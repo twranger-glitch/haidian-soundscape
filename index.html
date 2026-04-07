@@ -57,7 +57,7 @@
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
         .filter-item input { margin-right: 10px; accent-color: #27ae60; }
 
-        /* --- 彈出視窗樣式 (恢復運作良好版本的設計) --- */
+        /* --- 彈出視窗樣式 --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -73,18 +73,20 @@
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
-        .sound-cover { width: 100%; height: 170px; object-fit: cover; }
+        .sound-cover { width: 100%; height: 170px; object-fit: cover; background-color: #f1f2f6;}
         .sound-info { padding: 20px; }
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .sound-category { background: #27ae60; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .sound-date { color: #95a5a6; font-size: 11px; font-weight: 600; }
         .sound-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; }
-        .sound-player { width: 100%; height: 35px; margin-top: 10px; }
+        .sound-player { width: 100%; height: 35px; margin-top: 10px; border-radius: 20px; outline: none;}
+        .photo-badge { background: #f39c12; color: #fff; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold; text-align: center; margin: 10px 0 0 0;}
 
+        /* 叢集顏色自定義為海佃綠 */
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background-color: rgba(39, 174, 96, 0.9); color: white; font-weight: bold; }
 
-        @media (max-width: 600px) { .side-panel { width: 200px; top: 120px; left: 10px; padding: 15px; } }
+        @media (max-width: 600px) { .side-panel { width: 200px; top: 120px; left: 10px; padding: 15px; } .project-title .sub-title { display: none; } }
     </style>
 </head>
 <body>
@@ -108,11 +110,11 @@
             <span class="panel-label">📂 聲景類別篩選</span>
             <div class="filter-group">
                 <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 顯示所有聲景</label>
+                <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
                 <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
                 <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業聲" onchange="filterMarkers()"> 活動與產業聲</label>
                 <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="自然聲" onchange="filterMarkers()"> 自然聲</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="記憶聲" onchange="filterMarkers()"> 記憶聲</label>
+                <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
             </div>
         </div>
     </div>
@@ -166,7 +168,7 @@
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 18 });
         var allMarkersData = [];
 
-        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
+        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL)
             .then(res => res.json())
@@ -178,7 +180,7 @@
         function renderMarkers(data) {
             markerCluster.clearLayers();
             data.forEach(item => {
-                var audioHTML = item.audioUrl ? `<audio controls class="sound-player" src="${item.audioUrl}" controlsList="nodownload"></audio>` : `<p style="padding:10px; background:#f8f9fa; border-radius:10px; font-size:12px; text-align:center;">📷 純照片記錄</p>`;
+                var audioHTML = item.audioUrl ? `<audio controls class="sound-player" src="${item.audioUrl}" controlsList="nodownload"></audio>` : `<p class="photo-badge">📷 這是生態影像，無聲音記錄</p>`;
                 var coverHTML = `<img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">`;
                 var cleanCat = item.category.split(/[(（]/)[0].trim();
 
