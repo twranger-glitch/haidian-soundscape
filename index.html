@@ -15,112 +15,67 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <style>
-        /* 重置基本樣式 */
+        /* --- 基礎美學設定 --- */
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; }
-        
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
 
-        /* 頂部懸浮導覽列 */
+        /* --- 頂部懸浮導覽列 (毛玻璃質感) --- */
         .glass-header {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 800px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 25px;
-            z-index: 1000;
-            flex-wrap: wrap;
-            gap: 10px;
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 850px;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 25px; z-index: 1000; flex-wrap: wrap; gap: 10px;
         }
-        
-        /* 專案標題層次設計 */
-        .project-title { font-size: 20px; font-weight: 800; color: #2c3e50; letter-spacing: 1px; margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; }
+        .project-title { font-size: 18px; font-weight: 800; color: #2c3e50; letter-spacing: 1px; margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; }
         .project-title .main-title { color: #27ae60; margin: 0 6px; }
-        .project-title .sub-title { font-size: 14px; color: #7f8c8d; font-weight: 600; letter-spacing: 0.5px; }
+        .project-title .sub-title { font-size: 13px; color: #7f8c8d; font-weight: 600; }
 
-        .nav-buttons { display: flex; gap: 10px; }
-        .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 15px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: all 0.3s ease; }
+        .nav-buttons { display: flex; gap: 8px; }
+        .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: all 0.3s ease; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
 
-        /* ========================================= */
-        /* 精美彈出視窗 (Modal) 樣式                  */
-        /* ========================================= */
+        /* --- 精美彈出視窗 (Modal) --- */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
-            z-index: 2000; 
-            display: flex; justify-content: center; align-items: center;
-            opacity: 0; visibility: hidden;
-            transition: all 0.3s ease;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+            z-index: 2000; display: flex; justify-content: center; align-items: center;
+            opacity: 0; visibility: hidden; transition: all 0.3s ease;
         }
         .modal-overlay.active { opacity: 1; visibility: visible; }
-        
-        /* 加入 max-height 與 overflow-y 確保長文可滾動閱讀 */
         .modal-box {
-            background: white; border-radius: 20px;
-            width: 90%; max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
-            transform: translateY(20px);
-            transition: all 0.3s ease;
-            position: relative;
+            background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh;
+            overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            transform: translateY(20px); transition: all 0.3s ease; position: relative;
         }
         .modal-overlay.active .modal-box { transform: translateY(0); }
-
         .modal-close-btn {
-            position: absolute; top: 15px; right: 15px;
-            background: rgba(0,0,0,0.3); color: white;
-            border: none; border-radius: 50%;
-            width: 30px; height: 30px; font-size: 18px; font-weight: bold;
-            cursor: pointer; display: flex; justify-content: center; align-items: center;
-            transition: background 0.3s; z-index: 10;
+            position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.3); color: white;
+            border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 18px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; z-index: 10;
         }
-        .modal-close-btn:hover { background: rgba(0,0,0,0.7); }
-
         .modal-img { width: 100%; height: 200px; object-fit: cover; }
         .modal-content { padding: 25px; text-align: justify; }
-        
-        /* 宣言與品牌專屬樣式 */
         .modal-title { font-size: 22px; color: #2c3e50; margin: 0 0 8px 0; font-weight: 800; line-height: 1.3; }
-        .modal-tag { display: inline-block; background: #34495e; color: #ecf0f1; padding: 5px 12px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-bottom: 18px; letter-spacing: 0.5px; }
-        .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 12px 0; }
-        
-        /* 美感引言區塊 */
-        .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 8px 8px 0; }
-        .quote-block .modal-text { margin-bottom: 8px; }
-        .quote-block .modal-text:last-child { margin-bottom: 0; }
+        .modal-tag { display: inline-block; background: #34495e; color: #ecf0f1; padding: 5px 12px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-bottom: 18px; }
+        .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
+        .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
 
-        .contact-item { display: flex; align-items: center; margin-top: 15px; background: #f8f9fa; padding: 12px 15px; border-radius: 10px; border: 1px solid #eee;}
-        .contact-icon { font-size: 24px; margin-right: 15px; }
-
-        /* ========================================= */
-        /* 地圖標記彈出視窗樣式                        */
-        /* ========================================= */
-        .leaflet-popup-content-wrapper { border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 0; overflow: hidden; }
+        /* --- 地圖標記彈出卡片 (Popup) --- */
+        .leaflet-popup-content-wrapper { border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); padding: 0; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
         .sound-cover { width: 100%; height: 170px; object-fit: cover; background-color: #f1f2f6; }
-        .sound-info { padding: 18px; }
+        .sound-info { padding: 20px; }
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
-        .sound-category { background: #27ae60; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sound-date { color: #7f8c8d; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+        .sound-category { background: #27ae60; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; white-space: nowrap; }
+        .sound-date { color: #95a5a6; font-size: 12px; font-weight: 600; flex-shrink: 0; white-space: nowrap; }
         .sound-title { font-size: 19px; font-weight: bold; color: #2c3e50; margin: 0 0 5px 0; line-height: 1.3; }
-        .sound-author { font-size: 13px; color: #95a5a6; margin: 0 0 10px 0; font-weight: 500; }
-        .sound-desc { font-size: 14px; color: #555; margin: 0 0 15px 0; line-height: 1.5; }
-        .sound-player { width: 100%; outline: none; height: 40px; border-radius: 20px; }
-        .photo-badge { background: #f39c12; color: #fff; padding: 8px; border-radius: 8px; font-size: 13px; font-weight: bold; text-align: center; margin: 0; }
+        .sound-author { font-size: 13px; color: #bdc3c7; margin: 0 0 12px 0; font-weight: 500; }
+        .sound-desc { font-size: 14px; color: #555; margin: 0 0 18px 0; line-height: 1.6; }
+        .sound-player { width: 100%; height: 40px; border-radius: 20px; outline: none; }
+        .photo-badge { background: #f39c12; color: #fff; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold; text-align: center; }
         .leaflet-popup-close-button { display: none; }
     </style>
 </head>
@@ -139,19 +94,20 @@
     <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
         <div class="modal-box">
             <button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button>
-            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" alt="Haidian Hidden Library" class="modal-img">
+            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
             <div class="modal-content">
                 <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
                 <div class="modal-tag">Hidden below, growing beyond.</div>
                 
-                <p class="modal-text">海佃地下圖書室 Haidian Hidden Library，它真的位於地下室，卻不只是校園中的一個空間，而是一座低調運轉、持續孵育閱讀生命的基地。</p>
-                <p class="modal-text">我們稱它為 Hidden Library，不是因為它不存在，而是因為它像根系一樣，藏在看不見的地方，卻默默支撐著整座校園的閱讀生態。在這裡，閱讀不是裝飾，不是口號，而是一種慢慢發芽的力量。</p>
-                <p class="modal-text">海佃國小圖書室，也因此不只是地下室的一間書房，更是一座孵育閱讀嫩苗的基地。在這個隱身校園一隅的空間裡，我們願做孩子成長的沃土：收藏問題、灌溉想像、守護好奇，讓閱讀不只停留在書頁之間，而是在孩子心中悄悄扎根，慢慢發芽，長成理解世界的力量。</p>
-                <p class="modal-text">孩子走進地下室，帶走的不只是一本書，而是一張通往世界的地圖、一種理解世界的方法，以及一顆開始生長的心。</p>
+                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
+                
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行聽覺的田野調查。</p>
+
+                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
                 
                 <div class="quote-block">
-                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">因此，我們也把這裡稱作「海佃地圖」。</p>
-                    <p class="modal-text" style="font-size: 14px;">這不只是名字的諧音趣味，更是一種定位——圖書室，是孩子認識世界、探索自我、展開想像的地圖起點。</p>
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
+                    <p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
                 </div>
             </div>
         </div>
@@ -160,12 +116,12 @@
     <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')">
         <div class="modal-box">
             <button class="modal-close-btn" onclick="closeModal('contactModal')">×</button>
-            <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" alt="聯絡我們" class="modal-img">
+            <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img">
             <div class="modal-content">
-                <h2 class="modal-title" style="margin-bottom: 15px;">海佃地圖 聯絡資訊</h2>
+                <h2 class="modal-title">海佃地圖 聯絡資訊</h2>
                 <p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p>
-                <div class="contact-item">
-                    <span class="contact-icon">📍</span>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 24px;">📍</span>
                     <div>
                         <strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br>
                         <span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span>
@@ -176,48 +132,45 @@
     </div>
 
     <script>
-        // === 彈出視窗控制邏輯 ===
-        function openModal(modalId) { document.getElementById(modalId).classList.add('active'); }
-        function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
-        function closeModalOnBgClick(event, modalId) { if (event.target.id === modalId) { closeModal(modalId); } }
+        // --- 控制視窗邏輯 ---
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
 
-        // === 地圖與資料讀取邏輯 ===
+        // --- 地圖初始化 ---
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 13);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            maxZoom: 19
+            attribution: '&copy; CARTO', maxZoom: 19
         }).addTo(map);
 
+        // --- 標記叢集設定 ---
         var markerCluster = L.markerClusterGroup({
-            maxClusterRadius: 40,
-            disableClusteringAtZoom: 18
+            maxClusterRadius: 40, disableClusteringAtZoom: 18
         });
 
-        // 你的專屬資料庫 API
+        // --- 資料串接 API ---
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL)
-            .then(response => response.json())
+            .then(res => res.json())
             .then(data => {
-                if(data.length === 0) { console.log("資料庫目前還沒有帶有座標的聲景檔案。"); return; }
-
-                data.forEach(function(item) {
+                data.forEach(item => {
                     var audioHTML = item.audioUrl 
                         ? `<audio controls class="sound-player" src="${item.audioUrl}" controlsList="nodownload"></audio>` 
                         : `<p class="photo-badge">📷 這是生態影像，無聲音記錄</p>`;
 
                     var coverHTML = item.coverUrl
-                        ? `<img src="${item.coverUrl}" class="sound-cover" alt="聲景封面" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">`
-                        : `<div style="height:170px; background:#bdc3c7; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold;">無圖片</div>`;
+                        ? `<img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">`
+                        : `<div style="height:170px; background:#bdc3c7; display:flex; align-items:center; justify-content:center; color:#fff;">無圖片</div>`;
 
-                    var cleanCategory = item.category.split(/[(（]/)[0].trim();
+                    var cleanCat = item.category.split(/[(（]/)[0].trim();
 
                     var cardHTML = `
                         <div class="sound-card">
                             ${coverHTML}
                             <div class="sound-info">
                                 <div class="sound-meta">
-                                    <span class="sound-category">${cleanCategory}</span>
+                                    <span class="sound-category">${cleanCat}</span>
                                     <span class="sound-date">${item.date}</span>
                                 </div>
                                 <h3 class="sound-title">${item.title}</h3>
@@ -231,10 +184,9 @@
                     var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
                     markerCluster.addLayer(marker);
                 });
-
                 map.addLayer(markerCluster);
             })
-            .catch(error => { console.error("資料讀取失敗：", error); });
+            .catch(err => console.error("API Error:", err));
     </script>
 </body>
 </html>
