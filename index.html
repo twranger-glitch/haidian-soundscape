@@ -31,16 +31,16 @@
         }
         .project-title { font-size: 18px; font-weight: 800; color: #2c3e50; margin: 0; display: flex; align-items: baseline; }
         .project-title .main-title { color: #27ae60; margin: 0 6px; }
+        .project-title .sub-title { font-size: 13px; color: #7f8c8d; font-weight: 600; }
 
         .nav-buttons { display: flex; gap: 8px; align-items: center; }
         .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: 0.3s; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
         
-        /* 特別強調：我要投稿 */
         .btn-submit { background: #27ae60 !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-submit:hover { background: #219150 !important; transform: translateY(-2px); }
 
-        /* --- 左側控制面板 (搜尋與篩選) --- */
+        /* --- 左側控制面板 --- */
         .side-panel {
             position: absolute; top: 100px; left: 20px;
             width: 260px;
@@ -50,27 +50,26 @@
             display: flex; flex-direction: column; gap: 15px;
         }
         .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 5px; display: block; }
-        
-        /* 關鍵字搜尋框 */
-        .search-input {
-            width: 100%; padding: 10px 15px; border-radius: 12px; border: 1px solid #ddd;
-            font-size: 14px; outline: none; box-sizing: border-box; transition: 0.3s;
-        }
-        .search-input:focus { border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
+        .search-input { width: 100%; padding: 10px 15px; border-radius: 12px; border: 1px solid #ddd; font-size: 14px; outline: none; box-sizing: border-box; }
+        .search-input:focus { border-color: #27ae60; }
 
-        /* 類別篩選器 (Radio) */
         .filter-group { display: flex; flex-direction: column; gap: 8px; }
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
-        .filter-item input { margin-right: 10px; accent-color: #27ae60; cursor: pointer; }
+        .filter-item input { margin-right: 10px; accent-color: #27ae60; }
 
-        /* --- 彈出視窗與地圖卡片 (維持之前的設計) --- */
+        /* --- 彈出視窗樣式 (恢復運作良好版本的設計) --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
+        .modal-close-btn { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.3); color: white; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 18px; cursor: pointer; display: flex; justify-content: center; align-items: center; z-index: 10; }
         .modal-img { width: 100%; height: 200px; object-fit: cover; }
-        .modal-content { padding: 25px; }
+        .modal-content { padding: 25px; text-align: justify; }
+        .modal-title { font-size: 22px; color: #2c3e50; margin: 0 0 8px 0; font-weight: 800; line-height: 1.3; }
+        .modal-tag { display: inline-block; background: #34495e; color: #ecf0f1; padding: 5px 12px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-bottom: 18px; }
+        .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
         
+        /* --- 地圖標記卡片 --- */
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
@@ -82,24 +81,20 @@
         .sound-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; }
         .sound-player { width: 100%; height: 35px; margin-top: 10px; }
 
-        /* 修改叢集顏色為海佃綠 */
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background-color: rgba(39, 174, 96, 0.9); color: white; font-weight: bold; }
 
-        @media (max-width: 600px) {
-            .side-panel { width: 200px; top: 120px; left: 10px; padding: 15px; }
-            .project-title .sub-title { display: none; }
-        }
+        @media (max-width: 600px) { .side-panel { width: 200px; top: 120px; left: 10px; padding: 15px; } }
     </style>
 </head>
 <body>
 
     <header class="glass-header">
-        <h1 class="project-title">海佃 <span class="main-title">溪遊記</span></h1>
+        <h1 class="project-title">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景計畫</span></h1>
         <nav class="nav-buttons">
             <button onclick="openModal('aboutModal')">關於計畫</button>
             <button onclick="openModal('contactModal')">聯絡我們</button>
-            <button class="btn-submit" onclick="window.open('你的_GOOGLE_表單網址', '_blank')">我要投稿</button>
+            <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')">我要投稿</button>
         </nav>
     </header>
 
@@ -108,9 +103,7 @@
             <span class="panel-label">🔍 搜尋標題或採集者</span>
             <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
         </div>
-        
         <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;">
-
         <div>
             <span class="panel-label">📂 聲景類別篩選</span>
             <div class="filter-group">
@@ -128,13 +121,35 @@
 
     <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
         <div class="modal-box">
+            <button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button>
             <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
             <div class="modal-content">
-                <h2 class="modal-title">海佃地圖 | Hidden Library</h2>
+                <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
                 <div class="modal-tag">Hidden below, growing beyond.</div>
-                <p class="modal-text">海佃地下圖書室，如根系般隱身地下，灌溉想像、守護好奇。在【海佃 溪遊記】中，我們走出教室，用耳朵重新覺察這片土地的輪廓。</p>
+                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
                 <div class="quote-block">
-                    <p class="modal-text" style="font-weight: bold;">閱讀不限於文字，用耳朵也能聽見世界。</p>
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
+                    <p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')">
+        <div class="modal-box">
+            <button class="modal-close-btn" onclick="closeModal('contactModal')">×</button>
+            <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img">
+            <div class="modal-content">
+                <h2 class="modal-title">海佃地圖 聯絡資訊</h2>
+                <p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 24px;">📍</span>
+                    <div>
+                        <strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br>
+                        <span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -144,19 +159,14 @@
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
 
-        // 加入地址搜尋控制項 (右上角)
         L.Control.geocoder({ defaultMarkGeocode: false, placeholder: "搜尋地點或地址..." })
-            .on('markgeocode', function(e) {
-                var bbox = e.geocode.bbox;
-                var poly = L.polygon([ [bbox.getSouthEast().lat, bbox.getSouthEast().lng], [bbox.getNorthEast().lat, bbox.getNorthEast().lng], [bbox.getNorthWest().lat, bbox.getNorthWest().lng], [bbox.getSouthWest().lat, bbox.getSouthWest().lng] ]);
-                map.fitBounds(poly.getBounds());
-            })
+            .on('markgeocode', function(e) { map.fitBounds(e.geocode.bbox); })
             .addTo(map);
 
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 18 });
-        var allMarkersData = []; // 儲存原始資料
+        var allMarkersData = [];
 
-        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
+        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL)
             .then(res => res.json())
@@ -193,7 +203,6 @@
         function filterMarkers() {
             var searchTerm = document.getElementById('searchInput').value.toLowerCase();
             var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
-
             var filtered = allMarkersData.filter(item => {
                 var matchesSearch = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm);
                 var matchesCat = (selectedCat === 'all') || item.category.includes(selectedCat);
