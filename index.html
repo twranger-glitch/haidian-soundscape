@@ -61,7 +61,7 @@
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
         .sound-cover { width: 100%; height: 170px; object-fit: cover; background-color: #f1f2f6;}
-        .sound-info { padding: 20px; padding-bottom: 8px; }
+        .sound-info { padding: 20px; padding-bottom: 15px; } /* 底部留白稍微調整 */
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .sound-category { background: #27ae60; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .sound-date { color: #95a5a6; font-size: 11px; font-weight: 600; }
@@ -71,11 +71,7 @@
         .btn-play-main { background: #27ae60; color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; margin-top: 5px; box-shadow: 0 4px 10px rgba(39,174,96,0.3); width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); }
 
-        /* 🔥 新增：極低調的卡片底部動作區 (替代原本很擠的按鈕) */
-        .card-footer {
-            margin-top: 15px; padding-top: 10px; border-top: 1px solid #f1f2f6;
-            display: flex; justify-content: flex-end; gap: 15px;
-        }
+        /* 🔥 新增：極度低調、節省空間的連結樣式 */
         .action-link-faint { font-size: 11px; color: #dcdde1; text-decoration: none; transition: color 0.2s; }
         .action-link-faint:hover { color: #a4b0be; text-decoration: underline; }
 
@@ -254,26 +250,30 @@
                 var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
                 var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
 
-                // 🔥 套用極低調的底部 Footer (取代原本的按鈕群)
+                // 🔥 空間極致壓縮：將「採集者」與「後勤按鈕」放在同一行，完全不佔額外高度
                 var cardHTML = `
                     <div class="sound-card">
                         ${coverHTML}
                         <div class="sound-info">
                             <div class="sound-meta"><span class="sound-category">${cleanCat}</span><span class="sound-date">${displayDate}</span></div>
                             <h3 class="sound-title">${item.title}</h3>
-                            <p style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</p>
-                            <p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>
-                            ${audioHTML}
-                            <div class="card-footer">
-                                <a href="${reportUrl}" target="_blank" class="action-link-faint">勘誤</a>
-                                <a href="${deleteUrl}" target="_blank" class="action-link-faint">申請下架</a>
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-size:12px; color:#95a5a6;">📍 ${item.author}</span>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <a href="${reportUrl}" target="_blank" class="action-link-faint">勘誤</a>
+                                    <span style="color: #ecf0f1; font-size: 10px;">|</span>
+                                    <a href="${deleteUrl}" target="_blank" class="action-link-faint">下架</a>
+                                </div>
                             </div>
+
+                            <p style="font-size:13px; color:#555; line-height:1.5; margin-top: 0;">${item.description}</p>
+                            ${audioHTML}
                         </div>
                     </div>
                 `;
                 var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
                 
-                // 🔥 新增：當點擊標記 (打開卡片) 時，讓全站播放器「就緒待命」，但不自動播放
                 marker.on('click', function() {
                     if (item.audioUrl) {
                         prepareGlobalPlayer(index);
@@ -290,12 +290,10 @@
             return audioUrl.replace('/upload/', `/upload/fl_waveform,co_rgb:${colorHex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png');
         }
 
-        // 獨立出「準備播放器」的函式
         function prepareGlobalPlayer(index) {
             var item = allMarkersData[index];
             if (!item || !item.audioUrl) return;
 
-            // 如果已經是同一首，就不重新打斷
             if (currentAudioIndex === index) {
                 document.getElementById('globalPlayer').classList.add('active');
                 return;
@@ -312,7 +310,6 @@
             document.getElementById('waveProgress').src = getWaveformUrl(item.audioUrl, "27ae60");
             document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
 
-            // 暫停原本的聲音，載入新的（但不播放）
             globalAudio.pause();
             globalAudio.src = item.audioUrl;
             globalAudio.volume = document.getElementById('volumeSlider').value;
@@ -321,7 +318,6 @@
             document.getElementById('globalPlayer').classList.add('active');
         }
 
-        // 使用者點擊綠色大按鈕時，才正式播放
         function startGlobalPlayback(index) {
             if (currentAudioIndex !== index) {
                 prepareGlobalPlayer(index);
