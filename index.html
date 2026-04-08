@@ -12,7 +12,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
@@ -21,15 +20,7 @@
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
 
-        /* --- 頂部懸浮選單 --- */
-        .glass-header {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            width: 90%; max-width: 950px;
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 25px; z-index: 1000; gap: 10px;
-        }
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; gap: 10px; }
         .project-title { font-size: 18px; font-weight: 800; color: #2c3e50; margin: 0; display: flex; align-items: baseline; }
         .project-title .main-title { color: #27ae60; margin: 0 6px; }
         .project-title .sub-title { font-size: 13px; color: #7f8c8d; font-weight: 600; }
@@ -37,32 +28,13 @@
         .nav-buttons { display: flex; gap: 8px; align-items: center; }
         .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: 0.3s; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
-        
         .btn-submit { background: #27ae60 !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-submit:hover { background: #219150 !important; transform: translateY(-2px); }
 
-        /* --- 側邊抽屜 --- */
-        .side-panel {
-            position: absolute; top: 100px; left: var(--panel-offset);
-            width: 260px;
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            padding: 20px; z-index: 999;
-            display: flex; flex-direction: column; gap: 15px;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .side-panel { position: absolute; top: 100px; left: var(--panel-offset); width: 260px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); padding: 20px; z-index: 999; display: flex; flex-direction: column; gap: 15px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .side-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
 
-        /* 一體成型拉環 */
-        .toggle-tab {
-            position: absolute; top: 50%; right: -32px; transform: translateY(-50%);
-            width: 32px; height: 64px;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            border-radius: 0 16px 16px 0; box-shadow: 6px 0 12px rgba(0,0,0,0.06);
-            border: 1px solid rgba(255,255,255,0.8); border-left: none;
-            cursor: pointer; display: flex; justify-content: center; align-items: center;
-            color: #27ae60; transition: background 0.3s, color 0.3s;
-        }
+        .toggle-tab { position: absolute; top: 50%; right: -32px; transform: translateY(-50%); width: 32px; height: 64px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 0 16px 16px 0; box-shadow: 6px 0 12px rgba(0,0,0,0.06); border: 1px solid rgba(255,255,255,0.8); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: #27ae60; transition: background 0.3s, color 0.3s; }
         .toggle-tab:hover { background: #fff; color: #1e8449; }
         .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .side-panel.collapsed .toggle-icon { transform: rotate(180deg); }
@@ -74,7 +46,6 @@
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
         .filter-item input { margin-right: 10px; accent-color: #27ae60; }
 
-        /* --- 彈出視窗 --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -86,12 +57,11 @@
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
         
-        /* --- 地圖卡片樣式更新：極簡低調的操作連結 --- */
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
         .sound-cover { width: 100%; height: 170px; object-fit: cover; background-color: #f1f2f6;}
-        .sound-info { padding: 20px; padding-bottom: 12px; /* 底部空間縮小 */}
+        .sound-info { padding: 20px; padding-bottom: 12px; }
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .sound-category { background: #27ae60; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .sound-date { color: #95a5a6; font-size: 11px; font-weight: 600; }
@@ -99,14 +69,11 @@
         .sound-player { width: 100%; height: 35px; margin-top: 10px; border-radius: 20px; outline: none;}
         .photo-badge { background: #f39c12; color: #fff; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold; text-align: center; margin: 10px 0 0 0;}
         
-        /* 勘誤與下架連結群組：重新設計為低調的註腳 */
         .card-actions { display: flex; gap: 20px; margin-top: 15px; justify-content: center; }
         .action-link { font-size: 11px; cursor: pointer; transition: 0.2s; text-decoration: none; font-weight: normal; }
-        
-        .btn-report { color: #bdc3c7; /* 非常淡的灰色 */ }
+        .btn-report { color: #bdc3c7; }
         .btn-report:hover { color: #7f8c8d; text-decoration: underline; }
-        
-        .btn-delete { color: #f2dede; /* 非常淡的紅色 */ }
+        .btn-delete { color: #f2dede; }
         .btn-delete:hover { color: #e74c3c; text-decoration: underline; }
 
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
@@ -200,9 +167,14 @@
             .on('markgeocode', function(e) { map.fitBounds(e.geocode.bbox); })
             .addTo(map);
 
-        var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 18 });
+        var markerCluster = L.markerClusterGroup({ 
+            maxClusterRadius: 40, 
+            disableClusteringAtZoom: 18,
+            spiderfyOnMaxZoom: true // 確保重疊的座標點可以散開
+        });
         var allMarkersData = [];
 
+        // ⚠️ 這裡請填入您剛剛重新部署後的 Google Apps Script 網址
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL)
@@ -219,6 +191,12 @@
                 var coverHTML = `<img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">`;
                 var cleanCat = item.category.split(/[(（]/)[0].trim();
 
+                // 日期優化顯示：如果是 00:00:00 結尾（代表沒有精準時分秒），就將其藏起只顯示日期
+                var displayDate = item.date;
+                if (displayDate && displayDate.endsWith(" 00:00:00")) {
+                    displayDate = displayDate.replace(" 00:00:00", "");
+                }
+
                 var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
                 var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
 
@@ -226,7 +204,7 @@
                     <div class="sound-card">
                         ${coverHTML}
                         <div class="sound-info">
-                            <div class="sound-meta"><span class="sound-category">${cleanCat}</span><span class="sound-date">${item.date}</span></div>
+                            <div class="sound-meta"><span class="sound-category">${cleanCat}</span><span class="sound-date">${displayDate}</span></div>
                             <h3 class="sound-title">${item.title}</h3>
                             <p style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</p>
                             <p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>
