@@ -84,21 +84,42 @@
         .modal-tag { display: inline-block; background: #34495e; color: #ecf0f1; padding: 5px 12px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-bottom: 18px; }
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
-        
-        /* 🔥 新增規範特有的排版樣式 */
         .ethics-list { padding-left: 20px; margin-top: 5px; margin-bottom: 20px;}
         .ethics-list li { margin-bottom: 8px; color: #555; font-size: 14.5px; line-height: 1.6;}
         .ethics-title { font-weight: bold; color: #27ae60; font-size: 16px; margin-top: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;}
 
-        .leaflet-popup-content { margin: 0; width: 300px !important; }
-        .sound-card { display: flex; flex-direction: column; }
-        .sound-cover { width: 100%; height: 170px; object-fit: cover; }
-        .sound-info { padding: 20px; }
-        .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .sound-category { background: var(--accent-color); color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
-        .btn-play-main { background: var(--accent-color); color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; width: 100%; margin-top: 10px; transition: 0.2s;}
-        .btn-play-main:hover { background: #219150; transform: translateY(-2px); }
-        .admin-menu { margin-top: 10px; text-align: right; }
+        /* =======================================================
+           🔥 視覺重構：美感教科書等級的地圖卡片 (Card UI)
+           ======================================================= */
+        .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+        .leaflet-popup-content { margin: 0; width: 320px !important; }
+        .sound-card { display: flex; flex-direction: column; background: #fff; }
+        .sound-cover { width: 100%; height: 160px; object-fit: cover; }
+        .sound-info { padding: 22px; }
+        
+        /* 標題極大化，俐落粗體 */
+        .sound-title { font-size: 22px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
+        
+        /* 資訊整合單行排列 */
+        .sound-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; margin-bottom: 15px; }
+        .meta-author { font-weight: 800; color: #2c3e50; }
+        .meta-divider { color: #bdc3c7; font-weight: 300; font-size: 11px; }
+        .meta-date { font-weight: 700; color: #7f8c8d; }
+        .meta-category { background: #f1c40f; color: #2c3e50; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
+        
+        /* 灰色柔和描述文字 */
+        .sound-desc { font-size: 14.5px; color: #7f8c8d; line-height: 1.6; margin: 0 0 18px 0; text-align: justify; }
+        
+        /* 優雅的 Ghost Button 播放鍵 */
+        .btn-play-main { 
+            background: #fff; color: var(--accent-color); border: 2px solid var(--accent-color); 
+            padding: 10px 15px; border-radius: 50px; font-size: 14px; font-weight: 800; 
+            cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; 
+            gap: 6px; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(39,174,96,0.1); 
+        }
+        .btn-play-main:hover { background: var(--accent-color); color: #fff; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(39,174,96,0.2); }
+        
+        .admin-menu { margin-top: 15px; text-align: right; }
         .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; }
         .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
 
@@ -108,8 +129,6 @@
             .project-title span.sub-title { font-size: 11px; display: block; margin-left: 0; margin-top: 2px;} 
             .drawer-panel { width: 260px; } 
             .volume-control { display: none; } 
-            
-            /* 手機版導覽列改為滑動式，避免按鈕被切掉 */
             .nav-buttons { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; max-width: 160px;}
             .nav-buttons::-webkit-scrollbar { display: none; }
         }
@@ -160,7 +179,7 @@
         <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀。</p>
             <div class="route-list">
                 <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
@@ -186,92 +205,9 @@
         <button class="close-player-btn" onclick="closeGlobalPlayer()">✕</button>
     </div>
 
-    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
-        <div class="modal-box">
-            <button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button>
-            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
-            <div class="modal-content">
-                <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
-                <div class="modal-tag">Hidden below, growing beyond.</div>
-                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
-                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
-                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
-                <div class="quote-block">
-                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
-                    <p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')">
-        <div class="modal-box">
-            <button class="modal-close-btn" onclick="closeModal('contactModal')">×</button>
-            <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img">
-            <div class="modal-content">
-                <h2 class="modal-title">聯絡資訊</h2>
-                <p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
-                    <span style="font-size: 24px;">📍</span>
-                    <div>
-                        <strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br>
-                        <span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="ethicsModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'ethicsModal')">
-        <div class="modal-box">
-            <button class="modal-close-btn" onclick="closeModal('ethicsModal')">×</button>
-            <img src="https://images.unsplash.com/photo-1516321497487-e288fb19713f?q=80&w=800&auto=format&fit=crop" class="modal-img">
-            <div class="modal-content">
-                <h2 class="modal-title">海佃聲音地景<br><span style="font-size: 18px; color: #d35400;">採集倫理與投稿規範</span></h2>
-                <p class="modal-text">為了保護自己與他人，參與聲音地景採集的同學，請務必遵守以下數位小公民規範：</p>
-                
-                <div class="ethics-title">一、我會保護自己和別人的隱私</div>
-                <ul class="ethics-list">
-                    <li><strong>強烈建議使用「暱稱」投稿</strong>，不說出或錄到可辨識身分的資訊（如全名、地址、電話等）。</li>
-                    <li>若錄到他人聲音，只能出現「一般路人聲音」或「聽不出是誰」的談話，不可清楚錄下私下談話內容。</li>
-                    <li>不在錄音中透露別人的秘密或私人糾紛。</li>
-                </ul>
-
-                <div class="ethics-title">二、我錄的聲音要「先問過」再錄</div>
-                <ul class="ethics-list">
-                    <li>要錄到特定同學、老師或家人的聲音前，必須先告知並<strong>得到同意</strong>才可錄音。</li>
-                    <li>絕不偷錄他人的私下對話，以免侵犯隱私。</li>
-                    <li>若是課堂上的教學內容，需先徵求老師允許。</li>
-                </ul>
-
-                <div class="ethics-title">三、我尊重著作權，只上傳「自己有權利」的聲音</div>
-                <ul class="ethics-list">
-                    <li>聲音作品需以「親自錄製」為主，禁止直接側錄網路音樂、電視節目或廣播上傳。</li>
-                    <li>若錄音背景有流行音樂或廣告歌，請盡量避開或縮短，避免侵權。</li>
-                    <li>投稿即代表同意將作品授權學校於教學或校園活動中無償展示播放。</li>
-                </ul>
-
-                <div class="ethics-title">四、我會用友善、不傷人的聲音</div>
-                <ul class="ethics-list">
-                    <li>使用文明用語，不說髒話、不取笑他人。</li>
-                    <li>絕不錄製或散布任何歧視、霸凌、威脅或謠言內容。</li>
-                    <li>若現場有人爭吵或不適，請勿錄音上傳以免造成二次傷害。</li>
-                </ul>
-
-                <div class="ethics-title">五、我會遵守學校與平台規範</div>
-                <ul class="ethics-list">
-                    <li>遵守學校設備使用規定，不在禁止錄音的時地進行錄製。</li>
-                    <li>不利用錄音檔進行惡意剪輯或私下散布嘲笑。</li>
-                    <li><strong>經管理員認定若有個資、隱私或侵權疑慮，平台有權逕行下架作品。</strong></li>
-                </ul>
-                
-                <div class="quote-block" style="border-left-color: #d35400; background: #fff3e0;">
-                    <p class="modal-text" style="font-weight: bold; color: #d35400;">⭐ 投稿前重要提醒：</p>
-                    <p class="modal-text" style="font-size: 14px; margin-bottom: 0;">請務必在投稿表單中勾選「已與家長討論並取得同意」。這是保護你創作權益的重要步驟喔！</p>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button><img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2><div class="modal-tag">Hidden below, growing beyond.</div><p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p><p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p><p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p><div class="quote-block"><p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p><p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p></div></div></div></div>
+    <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('contactModal')">×</button><img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">聯絡資訊</h2><p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p><div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;"><span style="font-size: 24px;">📍</span><div><strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br><span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span></div></div></div></div></div>
+    <div id="ethicsModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'ethicsModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('ethicsModal')">×</button><img src="https://images.unsplash.com/photo-1516321497487-e288fb19713f?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">海佃聲音地景<br><span style="font-size: 18px; color: #d35400;">採集倫理與投稿規範</span></h2><p class="modal-text">為了保護自己與他人，參與聲音地景採集的同學，請務必遵守以下數位小公民規範：</p><div class="ethics-title">一、我會保護自己和別人的隱私</div><ul class="ethics-list"><li><strong>強烈建議使用「暱稱」投稿</strong>，不說出或錄到可辨識身分的資訊。</li><li>若錄到他人聲音，只能出現「一般路人聲音」或「聽不出是誰」的談話。</li><li>不在錄音中透露別人的秘密或私人糾紛。</li></ul><div class="ethics-title">二、我錄的聲音要「先問過」再錄</div><ul class="ethics-list"><li>要錄到特定同學、老師或家人的聲音前，必須先告知並<strong>得到同意</strong>。</li><li>絕不偷錄他人的私下對話，以免侵犯隱私。</li></ul><div class="ethics-title">三、我尊重著作權，只上傳「自己有權利」的聲音</div><ul class="ethics-list"><li>聲音作品需以「親自錄製」為主，禁止直接側錄網路音樂上傳。</li><li>投稿即代表同意將作品授權學校於教學或校園活動中無償展示播放。</li></ul><div class="ethics-title">四、我會用友善、不傷人的聲音</div><ul class="ethics-list"><li>使用文明用語，絕不錄製或散布任何歧視、霸凌、威脅內容。</li></ul><div class="ethics-title">五、我會遵守學校與平台規範</div><ul class="ethics-list"><li>遵守學校設備使用規定，不在禁止錄音的時地進行錄製。</li><li><strong>經管理員認定若有個資、隱私或侵權疑慮，平台有權逕行下架作品。</strong></li></ul><div class="quote-block" style="border-left-color: #d35400; background: #fff3e0;"><p class="modal-text" style="font-weight: bold; color: #d35400;">⭐ 投稿前重要提醒：</p><p class="modal-text" style="font-size: 14px; margin-bottom: 0;">請務必在投稿表單中勾選「已與家長討論並取得同意」。這是保護你創作權益的重要步驟喔！</p></div></div></div></div>
 
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
@@ -280,7 +216,6 @@
         
         var allMarkersData = [];
         var globalAudio = new Audio(), currentAudioUid = null;
-        
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
 
@@ -290,11 +225,39 @@
         fetch(API_URL).then(res => res.json()).then(data => { allMarkersData = data; renderMarkers(data); });
 
         function createMarker(item) {
+            // 🔥 套用美學排版，重建資料字串
+            var cleanCat = item.category.split(/[(（]/)[0].trim();
+            var displayDate = item.date.replace(" 00:00:00", "").replace(/-/g, "/"); 
+            
             var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">▶ 播放此處聲景</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:10px; text-align:center; font-size:12px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
             var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
             var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
             
-            var cardHTML = `<div class="sound-card"><img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'"><div class="sound-info"><div class="sound-meta"><span class="sound-category">${item.category.split(/[(（]/)[0]}</span><span class="sound-date">${item.date.replace(" 00:00:00","")}</span></div><h3 class="sound-title">${item.title}</h3><div style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</div><p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>${audioHTML}<details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none; font-weight:bold;">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none; font-weight:bold;">🗑️ 下架</a></div></details></div></div>`;
+            var cardHTML = `
+                <div class="sound-card">
+                    <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
+                    <div class="sound-info">
+                        <h3 class="sound-title">${item.title}</h3>
+                        <div class="sound-meta">
+                            <span class="meta-author">${item.author}</span>
+                            <span class="meta-divider">|</span>
+                            <span class="meta-date">${displayDate}</span>
+                            <span class="meta-divider">|</span>
+                            <span class="meta-category">${cleanCat}</span>
+                        </div>
+                        <p class="sound-desc">${item.description}</p>
+                        ${audioHTML}
+                        <details class="admin-menu">
+                            <summary>⋮</summary>
+                            <div class="admin-dropdown">
+                                <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a>
+                                <span style="color:#eee">|</span>
+                                <a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
             marker.on('click', () => { 
                 if(item.audioUrl) prepareGlobalPlayer(item.uid); 
@@ -311,7 +274,6 @@
 
         function filterMarkers() {
             if (currentRouteType) return; 
-            
             var searchTerm = document.getElementById('searchInput').value.toLowerCase();
             var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
             var hourLimit = parseInt(document.getElementById('timeSlider').value);
@@ -326,87 +288,54 @@
             renderMarkers(filtered);
         }
 
-        // 🔥 風琴式切換：完美解決重疊問題
         function togglePanel(id) {
             var targetPanel = document.getElementById(id);
             var isOpening = targetPanel.classList.contains('collapsed');
-            
-            ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => {
-                document.getElementById(p).classList.add('collapsed');
-            });
-            
+            ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => { document.getElementById(p).classList.add('collapsed'); });
             if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-
             if (type === 'clear' || currentRouteType === type) {
-                currentRouteType = null;
-                isRoutePlaying = false;
-                closeGlobalPlayer();
+                currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
                 document.getElementById('clearRouteBtn').style.display = 'none';
                 if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-                filterMarkers(); 
-                return;
+                filterMarkers(); return;
             }
-
-            currentRouteType = type;
-            isRoutePlaying = true;
+            currentRouteType = type; isRoutePlaying = true;
             btnElement.classList.add('active');
             document.getElementById('clearRouteBtn').style.display = 'block';
 
             if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
             else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
 
-            if (routePointsData.length < 2) {
-                alert('目前該主題的聲景資料不足以產生路線！');
-                toggleRoute('clear');
-                return;
-            }
+            if (routePointsData.length < 2) { alert('目前該主題的聲景資料不足以產生路線！'); toggleRoute('clear'); return; }
 
-            markerCluster.clearLayers();
-            routeMarkerObjects = [];
-            routePointsData.forEach(item => {
-                var marker = createMarker(item);
-                routeMarkerObjects.push(marker);
-                markerCluster.addLayer(marker);
-            });
+            markerCluster.clearLayers(); routeMarkerObjects = [];
+            routePointsData.forEach(item => { var marker = createMarker(item); routeMarkerObjects.push(marker); markerCluster.addLayer(marker); });
             map.addLayer(markerCluster);
 
             if (currentRouteLine) map.removeLayer(currentRouteLine);
             var latlngs = routePointsData.map(p => [p.lat, p.lon]);
             currentRouteLine = L.polyline(latlngs, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
-
             map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] });
 
             currentRouteIndex = 0;
-            if (window.innerWidth <= 600) { togglePanel('routePanel'); } // 手機版自動收合
+            if (window.innerWidth <= 600) { togglePanel('routePanel'); } 
             setTimeout(playNextRoutePoint, 1500); 
         }
 
         function playNextRoutePoint() {
             if (!isRoutePlaying) return; 
-            if (currentRouteIndex >= routePointsData.length) {
-                alert("✅ 路線任務探索完畢！");
-                isRoutePlaying = false;
-                return;
-            }
-            var pt = routePointsData[currentRouteIndex];
-            var marker = routeMarkerObjects[currentRouteIndex];
-
+            if (currentRouteIndex >= routePointsData.length) { alert("✅ 路線任務探索完畢！"); isRoutePlaying = false; return; }
+            var pt = routePointsData[currentRouteIndex]; var marker = routeMarkerObjects[currentRouteIndex];
             map.flyTo([pt.lat, pt.lon], 17, { duration: 1.5 });
-
             setTimeout(() => {
                 if (!isRoutePlaying) return;
                 marker.openPopup();
-                if (pt.audioUrl) {
-                    prepareGlobalPlayer(pt.uid);
-                    globalAudio.play();
-                    document.getElementById('playerToggleBtn').innerText = "⏸";
-                } else {
-                    setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000);
-                }
+                if (pt.audioUrl) { prepareGlobalPlayer(pt.uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; } 
+                else { setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
             }, 1600);
         }
 
@@ -434,9 +363,7 @@
 
         function startGlobalPlayback(uid) { 
             if (currentAudioUid !== uid) prepareGlobalPlayer(uid); 
-            globalAudio.play(); 
-            document.getElementById('playerToggleBtn').innerText = "⏸"; 
-            isRoutePlaying = false; 
+            globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; isRoutePlaying = false; 
         }
 
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerText = "▶"; } }
@@ -451,7 +378,6 @@
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
-        // 手機版預設全部收合
         if (window.innerWidth <= 600) { 
             document.getElementById('sidePanel').classList.add('collapsed'); 
             document.getElementById('timelinePanel').classList.add('collapsed'); 
