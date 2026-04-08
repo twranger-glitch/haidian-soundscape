@@ -86,23 +86,17 @@
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
 
-        /* =======================================================
-           🔥 像素級美學重構：地圖卡片 (Pixel-perfect Card UI)
-           ======================================================= */
+        /* 卡片設計 */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
         .sound-info { padding: 20px; }
-        
         .sound-title { font-size: 20px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
-        
-        /* 資訊列強制單行，絕不換行 */
         .sound-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 15px; color: #7f8c8d; white-space: nowrap; }
         .meta-author { font-size: 13px; font-weight: 800; color: #2c3e50; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
         .meta-divider { color: #dcdde1; font-weight: 300; font-size: 10px; }
         .meta-date { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; font-family: 'Courier New', Courier, monospace;}
-        
         .meta-category { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 900; letter-spacing: 0.2px; }
         .cat-nature { background: #e8f8f5; color: #1abc9c; }   
         .cat-culture { background: #fef9e7; color: #f39c12; }  
@@ -110,27 +104,31 @@
         .cat-space { background: #ebf5fb; color: #3498db; }    
         .cat-history { background: #f4ecf8; color: #9b59b6; }  
         .cat-default { background: #f1f2f6; color: #7f8c8d; }  
-        
         .sound-desc { font-size: 14px; color: #7f8c8d; line-height: 1.6; margin: 0 0 18px 0; text-align: justify; }
-        
         .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 10px 15px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(39,174,96,0.25); }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
         
+        /* 修正 7: 讓 ⋮ 顏色明顯些又不過度突兀 */
         .admin-menu { margin-top: 15px; text-align: right; }
-        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; transition: 0.2s;}
-        .admin-menu summary:hover { color: #95a5a6; }
+        .admin-menu summary { font-size: 20px; color: #7f8c8d; cursor: pointer; list-style: none; display: inline-block; transition: 0.2s; font-weight: 900; padding: 0 5px; }
+        .admin-menu summary:hover { color: #34495e; }
         .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
         .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; transition: 0.2s;}
         .action-link-faint:hover { color: #e74c3c; }
 
+        /* 修正 1 & 6: 手機版完美防擠壓與音量控制 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
+            .glass-header { padding: 10px 15px; width: 92%; } /* 加寬讓按鈕空間更充裕 */
             .project-title { font-size: 16px; }
             .project-title span.sub-title { font-size: 11px; display: block; margin-left: 0; margin-top: 2px;} 
             .drawer-panel { width: 260px; } 
-            .volume-control { display: none; } 
-            .nav-buttons { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; max-width: 160px;}
-            .nav-buttons::-webkit-scrollbar { display: none; }
+            
+            .nav-buttons { overflow-x: visible; white-space: nowrap; max-width: none; gap: 6px; }
+            
+            /* 保留並適配音量控制 */
+            .volume-control { display: flex; margin: 0 10px; gap: 5px; } 
+            .volume-slider { width: 50px; }
         }
     </style>
 </head>
@@ -139,8 +137,7 @@
     <header class="glass-header">
         <h1 class="project-title">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景計畫</span></h1>
         <nav class="nav-buttons">
-            <button onclick="openModal('aboutModal')">關於</button>
-            <button onclick="openModal('contactModal')">聯絡</button>
+            <button onclick="openModal('aboutModal')">關於我們</button>
             <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')">我要投稿</button>
         </nav>
     </header>
@@ -165,7 +162,7 @@
     </div>
 
     <div id="timelinePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('timelinePanel')"><span style="font-size:16px;">🕒</span></button>
+        <button class="toggle-btn" onclick="togglePanel('timelinePanel')"><svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
         <div class="drawer-content">
             <span class="panel-label">🕒 聲景時間軸探索</span>
             <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段的聲景</p>
@@ -175,10 +172,10 @@
     </div>
 
     <div id="routePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
+        <button class="toggle-btn" onclick="togglePanel('routePanel')"><svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀。</p>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
             <div class="route-list">
                 <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
@@ -204,8 +201,31 @@
         <button class="close-player-btn" onclick="closeGlobalPlayer()">✕</button>
     </div>
 
-    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button><img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2><div class="modal-tag">Hidden below, growing beyond.</div><p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p><p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p><p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p><div class="quote-block"><p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p><p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p></div></div></div></div>
-    <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('contactModal')">×</button><img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">聯絡資訊</h2><p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p><div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;"><span style="font-size: 24px;">📍</span><div><strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br><span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span></div></div></div></div></div>
+    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
+        <div class="modal-box">
+            <button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button>
+            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
+            <div class="modal-content">
+                <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
+                <div class="modal-tag">Hidden below, growing beyond.</div>
+                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
+                <div class="quote-block">
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
+                    <p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+                <h3 class="modal-title" style="font-size: 18px;">聯絡我們</h3>
+                <p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 24px;">📍</span>
+                    <div><strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br><span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
@@ -215,20 +235,18 @@
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
 
-        // ⚠️ 這裡請填入您的 Google Apps Script 網址 (部署後的版本)
+        // API URL
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL).then(res => res.json()).then(data => { allMarkersData = data; renderMarkers(data); });
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
-            
-            // 🔥 處理日期顯示：去掉秒數，只留 YYYY/MM/DD HH:mm，讓單行排版更完美
             var rawDate = item.date.replace(" 00:00:00", "");
             var displayDate = rawDate;
             if(rawDate.includes(":")) {
                 var parts = rawDate.split(":");
-                displayDate = parts[0] + ":" + parts[1]; // 只保留到分
+                displayDate = parts[0] + ":" + parts[1];
             }
             displayDate = displayDate.replace(/-/g, "/");
             
@@ -239,9 +257,7 @@
             else if (cleanCat.includes("空間")) catClass = "cat-space";
             else if (cleanCat.includes("歲月")) catClass = "cat-history";
 
-            // 🔥 捨棄 Emoji，改用極簡高質感的 SVG 線條圖示
-            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; // 日曆
-            
+            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; 
             var hourMatch = item.date.match(/\s(\d{2}):/);
             if (hourMatch) {
                 var h = parseInt(hourMatch[1]);
@@ -291,7 +307,8 @@
                     </div>
                 </div>
             `;
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
+            // 修正 5: 加入 autoPanPaddingTopLeft 確保 popup 彈出時不會與上方的選單列重疊
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             marker.on('click', () => { 
                 if(item.audioUrl) prepareGlobalPlayer(item.uid); 
                 isRoutePlaying = false; 
@@ -358,11 +375,23 @@
         function playNextRoutePoint() {
             if (!isRoutePlaying) return; 
             if (currentRouteIndex >= routePointsData.length) { alert("✅ 路線任務探索完畢！"); isRoutePlaying = false; return; }
-            var pt = routePointsData[currentRouteIndex]; var marker = routeMarkerObjects[currentRouteIndex];
-            map.flyTo([pt.lat, pt.lon], 17, { duration: 1.5 });
-            setTimeout(() => {
+            var pt = routePointsData[currentRouteIndex]; 
+            var marker = routeMarkerObjects[currentRouteIndex];
+            
+            // 修正 4 & 5: 使用 zoomToShowLayer 確保點位展開並強迫打開 Popup，接著微調畫面中心以避開 Header
+            markerCluster.zoomToShowLayer(marker, function() {
                 if (!isRoutePlaying) return;
+                
                 marker.openPopup();
+                
+                // 等待彈窗打開後，利用 panTo 自動將視角往下偏移，避免被頂部 Header 擋住
+                setTimeout(() => {
+                    if (map && marker) {
+                        var targetPoint = map.project(marker.getLatLng(), map.getZoom()).subtract([0, 120]);
+                        map.panTo(map.unproject(targetPoint, map.getZoom()), { animate: true });
+                    }
+                }, 300);
+
                 if (pt.audioUrl) {
                     prepareGlobalPlayer(pt.uid);
                     globalAudio.play();
@@ -370,7 +399,7 @@
                 } else {
                     setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000);
                 }
-            }, 1600);
+            });
         }
 
         globalAudio.onended = () => { 
