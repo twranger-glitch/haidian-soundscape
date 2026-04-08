@@ -61,7 +61,7 @@
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
         .sound-cover { width: 100%; height: 170px; object-fit: cover; background-color: #f1f2f6;}
-        .sound-info { padding: 20px; padding-bottom: 15px; } /* 底部留白稍微調整 */
+        .sound-info { padding: 20px; padding-bottom: 15px; } 
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .sound-category { background: #27ae60; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .sound-date { color: #95a5a6; font-size: 11px; font-weight: 600; }
@@ -71,9 +71,15 @@
         .btn-play-main { background: #27ae60; color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; margin-top: 5px; box-shadow: 0 4px 10px rgba(39,174,96,0.3); width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); }
 
-        /* 🔥 新增：極度低調、節省空間的連結樣式 */
-        .action-link-faint { font-size: 11px; color: #dcdde1; text-decoration: none; transition: color 0.2s; }
-        .action-link-faint:hover { color: #a4b0be; text-decoration: underline; }
+        /* 🔥 新增：隱藏式防誤觸管理選單 (⋮) */
+        .admin-menu { margin-top: 5px; text-align: right; }
+        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; padding: 0 5px; user-select: none; }
+        .admin-menu summary::-webkit-details-marker { display: none; } /* 隱藏預設的黑色小三角形 */
+        .admin-menu summary:hover, .admin-menu[open] summary { color: #7f8c8d; }
+        
+        .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
+        .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; transition: color 0.2s; font-weight: bold; }
+        .action-link-faint:hover { color: #e74c3c; }
 
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background-color: rgba(39, 174, 96, 0.9); color: white; font-weight: bold; }
@@ -250,7 +256,7 @@
                 var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
                 var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
 
-                // 🔥 空間極致壓縮：將「採集者」與「後勤按鈕」放在同一行，完全不佔額外高度
+                // 🔥 導入原生 <details> 標籤，點擊 ⋮ 才會展開，完美防誤觸
                 var cardHTML = `
                     <div class="sound-card">
                         ${coverHTML}
@@ -258,17 +264,19 @@
                             <div class="sound-meta"><span class="sound-category">${cleanCat}</span><span class="sound-date">${displayDate}</span></div>
                             <h3 class="sound-title">${item.title}</h3>
                             
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-size:12px; color:#95a5a6;">📍 ${item.author}</span>
-                                <div style="display: flex; gap: 8px; align-items: center;">
-                                    <a href="${reportUrl}" target="_blank" class="action-link-faint">勘誤</a>
-                                    <span style="color: #ecf0f1; font-size: 10px;">|</span>
-                                    <a href="${deleteUrl}" target="_blank" class="action-link-faint">下架</a>
-                                </div>
-                            </div>
-
+                            <div style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</div>
                             <p style="font-size:13px; color:#555; line-height:1.5; margin-top: 0;">${item.description}</p>
                             ${audioHTML}
+
+                            <details class="admin-menu">
+                                <summary title="管理選項">⋮</summary>
+                                <div class="admin-dropdown">
+                                    <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a>
+                                    <span style="color: #dcdde1;">|</span>
+                                    <a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
+                                </div>
+                            </details>
+
                         </div>
                     </div>
                 `;
