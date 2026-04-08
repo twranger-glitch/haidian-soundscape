@@ -178,7 +178,7 @@
         <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀。</p>
             <div class="route-list">
                 <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
@@ -211,9 +211,7 @@
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
-        
-        var allMarkersData = [];
-        var globalAudio = new Audio(), currentAudioUid = null;
+        var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
 
@@ -224,9 +222,14 @@
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
+            
+            // 🔥 處理日期顯示：去掉秒數，只留 YYYY/MM/DD HH:mm，讓單行排版更完美
             var rawDate = item.date.replace(" 00:00:00", "");
             var displayDate = rawDate;
-            if(rawDate.includes(":")) { var parts = rawDate.split(":"); displayDate = parts[0] + ":" + parts[1]; }
+            if(rawDate.includes(":")) {
+                var parts = rawDate.split(":");
+                displayDate = parts[0] + ":" + parts[1]; // 只保留到分
+            }
             displayDate = displayDate.replace(/-/g, "/");
             
             var catClass = "cat-default";
@@ -236,17 +239,30 @@
             else if (cleanCat.includes("空間")) catClass = "cat-space";
             else if (cleanCat.includes("歲月")) catClass = "cat-history";
 
-            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; 
+            // 🔥 捨棄 Emoji，改用極簡高質感的 SVG 線條圖示
+            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; // 日曆
+            
             var hourMatch = item.date.match(/\s(\d{2}):/);
             if (hourMatch) {
                 var h = parseInt(hourMatch[1]);
-                if (h >= 5 && h < 11) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
-                else if (h >= 11 && h < 16) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-                else if (h >= 16 && h < 19) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
-                else timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+                if (h >= 5 && h < 11) { // 晨
+                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
+                } else if (h >= 11 && h < 16) { // 日
+                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+                } else if (h >= 16 && h < 19) { // 暮
+                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
+                } else { // 夜
+                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+                }
             }
 
-            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>播放聲音記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
+            var audioHTML = item.audioUrl ? 
+                `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    播放聲音記錄
+                </button>` : 
+                `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
+            
             var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
             var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
             
@@ -264,47 +280,76 @@
                         </div>
                         <p class="sound-desc">${item.description}</p>
                         ${audioHTML}
-                        <details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a></div></details>
+                        <details class="admin-menu">
+                            <summary>⋮</summary>
+                            <div class="admin-dropdown">
+                                <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a>
+                                <span style="color:#eee">|</span>
+                                <a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
+                            </div>
+                        </details>
                     </div>
                 </div>
             `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
-            marker.on('click', () => { if(item.audioUrl) prepareGlobalPlayer(item.uid); isRoutePlaying = false; });
+            marker.on('click', () => { 
+                if(item.audioUrl) prepareGlobalPlayer(item.uid); 
+                isRoutePlaying = false; 
+            });
             return marker;
         }
 
         function renderMarkers(data) { markerCluster.clearLayers(); data.forEach((item) => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
+        
         function filterMarkers() {
             if (currentRouteType) return; 
-            var searchTerm = document.getElementById('searchInput').value.toLowerCase(), selectedCat = document.querySelector('input[name="catFilter"]:checked').value, hourLimit = parseInt(document.getElementById('timeSlider').value);
+            var searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
+            var hourLimit = parseInt(document.getElementById('timeSlider').value);
             document.getElementById('timeDisplay').innerText = hourLimit === -1 ? "全部時段" : hourLimit + ":00 - " + hourLimit + ":59";
+            
             var filtered = allMarkersData.filter(item => {
-                var matchS = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm), matchC = (selectedCat === 'all') || item.category.includes(selectedCat), matchT = hourLimit === -1 || (item.date.match(/\s(\d{2}):/) && parseInt(item.date.match(/\s(\d{2}):/)[1]) === hourLimit);
+                var matchS = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm);
+                var matchC = (selectedCat === 'all') || item.category.includes(selectedCat);
+                var matchT = hourLimit === -1 || (item.date.match(/\s(\d{2}):/) && parseInt(item.date.match(/\s(\d{2}):/)[1]) === hourLimit);
                 return matchS && matchC && matchT;
             });
             renderMarkers(filtered);
         }
 
         function togglePanel(id) {
-            var targetPanel = document.getElementById(id), isOpening = targetPanel.classList.contains('collapsed');
+            var targetPanel = document.getElementById(id);
+            var isOpening = targetPanel.classList.contains('collapsed');
             ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => { document.getElementById(p).classList.add('collapsed'); });
             if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            if (type === 'clear' || currentRouteType === type) { currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer(); document.getElementById('clearRouteBtn').style.display = 'none'; if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; } filterMarkers(); return; }
-            currentRouteType = type; isRoutePlaying = true; btnElement.classList.add('active'); document.getElementById('clearRouteBtn').style.display = 'block';
+            if (type === 'clear' || currentRouteType === type) {
+                currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
+                document.getElementById('clearRouteBtn').style.display = 'none';
+                if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+                filterMarkers(); return;
+            }
+            currentRouteType = type; isRoutePlaying = true;
+            btnElement.classList.add('active');
+            document.getElementById('clearRouteBtn').style.display = 'block';
+
             if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
             else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
+
             if (routePointsData.length < 2) { alert('目前該主題的聲景資料不足以產生路線！'); toggleRoute('clear'); return; }
+
             markerCluster.clearLayers(); routeMarkerObjects = [];
             routePointsData.forEach(item => { var marker = createMarker(item); routeMarkerObjects.push(marker); markerCluster.addLayer(marker); });
             map.addLayer(markerCluster);
+
             if (currentRouteLine) map.removeLayer(currentRouteLine);
             var latlngs = routePointsData.map(p => [p.lat, p.lon]);
             currentRouteLine = L.polyline(latlngs, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
             map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] });
+
             currentRouteIndex = 0;
             if (window.innerWidth <= 600) { togglePanel('routePanel'); } 
             setTimeout(playNextRoutePoint, 1500); 
@@ -318,30 +363,70 @@
             setTimeout(() => {
                 if (!isRoutePlaying) return;
                 marker.openPopup();
-                if (pt.audioUrl) { prepareGlobalPlayer(pt.uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
-                else { setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
+                if (pt.audioUrl) {
+                    prepareGlobalPlayer(pt.uid);
+                    globalAudio.play();
+                    document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+                } else {
+                    setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000);
+                }
             }, 1600);
         }
 
-        globalAudio.onended = () => { document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`; if (isRoutePlaying) { currentRouteIndex++; setTimeout(playNextRoutePoint, 1500); } };
+        globalAudio.onended = () => { 
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; 
+            document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`; 
+            if (isRoutePlaying) { currentRouteIndex++; setTimeout(playNextRoutePoint, 1500); }
+        };
+
         function getWaveformUrl(url, hex) { return url.replace('/upload/', `/upload/fl_waveform,co_rgb:${hex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png'); }
+        
         function prepareGlobalPlayer(uid) {
-            var item = allMarkersData.find(i => i.uid === uid); if (!item) return;
+            var item = allMarkersData.find(i => i.uid === uid);
+            if (!item) return;
             if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
-            currentAudioUid = uid; document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")"; document.getElementById('waveBase').src = getWaveformUrl(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = getWaveformUrl(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)'; globalAudio.pause(); globalAudio.src = item.audioUrl; document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; document.getElementById('globalPlayer').classList.add('active');
+            currentAudioUid = uid;
+            document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")";
+            document.getElementById('waveBase').src = getWaveformUrl(item.audioUrl, "bdc3c7");
+            document.getElementById('waveProgress').src = getWaveformUrl(item.audioUrl, "27ae60");
+            document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
+            globalAudio.pause(); globalAudio.src = item.audioUrl;
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+            document.getElementById('globalPlayer').classList.add('active');
         }
-        function startGlobalPlayback(uid) { if (currentAudioUid !== uid) prepareGlobalPlayer(uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; isRoutePlaying = false; }
-        function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
+
+        function startGlobalPlayback(uid) { 
+            if (currentAudioUid !== uid) prepareGlobalPlayer(uid); 
+            globalAudio.play(); 
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
+            isRoutePlaying = false; 
+        }
+
+        function toggleGlobalAudio() { 
+            if (globalAudio.paused) { 
+                globalAudio.play(); 
+                document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
+            } else { 
+                globalAudio.pause(); 
+                document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; 
+            } 
+        }
         function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; }
         function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerText = globalAudio.volume == 0 ? "🔇" : (globalAudio.volume < 0.5 ? "🔉" : "🔊"); }
         function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
+        
         globalAudio.ontimeupdate = () => { if(globalAudio.duration) document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; };
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
+        
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
-        if (window.innerWidth <= 600) { document.getElementById('sidePanel').classList.add('collapsed'); document.getElementById('timelinePanel').classList.add('collapsed'); document.getElementById('routePanel').classList.add('collapsed'); }
+        if (window.innerWidth <= 600) { 
+            document.getElementById('sidePanel').classList.add('collapsed'); 
+            document.getElementById('timelinePanel').classList.add('collapsed'); 
+            document.getElementById('routePanel').classList.add('collapsed'); 
+        }
     </script>
 </body>
 </html>
