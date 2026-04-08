@@ -10,8 +10,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <style>
         :root { --panel-offset: 20px; --accent-color: #27ae60; }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
@@ -27,9 +25,9 @@
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: var(--accent-color); }
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); border-radius: 12px !important; }
 
-        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 280px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 300px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
-        .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 15px; max-height: calc(100vh - 240px); overflow-y: auto; }
+        .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 15px; max-height: calc(100vh - 160px); overflow-y: auto; }
         .drawer-content::-webkit-scrollbar { width: 6px; }
         .drawer-content::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
 
@@ -37,11 +35,9 @@
         .toggle-btn:hover { background: #fff; transform: scale(1.05); }
 
         #sidePanel { top: 90px; }
-        #timelinePanel { top: 90px; }
-        #routePanel { top: 90px; }
+        #routePanel { top: 90px; } /* 原本 160px，合併面板後可往上移 */
         #sidePanel .toggle-btn { top: 20px; }
-        #timelinePanel .toggle-btn { top: 90px; }
-        #routePanel .toggle-btn { top: 160px; }
+        #routePanel .toggle-btn { top: 90px; } /* 錯開抽屜按鈕位置 */
         
         .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s; }
         .drawer-panel.collapsed .toggle-icon.svg-icon { transform: rotate(180deg); }
@@ -49,9 +45,9 @@
         .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 8px; display: block; }
         .search-input { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid #eee; font-size: 14px; outline: none; box-sizing: border-box; }
         .search-input:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
-        .filter-group { display: flex; flex-direction: column; gap: 12px; }
-        .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
-        .filter-item input { margin-right: 12px; accent-color: var(--accent-color); width: 18px; height: 18px; }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 10px; }
+        .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 13px; color: #34495e; font-weight: 600; width: 45%; }
+        .filter-item input { margin-right: 8px; accent-color: var(--accent-color); width: 16px; height: 16px; }
 
         .time-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; margin: 10px 0; }
         .time-display { font-size: 14px; font-weight: bold; color: var(--accent-color); text-align: center; background: rgba(39, 174, 96, 0.05); padding: 8px; border-radius: 10px; }
@@ -63,16 +59,23 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        .global-player { position: fixed; bottom: -150px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 25px; gap: 15px; z-index: 2000; transition: 0.5s; }
+        /* --- 播放器全新 HTML 對應之 CSS --- */
+        .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
         .global-player.active { bottom: 20px; } 
-        .player-control-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 20px; cursor: pointer; flex-shrink: 0; }
-        .player-content { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        
+        .player-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .player-title { font-weight: 800; color: #2c3e50; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+        
         .waveform-wrapper { position: relative; width: 100%; height: 35px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f8f9fa; }
         .wave-base { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.6; }
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
-        .volume-control { display: flex; align-items: center; gap: 10px; margin: 0 15px; flex-shrink: 0; }
+        
+        .player-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+        .player-control-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 20px; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; }
+        .volume-control { display: flex; align-items: center; gap: 8px; }
         .volume-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
-        .close-player-btn { background: transparent; border: none; font-size: 20px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; }
+        .close-player-btn { background: transparent; border: none; font-size: 24px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; width: 30px; height: 30px; border-radius: 50%; transition: 0.2s;}
+        .close-player-btn:hover { background: #eee; color: #7f8c8d;}
 
         /* 彈窗樣式 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
@@ -108,7 +111,6 @@
         .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 10px 15px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(39,174,96,0.25); }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
         
-        /* 修正 7: 讓 ⋮ 顏色明顯些又不過度突兀 */
         .admin-menu { margin-top: 15px; text-align: right; }
         .admin-menu summary { font-size: 20px; color: #7f8c8d; cursor: pointer; list-style: none; display: inline-block; transition: 0.2s; font-weight: 900; padding: 0 5px; }
         .admin-menu summary:hover { color: #34495e; }
@@ -116,19 +118,39 @@
         .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; transition: 0.2s;}
         .action-link-faint:hover { color: #e74c3c; }
 
-        /* 修正 1 & 6: 手機版完美防擠壓與音量控制 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
-            .glass-header { padding: 10px 15px; width: 92%; } /* 加寬讓按鈕空間更充裕 */
+            .glass-header { padding: 10px 15px; width: 92%; } 
             .project-title { font-size: 16px; }
             .project-title span.sub-title { font-size: 11px; display: block; margin-left: 0; margin-top: 2px;} 
-            .drawer-panel { width: 260px; } 
-            
+            .drawer-panel { width: 280px; } 
             .nav-buttons { overflow-x: visible; white-space: nowrap; max-width: none; gap: 6px; }
             
-            /* 保留並適配音量控制 */
-            .volume-control { display: flex; margin: 0 10px; gap: 5px; } 
-            .volume-slider { width: 50px; }
+            /* --- 手機版播放器：完全垂直堆疊設計 --- */
+            .global-player { 
+                flex-direction: column; /* 改為上下分層 */
+                padding: 15px 20px; 
+                width: 100%; 
+                box-sizing: border-box; 
+                border-radius: 24px 24px 0 0; /* 圓角只留上方，貼齊底部 */
+                bottom: -250px;
+            }
+            .global-player.active { bottom: 0; } /* 啟動時完全貼齊畫面底部 */
+            
+            .player-main { width: 100%; margin-bottom: 5px; }
+            .player-title { 
+                white-space: normal; /* 解除單行限制，完整顯示標題與作者 */
+                margin-bottom: 12px; 
+                font-size: 15px;
+            }
+            .waveform-wrapper { height: 40px; } /* 聲紋波稍微加粗更好點擊 */
+            
+            .player-controls { 
+                width: 100%; 
+                justify-content: space-between; /* 均分按鈕與音量條空間 */
+            }
+            .volume-control { flex: 1; margin: 0 15px; } /* 音量條佔滿剩餘空間 */
+            .volume-slider { width: 100%; height: 6px; } /* 滑桿加粗拉長 */
         }
     </style>
 </head>
@@ -143,36 +165,44 @@
     </header>
 
     <div id="sidePanel" class="drawer-panel">
-        <button class="toggle-btn" onclick="togglePanel('sidePanel')"><svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+        <button class="toggle-btn" onclick="togglePanel('sidePanel')">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
         <div class="drawer-content">
-            <div><span class="panel-label">🔍 搜尋標題或採集者</span><input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()"></div>
-            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 0;">
+            <div>
+                <span class="panel-label">🔍 搜尋標題或採集者</span>
+                <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
+            
             <div>
                 <span class="panel-label">📂 聲景類別篩選</span>
                 <div class="filter-group">
                     <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 所有聲景</label>
                     <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
                     <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
-                    <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業聲" onchange="filterMarkers()"> 活動與產業聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業" onchange="filterMarkers()"> 活動與產業</label>
                     <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
                     <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div id="timelinePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('timelinePanel')"><svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-        <div class="drawer-content">
-            <span class="panel-label">🕒 聲景時間軸探索</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段的聲景</p>
-            <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
-            <div id="timeDisplay" class="time-display">全部時段</div>
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
+
+            <div>
+                <span class="panel-label">🕒 聲景時間軸探索</span>
+                <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段</p>
+                <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
+                <div id="timeDisplay" class="time-display">全部時段</div>
+            </div>
         </div>
     </div>
 
     <div id="routePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('routePanel')"><svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+        <button class="toggle-btn" onclick="togglePanel('routePanel')">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
             <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
@@ -187,18 +217,20 @@
     <div id="map"></div>
 
     <div id="globalPlayer" class="global-player">
-        <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">⏸</button>
-        <div class="player-content">
-            <div id="playerTitleUI" style="font-weight:800; color:#2c3e50; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">載入中...</div>
+        <div class="player-main">
+            <div id="playerTitleUI" class="player-title">載入中...</div>
             <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
                 <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
             </div>
         </div>
-        <div class="volume-control">
-            <span id="muteBtn" class="mute-icon" onclick="toggleMute()">🔊</span>
-            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
+        <div class="player-controls">
+            <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">⏸</button>
+            <div class="volume-control">
+                <span id="muteBtn" class="mute-icon" onclick="toggleMute()">🔊</span>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
+            </div>
+            <button class="close-player-btn" onclick="closeGlobalPlayer()">✕</button>
         </div>
-        <button class="close-player-btn" onclick="closeGlobalPlayer()">✕</button>
     </div>
 
     <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
@@ -261,13 +293,13 @@
             var hourMatch = item.date.match(/\s(\d{2}):/);
             if (hourMatch) {
                 var h = parseInt(hourMatch[1]);
-                if (h >= 5 && h < 11) { // 晨
+                if (h >= 5 && h < 11) { 
                     timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
-                } else if (h >= 11 && h < 16) { // 日
+                } else if (h >= 11 && h < 16) { 
                     timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-                } else if (h >= 16 && h < 19) { // 暮
+                } else if (h >= 16 && h < 19) { 
                     timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
-                } else { // 夜
+                } else { 
                     timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
                 }
             }
@@ -307,7 +339,6 @@
                     </div>
                 </div>
             `;
-            // 修正 5: 加入 autoPanPaddingTopLeft 確保 popup 彈出時不會與上方的選單列重疊
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             marker.on('click', () => { 
                 if(item.audioUrl) prepareGlobalPlayer(item.uid); 
@@ -334,10 +365,11 @@
             renderMarkers(filtered);
         }
 
+        // 修改後的 togglePanel，移除了 timelinePanel 的牽絆
         function togglePanel(id) {
             var targetPanel = document.getElementById(id);
             var isOpening = targetPanel.classList.contains('collapsed');
-            ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => { document.getElementById(p).classList.add('collapsed'); });
+            ['sidePanel', 'routePanel'].forEach(p => { document.getElementById(p).classList.add('collapsed'); });
             if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
@@ -378,13 +410,11 @@
             var pt = routePointsData[currentRouteIndex]; 
             var marker = routeMarkerObjects[currentRouteIndex];
             
-            // 修正 4 & 5: 使用 zoomToShowLayer 確保點位展開並強迫打開 Popup，接著微調畫面中心以避開 Header
             markerCluster.zoomToShowLayer(marker, function() {
                 if (!isRoutePlaying) return;
                 
                 marker.openPopup();
                 
-                // 等待彈窗打開後，利用 panTo 自動將視角往下偏移，避免被頂部 Header 擋住
                 setTimeout(() => {
                     if (map && marker) {
                         var targetPoint = map.project(marker.getLatLng(), map.getZoom()).subtract([0, 120]);
@@ -453,7 +483,6 @@
         
         if (window.innerWidth <= 600) { 
             document.getElementById('sidePanel').classList.add('collapsed'); 
-            document.getElementById('timelinePanel').classList.add('collapsed'); 
             document.getElementById('routePanel').classList.add('collapsed'); 
         }
     </script>
