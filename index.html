@@ -123,6 +123,32 @@
         .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; transition: 0.2s;}
         .action-link-faint:hover { color: #e74c3c; }
 
+        /* 👑 新增：圖層切換鈕的美化 CSS */
+        .leaflet-control-layers { 
+            margin-top: 85px !important; 
+            margin-right: 20px !important; 
+            border-radius: 16px !important; 
+            border: none !important; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; 
+            padding: 5px;
+            font-family: '微軟正黑體', sans-serif;
+            transition: all 0.3s;
+        }
+        .leaflet-control-layers-expanded {
+            padding: 12px 18px !important;
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(10px);
+        }
+        .leaflet-control-layers label {
+            font-size: 13px;
+            font-weight: 800;
+            color: #2c3e50;
+            cursor: pointer;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { padding: 10px 15px; width: 92%; } 
@@ -152,6 +178,9 @@
             .player-controls { width: 100%; justify-content: space-between; }
             .volume-control { flex: 1; margin: 0 15px; } 
             .volume-slider { width: 100%; height: 6px; } 
+
+            /* 手機版的圖層按鈕微調位置，避免和右邊重疊 */
+            .leaflet-control-layers { margin-top: 70px !important; margin-right: 15px !important; }
         }
     </style>
 </head>
@@ -270,12 +299,42 @@
     </div>
     
     <script>
-        // 👉 注意這裡！我把預設視角調整了一下，並且換上了國土測繪中心的地圖
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
-        L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+        
+        // 🌟 新增：定義兩個底圖圖層
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
+            attribution: '&copy; CARTO' 
+        });
+        
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
             attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>',
             maxZoom: 19
-        }).addTo(map);
+        });
+
+        // 預設先加入臺灣地圖
+        taiwanLayer.addTo(map);
+
+        // 🌟 新增：加入右上角的手動切換控制器
+        var baseMaps = {
+            "🇹🇼 臺灣精細地圖": taiwanLayer,
+            "🌍 全球通用地圖": globalLayer
+        };
+        L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
+
+        // 🌟 新增：動態底圖切換邏輯 (Dynamic Basemap Switching)
+        map.on('moveend', function() {
+            var center = map.getCenter();
+            // 判斷中心點是否在大臺灣區域 (包含金馬澎)
+            var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
+            
+            if (inTaiwan && !map.hasLayer(taiwanLayer)) {
+                map.removeLayer(globalLayer);
+                map.addLayer(taiwanLayer);
+            } else if (!inTaiwan && !map.hasLayer(globalLayer)) {
+                map.removeLayer(taiwanLayer);
+                map.addLayer(globalLayer);
+            }
+        });
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
