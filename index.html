@@ -167,10 +167,10 @@
             .on('markgeocode', function(e) { map.fitBounds(e.geocode.bbox); })
             .addTo(map);
 
+        // 🔥 修復：移除 disableClusteringAtZoom，讓同座標點可以順利觸發蜘蛛散開
         var markerCluster = L.markerClusterGroup({ 
-            maxClusterRadius: 40, 
-            disableClusteringAtZoom: 18,
-            spiderfyOnMaxZoom: true // 確保重疊的座標點可以散開
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: true
         });
         var allMarkersData = [];
 
