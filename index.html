@@ -74,7 +74,6 @@
         .volume-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
         .close-player-btn { background: transparent; border: none; font-size: 20px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; }
 
-        /* 彈窗樣式 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -85,38 +84,18 @@
         .modal-tag { display: inline-block; background: #34495e; color: #ecf0f1; padding: 5px 12px; border-radius: 12px; font-size: 13px; font-weight: bold; margin-bottom: 18px; }
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
-        .ethics-list { padding-left: 20px; margin-top: 5px; margin-bottom: 20px;}
-        .ethics-list li { margin-bottom: 8px; color: #555; font-size: 14.5px; line-height: 1.6;}
-        .ethics-title { font-weight: bold; color: #27ae60; font-size: 16px; margin-top: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;}
 
-        /* =======================================================
-           🔥 像素級美學重構：地圖卡片 (Pixel-perfect Card UI)
-           ======================================================= */
+        /* 地圖卡片 */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
         .sound-info { padding: 20px; }
-        
-        /* 標題極大化，俐落粗體 */
         .sound-title { font-size: 20px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
-        
-        /* 🔥 重點修復：資訊列強制單行，絕不換行 */
-        .sound-meta { 
-            display: flex; align-items: center; gap: 6px; 
-            margin-bottom: 15px; color: #7f8c8d; 
-            white-space: nowrap; /* 核心：禁止換行 */
-        }
-        
-        /* 如果名字太長，自動變成「...」 */
+        .sound-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 15px; color: #7f8c8d; white-space: nowrap; }
         .meta-author { font-size: 13px; font-weight: 800; color: #2c3e50; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
-        
         .meta-divider { color: #dcdde1; font-weight: 300; font-size: 10px; }
-        
-        /* 日期字體縮小並改用等寬字體，搭配 SVG */
         .meta-date { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; font-family: 'Courier New', Courier, monospace;}
-        
-        /* 標籤瘦身，更具現代感 */
         .meta-category { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 900; letter-spacing: 0.2px; }
         .cat-nature { background: #e8f8f5; color: #1abc9c; }   
         .cat-culture { background: #fef9e7; color: #f39c12; }  
@@ -124,19 +103,9 @@
         .cat-space { background: #ebf5fb; color: #3498db; }    
         .cat-history { background: #f4ecf8; color: #9b59b6; }  
         .cat-default { background: #f1f2f6; color: #7f8c8d; }  
-        
-        /* 描述文字調淡，增加呼吸感 */
         .sound-desc { font-size: 14px; color: #7f8c8d; line-height: 1.6; margin: 0 0 18px 0; text-align: justify; }
-        
-        /* 播放鍵質感升級 */
-        .btn-play-main { 
-            background: var(--accent-color); color: #fff; border: none; 
-            padding: 10px 15px; border-radius: 8px; font-size: 14px; font-weight: 800; 
-            cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; 
-            gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(39,174,96,0.25); 
-        }
+        .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 10px 15px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(39,174,96,0.25); }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
-        
         .admin-menu { margin-top: 15px; text-align: right; }
         .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; transition: 0.2s;}
         .admin-menu summary:hover { color: #95a5a6; }
@@ -150,8 +119,7 @@
             .project-title span.sub-title { font-size: 11px; display: block; margin-left: 0; margin-top: 2px;} 
             .drawer-panel { width: 260px; } 
             .volume-control { display: none; } 
-            .nav-buttons { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; max-width: 160px;}
-            .nav-buttons::-webkit-scrollbar { display: none; }
+            /* 移除會導致按鈕滑出螢幕的 scroll 設定，讓按鈕自然並排 */
         }
     </style>
 </head>
@@ -162,8 +130,7 @@
         <nav class="nav-buttons">
             <button onclick="openModal('aboutModal')">關於</button>
             <button onclick="openModal('contactModal')">聯絡</button>
-            <button onclick="openModal('ethicsModal')" style="color: #d35400; font-weight: bold;">規範</button>
-            <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')">投稿</button>
+            <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')">我要投稿</button>
         </nav>
     </header>
 
@@ -200,7 +167,7 @@
         <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀。</p>
             <div class="route-list">
                 <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
@@ -228,15 +195,12 @@
 
     <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('aboutModal')">×</button><img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2><div class="modal-tag">Hidden below, growing beyond.</div><p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p><p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p><p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p><div class="quote-block"><p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p><p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p></div></div></div></div>
     <div id="contactModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'contactModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('contactModal')">×</button><img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">聯絡資訊</h2><p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p><div style="background: #f8f9fa; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;"><span style="font-size: 24px;">📍</span><div><strong style="color: #2c3e50;">海佃國小 地下圖書室</strong><br><span style="font-size: 13px; color: #7f8c8d;">Haidian Hidden Library</span></div></div></div></div></div>
-    <div id="ethicsModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'ethicsModal')"><div class="modal-box"><button class="modal-close-btn" onclick="closeModal('ethicsModal')">×</button><img src="https://images.unsplash.com/photo-1516321497487-e288fb19713f?q=80&w=800&auto=format&fit=crop" class="modal-img"><div class="modal-content"><h2 class="modal-title">海佃聲音地景<br><span style="font-size: 18px; color: #d35400;">採集倫理與投稿規範</span></h2><p class="modal-text">為了保護自己與他人，參與聲音地景採集的同學，請務必遵守以下數位小公民規範：</p><div class="ethics-title">一、我會保護自己和別人的隱私</div><ul class="ethics-list"><li><strong>強烈建議使用「暱稱」投稿</strong>，不說出或錄到可辨識身分的資訊。</li><li>若錄到他人聲音，只能出現「一般路人聲音」或「聽不出是誰」的談話。</li><li>不在錄音中透露別人的秘密或私人糾紛。</li></ul><div class="ethics-title">二、我錄的聲音要「先問過」再錄</div><ul class="ethics-list"><li>要錄到特定同學、老師或家人的聲音前，必須先告知並<strong>得到同意</strong>。</li><li>絕不偷錄他人的私下對話，以免侵犯隱私。</li></ul><div class="ethics-title">三、我尊重著作權，只上傳「自己有權利」的聲音</div><ul class="ethics-list"><li>聲音作品需以「親自錄製」為主，禁止直接側錄網路音樂上傳。</li><li>投稿即代表同意將作品授權學校於教學或校園活動中無償展示播放。</li></ul><div class="ethics-title">四、我會用友善、不傷人的聲音</div><ul class="ethics-list"><li>使用文明用語，絕不錄製或散布任何歧視、霸凌、威脅內容。</li></ul><div class="ethics-title">五、我會遵守學校與平台規範</div><ul class="ethics-list"><li>遵守學校設備使用規定，不在禁止錄音的時地進行錄製。</li><li><strong>經管理員認定若有個資、隱私或侵權疑慮，平台有權逕行下架作品。</strong></li></ul><div class="quote-block" style="border-left-color: #d35400; background: #fff3e0;"><p class="modal-text" style="font-weight: bold; color: #d35400;">⭐ 投稿前重要提醒：</p><p class="modal-text" style="font-size: 14px; margin-bottom: 0;">請務必在投稿表單中勾選「已與家長討論並取得同意」。這是保護你創作權益的重要步驟喔！</p></div></div></div></div>
-
+    
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
-        
-        var allMarkersData = [];
-        var globalAudio = new Audio(), currentAudioUid = null;
+        var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
 
@@ -247,14 +211,9 @@
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
-            
-            // 🔥 處理日期顯示：去掉秒數，只留 YYYY/MM/DD HH:mm，讓單行排版更完美
             var rawDate = item.date.replace(" 00:00:00", "");
             var displayDate = rawDate;
-            if(rawDate.includes(":")) {
-                var parts = rawDate.split(":");
-                displayDate = parts[0] + ":" + parts[1]; // 只保留到分
-            }
+            if(rawDate.includes(":")) { var parts = rawDate.split(":"); displayDate = parts[0] + ":" + parts[1]; }
             displayDate = displayDate.replace(/-/g, "/");
             
             var catClass = "cat-default";
@@ -264,31 +223,17 @@
             else if (cleanCat.includes("空間")) catClass = "cat-space";
             else if (cleanCat.includes("歲月")) catClass = "cat-history";
 
-            // 🔥 捨棄 Emoji，改用極簡高質感的 SVG 線條圖示
-            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; // 日曆
-            
+            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; 
             var hourMatch = item.date.match(/\s(\d{2}):/);
             if (hourMatch) {
                 var h = parseInt(hourMatch[1]);
-                if (h >= 5 && h < 11) { // 晨
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
-                } else if (h >= 11 && h < 16) { // 日
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-                } else if (h >= 16 && h < 19) { // 暮
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
-                } else { // 夜
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-                }
+                if (h >= 5 && h < 11) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
+                else if (h >= 11 && h < 16) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+                else if (h >= 16 && h < 19) timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
+                else timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
             }
 
-            // 播放鍵也升級為實心厚實感
-            var audioHTML = item.audioUrl ? 
-                `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    播放聲音記錄
-                </button>` : 
-                `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
-            
+            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>播放聲音記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
             var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
             var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
             
@@ -297,7 +242,6 @@
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
                     <div class="sound-info">
                         <h3 class="sound-title">${item.title}</h3>
-                        
                         <div class="sound-meta">
                             <span class="meta-author" title="${item.author}">${item.author}</span>
                             <span class="meta-divider">|</span>
@@ -305,84 +249,49 @@
                             <span class="meta-divider">|</span>
                             <span class="meta-category ${catClass}">${cleanCat}</span>
                         </div>
-
                         <p class="sound-desc">${item.description}</p>
                         ${audioHTML}
-                        
-                        <details class="admin-menu">
-                            <summary>⋮</summary>
-                            <div class="admin-dropdown">
-                                <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a>
-                                <span style="color:#eee">|</span>
-                                <a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
-                            </div>
-                        </details>
+                        <details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a></div></details>
                     </div>
                 </div>
             `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
-            marker.on('click', () => { 
-                if(item.audioUrl) prepareGlobalPlayer(item.uid); 
-                isRoutePlaying = false; 
-            });
+            marker.on('click', () => { if(item.audioUrl) prepareGlobalPlayer(item.uid); isRoutePlaying = false; });
             return marker;
         }
 
-        function renderMarkers(data) {
-            markerCluster.clearLayers();
-            data.forEach((item) => markerCluster.addLayer(createMarker(item)));
-            map.addLayer(markerCluster);
-        }
-
+        function renderMarkers(data) { markerCluster.clearLayers(); data.forEach((item) => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
         function filterMarkers() {
             if (currentRouteType) return; 
-            var searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
-            var hourLimit = parseInt(document.getElementById('timeSlider').value);
+            var searchTerm = document.getElementById('searchInput').value.toLowerCase(), selectedCat = document.querySelector('input[name="catFilter"]:checked').value, hourLimit = parseInt(document.getElementById('timeSlider').value);
             document.getElementById('timeDisplay').innerText = hourLimit === -1 ? "全部時段" : hourLimit + ":00 - " + hourLimit + ":59";
-            
             var filtered = allMarkersData.filter(item => {
-                var matchS = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm);
-                var matchC = (selectedCat === 'all') || item.category.includes(selectedCat);
-                var matchT = hourLimit === -1 || (item.date.match(/\s(\d{2}):/) && parseInt(item.date.match(/\s(\d{2}):/)[1]) === hourLimit);
+                var matchS = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm), matchC = (selectedCat === 'all') || item.category.includes(selectedCat), matchT = hourLimit === -1 || (item.date.match(/\s(\d{2}):/) && parseInt(item.date.match(/\s(\d{2}):/)[1]) === hourLimit);
                 return matchS && matchC && matchT;
             });
             renderMarkers(filtered);
         }
 
         function togglePanel(id) {
-            var targetPanel = document.getElementById(id);
-            var isOpening = targetPanel.classList.contains('collapsed');
+            var targetPanel = document.getElementById(id), isOpening = targetPanel.classList.contains('collapsed');
             ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => { document.getElementById(p).classList.add('collapsed'); });
             if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            if (type === 'clear' || currentRouteType === type) {
-                currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
-                document.getElementById('clearRouteBtn').style.display = 'none';
-                if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-                filterMarkers(); return;
-            }
-            currentRouteType = type; isRoutePlaying = true;
-            btnElement.classList.add('active');
-            document.getElementById('clearRouteBtn').style.display = 'block';
-
+            if (type === 'clear' || currentRouteType === type) { currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer(); document.getElementById('clearRouteBtn').style.display = 'none'; if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; } filterMarkers(); return; }
+            currentRouteType = type; isRoutePlaying = true; btnElement.classList.add('active'); document.getElementById('clearRouteBtn').style.display = 'block';
             if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
             else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
-
             if (routePointsData.length < 2) { alert('目前該主題的聲景資料不足以產生路線！'); toggleRoute('clear'); return; }
-
             markerCluster.clearLayers(); routeMarkerObjects = [];
             routePointsData.forEach(item => { var marker = createMarker(item); routeMarkerObjects.push(marker); markerCluster.addLayer(marker); });
             map.addLayer(markerCluster);
-
             if (currentRouteLine) map.removeLayer(currentRouteLine);
             var latlngs = routePointsData.map(p => [p.lat, p.lon]);
             currentRouteLine = L.polyline(latlngs, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
             map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] });
-
             currentRouteIndex = 0;
             if (window.innerWidth <= 600) { togglePanel('routePanel'); } 
             setTimeout(playNextRoutePoint, 1500); 
@@ -401,58 +310,25 @@
             }, 1600);
         }
 
-        globalAudio.onended = () => { 
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; 
-            document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`; 
-            if (isRoutePlaying) { currentRouteIndex++; setTimeout(playNextRoutePoint, 1500); }
-        };
-
+        globalAudio.onended = () => { document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`; if (isRoutePlaying) { currentRouteIndex++; setTimeout(playNextRoutePoint, 1500); } };
         function getWaveformUrl(url, hex) { return url.replace('/upload/', `/upload/fl_waveform,co_rgb:${hex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png'); }
-        
         function prepareGlobalPlayer(uid) {
-            var item = allMarkersData.find(i => i.uid === uid);
-            if (!item) return;
+            var item = allMarkersData.find(i => i.uid === uid); if (!item) return;
             if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
-            currentAudioUid = uid;
-            document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")";
-            document.getElementById('waveBase').src = getWaveformUrl(item.audioUrl, "bdc3c7");
-            document.getElementById('waveProgress').src = getWaveformUrl(item.audioUrl, "27ae60");
-            document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
-            globalAudio.pause(); globalAudio.src = item.audioUrl;
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-            document.getElementById('globalPlayer').classList.add('active');
+            currentAudioUid = uid; document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")"; document.getElementById('waveBase').src = getWaveformUrl(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = getWaveformUrl(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)'; globalAudio.pause(); globalAudio.src = item.audioUrl; document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; document.getElementById('globalPlayer').classList.add('active');
         }
-
-        function startGlobalPlayback(uid) { 
-            if (currentAudioUid !== uid) prepareGlobalPlayer(uid); 
-            globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; isRoutePlaying = false; 
-        }
-
-        function toggleGlobalAudio() { 
-            if (globalAudio.paused) { 
-                globalAudio.play(); 
-                document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
-            } else { 
-                globalAudio.pause(); 
-                document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; 
-            } 
-        }
+        function startGlobalPlayback(uid) { if (currentAudioUid !== uid) prepareGlobalPlayer(uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; isRoutePlaying = false; }
+        function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
         function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; }
         function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerText = globalAudio.volume == 0 ? "🔇" : (globalAudio.volume < 0.5 ? "🔉" : "🔊"); }
         function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
-        
         globalAudio.ontimeupdate = () => { if(globalAudio.duration) document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; };
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
-        
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
-        if (window.innerWidth <= 600) { 
-            document.getElementById('sidePanel').classList.add('collapsed'); 
-            document.getElementById('timelinePanel').classList.add('collapsed'); 
-            document.getElementById('routePanel').classList.add('collapsed'); 
-        }
+        if (window.innerWidth <= 600) { document.getElementById('sidePanel').classList.add('collapsed'); document.getElementById('timelinePanel').classList.add('collapsed'); document.getElementById('routePanel').classList.add('collapsed'); }
     </script>
 </body>
 </html>
