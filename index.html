@@ -17,52 +17,58 @@
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
         
-        /* --- 頂部標題與按鈕 --- */
+        /* --- 頂部標題修復 --- */
         .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; }
-        .project-title { font-size: 18px; font-weight: 800; color: #2c3e50; margin: 0; display: flex; align-items: baseline;}
-        .project-title .main-title { color: var(--accent-color); margin: 0 6px; }
-        .project-title .sub-title { font-size: 13px; color: #7f8c8d; font-weight: 600; }
+        
+        /* 標題支援自動換行，解決手機被切斷問題 */
+        .project-title { font-size: 18px; font-weight: 800; color: #2c3e50; margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; }
+        .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
+        .project-title span.sub-title { font-size: 13px; color: #7f8c8d; font-weight: 600; margin-left: 5px; }
         
         .nav-buttons { display: flex; gap: 8px; align-items: center; }
-        .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: 0.3s;}
+        .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: 0.3s; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: var(--accent-color); }
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); border-radius: 12px !important; }
-        .btn-submit:hover { transform: translateY(-2px); }
 
-        /* --- 🔥 完美的左側獨立抽屜系統 (解決重疊問題) --- */
+        /* --- 🔥 終極版「資料夾分頁 (Folder Tabs)」抽屜系統 --- */
         .drawer-panel { 
             position: absolute; top: 90px; left: var(--panel-offset); 
             background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); 
             border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
-            padding: 25px; z-index: 999; display: flex; flex-direction: column; gap: 15px;
+            z-index: 999; width: 280px; box-sizing: border-box;
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-            width: 280px; max-height: calc(100vh - 200px); overflow-y: auto; box-sizing: border-box;
         }
-        /* 自訂捲軸 */
-        .drawer-panel::-webkit-scrollbar { width: 6px; }
-        .drawer-panel::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
-        
-        /* 隱藏時退到螢幕外 */
+        /* 隱藏時往左退出畫面 */
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
         
-        /* 抽屜的拉環按鈕 (位置錯開，完美並排) */
+        /* 內部卷軸內容區 (解決 overflow 吃掉按鈕的 Bug) */
+        .drawer-content {
+            padding: 25px; display: flex; flex-direction: column; gap: 15px;
+            max-height: calc(100vh - 240px); overflow-y: auto;
+        }
+        .drawer-content::-webkit-scrollbar { width: 6px; }
+        .drawer-content::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
+
+        /* 標籤拉環按鈕 */
         .toggle-btn { 
-            position: absolute; right: -32px; 
-            width: 32px; height: 64px; background: rgba(255, 255, 255, 0.95); 
-            border-radius: 0 16px 16px 0; border: none; cursor: pointer; display: flex; 
-            justify-content: center; align-items: center; color: var(--accent-color); 
+            position: absolute; right: -32px; width: 32px; height: 60px; 
+            background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: none; cursor: pointer; 
+            display: flex; justify-content: center; align-items: center; color: var(--accent-color); 
             box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s;
         }
         .toggle-btn:hover { background: #fff; transform: scale(1.05); }
 
-        /* 設定三個拉環的高度，確保收合時像一個清單 */
+        /* 讓三個拉環垂直錯開，形成資料夾標籤 */
         #sidePanel .toggle-btn { top: 20px; }
-        #timelinePanel .toggle-btn { top: 94px; }
-        #routePanel .toggle-btn { top: 168px; }
+        #timelinePanel .toggle-btn { top: 90px; }
+        #routePanel .toggle-btn { top: 160px; }
+        
+        .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s; }
+        .drawer-panel.collapsed .toggle-icon.svg-icon { transform: rotate(180deg); }
 
-        /* 面板內容排版 */
+        /* 面板內部排版 */
         .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 8px; display: block; }
-        .search-input { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid #eee; font-size: 14px; outline: none; box-sizing: border-box; transition: 0.2s;}
+        .search-input { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid #eee; font-size: 14px; outline: none; box-sizing: border-box; }
         .search-input:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
         .filter-group { display: flex; flex-direction: column; gap: 12px; }
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
@@ -71,7 +77,6 @@
         .time-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; margin: 10px 0; }
         .time-display { font-size: 14px; font-weight: bold; color: var(--accent-color); text-align: center; background: rgba(39, 174, 96, 0.05); padding: 8px; border-radius: 10px; }
 
-        /* 路線任務選單 */
         .route-list { display: flex; flex-direction: column; gap: 10px; }
         .route-btn { background: #f8f9fa; border: 1px solid #eee; color: #2c3e50; font-size: 13px; font-weight: bold; padding: 12px; border-radius: 12px; cursor: pointer; transition: 0.2s; text-align: left; }
         .route-btn:hover { background: #e8f8f5; border-color: var(--accent-color); color: var(--accent-color); }
@@ -91,7 +96,7 @@
         .volume-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
         .close-player-btn { background: transparent; border: none; font-size: 20px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; }
 
-        /* --- 彈出視窗 --- */
+        /* --- 彈出視窗 (文案完整保留) --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -111,15 +116,17 @@
         .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .sound-category { background: var(--accent-color); color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .btn-play-main { background: var(--accent-color); color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; width: 100%; margin-top: 10px; transition: 0.2s;}
-        .btn-play-main:hover { background: #219150; }
+        .btn-play-main:hover { background: #219150; transform: translateY(-2px); }
         .admin-menu { margin-top: 10px; text-align: right; }
         .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; }
         .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
 
+        /* 手機版微調 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
-            .drawer-panel { width: 260px; padding: 15px; } 
-            .project-title .sub-title { display: none; }
+            .project-title { font-size: 16px; }
+            .project-title span.sub-title { font-size: 11px; display: block; } /* 強制顯示子標題 */
+            .drawer-panel { width: 260px; } 
             .volume-control { display: none; } 
         }
     </style>
@@ -136,38 +143,46 @@
     </header>
 
     <div id="sidePanel" class="drawer-panel">
-        <button class="toggle-btn" onclick="togglePanel('sidePanel')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-        <div><span class="panel-label">🔍 搜尋標題或採集者</span><input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()"></div>
-        <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
-        <div>
-            <span class="panel-label">📂 聲景類別篩選</span>
-            <div class="filter-group">
-                <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 所有聲景</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業聲" onchange="filterMarkers()"> 活動與產業聲</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
-                <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
+        <button class="toggle-btn" onclick="togglePanel('sidePanel')">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <div class="drawer-content">
+            <div><span class="panel-label">🔍 搜尋標題或採集者</span><input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()"></div>
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 0;">
+            <div>
+                <span class="panel-label">📂 聲景類別篩選</span>
+                <div class="filter-group">
+                    <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 所有聲景</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業聲" onchange="filterMarkers()"> 活動與產業聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="timelinePanel" class="drawer-panel collapsed">
         <button class="toggle-btn" onclick="togglePanel('timelinePanel')"><span style="font-size:16px;">🕒</span></button>
-        <span class="panel-label">🕒 聲景時間軸探索</span>
-        <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段的聲景</p>
-        <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
-        <div id="timeDisplay" class="time-display">全部時段</div>
+        <div class="drawer-content">
+            <span class="panel-label">🕒 聲景時間軸探索</span>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段的聲景</p>
+            <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
+            <div id="timeDisplay" class="time-display">全部時段</div>
+        </div>
     </div>
 
     <div id="routePanel" class="drawer-panel collapsed">
         <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
-        <span class="panel-label">🗺️ 主題聆聽路線</span>
-        <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航播放）。</p>
-        <div class="route-list">
-            <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
-            <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
-            <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#f2dede; color:#c0392b; text-align:center;">❌ 結束路線任務</button>
+        <div class="drawer-content">
+            <span class="panel-label">🗺️ 主題聆聽路線</span>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
+            <div class="route-list">
+                <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
+                <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
+                <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#f2dede; color:#c0392b; text-align:center;">❌ 結束路線任務</button>
+            </div>
         </div>
     </div>
 
@@ -232,13 +247,8 @@
         var allMarkersData = [];
         var globalAudio = new Audio(), currentAudioUid = null;
         
-        // 🔥 自動導航路線系統核心變數
-        var currentRouteType = null;
-        var currentRouteLine = null;
-        var isRoutePlaying = false;
-        var routePointsData = [];
-        var routeMarkerObjects = [];
-        var currentRouteIndex = 0;
+        var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
+        var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
 
         // ⚠️ 這裡請填入您的 Google Apps Script 網址
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
@@ -254,8 +264,7 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
             marker.on('click', () => { 
                 if(item.audioUrl) prepareGlobalPlayer(item.uid); 
-                // 如果手動點其他作品，中斷目前的路線導航
-                isRoutePlaying = false;
+                isRoutePlaying = false; 
             });
             return marker;
         }
@@ -267,7 +276,7 @@
         }
 
         function filterMarkers() {
-            if (currentRouteType) return; // 路線任務中凍結搜尋
+            if (currentRouteType) return; 
             
             var searchTerm = document.getElementById('searchInput').value.toLowerCase();
             var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
@@ -283,25 +292,19 @@
             renderMarkers(filtered);
         }
 
-        // 🔥 手機排版解法：風琴式抽屜 (一次只開一個)
+        // 🔥 風琴式切換：確保只有一個面板會展開
         function togglePanel(id) {
             var targetPanel = document.getElementById(id);
             var isOpening = targetPanel.classList.contains('collapsed');
-            
             ['sidePanel', 'timelinePanel', 'routePanel'].forEach(p => {
                 document.getElementById(p).classList.add('collapsed');
             });
-
-            if (isOpening) {
-                targetPanel.classList.remove('collapsed');
-            }
+            if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
-        // 🔥 完美的自動導航路線引擎
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
 
-            // 關閉路線
             if (type === 'clear' || currentRouteType === type) {
                 currentRouteType = null;
                 isRoutePlaying = false;
@@ -312,7 +315,6 @@
                 return;
             }
 
-            // 啟動新路線
             currentRouteType = type;
             isRoutePlaying = true;
             btnElement.classList.add('active');
@@ -342,11 +344,15 @@
 
             map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] });
 
-            // 啟動自動導航序列
             currentRouteIndex = 0;
+            
+            // 手機版：啟動任務後自動將面板收折，讓出地圖視野
+            if (window.innerWidth <= 600) { togglePanel('routePanel'); }
+
             setTimeout(playNextRoutePoint, 1500); 
         }
 
+        // 🔥 自動飛越與播放邏輯
         function playNextRoutePoint() {
             if (!isRoutePlaying) return; 
             if (currentRouteIndex >= routePointsData.length) {
@@ -354,14 +360,11 @@
                 isRoutePlaying = false;
                 return;
             }
-
             var pt = routePointsData[currentRouteIndex];
             var marker = routeMarkerObjects[currentRouteIndex];
 
-            // 地圖自動飛向該點
             map.flyTo([pt.lat, pt.lon], 17, { duration: 1.5 });
 
-            // 等待飛行結束後打開卡片並播放
             setTimeout(() => {
                 if (!isRoutePlaying) return;
                 marker.openPopup();
@@ -370,25 +373,15 @@
                     globalAudio.play();
                     document.getElementById('playerToggleBtn').innerText = "⏸";
                 } else {
-                    // 如果是無聲相片，停留 4 秒後自動飛下一站
-                    setTimeout(() => {
-                        if (isRoutePlaying) {
-                            currentRouteIndex++;
-                            playNextRoutePoint();
-                        }
-                    }, 4000);
+                    setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000);
                 }
             }, 1600);
         }
 
-        // 當音檔播完時，如果是路線任務，自動接續下一站
         globalAudio.onended = () => { 
             document.getElementById('playerToggleBtn').innerText = "▶"; 
             document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`; 
-            if (isRoutePlaying) {
-                currentRouteIndex++;
-                setTimeout(playNextRoutePoint, 1500); // 休息 1.5 秒再飛往下個景點
-            }
+            if (isRoutePlaying) { currentRouteIndex++; setTimeout(playNextRoutePoint, 1500); }
         };
 
         function getWaveformUrl(url, hex) { return url.replace('/upload/', `/upload/fl_waveform,co_rgb:${hex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png'); }
@@ -411,29 +404,21 @@
             if (currentAudioUid !== uid) prepareGlobalPlayer(uid); 
             globalAudio.play(); 
             document.getElementById('playerToggleBtn').innerText = "⏸"; 
-            isRoutePlaying = false; // 手動點擊播放代表脫離自動任務
+            isRoutePlaying = false; 
         }
 
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerText = "▶"; } }
-        
-        function closeGlobalPlayer() { 
-            globalAudio.pause(); 
-            document.getElementById('globalPlayer').classList.remove('active'); 
-            currentAudioUid = null; 
-            isRoutePlaying = false; // 關閉播放器代表中止路線任務
-        }
-        
+        function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; }
         function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerText = globalAudio.volume == 0 ? "🔇" : (globalAudio.volume < 0.5 ? "🔉" : "🔊"); }
         function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
         
         globalAudio.ontimeupdate = () => { if(globalAudio.duration) document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; };
-        
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
-        // 手機版預設收合三個抽屜
+        // 手機版預設收合三個抽屜，避免載入時畫面太擠
         if (window.innerWidth <= 600) { 
             document.getElementById('sidePanel').classList.add('collapsed'); 
             document.getElementById('timelinePanel').classList.add('collapsed'); 
