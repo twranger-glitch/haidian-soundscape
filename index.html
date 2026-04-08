@@ -17,11 +17,7 @@
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
     <style>
-        :root {
-            /* 定義面板距離左側的空白距離 */
-            --panel-offset: 20px;
-        }
-
+        :root { --panel-offset: 20px; }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
 
@@ -45,9 +41,7 @@
         .btn-submit { background: #27ae60 !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-submit:hover { background: #219150 !important; transform: translateY(-2px); }
 
-        /* ========================================= */
-        /* 新版：具備設計感的「側邊抽屜」與「拉環」    */
-        /* ========================================= */
+        /* --- 側邊抽屜 --- */
         .side-panel {
             position: absolute; top: 100px; left: var(--panel-offset);
             width: 260px;
@@ -55,46 +49,32 @@
             border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             padding: 20px; z-index: 999;
             display: flex; flex-direction: column; gap: 15px;
-            /* 動畫過渡：使用更高級的貝茲曲線，讓滑動有彈性 */
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
-        /* 當加上 collapsed 類別時，面板精準地往左退到畫面邊緣之外 */
-        .side-panel.collapsed { 
-            transform: translateX(calc(-100% - var(--panel-offset))); 
-        }
+        .side-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
 
-        /* 充滿設計感的一體成型拉環 */
+        /* 一體成型拉環 */
         .toggle-tab {
             position: absolute; top: 50%; right: -32px; transform: translateY(-50%);
             width: 32px; height: 64px;
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            border-radius: 0 16px 16px 0; /* 左平右圓 */
-            box-shadow: 6px 0 12px rgba(0,0,0,0.06);
+            border-radius: 0 16px 16px 0; box-shadow: 6px 0 12px rgba(0,0,0,0.06);
             border: 1px solid rgba(255,255,255,0.8); border-left: none;
             cursor: pointer; display: flex; justify-content: center; align-items: center;
             color: #27ae60; transition: background 0.3s, color 0.3s;
         }
         .toggle-tab:hover { background: #fff; color: #1e8449; }
-        
-        /* 拉環內的箭頭圖示 (使用 SVG 保持銳利質感) */
-        .toggle-icon { 
-            width: 20px; height: 20px; 
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-        }
-        /* 面板收合時，箭頭翻轉 180 度指向右邊 */
+        .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .side-panel.collapsed .toggle-icon { transform: rotate(180deg); }
-
 
         .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 5px; display: block; }
         .search-input { width: 100%; padding: 10px 15px; border-radius: 12px; border: 1px solid #ddd; font-size: 14px; outline: none; box-sizing: border-box; }
         .search-input:focus { border-color: #27ae60; }
-
         .filter-group { display: flex; flex-direction: column; gap: 8px; }
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
         .filter-item input { margin-right: 10px; accent-color: #27ae60; }
 
-        /* --- 彈出視窗樣式 --- */
+        /* --- 彈出視窗 --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -106,7 +86,7 @@
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
         
-        /* --- 地圖標記卡片 --- */
+        /* --- 地圖卡片與新增的操作按鈕 --- */
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
@@ -118,12 +98,20 @@
         .sound-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; }
         .sound-player { width: 100%; height: 35px; margin-top: 10px; border-radius: 20px; outline: none;}
         .photo-badge { background: #f39c12; color: #fff; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold; text-align: center; margin: 10px 0 0 0;}
+        
+        /* 勘誤與下架按鈕群組 */
+        .card-actions { display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .action-btn { flex: 1; padding: 8px 0; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; text-align: center; transition: 0.2s; text-decoration: none; }
+        .btn-report { background: #f0f3f4; color: #7f8c8d; }
+        .btn-report:hover { background: #e0e6e8; color: #2c3e50; }
+        .btn-delete { background: #fae5e5; color: #c0392b; }
+        .btn-delete:hover { background: #f5cccc; color: #a93226; }
 
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background-color: rgba(39, 174, 96, 0.9); color: white; font-weight: bold; }
 
         @media (max-width: 600px) { 
-            :root { --panel-offset: 10px; } /* 手機版間距變小 */
+            :root { --panel-offset: 10px; } 
             .side-panel { width: 220px; padding: 15px; } 
             .project-title .sub-title { display: none; } 
         }
@@ -141,13 +129,11 @@
     </header>
 
     <div id="sidePanel" class="side-panel">
-        
         <button class="toggle-tab" onclick="toggleSearchPanel()" title="收合/展開搜尋面板">
             <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
         </button>
-
         <div>
             <span class="panel-label">🔍 搜尋標題或採集者</span>
             <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
@@ -231,6 +217,10 @@
                 var coverHTML = `<img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">`;
                 var cleanCat = item.category.split(/[(（]/)[0].trim();
 
+                // 產生預先填寫好的表單網址 (將 TEST 替換為實際的作品標題)
+                var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
+                var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
+
                 var cardHTML = `
                     <div class="sound-card">
                         ${coverHTML}
@@ -240,6 +230,10 @@
                             <p style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</p>
                             <p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>
                             ${audioHTML}
+                            <div class="card-actions">
+                                <a href="${reportUrl}" target="_blank" class="action-btn btn-report">✏️ 勘誤</a>
+                                <a href="${deleteUrl}" target="_blank" class="action-btn btn-delete">🗑️ 下架</a>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -264,16 +258,12 @@
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
 
-        // --- 側邊抽屜拉環邏輯 ---
         function toggleSearchPanel() {
             var panel = document.getElementById('sidePanel');
             panel.classList.toggle('collapsed');
         }
 
-        // 貼心設計：若使用者用手機開啟，預設先將面板收合，還給他們乾淨地圖
-        if (window.innerWidth <= 600) {
-            document.getElementById('sidePanel').classList.add('collapsed');
-        }
+        if (window.innerWidth <= 600) { document.getElementById('sidePanel').classList.add('collapsed'); }
     </script>
 </body>
 </html>
