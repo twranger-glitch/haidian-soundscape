@@ -52,7 +52,6 @@
         .time-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; margin: 10px 0; }
         .time-display { font-size: 14px; font-weight: bold; color: var(--accent-color); text-align: center; background: rgba(39, 174, 96, 0.05); padding: 8px; border-radius: 10px; }
 
-        /* --- 新增：最新投稿清單樣式 --- */
         .latest-list { display: flex; flex-direction: column; gap: 10px; }
         .latest-item { display: flex; gap: 12px; background: #fff; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid #eee; transition: all 0.2s ease; align-items: center;}
         .latest-item:hover { border-color: var(--accent-color); transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
@@ -271,14 +270,18 @@
     </div>
     
     <script>
-        var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 14);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
+        // 👉 注意這裡！我把預設視角調整了一下，並且換上了國土測繪中心的地圖
+        var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
+        L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+            attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>',
+            maxZoom: 19
+        }).addTo(map);
+        
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
         
-        // 新增：用來儲存 UID 與 Marker 物件的對應，方便從清單點擊時呼叫
         var globalMarkerMap = {}; 
 
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
@@ -286,7 +289,7 @@
         fetch(API_URL).then(res => res.json()).then(data => { 
             allMarkersData = data; 
             renderMarkers(data); 
-            renderLatestSubmissions(data); // 載入後渲染最新排行榜
+            renderLatestSubmissions(data); 
         });
 
         function createMarker(item) {
@@ -358,7 +361,6 @@
             `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             
-            // 存入全域字典，讓清單可以呼叫
             globalMarkerMap[item.uid] = marker;
 
             marker.on('click', () => { 
@@ -368,12 +370,10 @@
             return marker;
         }
 
-        // 新增：渲染最新上架清單
         function renderLatestSubmissions(data) {
             var latestListDiv = document.getElementById('latestList');
             latestListDiv.innerHTML = "";
             
-            // 安全的日期排序 (由新到舊)
             var sortedData = data.slice().sort(function(a, b) {
                 var dateA = new Date(a.date.replace(/-/g, '/'));
                 var dateB = new Date(b.date.replace(/-/g, '/'));
@@ -382,7 +382,6 @@
                 return dateB - dateA;
             });
 
-            // 取前 10 筆
             var top10 = sortedData.slice(0, 10);
             
             if(top10.length === 0) {
@@ -391,7 +390,7 @@
             }
 
             top10.forEach(function(item) {
-                var rawDate = item.date.replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); // 只取年月日
+                var rawDate = item.date.replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
                 var itemHTML = `
                     <div class="latest-item" onclick="focusMarkerOnMap('${item.uid}')">
                         <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
@@ -408,19 +407,15 @@
             });
         }
 
-        // 新增：點擊清單項目後，地圖飛梭並打開卡片
         function focusMarkerOnMap(uid) {
             var targetMarker = globalMarkerMap[uid];
             if(targetMarker) {
-                // 手機版自動收合抽屜，方便看地圖
                 if (window.innerWidth <= 600) {
                     togglePanel('sidePanel');
                 }
                 
-                // 撥開叢集並打開 popup
                 markerCluster.zoomToShowLayer(targetMarker, function() {
                     targetMarker.openPopup();
-                    // 稍微往下平移避開 Header
                     setTimeout(() => {
                         if (map && targetMarker) {
                             var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]);
