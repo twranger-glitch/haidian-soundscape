@@ -74,6 +74,7 @@
         .volume-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
         .close-player-btn { background: transparent; border: none; font-size: 20px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; }
 
+        /* 彈出視窗 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -89,28 +90,36 @@
         .ethics-title { font-weight: bold; color: #27ae60; font-size: 16px; margin-top: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;}
 
         /* =======================================================
-           🔥 視覺重構：美感教科書等級的地圖卡片 (Card UI)
+           🔥 海佃專屬：超越對手的大師級卡片美學
            ======================================================= */
-        .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+        .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.2); }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
         .sound-info { padding: 22px; }
         
-        /* 標題極大化，俐落粗體 */
-        .sound-title { font-size: 22px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
+        /* 標題層級極大化 */
+        .sound-title { font-size: 20px; font-weight: 900; color: #1e272e; margin: 0 0 12px 0; letter-spacing: 0.5px; line-height: 1.4; }
         
-        /* 資訊整合單行排列 */
-        .sound-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; margin-bottom: 15px; }
+        /* 資訊列：優雅的單行排版與動態時光圖示 */
+        .sound-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; margin-bottom: 16px; }
         .meta-author { font-weight: 800; color: #2c3e50; }
         .meta-divider { color: #bdc3c7; font-weight: 300; font-size: 11px; }
-        .meta-date { font-weight: 700; color: #7f8c8d; }
-        .meta-category { background: #f1c40f; color: #2c3e50; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
+        .meta-date { font-weight: 700; color: #7f8c8d; display: flex; align-items: center; gap: 4px;}
         
-        /* 灰色柔和描述文字 */
-        .sound-desc { font-size: 14.5px; color: #7f8c8d; line-height: 1.6; margin: 0 0 18px 0; text-align: justify; }
+        /* 🔥 超越點 1：專屬類別色彩學 */
+        .meta-category { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
+        .cat-nature { background: #e8f8f5; color: #1abc9c; }   /* 綠色系 */
+        .cat-culture { background: #fef9e7; color: #f39c12; }  /* 溫暖橘 */
+        .cat-industry { background: #fbeee6; color: #e67e22; } /* 工業褐 */
+        .cat-space { background: #ebf5fb; color: #3498db; }    /* 空間藍 */
+        .cat-history { background: #f4ecf8; color: #9b59b6; }  /* 歲月紫 */
+        .cat-default { background: #f1f2f6; color: #7f8c8d; }  /* 預設灰 */
         
-        /* 優雅的 Ghost Button 播放鍵 */
+        /* 呼吸感描述文字 */
+        .sound-desc { font-size: 14.5px; color: #576574; line-height: 1.7; margin: 0 0 20px 0; text-align: justify; font-weight: 500;}
+        
+        /* Ghost Button 播放鍵 */
         .btn-play-main { 
             background: #fff; color: var(--accent-color); border: 2px solid var(--accent-color); 
             padding: 10px 15px; border-radius: 50px; font-size: 14px; font-weight: 800; 
@@ -120,8 +129,11 @@
         .btn-play-main:hover { background: var(--accent-color); color: #fff; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(39,174,96,0.2); }
         
         .admin-menu { margin-top: 15px; text-align: right; }
-        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; }
+        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; transition: 0.2s;}
+        .admin-menu summary:hover { color: #95a5a6; }
         .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
+        .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; transition: 0.2s;}
+        .action-link-faint:hover { color: #e74c3c; }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
@@ -179,7 +191,7 @@
         <button class="toggle-btn" onclick="togglePanel('routePanel')"><span style="font-size:16px;">🗺️</span></button>
         <div class="drawer-content">
             <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀。</p>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
             <div class="route-list">
                 <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
@@ -225,14 +237,34 @@
         fetch(API_URL).then(res => res.json()).then(data => { allMarkersData = data; renderMarkers(data); });
 
         function createMarker(item) {
-            // 🔥 套用美學排版，重建資料字串
             var cleanCat = item.category.split(/[(（]/)[0].trim();
             var displayDate = item.date.replace(" 00:00:00", "").replace(/-/g, "/"); 
             
-            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">▶ 播放此處聲景</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:10px; text-align:center; font-size:12px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
+            // 🔥 超越點 1：專屬色彩學邏輯
+            var catClass = "cat-default";
+            if (cleanCat.includes("自然")) catClass = "cat-nature";
+            else if (cleanCat.includes("常民")) catClass = "cat-culture";
+            else if (cleanCat.includes("活動") || cleanCat.includes("產業")) catClass = "cat-industry";
+            else if (cleanCat.includes("空間")) catClass = "cat-space";
+            else if (cleanCat.includes("歲月")) catClass = "cat-history";
+
+            // 🔥 超越點 2：動態時光圖示邏輯
+            var timeEmoji = "🕒"; // 預設
+            var hourMatch = item.date.match(/\s(\d{2}):/);
+            if (hourMatch) {
+                var h = parseInt(hourMatch[1]);
+                if (h >= 5 && h < 11) timeEmoji = "🌅";
+                else if (h >= 11 && h < 16) timeEmoji = "☀️";
+                else if (h >= 16 && h < 19) timeEmoji = "🌇";
+                else timeEmoji = "🌙";
+            }
+            if (displayDate.length <= 10) timeEmoji = "📅"; // 若只有日期無精準時間，顯示日曆
+
+            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">▶ 播放此段聲景記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:10px; text-align:center; font-size:12px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
             var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
             var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
             
+            // 🔥 超越點 3：呼吸感排版 HTML 結構
             var cardHTML = `
                 <div class="sound-card">
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
@@ -241,9 +273,9 @@
                         <div class="sound-meta">
                             <span class="meta-author">${item.author}</span>
                             <span class="meta-divider">|</span>
-                            <span class="meta-date">${displayDate}</span>
+                            <span class="meta-date">${timeEmoji} ${displayDate}</span>
                             <span class="meta-divider">|</span>
-                            <span class="meta-category">${cleanCat}</span>
+                            <span class="meta-category ${catClass}">${cleanCat}</span>
                         </div>
                         <p class="sound-desc">${item.description}</p>
                         ${audioHTML}
