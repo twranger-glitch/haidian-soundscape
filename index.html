@@ -22,6 +22,7 @@
         .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; }
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); border-radius: 12px !important; }
 
+        /* 側邊雙面板樣式 */
         .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); padding: 25px; z-index: 999; display: flex; flex-direction: column; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
         .toggle-btn { position: absolute; top: 50%; right: -32px; transform: translateY(-50%); width: 32px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--accent-color); box-shadow: 6px 0 12px rgba(0,0,0,0.06); }
@@ -38,6 +39,7 @@
         .time-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; margin: 10px 0; }
         .time-display { font-size: 14px; font-weight: bold; color: var(--accent-color); text-align: center; background: rgba(39, 174, 96, 0.05); padding: 8px; border-radius: 10px; }
 
+        /* 全站播放器 */
         .global-player { position: fixed; bottom: -150px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 25px; gap: 15px; z-index: 2000; transition: 0.5s; }
         .global-player.active { bottom: 20px; } 
         .player-control-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 20px; cursor: pointer; flex-shrink: 0; }
@@ -47,16 +49,22 @@
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
         .volume-control { display: flex; align-items: center; gap: 10px; margin: 0 15px; flex-shrink: 0; }
         .volume-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
+        .mute-icon { cursor: pointer; font-size: 18px; user-select: none; }
         .close-player-btn { background: transparent; border: none; font-size: 20px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; }
 
+        /* 卡片內容 */
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
         .sound-cover { width: 100%; height: 170px; object-fit: cover; }
         .sound-info { padding: 20px; }
+        .sound-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .sound-category { background: var(--accent-color); color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
         .btn-play-main { background: var(--accent-color); color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; width: 100%; margin-top: 10px; }
+        
         .admin-menu { margin-top: 10px; text-align: right; }
         .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; }
         .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
+        .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; }
 
         @media (max-width: 600px) { .drawer-panel { width: 220px; padding: 15px; } .volume-control { display: none; } }
     </style>
@@ -108,10 +116,12 @@
                 <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
             </div>
         </div>
+        
         <div class="volume-control">
-            <span id="muteBtn" onclick="toggleMute()" style="cursor:pointer; font-size: 18px;">🔊</span>
+            <span id="muteBtn" class="mute-icon" onclick="toggleMute()">🔊</span>
             <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
         </div>
+
         <button class="close-player-btn" onclick="closeGlobalPlayer()">✕</button>
     </div>
 
@@ -123,6 +133,7 @@
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
 
+        // ⚠️ 這裡請填入您的 Google Apps Script 網址 (部署後的版本)
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL).then(res => res.json()).then(data => { allMarkersData = data; renderMarkers(data); });
@@ -134,10 +145,9 @@
                 var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
                 var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
                 
-                var cardHTML = `<div class="sound-card"><img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'"><div class="sound-info"><div class="sound-meta"><span class="sound-category">${item.category.split(/[(（]/)[0]}</span><span class="sound-date">${item.date.replace(" 00:00:00","")}</span></div><h3 class="sound-title">${item.title}</h3><div style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</div><p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>${audioHTML}<details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none;">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none;">🗑️ 下架</a></div></details></div></div>`;
+                var cardHTML = `<div class="sound-card"><img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'"><div class="sound-info"><div class="sound-meta"><span class="sound-category">${item.category.split(/[(（]/)[0]}</span><span class="sound-date">${item.date.replace(" 00:00:00","")}</span></div><h3 class="sound-title">${item.title}</h3><div style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</div><p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>${audioHTML}<details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none; font-weight:bold;">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" style="font-size:12px; color:#95a5a6; text-decoration:none; font-weight:bold;">🗑️ 下架</a></div></details></div></div>`;
                 var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML);
                 
-                // 🔥 修復關鍵：使用 UID 觸發播放器
                 marker.on('click', () => { if(item.audioUrl) prepareGlobalPlayer(item.uid); });
                 markerCluster.addLayer(marker);
             });
@@ -161,7 +171,6 @@
         function togglePanel(id) { document.getElementById(id).classList.toggle('collapsed'); }
         function getWaveformUrl(url, hex) { return url.replace('/upload/', `/upload/fl_waveform,co_rgb:${hex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png'); }
         
-        // 🔥 修復關鍵：改用 UID 從原始資料庫尋找正確作品
         function prepareGlobalPlayer(uid) {
             var item = allMarkersData.find(i => i.uid === uid);
             if (!item) return;
@@ -184,6 +193,7 @@
 
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerText = "▶"; } }
         function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; }
+        
         function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerText = globalAudio.volume == 0 ? "🔇" : (globalAudio.volume < 0.5 ? "🔉" : "🔊"); }
         function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
         
@@ -193,6 +203,7 @@
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
+        
         if (window.innerWidth <= 600) { document.getElementById('sidePanel').classList.add('collapsed'); document.getElementById('timelinePanel').classList.add('collapsed'); }
     </script>
 </body>
