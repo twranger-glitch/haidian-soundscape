@@ -36,28 +36,54 @@
         .nav-buttons { display: flex; gap: 8px; align-items: center; }
         .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: 0.3s; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
-        
         .btn-submit { background: #27ae60 !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-submit:hover { background: #219150 !important; transform: translateY(-2px); }
 
-        /* --- 左側控制面板 --- */
+        /* --- 左側控制面板 (加入滑動動畫與收合邏輯) --- */
         .side-panel {
             position: absolute; top: 100px; left: 20px;
             width: 260px;
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             padding: 20px; z-index: 999;
             display: flex; flex-direction: column; gap: 15px;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
         }
-        .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 5px; display: block; }
+        /* 面板收合時的狀態 */
+        .side-panel.collapsed {
+            transform: translateX(-150%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* 隱藏面板的按鈕 (面板內部的 X) */
+        .close-panel-btn {
+            position: absolute; top: 15px; right: 15px;
+            background: transparent; border: none; font-size: 18px; color: #7f8c8d; cursor: pointer;
+            padding: 0; width: 24px; height: 24px; display: flex; justify-content: center; align-items: center; border-radius: 50%; transition: 0.2s;
+        }
+        .close-panel-btn:hover { background: #e0e0e0; color: #2c3e50; }
+
+        /* 呼叫面板的懸浮按鈕 (畫面左側) */
+        .open-panel-btn {
+            position: absolute; bottom: 30px; left: 20px;
+            background: #2c3e50; color: white; border: none; border-radius: 50%;
+            width: 50px; height: 50px; font-size: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            cursor: pointer; z-index: 998; display: flex; justify-content: center; align-items: center;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+        .open-panel-btn:hover { background: #34495e; transform: scale(1.05); }
+        /* 當面板打開時，隱藏這個懸浮按鈕 */
+        .open-panel-btn.hidden { transform: translateX(-150px); opacity: 0; pointer-events: none; }
+
+        .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 5px; display: block; padding-right: 20px;}
         .search-input { width: 100%; padding: 10px 15px; border-radius: 12px; border: 1px solid #ddd; font-size: 14px; outline: none; box-sizing: border-box; }
         .search-input:focus { border-color: #27ae60; }
-
         .filter-group { display: flex; flex-direction: column; gap: 8px; }
         .filter-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #34495e; font-weight: 600; }
         .filter-item input { margin-right: 10px; accent-color: #27ae60; }
 
-        /* --- 彈出視窗樣式 --- */
+        /* --- 彈出視窗與卡片 --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -69,7 +95,6 @@
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
         
-        /* --- 地圖標記卡片 --- */
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
@@ -82,11 +107,13 @@
         .sound-player { width: 100%; height: 35px; margin-top: 10px; border-radius: 20px; outline: none;}
         .photo-badge { background: #f39c12; color: #fff; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold; text-align: center; margin: 10px 0 0 0;}
 
-        /* 叢集顏色自定義為海佃綠 */
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: rgba(39, 174, 96, 0.6); }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background-color: rgba(39, 174, 96, 0.9); color: white; font-weight: bold; }
 
-        @media (max-width: 600px) { .side-panel { width: 200px; top: 120px; left: 10px; padding: 15px; } .project-title .sub-title { display: none; } }
+        @media (max-width: 600px) { 
+            .side-panel { width: 220px; top: 100px; left: 10px; padding: 15px; } 
+            .project-title .sub-title { display: none; } 
+        }
     </style>
 </head>
 <body>
@@ -100,7 +127,10 @@
         </nav>
     </header>
 
-    <div class="side-panel">
+    <button id="openPanelBtn" class="open-panel-btn hidden" onclick="toggleSearchPanel()" title="開啟搜尋與篩選">🔍</button>
+
+    <div id="sidePanel" class="side-panel">
+        <button class="close-panel-btn" onclick="toggleSearchPanel()" title="隱藏面板">✕</button>
         <div>
             <span class="panel-label">🔍 搜尋標題或採集者</span>
             <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
@@ -216,6 +246,20 @@
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
+
+        // --- 收合面板邏輯 ---
+        function toggleSearchPanel() {
+            var panel = document.getElementById('sidePanel');
+            var btn = document.getElementById('openPanelBtn');
+            panel.classList.toggle('collapsed');
+            btn.classList.toggle('hidden');
+        }
+
+        // 手機版載入時，自動收起面板以免擋住地圖
+        if (window.innerWidth <= 600) {
+            document.getElementById('sidePanel').classList.add('collapsed');
+            document.getElementById('openPanelBtn').classList.remove('hidden');
+        }
     </script>
 </body>
 </html>
