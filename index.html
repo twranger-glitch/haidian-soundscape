@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>海佃 溪遊記 | 聲音地景計畫</title>
     <meta name="robots" content="noindex, nofollow" />
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
     <style>
         :root { --panel-offset: 20px; --accent-color: #27ae60; }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
@@ -123,31 +127,9 @@
         .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; transition: 0.2s;}
         .action-link-faint:hover { color: #e74c3c; }
 
-        /* 👑 新增：圖層切換鈕的美化 CSS */
-        .leaflet-control-layers { 
-            margin-top: 85px !important; 
-            margin-right: 20px !important; 
-            border-radius: 16px !important; 
-            border: none !important; 
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; 
-            padding: 5px;
-            font-family: '微軟正黑體', sans-serif;
-            transition: all 0.3s;
-        }
-        .leaflet-control-layers-expanded {
-            padding: 12px 18px !important;
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(10px);
-        }
-        .leaflet-control-layers label {
-            font-size: 13px;
-            font-weight: 800;
-            color: #2c3e50;
-            cursor: pointer;
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-        }
+        .leaflet-control-layers { margin-top: 85px !important; margin-right: 20px !important; border-radius: 16px !important; border: none !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; padding: 5px; font-family: '微軟正黑體', sans-serif; transition: all 0.3s; }
+        .leaflet-control-layers-expanded { padding: 12px 18px !important; background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(10px); }
+        .leaflet-control-layers label { font-size: 13px; font-weight: 800; color: #2c3e50; cursor: pointer; margin-bottom: 5px; display: flex; align-items: center; }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
@@ -157,29 +139,15 @@
             .drawer-panel { width: 280px; } 
             .nav-buttons { overflow-x: visible; white-space: nowrap; max-width: none; gap: 6px; }
             
-            .global-player { 
-                flex-direction: column; 
-                padding: 15px 20px; 
-                width: 100%; 
-                box-sizing: border-box; 
-                border-radius: 24px 24px 0 0; 
-                bottom: -250px;
-            }
+            .global-player { flex-direction: column; padding: 15px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
             .global-player.active { bottom: 0; } 
-            
             .player-main { width: 100%; margin-bottom: 5px; }
-            .player-title { 
-                white-space: normal; 
-                margin-bottom: 12px; 
-                font-size: 15px;
-            }
+            .player-title { white-space: normal; margin-bottom: 12px; font-size: 15px; }
             .waveform-wrapper { height: 40px; } 
-            
             .player-controls { width: 100%; justify-content: space-between; }
             .volume-control { flex: 1; margin: 0 15px; } 
             .volume-slider { width: 100%; height: 6px; } 
 
-            /* 手機版的圖層按鈕微調位置，避免和右邊重疊 */
             .leaflet-control-layers { margin-top: 70px !important; margin-right: 15px !important; }
         }
     </style>
@@ -203,9 +171,7 @@
                 <span class="panel-label">🔍 搜尋標題或採集者</span>
                 <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
             </div>
-            
             <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
-            
             <div>
                 <span class="panel-label">📂 聲景類別篩選</span>
                 <div class="filter-group">
@@ -217,24 +183,18 @@
                     <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
                 </div>
             </div>
-
             <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
-
             <div>
                 <span class="panel-label">🕒 聲景時間軸探索</span>
                 <p style="font-size:12px; color:#7f8c8d; margin-top:0;">撥動滑桿探索不同時段</p>
                 <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
                 <div id="timeDisplay" class="time-display">全部時段</div>
             </div>
-
             <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
-
             <div>
                 <span class="panel-label" style="color: #27ae60;">🌟 最新上架聲景 (Top 10)</span>
-                <div id="latestList" class="latest-list">
-                    </div>
+                <div id="latestList" class="latest-list"></div>
             </div>
-
         </div>
     </div>
 
@@ -243,11 +203,15 @@
             <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
         <div class="drawer-content">
-            <span class="panel-label">🗺️ 主題聆聽路線</span>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">啟動路線任務，來一場深度聲景走讀（自動導航與播放）。</p>
+            <span class="panel-label">🗺️ 主題與空間走讀</span>
+            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">選擇主題或啟動空間魔法，自動串接沿途聲景。</p>
             <div class="route-list">
-                <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (自然聲)</button>
-                <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (常民聲)</button>
+                <button class="route-btn" onclick="toggleRoute('nature', this)">🌿 綠色生態走讀 (依類別)</button>
+                <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (依類別)</button>
+                
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">🌊 鹽水溪畔 50m 走讀</button>
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 50m 走讀</button>
+                
                 <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#f2dede; color:#c0392b; text-align:center;">❌ 結束路線任務</button>
             </div>
         </div>
@@ -301,45 +265,28 @@
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        // 🌟 新增：定義兩個底圖圖層
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
-            attribution: '&copy; CARTO' 
-        });
-        
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
-            attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>',
-            maxZoom: 19
-        });
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
 
-        // 預設先加入臺灣地圖
         taiwanLayer.addTo(map);
 
-        // 🌟 新增：加入右上角的手動切換控制器
-        var baseMaps = {
-            "🇹🇼 臺灣精細地圖": taiwanLayer,
-            "🌍 全球通用地圖": globalLayer
-        };
+        var baseMaps = { "🇹🇼 臺灣精細地圖": taiwanLayer, "🌍 全球通用地圖": globalLayer };
         L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
 
-        // 🌟 新增：動態底圖切換邏輯 (Dynamic Basemap Switching)
         map.on('moveend', function() {
             var center = map.getCenter();
-            // 判斷中心點是否在大臺灣區域 (包含金馬澎)
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
-            
-            if (inTaiwan && !map.hasLayer(taiwanLayer)) {
-                map.removeLayer(globalLayer);
-                map.addLayer(taiwanLayer);
-            } else if (!inTaiwan && !map.hasLayer(globalLayer)) {
-                map.removeLayer(taiwanLayer);
-                map.addLayer(globalLayer);
-            }
+            if (inTaiwan && !map.hasLayer(taiwanLayer)) { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); } 
+            else if (!inTaiwan && !map.hasLayer(globalLayer)) { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); }
         });
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
+        
+        // 🌟 新增：用來記錄畫在地圖上的 Buffer 範圍藍色色塊
+        var currentGeoFenceBufferLayer = null; 
         
         var globalMarkerMap = {}; 
 
@@ -355,10 +302,7 @@
             var cleanCat = item.category.split(/[(（]/)[0].trim();
             var rawDate = item.date.replace(" 00:00:00", "");
             var displayDate = rawDate;
-            if(rawDate.includes(":")) {
-                var parts = rawDate.split(":");
-                displayDate = parts[0] + ":" + parts[1];
-            }
+            if(rawDate.includes(":")) { var parts = rawDate.split(":"); displayDate = parts[0] + ":" + parts[1]; }
             displayDate = displayDate.replace(/-/g, "/");
             
             var catClass = "cat-default";
@@ -372,24 +316,13 @@
             var hourMatch = item.date.match(/\s(\d{2}):/);
             if (hourMatch) {
                 var h = parseInt(hourMatch[1]);
-                if (h >= 5 && h < 11) { 
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`;
-                } else if (h >= 11 && h < 16) { 
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-                } else if (h >= 16 && h < 19) { 
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`;
-                } else { 
-                    timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-                }
+                if (h >= 5 && h < 11) { timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M4.22 10.22l1.42 1.42"/><path d="M19.78 10.22l-1.42 1.42"/><path d="M2 18h20"/><path d="M6 14a6 6 0 0 1 12 0"/></svg>`; } 
+                else if (h >= 11 && h < 16) { timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`; } 
+                else if (h >= 16 && h < 19) { timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="2" y1="22" x2="22" y2="22"/></svg>`; } 
+                else { timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`; }
             }
 
-            var audioHTML = item.audioUrl ? 
-                `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    播放聲音記錄
-                </button>` : 
-                `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
-            
+            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> 播放聲音記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
             var reportUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%E2%9C%8F%EF%B8%8F+%E6%8F%90%E5%87%BA%E5%8B%98%E8%AA%A4&entry.111338985=" + encodeURIComponent(item.title);
             var deleteUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=%F0%9F%97%91%EF%B8%8F+%E5%8E%9F%E4%BD%9C%E8%80%85%E7%94%B3%E8%AB%8B%E4%B8%8B%E6%9E%B6&entry.111338985=" + encodeURIComponent(item.title);
             
@@ -399,10 +332,8 @@
                     <div class="sound-info">
                         <h3 class="sound-title">${item.title}</h3>
                         <div class="sound-meta">
-                            <span class="meta-author" title="${item.author}">${item.author}</span>
-                            <span class="meta-divider">|</span>
-                            <span class="meta-date">${timeSvg} ${displayDate}</span>
-                            <span class="meta-divider">|</span>
+                            <span class="meta-author" title="${item.author}">${item.author}</span><span class="meta-divider">|</span>
+                            <span class="meta-date">${timeSvg} ${displayDate}</span><span class="meta-divider">|</span>
                             <span class="meta-category ${catClass}">${cleanCat}</span>
                         </div>
                         <p class="sound-desc">${item.description}</p>
@@ -410,44 +341,28 @@
                         <details class="admin-menu">
                             <summary>⋮</summary>
                             <div class="admin-dropdown">
-                                <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a>
-                                <span style="color:#eee">|</span>
-                                <a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
+                                <a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a>
                             </div>
                         </details>
                     </div>
                 </div>
             `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
-            
             globalMarkerMap[item.uid] = marker;
-
-            marker.on('click', () => { 
-                if(item.audioUrl) prepareGlobalPlayer(item.uid); 
-                isRoutePlaying = false; 
-            });
+            marker.on('click', () => { if(item.audioUrl) prepareGlobalPlayer(item.uid); isRoutePlaying = false; });
             return marker;
         }
 
         function renderLatestSubmissions(data) {
             var latestListDiv = document.getElementById('latestList');
             latestListDiv.innerHTML = "";
-            
             var sortedData = data.slice().sort(function(a, b) {
-                var dateA = new Date(a.date.replace(/-/g, '/'));
-                var dateB = new Date(b.date.replace(/-/g, '/'));
-                if (isNaN(dateA)) dateA = new Date(0);
-                if (isNaN(dateB)) dateB = new Date(0);
+                var dateA = new Date(a.date.replace(/-/g, '/')), dateB = new Date(b.date.replace(/-/g, '/'));
+                if (isNaN(dateA)) dateA = new Date(0); if (isNaN(dateB)) dateB = new Date(0);
                 return dateB - dateA;
             });
-
             var top10 = sortedData.slice(0, 10);
-            
-            if(top10.length === 0) {
-                latestListDiv.innerHTML = "<p style='font-size:12px; color:#95a5a6;'>目前尚無作品</p>";
-                return;
-            }
-
+            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#95a5a6;'>目前尚無作品</p>"; return; }
             top10.forEach(function(item) {
                 var rawDate = item.date.replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
                 var itemHTML = `
@@ -455,13 +370,9 @@
                         <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
                         <div class="latest-item-info">
                             <div class="latest-item-title">${item.title}</div>
-                            <div class="latest-item-meta">
-                                <span>${item.author}</span>
-                                <span>${rawDate}</span>
-                            </div>
+                            <div class="latest-item-meta"><span>${item.author}</span><span>${rawDate}</span></div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
                 latestListDiv.innerHTML += itemHTML;
             });
         }
@@ -469,18 +380,10 @@
         function focusMarkerOnMap(uid) {
             var targetMarker = globalMarkerMap[uid];
             if(targetMarker) {
-                if (window.innerWidth <= 600) {
-                    togglePanel('sidePanel');
-                }
-                
+                if (window.innerWidth <= 600) togglePanel('sidePanel');
                 markerCluster.zoomToShowLayer(targetMarker, function() {
                     targetMarker.openPopup();
-                    setTimeout(() => {
-                        if (map && targetMarker) {
-                            var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]);
-                            map.panTo(map.unproject(pt, map.getZoom()), { animate: true });
-                        }
-                    }, 300);
+                    setTimeout(() => { if (map && targetMarker) { var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]); map.panTo(map.unproject(pt, map.getZoom()), { animate: true }); } }, 300);
                 });
             }
         }
@@ -510,22 +413,58 @@
             if (isOpening) targetPanel.classList.remove('collapsed');
         }
 
+        // 🌟 修改：加入 Turf.js 的空間運算邏輯
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // 清除之前的圍欄畫面
+            if (currentGeoFenceBufferLayer) {
+                map.removeLayer(currentGeoFenceBufferLayer);
+                currentGeoFenceBufferLayer = null;
+            }
+
             if (type === 'clear' || currentRouteType === type) {
                 currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
                 document.getElementById('clearRouteBtn').style.display = 'none';
                 if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
                 filterMarkers(); return;
             }
+
             currentRouteType = type; isRoutePlaying = true;
             btnElement.classList.add('active');
             document.getElementById('clearRouteBtn').style.display = 'block';
 
             if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
             else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
+            else if (type === 'geofence_yanshui' || type === 'geofence_jianan') {
+                // 定義隱形河道座標：注意 Turf.js 是 [經度 Lng, 緯度 Lat]
+                var riverPaths = {
+                    yanshui: [[120.170, 23.025], [120.190, 23.038], [120.208, 23.041], [120.220, 23.042]], // 鹽水溪大概輪廓
+                    jianan: [[120.180, 23.058], [120.195, 23.050], [120.210, 23.045], [120.225, 23.042]]  // 嘉南大圳大概輪廓
+                };
+                
+                var riverKey = type.split('_')[1];
+                var riverLine = turf.lineString(riverPaths[riverKey]);
+                
+                // 創造 50 公尺的緩衝區保護罩 (Buffer)
+                var riverBuffer = turf.buffer(riverLine, 50, { units: 'meters' });
 
-            if (routePointsData.length < 2) { alert('目前該主題的聲景資料不足以產生路線！'); toggleRoute('clear'); return; }
+                // 把保護罩畫在地圖上，讓大家看到！
+                currentGeoFenceBufferLayer = L.geoJSON(riverBuffer, {
+                    style: { color: '#3498db', weight: 2, opacity: 0.6, fillColor: '#3498db', fillOpacity: 0.2 }
+                }).addTo(map);
+
+                // 核心邏輯：掃描所有點，如果在保護罩內，就抓進來！
+                routePointsData = allMarkersData.filter(item => {
+                    var pt = turf.point([item.lon, item.lat]);
+                    return turf.booleanPointInPolygon(pt, riverBuffer);
+                });
+            }
+
+            if (routePointsData.length < 2) { 
+                alert('報告！這個範圍內目前的聲景作品不到 2 個，還不足以形成一條路線喔！快去投稿吧！'); 
+                toggleRoute('clear'); return; 
+            }
 
             markerCluster.clearLayers(); routeMarkerObjects = [];
             routePointsData.forEach(item => { var marker = createMarker(item); routeMarkerObjects.push(marker); markerCluster.addLayer(marker); });
@@ -534,7 +473,10 @@
             if (currentRouteLine) map.removeLayer(currentRouteLine);
             var latlngs = routePointsData.map(p => [p.lat, p.lon]);
             currentRouteLine = L.polyline(latlngs, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
-            map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] });
+            
+            // 視角縮放到涵蓋整條路線和緩衝區
+            if(currentGeoFenceBufferLayer) { map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] }); }
+            else { map.fitBounds(currentRouteLine.getBounds(), { padding: [50, 50] }); }
 
             currentRouteIndex = 0;
             if (window.innerWidth <= 600) { togglePanel('routePanel'); } 
@@ -549,9 +491,7 @@
             
             markerCluster.zoomToShowLayer(marker, function() {
                 if (!isRoutePlaying) return;
-                
                 marker.openPopup();
-                
                 setTimeout(() => {
                     if (map && marker) {
                         var targetPoint = map.project(marker.getLatLng(), map.getZoom()).subtract([0, 120]);
