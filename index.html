@@ -35,9 +35,9 @@
         .toggle-btn:hover { background: #fff; transform: scale(1.05); }
 
         #sidePanel { top: 90px; }
-        #routePanel { top: 90px; } /* 原本 160px，合併面板後可往上移 */
+        #routePanel { top: 90px; } 
         #sidePanel .toggle-btn { top: 20px; }
-        #routePanel .toggle-btn { top: 90px; } /* 錯開抽屜按鈕位置 */
+        #routePanel .toggle-btn { top: 90px; } 
         
         .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s; }
         .drawer-panel.collapsed .toggle-icon.svg-icon { transform: rotate(180deg); }
@@ -52,6 +52,15 @@
         .time-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; margin: 10px 0; }
         .time-display { font-size: 14px; font-weight: bold; color: var(--accent-color); text-align: center; background: rgba(39, 174, 96, 0.05); padding: 8px; border-radius: 10px; }
 
+        /* --- 新增：最新投稿清單樣式 --- */
+        .latest-list { display: flex; flex-direction: column; gap: 10px; }
+        .latest-item { display: flex; gap: 12px; background: #fff; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid #eee; transition: all 0.2s ease; align-items: center;}
+        .latest-item:hover { border-color: var(--accent-color); transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .latest-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+        .latest-item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .latest-item-title { font-size: 13px; font-weight: 800; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .latest-item-meta { font-size: 11px; color: #7f8c8d; display: flex; justify-content: space-between; }
+
         .route-list { display: flex; flex-direction: column; gap: 10px; }
         .route-btn { background: #f8f9fa; border: 1px solid #eee; color: #2c3e50; font-size: 13px; font-weight: bold; padding: 12px; border-radius: 12px; cursor: pointer; transition: 0.2s; text-align: left; }
         .route-btn:hover { background: #e8f8f5; border-color: var(--accent-color); color: var(--accent-color); }
@@ -59,7 +68,6 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        /* --- 播放器全新 HTML 對應之 CSS --- */
         .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
         .global-player.active { bottom: 20px; } 
         
@@ -77,7 +85,6 @@
         .close-player-btn { background: transparent; border: none; font-size: 24px; color: #bdc3c7; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; width: 30px; height: 30px; border-radius: 50%; transition: 0.2s;}
         .close-player-btn:hover { background: #eee; color: #7f8c8d;}
 
-        /* 彈窗樣式 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 24px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative; }
@@ -89,7 +96,6 @@
         .modal-text { font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 15px 0; }
         .quote-block { margin-top: 20px; padding: 18px; background: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 12px 12px 0; }
 
-        /* 卡片設計 */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         .sound-card { display: flex; flex-direction: column; background: #fff; }
@@ -126,31 +132,27 @@
             .drawer-panel { width: 280px; } 
             .nav-buttons { overflow-x: visible; white-space: nowrap; max-width: none; gap: 6px; }
             
-            /* --- 手機版播放器：完全垂直堆疊設計 --- */
             .global-player { 
-                flex-direction: column; /* 改為上下分層 */
+                flex-direction: column; 
                 padding: 15px 20px; 
                 width: 100%; 
                 box-sizing: border-box; 
-                border-radius: 24px 24px 0 0; /* 圓角只留上方，貼齊底部 */
+                border-radius: 24px 24px 0 0; 
                 bottom: -250px;
             }
-            .global-player.active { bottom: 0; } /* 啟動時完全貼齊畫面底部 */
+            .global-player.active { bottom: 0; } 
             
             .player-main { width: 100%; margin-bottom: 5px; }
             .player-title { 
-                white-space: normal; /* 解除單行限制，完整顯示標題與作者 */
+                white-space: normal; 
                 margin-bottom: 12px; 
                 font-size: 15px;
             }
-            .waveform-wrapper { height: 40px; } /* 聲紋波稍微加粗更好點擊 */
+            .waveform-wrapper { height: 40px; } 
             
-            .player-controls { 
-                width: 100%; 
-                justify-content: space-between; /* 均分按鈕與音量條空間 */
-            }
-            .volume-control { flex: 1; margin: 0 15px; } /* 音量條佔滿剩餘空間 */
-            .volume-slider { width: 100%; height: 6px; } /* 滑桿加粗拉長 */
+            .player-controls { width: 100%; justify-content: space-between; }
+            .volume-control { flex: 1; margin: 0 15px; } 
+            .volume-slider { width: 100%; height: 6px; } 
         }
     </style>
 </head>
@@ -196,6 +198,15 @@
                 <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
                 <div id="timeDisplay" class="time-display">全部時段</div>
             </div>
+
+            <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
+
+            <div>
+                <span class="panel-label" style="color: #27ae60;">🌟 最新上架聲景 (Top 10)</span>
+                <div id="latestList" class="latest-list">
+                    </div>
+            </div>
+
         </div>
     </div>
 
@@ -266,11 +277,17 @@
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
+        
+        // 新增：用來儲存 UID 與 Marker 物件的對應，方便從清單點擊時呼叫
+        var globalMarkerMap = {}; 
 
-        // API URL
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
-        fetch(API_URL).then(res => res.json()).then(data => { allMarkersData = data; renderMarkers(data); });
+        fetch(API_URL).then(res => res.json()).then(data => { 
+            allMarkersData = data; 
+            renderMarkers(data); 
+            renderLatestSubmissions(data); // 載入後渲染最新排行榜
+        });
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
@@ -340,6 +357,10 @@
                 </div>
             `;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
+            
+            // 存入全域字典，讓清單可以呼叫
+            globalMarkerMap[item.uid] = marker;
+
             marker.on('click', () => { 
                 if(item.audioUrl) prepareGlobalPlayer(item.uid); 
                 isRoutePlaying = false; 
@@ -347,7 +368,70 @@
             return marker;
         }
 
-        function renderMarkers(data) { markerCluster.clearLayers(); data.forEach((item) => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
+        // 新增：渲染最新上架清單
+        function renderLatestSubmissions(data) {
+            var latestListDiv = document.getElementById('latestList');
+            latestListDiv.innerHTML = "";
+            
+            // 安全的日期排序 (由新到舊)
+            var sortedData = data.slice().sort(function(a, b) {
+                var dateA = new Date(a.date.replace(/-/g, '/'));
+                var dateB = new Date(b.date.replace(/-/g, '/'));
+                if (isNaN(dateA)) dateA = new Date(0);
+                if (isNaN(dateB)) dateB = new Date(0);
+                return dateB - dateA;
+            });
+
+            // 取前 10 筆
+            var top10 = sortedData.slice(0, 10);
+            
+            if(top10.length === 0) {
+                latestListDiv.innerHTML = "<p style='font-size:12px; color:#95a5a6;'>目前尚無作品</p>";
+                return;
+            }
+
+            top10.forEach(function(item) {
+                var rawDate = item.date.replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); // 只取年月日
+                var itemHTML = `
+                    <div class="latest-item" onclick="focusMarkerOnMap('${item.uid}')">
+                        <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
+                        <div class="latest-item-info">
+                            <div class="latest-item-title">${item.title}</div>
+                            <div class="latest-item-meta">
+                                <span>${item.author}</span>
+                                <span>${rawDate}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                latestListDiv.innerHTML += itemHTML;
+            });
+        }
+
+        // 新增：點擊清單項目後，地圖飛梭並打開卡片
+        function focusMarkerOnMap(uid) {
+            var targetMarker = globalMarkerMap[uid];
+            if(targetMarker) {
+                // 手機版自動收合抽屜，方便看地圖
+                if (window.innerWidth <= 600) {
+                    togglePanel('sidePanel');
+                }
+                
+                // 撥開叢集並打開 popup
+                markerCluster.zoomToShowLayer(targetMarker, function() {
+                    targetMarker.openPopup();
+                    // 稍微往下平移避開 Header
+                    setTimeout(() => {
+                        if (map && targetMarker) {
+                            var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]);
+                            map.panTo(map.unproject(pt, map.getZoom()), { animate: true });
+                        }
+                    }, 300);
+                });
+            }
+        }
+
+        function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach((item) => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
         
         function filterMarkers() {
             if (currentRouteType) return; 
@@ -365,7 +449,6 @@
             renderMarkers(filtered);
         }
 
-        // 修改後的 togglePanel，移除了 timelinePanel 的牽絆
         function togglePanel(id) {
             var targetPanel = document.getElementById(id);
             var isOpening = targetPanel.classList.contains('collapsed');
