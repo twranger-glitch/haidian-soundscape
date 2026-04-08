@@ -31,31 +31,60 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-submit:hover { background: #219150 !important; transform: translateY(-2px); }
 
-        /* --- 側邊面板 --- */
-        .side-panel { position: absolute; top: 100px; left: var(--panel-offset); width: 260px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); padding: 20px; z-index: 999; display: flex; flex-direction: column; gap: 15px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        /* --- 側邊面板 (修復重點) --- */
+        .side-panel { 
+            position: absolute; top: 100px; left: var(--panel-offset); 
+            width: 280px; 
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); 
+            border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+            padding: 25px; z-index: 999; 
+            display: flex; flex-direction: column; gap: 20px; 
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
         .side-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset))); }
+        
         .toggle-tab { position: absolute; top: 50%; right: -32px; transform: translateY(-50%); width: 32px; height: 64px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 0 16px 16px 0; box-shadow: 6px 0 12px rgba(0,0,0,0.06); border: 1px solid rgba(255,255,255,0.8); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--accent-color); transition: 0.3s; }
         .toggle-icon { width: 20px; height: 20px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .side-panel.collapsed .toggle-icon { transform: rotate(180deg); }
 
-        /* --- 時間軸滑桿 (Timeline Slider) --- */
+        /* 搜尋框樣式回歸 */
+        .panel-label { font-size: 14px; font-weight: 800; color: #7f8c8d; margin-bottom: 8px; display: block; }
+        .search-input { 
+            width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid #eee; 
+            font-size: 14px; outline: none; box-sizing: border-box; background: white;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); transition: 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
+
+        /* 篩選類別強制垂直排版 */
+        .filter-group { display: flex; flex-direction: column; gap: 12px; }
+        .filter-item { 
+            display: flex; align-items: center; cursor: pointer; 
+            font-size: 14px; color: #34495e; font-weight: 600; 
+            transition: color 0.2s;
+        }
+        .filter-item:hover { color: var(--accent-color); }
+        .filter-item input { 
+            margin: 0 12px 0 0; width: 18px; height: 18px; 
+            accent-color: var(--accent-color); cursor: pointer;
+        }
+
+        /* --- 時間軸滑桿 (Timeline) --- */
         .timeline-container {
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
             width: 80%; max-width: 600px; background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px); border-radius: 50px; padding: 10px 30px;
+            backdrop-filter: blur(10px); border-radius: 50px; padding: 12px 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 1500;
             display: flex; flex-direction: column; align-items: center; gap: 5px;
-            transition: transform 0.3s ease;
+            transition: transform 0.4s ease;
         }
-        /* 當播放器啟動時，時間軸往上挪一點 */
-        .timeline-container.shifted { transform: translateX(-50%) translateY(-100px); }
-        
-        .timeline-label { font-size: 13px; font-weight: 800; color: #2c3e50; margin-bottom: 2px; }
+        .timeline-container.shifted { transform: translateX(-50%) translateY(-105px); }
+        .timeline-label { font-size: 13px; font-weight: 800; color: #7f8c8d; }
         .slider-wrapper { width: 100%; display: flex; align-items: center; gap: 15px; }
         .time-slider { flex: 1; accent-color: var(--accent-color); cursor: pointer; }
-        .time-display { font-size: 12px; font-weight: bold; color: var(--accent-color); width: 80px; text-align: center; }
+        .time-display { font-size: 12px; font-weight: bold; color: var(--accent-color); width: 85px; text-align: center; }
 
-        /* --- 地圖卡片樣式 --- */
+        /* --- 地圖卡片 & 播放器 --- */
         .leaflet-popup-content-wrapper { border-radius: 20px; overflow: hidden; }
         .leaflet-popup-content { margin: 0; width: 300px !important; }
         .sound-card { display: flex; flex-direction: column; }
@@ -67,14 +96,12 @@
         .sound-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; }
         .btn-play-main { background: var(--accent-color); color: white; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; margin-top: 5px; width: 100%; box-shadow: 0 4px 10px rgba(39,174,96,0.3); }
         
-        /* 防誤觸管理選單 */
-        .admin-menu { margin-top: 5px; text-align: right; }
-        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; padding: 0 5px; }
-        .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
+        .admin-menu { margin-top: 8px; text-align: right; }
+        .admin-menu summary { font-size: 18px; color: #dcdde1; cursor: pointer; list-style: none; display: inline-block; }
+        .admin-dropdown { background: #f8f9fa; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 12px; margin-top: 4px; border: 1px solid #eee; }
         .action-link-faint { font-size: 12px; color: #95a5a6; text-decoration: none; font-weight: bold; }
 
-        /* 全站播放器 */
-        .global-player { position: fixed; bottom: -150px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 800px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 20px; gap: 15px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .global-player { position: fixed; bottom: -150px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 800px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 20px; gap: 15px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
         .global-player.active { bottom: 20px; } 
         .player-control-btn { width: 45px; height: 45px; flex-shrink: 0; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 20px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4); }
         .player-content { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -88,7 +115,7 @@
 
         @media (max-width: 600px) { 
             .side-panel { width: 220px; padding: 15px; } 
-            .timeline-container { width: 90%; padding: 8px 15px; }
+            .timeline-container { width: 92%; padding: 8px 15px; }
             .volume-control { display: none; }
         }
     </style>
@@ -111,7 +138,7 @@
             <span class="panel-label">🔍 搜尋標題或採集者</span>
             <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
         </div>
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;">
+        <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 5px 0;">
         <div>
             <span class="panel-label">📂 聲景類別篩選</span>
             <div class="filter-group">
@@ -165,7 +192,6 @@
         var globalAudio = new Audio();
         var currentAudioIndex = -1;
 
-        // ⚠️ 這裡更換為你的 GAS 網址
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
 
         fetch(API_URL).then(res => res.json()).then(data => {
@@ -189,7 +215,7 @@
                             <div style="font-size:12px; color:#95a5a6; margin-bottom:10px;">📍 ${item.author}</div>
                             <p style="font-size:13px; color:#555; line-height:1.5;">${item.description}</p>
                             ${audioHTML}
-                            <details class="admin-menu"><summary>⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a></div></details>
+                            <details class="admin-menu"><summary title="管理選項">⋮</summary><div class="admin-dropdown"><a href="${reportUrl}" target="_blank" class="action-link-faint">✏️ 勘誤</a><span style="color:#eee">|</span><a href="${deleteUrl}" target="_blank" class="action-link-faint">🗑️ 下架</a></div></details>
                         </div>
                     </div>
                 `;
@@ -200,37 +226,26 @@
             map.addLayer(markerCluster);
         }
 
-        // 🔥 核心過濾邏輯：整合搜尋、類別與時間軸
         function filterMarkers() {
             var searchTerm = document.getElementById('searchInput').value.toLowerCase();
             var selectedCat = document.querySelector('input[name="catFilter"]:checked').value;
             var hourLimit = parseInt(document.getElementById('timeSlider').value);
-            
-            // 更新 UI 顯示
             var display = document.getElementById('timeDisplay');
             if (hourLimit === -1) { display.innerText = "全部時段"; }
             else { display.innerText = hourLimit + ":00 - " + hourLimit + ":59"; }
-
             var filtered = allMarkersData.filter(item => {
                 var matchesSearch = item.title.toLowerCase().includes(searchTerm) || item.author.toLowerCase().includes(searchTerm);
                 var matchesCat = (selectedCat === 'all') || item.category.includes(selectedCat);
-                
-                // 時間軸判定：如果不是全部(-1)，就檢查小時
                 var matchesTime = true;
                 if (hourLimit !== -1) {
                     var match = item.date.match(/\s(\d{2}):/);
-                    if (match) {
-                        var itemHour = parseInt(match[1]);
-                        matchesTime = (itemHour === hourLimit);
-                    } else { matchesTime = false; } // 沒有精準時間的作品在篩選時會消失
+                    if (match) { matchesTime = (parseInt(match[1]) === hourLimit); } else { matchesTime = false; }
                 }
-                
                 return matchesSearch && matchesCat && matchesTime;
             });
             renderMarkers(filtered);
         }
 
-        /* 播放器邏輯 (保持原樣，僅微調位移) */
         function getWaveformUrl(url, hex) { return url.replace('/upload/', `/upload/fl_waveform,co_rgb:${hex},b_transparent,w_800,h_80,c_scale/`).replace(/\.[^.]+$/, '.png'); }
         function prepareGlobalPlayer(index) {
             var item = allMarkersData[index];
@@ -244,7 +259,7 @@
             globalAudio.pause(); globalAudio.src = item.audioUrl;
             document.getElementById('playerToggleBtn').innerText = "▶";
             document.getElementById('globalPlayer').classList.add('active');
-            document.getElementById('timelineContainer').classList.add('shifted'); // 時間軸上移
+            document.getElementById('timelineContainer').classList.add('shifted');
         }
         function startGlobalPlayback(index) { if (currentAudioIndex !== index) prepareGlobalPlayer(index); globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; }
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerText = "⏸"; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerText = "▶"; } }
