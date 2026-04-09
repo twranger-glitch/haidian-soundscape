@@ -184,7 +184,8 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        .tools-menu-container { display: flex; flex-direction: column; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        /* 🌟 利用 flex-end 讓長短不一的面板完美向右對齊 */
+        .tools-menu-container { display: flex; flex-direction: column; align-items: flex-end; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
 
         .leaflet-top.leaflet-right { display: none !important; } 
@@ -194,51 +195,49 @@
             border-radius: 16px; padding: 12px 16px; 
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
             margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
+            width: max-content;
         }
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
         .custom-layer-control label:last-child { margin-bottom: 0; }
         .custom-layer-control input { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
         
+        /* 🌟 重製成精緻小巧的圖示膠囊 (Pill Menu) */
         .custom-geoman-container { 
+            width: 48px; /* 固定為直立膠囊寬度 */
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 16px; padding: 6px;
+            border-radius: 20px; padding: 6px;
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
-            overflow: hidden; 
-            min-width: 160px; /* 🌟 給文字說明的專屬寬度 */
+            display: flex; flex-direction: column; align-items: center;
+            box-sizing: border-box;
         }
         
-        /* 🌟 拔除 Geoman 原本多餘的邊界 */
-        .custom-geoman-container .leaflet-pm-toolbar { margin: 0 !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; background: transparent !important; display: flex; flex-direction: column; width: 100%;}
-        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important; margin-bottom: 4px !important; padding-bottom: 4px !important;}
-        .custom-geoman-container .button-container { border: none !important; width: 100%;}
+        /* 徹底重寫 Geoman 內部排版，強制轉化為 Apple 風垂直按鈕列 */
+        .custom-geoman-container .leaflet-pm-toolbar { 
+            margin: 0 !important; border: none !important; box-shadow: none !important; 
+            background: transparent !important; display: flex; flex-direction: column; width: 100%; gap: 4px;
+        }
+        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { 
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important; 
+            padding-bottom: 6px !important; margin-bottom: 2px !important;
+        }
+        .custom-geoman-container .button-container { border: none !important; width: 100%; display: flex; justify-content: center;}
         
-        /* 🌟 改造按鈕：變成帶有文字說明的滿版 Flex 橫幅 */
         .custom-geoman-container .leaflet-pm-toolbar a { 
-            width: 100% !important; height: 42px !important; 
+            width: 36px !important; height: 36px !important; 
             border-radius: 12px !important;
-            color: #64748b !important; padding: 0 16px !important; 
-            display: flex !important; justify-content: flex-start !important; align-items: center !important; 
-            gap: 12px !important;
+            color: #475569 !important; padding: 0 !important; margin: 0 !important;
+            display: flex !important; justify-content: center !important; align-items: center !important; 
             box-sizing: border-box !important; background: transparent !important;
-            transition: all 0.2s ease !important;
-            text-decoration: none !important;
+            transition: all 0.2s ease !important; text-decoration: none !important;
         }
-        .custom-geoman-container .leaflet-pm-toolbar a:hover { background: rgba(255,255,255,0.8) !important; color: var(--accent-color) !important; transform: scale(1.02); }
-        .custom-geoman-container .leaflet-pm-toolbar a.active { background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
-
-        /* 🌟 神奇魔法：利用 ::after 讀取 title 屬性變成實體文字標籤 */
-        .custom-geoman-container .leaflet-pm-toolbar a::after {
-            content: attr(title); 
-            font-size: 13px; font-weight: 700; white-space: nowrap;
-            color: #475569; transition: color 0.2s;
+        .custom-geoman-container .leaflet-pm-toolbar a:hover { 
+            background: rgba(0,0,0,0.06) !important; color: var(--accent-color) !important; transform: scale(1.05); 
         }
-        .custom-geoman-container .leaflet-pm-toolbar a:hover::after { color: var(--accent-color); }
-        
-        /* 🌟 針對危險動作(清除)的專屬紅色優化 */
-        .custom-geoman-container .leaflet-pm-toolbar a[title="一鍵全部清除"]::after,
-        .custom-geoman-container .leaflet-pm-toolbar a[title="單件刪除工具"]::after { color: #e74c3c; }
-        .custom-geoman-container .leaflet-pm-toolbar a[title="一鍵全部清除"]:hover::after,
-        .custom-geoman-container .leaflet-pm-toolbar a[title="單件刪除工具"]:hover::after { color: #c0392b; }
+        .custom-geoman-container .leaflet-pm-toolbar a.active { 
+            background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; 
+        }
+        /* 移除之前失敗的 ::after 文字標籤 */
+        .custom-geoman-container .leaflet-pm-toolbar a::after { content: none !important; }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
@@ -462,7 +461,6 @@
             else { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); }
         }
 
-        // 🌟 更新按鈕標題，讓 CSS ::after 可以抓取精簡的中文說明
         map.pm.setLang('zh-TW', {
             tooltips: {
                 placeMarker: '點擊放置標記',
@@ -498,12 +496,12 @@
             removalMode: true
         });
 
-        // 🌟 自訂清除按鈕，title 配合上面的長度
+        // 🌟 極簡強勢回歸：寫死尺寸與顏色的純粹 SVG，徹底擊破 Geoman 的蓋版干擾！
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'edit',
             title: '一鍵全部清除',
-            html: '<div style="display:flex; justify-content:center; align-items:center; width:18px; height:18px; color:#e74c3c;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6"></path><path d="M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6"></path><path d="M10 10v6"></path><path d="M14 10v6"></path></svg></div>', 
+            html: '<svg style="width:18px; height:18px; stroke:#e74c3c;" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6"></path><path d="M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
@@ -512,7 +510,6 @@
             toggle: false
         });
 
-        // 🌟 完美修復：使用 querySelectorAll 抓取所有 Geoman 拆分的區塊
         setTimeout(() => {
             var pmToolbars = document.querySelectorAll('.leaflet-pm-toolbar');
             var container = document.getElementById('geomanContainer');
@@ -650,7 +647,6 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
-            // 🌟 修正 UX：點擊地標只優雅開啟卡片，不再自動播放嚇人
             marker.on('click', () => { 
                 isRoutePlaying = false; 
                 clearTimeout(routeTimeout); 
@@ -686,7 +682,6 @@
             });
         }
 
-        // 🌟 修正 UX：點擊清單只飛過去開啟卡片，不再自動播放
         function focusMarkerOnMap(uid) {
             isRoutePlaying = false; 
             clearTimeout(routeTimeout);
