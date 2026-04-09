@@ -1,6 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
+<!DOCTYPE html><html lang="zh-TW"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>海佃溪遊記 | 聲音地景計畫</title>
@@ -18,14 +16,24 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <style>
-        :root { --panel-offset: 20px; --accent-color: #27ae60; --text-main: #2c3e50; --text-muted: #7f8c8d; }
+        :root { 
+            --panel-offset: 20px; 
+            --accent-color: #27ae60; 
+            --text-main: #2c3e50; 
+            --text-muted: #7f8c8d;
+            /* 🌟 Apple Glassmorphism 變數 */
+            --glass-bg: rgba(255, 255, 255, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --glass-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+            --glass-blur: blur(20px);
+        }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
         
         svg { flex-shrink: 0; }
 
         /* 🌟 頂部導覽列基礎樣式 */
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); }
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); }
         .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
         .project-title span.sub-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-left: 5px; }
@@ -38,7 +46,7 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25); border-radius: 12px !important; }
         .btn-submit:hover { background: #219150 !important; box-shadow: 0 6px 15px rgba(39, 174, 96, 0.35); }
 
-        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
+        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); }
         .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
         .drawer-content::-webkit-scrollbar { width: 5px; }
@@ -77,7 +85,7 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 16px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6);}
+        .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 16px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6);}
         .global-player.active { bottom: 20px; } 
         
         .player-main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -99,7 +107,7 @@
         .close-player-btn { background: transparent; border: none; color: #bdc3c7; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; width: 32px; height: 32px; border-radius: 50%; transition: 0.2s;}
         .close-player-btn:hover { background: #f1f2f6; color: #e74c3c;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s ease; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 20px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
         .modal-close-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.05); color: #555; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; justify-content: center; align-items: center; z-index: 10; transition: 0.2s;}
@@ -162,60 +170,77 @@
         .action-link-faint svg { width: 12px; height: 12px; }
         .action-link-faint:hover { color: #e74c3c; }
 
-        /* 🌟 右側工具列：完美原生級的收折與分家設計 */
-        .tools-toggle-btn { position: absolute; right: 20px; top: 90px; width: 44px; height: 44px; background: white; border-radius: 12px; display: flex; justify-content: center; align-items: center; box-shadow: 0 6px 16px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; cursor: pointer; color: var(--text-main); transition: 0.2s; z-index: 1001; }
-        .tools-toggle-btn:hover { color: var(--accent-color); transform: scale(1.05); }
-
-        /* 利用 Body Class 觸發隱藏/顯示原生 Leaflet 右上角容器 */
-        .leaflet-top.leaflet-right { 
-            top: 145px !important; 
-            right: 20px !important; 
-            display: flex !important; 
-            flex-direction: column; 
-            gap: 12px; /* 👈 圖層與繪圖工具之間的優雅留白 */
-            opacity: 0; 
-            pointer-events: none; 
+        /* 🌟 Apple Glassmorphism 右側工具列升級版 */
+        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; }
+        
+        .tools-toggle-btn { 
+            width: 48px; height: 48px; 
+            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.5));
+            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: 16px; 
+            display: flex; justify-content: center; align-items: center; 
+            box-shadow: var(--glass-shadow); 
+            border: 1px solid var(--glass-border); 
+            cursor: pointer; color: var(--text-main); 
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            transform: translateY(-10px); 
-            z-index: 1000;
+            margin-bottom: 12px;
         }
-        body.tools-open .leaflet-top.leaflet-right { opacity: 1; pointer-events: auto; transform: translateY(0); }
+        .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        /* 讓原生控制器呈現我們設計的高級感 */
-        .leaflet-control-layers { margin: 0 !important; border-radius: 12px !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; padding: 6px; font-family: '微軟正黑體', sans-serif; background: #fff !important; }
-        .leaflet-control-layers-expanded { padding: 12px 18px !important; }
-        .leaflet-control-layers label { font-size: 13px; font-weight: 700; color: var(--text-main); cursor: pointer; margin-bottom: 6px; display: flex; align-items: center; }
+        .tools-menu-container { display: flex; flex-direction: column; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
 
-        /* Geoman 工具箱樣式重構，確保大小適中 */
-        .leaflet-pm-toolbar { margin: 0 !important; border-radius: 12px !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; overflow: hidden; background: #fff;}
-        .leaflet-pm-toolbar a { width: 34px !important; height: 34px !important; padding: 0 !important; color: #64748b !important; }
-        .leaflet-pm-toolbar a:hover { color: var(--accent-color) !important; background: #f8fafc !important; }
-        .leaflet-pm-toolbar .button-container { border-bottom: 1px solid #f1f5f9; }
-        .leaflet-right .leaflet-control { float: none !important; clear: both; margin-bottom: 0;} /* 強制垂直排列不重疊 */
+        .leaflet-top.leaflet-right { display: none !important; } 
+        
+        .custom-layer-control { 
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: 16px; padding: 12px 16px; 
+            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
+            margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
+        }
+        .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
+        .custom-layer-control label:last-child { margin-bottom: 0; }
+        .custom-layer-control input { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
+        
+        .custom-geoman-container { 
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: 16px; padding: 6px;
+            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
+            overflow: hidden; 
+        }
+        .custom-geoman-container .leaflet-pm-toolbar { margin: 0 !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; background: transparent !important; }
+        .custom-geoman-container .button-container { border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important; }
+        .custom-geoman-container .button-container:last-child { border-bottom: none !important; }
+        
+        /* 解決 SVG 擠壓與設計層級問題 */
+        .custom-geoman-container .leaflet-pm-toolbar a { 
+            width: 42px !important; height: 42px !important; 
+            border-radius: 12px !important;
+            color: #64748b !important; padding: 0 !important; 
+            display: flex !important; justify-content: center !important; align-items: center !important; 
+            box-sizing: border-box !important; background: transparent !important;
+            transition: all 0.2s ease !important;
+        }
+        .custom-geoman-container .leaflet-pm-toolbar a:hover { 
+            background: rgba(255,255,255,0.8) !important; color: var(--accent-color) !important; 
+            transform: scale(1.05);
+        }
+        .custom-geoman-container .leaflet-pm-toolbar a.active {
+            background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important;
+        }
 
-        /* 🌟 手機版完美回歸：雙層大氣排版 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
-            .glass-header { 
-                flex-direction: column; 
-                align-items: flex-start; 
-                padding: 12px 16px; 
-                border-radius: 16px; 
-                width: 94%; 
-                height: auto; 
-                gap: 10px; 
-            } 
+            .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
             .project-title { font-size: 18px; width: 100%; justify-content: flex-start; flex-direction: row;}
             .project-title span.sub-title { font-size: 12px; margin-left: 5px; color: var(--text-muted); display: inline-block; margin-top:0;} 
             
             .nav-buttons { width: 100%; justify-content: space-between; gap: 8px; }
             .nav-buttons button { flex: 1; padding: 10px 5px; border-radius: 8px; width: auto; height: auto; justify-content: center; font-size: 13px;}
-            .nav-buttons button span.btn-text { display: inline;} /* 顯示完整文字！ */
             
             .drawer-panel { width: 290px; } 
-            #sidePanel, #routePanel { top: 125px; } /* 避開長高的 Header */
-            .tools-toggle-btn { top: 125px; right: 15px; }
-            .leaflet-top.leaflet-right { top: 180px !important; right: 15px !important; }
+            #sidePanel, #routePanel { top: 125px; } 
+            .right-tools-wrapper { top: 125px; right: 15px; }
 
             .global-player { flex-direction: column; padding: 18px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
             .global-player.active { bottom: 0; } 
@@ -226,24 +251,22 @@
             .volume-control { flex: 1; margin: 0 15px; } 
             .volume-slider { width: 100%; height: 6px; } 
         }
-    </style>
-</head>
-<body>
+    </style></head><body>
 
     <header class="glass-header">
         <h1 class="project-title">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
         <nav class="nav-buttons">
             <button onclick="openModal('aboutModal')" title="關於我們">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span class="btn-text">關於我們</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                關於我們
             </button>
             <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                <span class="btn-text">最新上架</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                最新上架
             </button>
             <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" title="我要投稿">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                <span class="btn-text">我要投稿</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                我要投稿
             </button>
         </nav>
     </header>
@@ -334,8 +357,17 @@
         </div>
     </div>
 
-    <div class="tools-toggle-btn" onclick="document.body.classList.toggle('tools-open')" title="地圖與繪圖工具">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+    <div id="rightToolsWrapper" class="right-tools-wrapper">
+        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖與繪圖工具">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4L4 8l8 4 8-4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 16l8 4 8-4"></path></svg>
+        </div>
+        <div class="tools-menu-container">
+            <div class="custom-layer-control">
+                <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 🇹🇼 臺灣精細地圖</label>
+                <label><input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 🌍 全球通用地圖</label>
+            </div>
+            <div id="geomanContainer" class="custom-geoman-container"></div>
+        </div>
     </div>
 
     <div id="map"></div>
@@ -412,11 +444,12 @@
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>' });
-
         taiwanLayer.addTo(map);
 
-        var baseMaps = { "臺灣精細地圖": taiwanLayer, "全球通用地圖": globalLayer };
-        L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
+        function switchBasemap(val) {
+            if (val === 'global') { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); } 
+            else { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); }
+        }
 
         map.pm.setLang('zh-TW', {
             tooltips: {
@@ -439,8 +472,7 @@
             }
         });
 
-        // 🌟 Geoman 工具原生化
-        map.pm.addControls({
+        var geomanControl = map.pm.addControls({
             position: 'topright',
             drawMarker: false,
             drawCircleMarker: false,
@@ -454,12 +486,12 @@
             removalMode: true
         });
 
-        // 🌟 SVG 垃圾桶：徹底解決空白圖示問題
+        // 🌟 完美修復：利用 Flex 完全置中，重寫精緻版垃圾桶 SVG 並固定尺寸防止擠壓
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'edit',
             title: '一鍵清除所有自訂路線與圖層 (Clear All)',
-            html: '<div style="color:#e74c3c; width:100%; height:100%; display:flex; justify-content:center; align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></div>', 
+            html: '<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; color:#ff3b30;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6"></path><path d="M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6"></path><path d="M10 10v6"></path><path d="M14 10v6"></path></svg></div>', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
@@ -468,33 +500,42 @@
             toggle: false
         });
 
+        // 🌟 無縫轉移至我們的 Apple Glass 容器
+        setTimeout(() => {
+            var pmToolbar = document.querySelector('.leaflet-pm-toolbar');
+            var container = document.getElementById('geomanContainer');
+            if (pmToolbar && container) container.appendChild(pmToolbar);
+        }, 100);
+
         map.on('moveend', function() {
             var center = map.getCenter();
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
-            if (inTaiwan && !map.hasLayer(taiwanLayer)) { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); } 
-            else if (!inTaiwan && !map.hasLayer(globalLayer)) { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); }
+            var isTaiwanLayerOn = document.querySelector('input[value="taiwan"]').checked;
+            
+            if (isTaiwanLayerOn) {
+                if (inTaiwan && !map.hasLayer(taiwanLayer)) { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); } 
+                else if (!inTaiwan && !map.hasLayer(globalLayer)) { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); }
+            }
         });
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
-        
         var routeTimeout = null; 
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 一次關閉所有抽屜
         function closeAllDrawers() {
             document.getElementById('sidePanel').classList.add('collapsed');
             document.getElementById('routePanel').classList.add('collapsed');
-            document.body.classList.remove('tools-open');
+            document.getElementById('rightToolsWrapper').classList.remove('open');
         }
 
         function openCustomDrawHelp() {
             closeAllDrawers();
-            document.body.classList.add('tools-open');
-            alert('啟用自訂空間範圍：\n\n1. 請點擊地圖右上角展開【地圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上描繪您想探索的範圍。\n3. 系統將為您自動導航該範圍的專屬路線！\n\n(若要清除範圍，請點擊垃圾桶圖示)');
+            document.getElementById('rightToolsWrapper').classList.add('open');
+            alert('啟用自訂空間範圍：\n\n1. 請點選地圖右上角的【地圖圖層按鈕】展開工具列。\n2. 在地圖上描繪您想探索的範圍。\n3. 系統將為您自動導航該範圍的專屬路線！\n\n(若要清除範圍，請點擊紅色垃圾桶圖示)');
         }
 
         function updateCardButtonUI() {
@@ -595,7 +636,6 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
-            // 🌟 點擊任一地標，徹底清掉背景導航狀態，把控制權搶回來！
             marker.on('click', () => { 
                 isRoutePlaying = false; 
                 clearTimeout(routeTimeout); 
@@ -604,7 +644,6 @@
                     toggleRoute('clear', clearBtn);
                 }
                 
-                // 瞬間自動播放
                 if (item.audioUrl) {
                     setTimeout(() => startGlobalPlayback(item.uid), 400);
                 }
@@ -636,7 +675,6 @@
             });
         }
 
-        // 🌟 點擊最新上架：切斷導航、跳轉、瞬間播放
         function focusMarkerOnMap(uid) {
             isRoutePlaying = false; 
             clearTimeout(routeTimeout);
@@ -949,6 +987,4 @@
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
-    </script>
-</body>
-</html>
+    </script></body></html>
