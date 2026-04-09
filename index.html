@@ -422,7 +422,6 @@
             return marker;
         }
 
-        // 🌟 修正 3：渲染到獨立的最新上架彈窗中
         function renderLatestSubmissions(data) {
             var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
             var sortedData = data.slice().sort((a, b) => new Date(b.date.replace(/-/g, '/')) - new Date(a.date.replace(/-/g, '/')));
@@ -470,68 +469,23 @@
             if (opening) target.classList.remove('collapsed');
         }
 
-        function executeCustomGeofence(bufferPolygon) {
-            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
-            if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('clearRouteBtn').style.display = 'block';
-
-            currentRouteType = 'custom';
-            isRoutePlaying = true;
-
-            currentGeoFenceBufferLayer = L.geoJSON(bufferPolygon, { style: { color: '#f39c12', weight: 2, opacity: 0.8, fillColor: '#f39c12', fillOpacity: 0.2 } }).addTo(map);
-
-            routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), bufferPolygon));
-
-            if (routePointsData.length < 2) {
-                alert('您手繪的範圍內作品不足 2 筆，無法啟動自動導航。但已為您標示出該範圍！快來投稿吧！');
-                markerCluster.clearLayers(); routeMarkerObjects = [];
-                routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
-                map.addLayer(markerCluster);
-                map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] });
-                if (window.innerWidth <= 600) togglePanel('routePanel');
-                isRoutePlaying = false;
-                return;
-            }
-
-            markerCluster.clearLayers(); routeMarkerObjects = [];
-            routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
-            map.addLayer(markerCluster);
-
-            currentRouteLine = L.polyline(routePointsData.map(p => [p.lat, p.lon]), { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
-            map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] });
-
-            currentRouteIndex = 0;
-            if (window.innerWidth <= 600) togglePanel('routePanel');
-            setTimeout(playNextRoutePoint, 1500);
-        }
-
-        map.on('pm:create', function(e) {
-            var layer = e.layer;
-            var shape = e.shape; 
-            var geojson = layer.toGeoJSON();
-            var searchPolygon;
-
-            if (shape === 'Line' || shape === 'LineString') {
-                searchPolygon = turf.buffer(geojson, 200, { units: 'meters' });
-            } else {
-                searchPolygon = geojson;
-            }
-
-            map.removeLayer(layer);
-            executeCustomGeofence(searchPolygon);
-        });
-
-        // 把共通的路線執行邏輯抽離出來
-        function executeStandardRoute(type) {
+        // 🌟 神級修正 1：抽出共通的「路徑繪製邏輯」，讓紅虛線貼地飛行！
+        function executeStandardRoute(type, actualPathCoords) {
+            // 如果範圍內連 2 個聲音都沒有，不啟動聲音導航，但「依然畫出紅虛線」讓使用者看路徑！
             if (routePointsData.length < 2) { 
                 if (type && type.startsWith('geofence')) {
-                    alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但您仍可查看空間涵蓋範圍！快來投稿吧！');
+                    alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但已為您標示出空間涵蓋範圍與路徑！快來投稿吧！');
                     markerCluster.clearLayers();
                     routeMarkerObjects = [];
                     routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
                     map.addLayer(markerCluster); 
+                    
                     if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+                    
+                    // 即使沒有聲音，也把真正的山路/河道畫出來！
+                    if (actualPathCoords) {
+                        currentRouteLine = L.polyline(actualPathCoords, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
+                    }
                     map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] });
                     if (window.innerWidth <= 600) togglePanel('routePanel');
                     isRoutePlaying = false;
@@ -543,18 +497,58 @@
                 }
             }
 
+            // 如果有聲音，畫圖並準備導航
             markerCluster.clearLayers(); routeMarkerObjects = [];
             routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
             map.addLayer(markerCluster);
 
             if (currentRouteLine) map.removeLayer(currentRouteLine);
-            currentRouteLine = L.polyline(routePointsData.map(p => [p.lat, p.lon]), { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
+            
+            // 決定紅虛線要怎麼畫：有傳入真正的河流/山路座標就用真正的，沒有才用聲音點連線
+            var coordsToDraw = actualPathCoords ? actualPathCoords : routePointsData.map(p => [p.lat, p.lon]);
+            currentRouteLine = L.polyline(coordsToDraw, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
+            
             map.fitBounds(currentGeoFenceBufferLayer ? currentGeoFenceBufferLayer.getBounds() : currentRouteLine.getBounds(), { padding: [50, 50] });
 
             currentRouteIndex = 0;
             if (window.innerWidth <= 600) togglePanel('routePanel'); 
             setTimeout(playNextRoutePoint, 1500); 
         }
+
+        function executeCustomGeofence(bufferPolygon, actualPathCoords) {
+            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
+            if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('clearRouteBtn').style.display = 'block';
+
+            currentRouteType = 'custom';
+            isRoutePlaying = true;
+
+            currentGeoFenceBufferLayer = L.geoJSON(bufferPolygon, { style: { color: '#f39c12', weight: 2, opacity: 0.8, fillColor: '#f39c12', fillOpacity: 0.2 } }).addTo(map);
+            routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), bufferPolygon));
+
+            // 套用最新的貼地飛行邏輯
+            executeStandardRoute('geofence_custom', actualPathCoords);
+        }
+
+        map.on('pm:create', function(e) {
+            var layer = e.layer;
+            var shape = e.shape; 
+            var geojson = layer.toGeoJSON();
+            var searchPolygon;
+            var pathCoords = null;
+
+            if (shape === 'Line' || shape === 'LineString') {
+                searchPolygon = turf.buffer(geojson, 200, { units: 'meters' });
+                // 抓取手繪的真實線條座標
+                pathCoords = geojson.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+            } else {
+                searchPolygon = geojson;
+            }
+
+            map.removeLayer(layer);
+            executeCustomGeofence(searchPolygon, pathCoords);
+        });
 
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
@@ -574,14 +568,14 @@
 
             if (type === 'nature') {
                 routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
-                executeStandardRoute(type);
+                executeStandardRoute(type, null); // 一般主題走讀，就直接連線
             }
             else if (type === 'culture') {
                 routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
-                executeStandardRoute(type);
+                executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                alert("⏳ 準備從雲端載入山海圳圖資，請稍候...");
+                alert("⏳ 準備從雲端載入山海圳綠道圖資，請稍候...");
                 
                 var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRVuVP_KljACFPTdkVfrwadoOxmvz6omF30Qz46Hy3C7YOeMXx69QubqfBkeGEt8FNqsqzDk-v3jZN-/pub?gid=0&single=true&output=csv"; 
                 
@@ -618,7 +612,10 @@
                         currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
                         routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
                         
-                        executeStandardRoute(type);
+                        // 🌟 讓紅線貼著山路飛：傳入真實的山路座標給執行系統
+                        var leafletPath = optimizedLine.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        executeStandardRoute(type, leafletPath);
+                        
                     } else {
                         alert("解析 CSV 失敗：沒有找到有效的座標資料，請檢查 Google Sheet 格式。");
                         toggleRoute('clear', document.getElementById('clearRouteBtn'));
@@ -676,7 +673,9 @@
                 currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
                 routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
                 
-                executeStandardRoute(type);
+                // 🌟 讓紅線貼著河道飛：傳入真實的河道座標給執行系統
+                var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
+                executeStandardRoute(type, leafletPath);
             }
         }
 
@@ -701,7 +700,6 @@
             var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
             document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
             
-            // 🎵 確保點擊後直接播放
             globalAudio.src = item.audioUrl; 
             globalAudio.play(); 
             
