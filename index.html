@@ -134,8 +134,21 @@
         .leaflet-control-layers-expanded { padding: 12px 18px !important; background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(10px); }
         .leaflet-control-layers label { font-size: 13px; font-weight: 800; color: #2c3e50; cursor: pointer; margin-bottom: 5px; display: flex; align-items: center; }
 
-        /* 給繪圖工具的按鈕自訂一點間距，避開圖層控制 */
+        /* 給繪圖工具的按鈕自訂間距 */
         .leaflet-pm-toolbar { margin-top: 20px !important; margin-right: 20px !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; border: none !important; border-radius: 12px !important; overflow: hidden; }
+        
+        /* 🌟 強制修正：讓一鍵清除按鈕的 Emoji 正確顯示 */
+        .custom-clear-icon {
+            background-image: none !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .custom-clear-icon::before {
+            content: "🗑️";
+            font-size: 16px;
+            display: block;
+        }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
@@ -219,7 +232,7 @@
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">🌊 鹽水溪畔 200m 深度走讀</button>
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m 走讀</button>
                 
-                <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
+                <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！\n\n⚠️ 如果想要清除手繪的線條與範圍，請點擊右上角的「🗑️ (垃圾桶)」按鈕一鍵清除！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
 
                 <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#f2dede; color:#c0392b; text-align:center;">❌ 結束路線任務</button>
             </div>
@@ -282,7 +295,7 @@
         var baseMaps = { "🇹🇼 臺灣精細地圖": taiwanLayer, "🌍 全球通用地圖": globalLayer };
         L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
 
-        // 🌟 升級 1：完全繁體中文語系注入 Leaflet-Geoman
+        // 繁體中文語系注入 Leaflet-Geoman
         map.pm.setLang('zh-TW', {
             tooltips: {
                 placeMarker: '點擊放置標記',
@@ -320,19 +333,17 @@
             editMode: false,
             dragMode: false,
             cutPolygon: false,
-            removalMode: true // 這是原本單點的橡皮擦
+            removalMode: true
         });
 
-        // 🌟 升級 2：加入專屬的「🗑️ 一鍵清除」神級按鈕
+        // 🌟 使用 CSS 類別強制注入 🗑️ 圖示
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'custom',
             title: '一鍵清除所有自訂路線與圖層 (Clear All)',
-            html: '<span style="font-size:16px; display:flex; justify-content:center; align-items:center; height:100%;">🗑️</span>',
+            className: 'custom-clear-icon', // 👈 指定在 CSS 裡面寫好的 Class
             onClick: () => {
-                // 1. 清除使用者畫在地圖上的 Geoman 殘留物
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
-                // 2. 觸發我們原本寫好的「結束路線」功能，清掉虛線與保護罩
                 var clearBtn = document.getElementById('clearRouteBtn');
                 if(clearBtn) toggleRoute('clear', clearBtn);
             },
@@ -523,7 +534,6 @@
                 document.getElementById('clearRouteBtn').style.display = 'none';
                 if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
                 
-                // 🌟 當我們呼叫 clear 時，順便幫忙清掉殘留的繪製草圖
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 
                 filterMarkers(); return;
@@ -578,7 +588,6 @@
                 
                 var riverKey = type.split('_')[1];
                 var riverLine = turf.lineString(p[riverKey]);
-                
                 var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                 currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
@@ -588,8 +597,7 @@
             if (routePointsData.length < 2) { 
                 if (type.startsWith('geofence')) {
                     alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但您仍可查看藍色的空間涵蓋範圍！快來投稿吧！');
-                    markerCluster.clearLayers();
-                    routeMarkerObjects = [];
+                    markerCluster.clearLayers(); routeMarkerObjects = [];
                     routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
                     map.addLayer(markerCluster); 
                     if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
