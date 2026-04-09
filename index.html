@@ -134,8 +134,27 @@
         .leaflet-control-layers-expanded { padding: 12px 18px !important; background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(10px); }
         .leaflet-control-layers label { font-size: 13px; font-weight: 800; color: #2c3e50; cursor: pointer; margin-bottom: 5px; display: flex; align-items: center; }
 
-        .leaflet-pm-toolbar { margin-top: 20px !important; margin-right: 20px !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; border: none !important; border-radius: 12px !important; overflow: hidden; }
+        /* 🌟 核心修改：無縫貼合工具列，消除所有區塊間隙 */
+        .leaflet-pm-toolbar { 
+            margin-top: 0px !important; 
+            margin-bottom: 0px !important; 
+            border-radius: 0 !important; 
+            border: none !important;
+            box-shadow: none !important;
+        }
+        /* 將外層容器設定陰影與圓角，讓所有按鈕看起來是一個整體 */
+        .leaflet-top.leaflet-right .leaflet-control:has(.leaflet-pm-toolbar) {
+            margin-top: 20px !important; 
+            margin-right: 20px !important; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important; 
+            border-radius: 12px !important; 
+            overflow: hidden;
+        }
+        .leaflet-pm-toolbar .button-container:not(:last-child) {
+            border-bottom: 1px solid #eee !important;
+        }
         
+        /* 強制注入 🗑️ 一鍵清除圖示 */
         .custom-clear-icon { background-image: none !important; display: flex !important; justify-content: center !important; align-items: center !important; }
         .custom-clear-icon::before { content: "🗑️"; font-size: 16px; display: block; }
 
@@ -157,7 +176,7 @@
             .volume-slider { width: 100%; height: 6px; } 
 
             .leaflet-control-layers { margin-top: 70px !important; margin-right: 15px !important; }
-            .leaflet-pm-toolbar { margin-right: 15px !important; }
+            .leaflet-top.leaflet-right .leaflet-control:has(.leaflet-pm-toolbar) { margin-right: 15px !important; }
         }
     </style>
 </head>
@@ -219,11 +238,11 @@
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (依類別)</button>
                 
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">🌊 鹽水溪畔 200m 深度走讀</button>
-                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m</button>
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m 走讀</button>
                 
-                <button class="route-btn" style="border-left: 4px solid #27ae60;" onclick="toggleRoute('geofence_shanhai', this)">🌳 山海圳綠道 200m 深度走讀</button>
-                
-                <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！\n\n⚠️ 如果想要清除手繪的線條與範圍，請點擊右上角的「🗑️ (垃圾桶)」按鈕一鍵清除！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
+                <button class="route-btn" style="border-left: 4px solid #2ecc71;" onclick="toggleRoute('geofence_shanhai', this)">🌳 山海圳綠道 200m 走讀 (直達玉山)</button>
+
+                <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！\n\n⚠️ 如果想要清除手繪的線條與範圍，請點擊右上角的「🗑️ 一鍵清除」按鈕！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
 
                 <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#f2dede; color:#c0392b; text-align:center;">❌ 結束路線任務</button>
             </div>
@@ -257,7 +276,7 @@
                 <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
                 <div class="modal-tag">Hidden below, growing beyond.</div>
                 <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
-                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳、山海圳綠道，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
                 <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
                 <div class="quote-block">
                     <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
@@ -286,7 +305,7 @@
         var baseMaps = { "🇹🇼 臺灣精細地圖": taiwanLayer, "🌍 全球通用地圖": globalLayer };
         L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
 
-        // 繁體中文語系注入 Leaflet-Geoman
+        // 🌟 核心修正：全繁體中文提示與去除多餘按鈕
         map.pm.setLang('zh-TW', {
             tooltips: {
                 placeMarker: '點擊放置標記',
@@ -297,41 +316,36 @@
                 finishRect: '點擊並拖曳繪製矩形',
                 edit: '拖曳節點以編輯形狀',
                 cut: '剪下圖層',
-                delete: '點擊你想刪除的形狀 (橡皮擦)'
+                delete: '點擊你想刪除的圖層'
             },
-            actions: {
-                cancel: '取消',
-                finish: '完成',
-                removeLastVertex: '移除最後一點'
-            },
+            actions: { cancel: '取消', finish: '完成', removeLastVertex: '移除最後一點' },
             buttonTitles: {
                 drawPolyButton: '繪製自訂範圍 (多邊形)',
                 drawLineButton: '繪製自訂路線 (折線)',
                 drawRectButton: '繪製矩形範圍',
-                editButton: '編輯形狀',
-                dragButton: '拖曳圖層',
-                cutButton: '剪切圖層',
-                deleteButton: '刪除圖層 (橡皮擦 - 點擊形狀刪除)'
+                deleteButton: '刪除圖層 (橡皮擦)'
             }
         });
 
+        // 設定：關閉旋轉按鈕 (rotateMode: false)，只保留你指定的5個核心按鈕
         map.pm.addControls({
             position: 'topright',
             drawMarker: false,
             drawCircleMarker: false,
             drawCircle: false,
             drawText: false,
+            drawRectangle: true,
             editMode: false,
             dragMode: false,
             cutPolygon: false,
-            removalMode: true,
-            rotateMode: false // 🌟 取消了沒用的圖層旋轉按鈕
+            rotateMode: false, // 👈 關閉不需要的旋轉按鈕
+            removalMode: true
         });
 
-        // 使用 CSS 類別強制注入 🗑️ 圖示的一鍵清除按鈕
+        // 🌟 核心修正：將一鍵清除塞入同一個區塊 (edit區塊)，實現無縫連體嬰按鈕
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
-            block: 'custom',
+            block: 'edit', // 👈 指定與橡皮擦同一個區塊，完美消除間隙
             title: '一鍵清除所有自訂路線與圖層 (Clear All)',
             className: 'custom-clear-icon', 
             onClick: () => {
@@ -355,7 +369,6 @@
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
         
         var currentGeoFenceBufferLayer = null; 
-        
         var globalMarkerMap = {}; 
 
         var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
@@ -576,25 +589,17 @@
                         [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
                         [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
                     ],
-                    // 🌳 山海圳綠道：直接套用嘉南大圳鹽水溪排水線的高精度座標！
+                    // 🌟 史詩級新路線：山海圳綠道 (一路延伸至玉山主峰)
                     shanhai: [
-                        [120.271733, 23.108189], [120.271038, 23.105101], [120.270575, 23.104705], [120.270641, 23.103944],
-                        [120.270459, 23.102986], [120.270906, 23.102575], [120.270945, 23.101577], [120.270845, 23.101480],
-                        [120.270995, 23.099969], [120.270967, 23.099612], [120.270792, 23.097123], [120.270542, 23.096418],
-                        [120.266026, 23.095475], [120.265564, 23.094727], [120.265462, 23.094005], [120.265518, 23.091660],
-                        [120.265629, 23.091261], [120.269064, 23.088363], [120.269416, 23.087848], [120.269379, 23.086982],
-                        [120.269296, 23.086447], [120.269139, 23.086209], [120.265131, 23.084858], [120.263988, 23.084731],
-                        [120.260765, 23.083720], [120.259342, 23.082692], [120.258908, 23.082548], [120.257116, 23.082650],
-                        [120.256276, 23.082497], [120.253598, 23.080228], [120.253080, 23.079565], [120.252896, 23.077889],
-                        [120.252535, 23.077404], [120.252101, 23.077175], [120.251853, 23.076717], [120.251955, 23.075459],
-                        [120.251345, 23.074278], [120.251291, 23.074205], [120.248718, 23.071947], [120.245708, 23.066739],
-                        [120.243336, 23.062568], [120.240793, 23.060216], [120.236847, 23.056810], [120.230292, 23.051061],
-                        [120.226851, 23.045736], [120.220451, 23.036356], [120.216766, 23.030920], [120.212424, 23.028814],
-                        [120.208260, 23.028657], [120.193166, 23.029837], [120.189832, 23.029168], [120.176875, 23.025377],
-                        [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
-                        [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
-                        [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
-                    ] 
+                        [120.136844, 22.994410], [120.141528, 23.005439], [120.150635, 23.013497], [120.166292, 23.016696],
+                        [120.176875, 23.025377], [120.193166, 23.029837], [120.208260, 23.028657], [120.216766, 23.030920],
+                        [120.226851, 23.045736], [120.236847, 23.056810], [120.245708, 23.066739], [120.251345, 23.074278],
+                        [120.252896, 23.077889], [120.258908, 23.082548], [120.265131, 23.084858], [120.269064, 23.088363],
+                        [120.265564, 23.094727], [120.270995, 23.099969], [120.271733, 23.108189], [120.295000, 23.125000],
+                        [120.335000, 23.160000], [120.373500, 23.205500], [120.420000, 23.225000], [120.485000, 23.240000],
+                        [120.540500, 23.245000], [120.610000, 23.275000], [120.680000, 23.320000], [120.735000, 23.365000],
+                        [120.810000, 23.420000], [120.885000, 23.460000], [120.957200, 23.467800]
+                    ]
                 };
                 
                 var riverKey = type.split('_')[1];
