@@ -282,7 +282,35 @@
         var baseMaps = { "🇹🇼 臺灣精細地圖": taiwanLayer, "🌍 全球通用地圖": globalLayer };
         L.control.layers(baseMaps, null, {position: 'topright'}).addTo(map);
 
-        // 🌟 新增：啟動 Leaflet-Geoman 繪圖工具箱
+        // 🌟 升級 1：完全繁體中文語系注入 Leaflet-Geoman
+        map.pm.setLang('zh-TW', {
+            tooltips: {
+                placeMarker: '點擊放置標記',
+                firstVertex: '點擊地圖放置第一個起點',
+                continueLine: '點擊繼續畫線',
+                finishLine: '點擊任何標記完成路線',
+                finishPoly: '點擊第一個起點完成多邊形',
+                finishRect: '點擊並拖曳繪製矩形',
+                edit: '拖曳節點以編輯形狀',
+                cut: '剪下圖層',
+                delete: '點擊你想刪除的形狀 (橡皮擦)'
+            },
+            actions: {
+                cancel: '取消',
+                finish: '完成',
+                removeLastVertex: '移除最後一點'
+            },
+            buttonTitles: {
+                drawPolyButton: '繪製自訂範圍 (多邊形)',
+                drawLineButton: '繪製自訂路線 (折線)',
+                drawRectButton: '繪製矩形範圍',
+                editButton: '編輯形狀',
+                dragButton: '拖曳圖層',
+                cutButton: '剪切圖層',
+                deleteButton: '刪除圖層 (橡皮擦 - 點擊形狀刪除)'
+            }
+        });
+
         map.pm.addControls({
             position: 'topright',
             drawMarker: false,
@@ -292,9 +320,24 @@
             editMode: false,
             dragMode: false,
             cutPolygon: false,
-            removalMode: true
+            removalMode: true // 這是原本單點的橡皮擦
         });
-        map.pm.setLang('zh');
+
+        // 🌟 升級 2：加入專屬的「🗑️ 一鍵清除」神級按鈕
+        map.pm.Toolbar.createCustomControl({
+            name: 'clearAllBtn',
+            block: 'custom',
+            title: '一鍵清除所有自訂路線與圖層 (Clear All)',
+            html: '<span style="font-size:16px; display:flex; justify-content:center; align-items:center; height:100%;">🗑️</span>',
+            onClick: () => {
+                // 1. 清除使用者畫在地圖上的 Geoman 殘留物
+                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
+                // 2. 觸發我們原本寫好的「結束路線」功能，清掉虛線與保護罩
+                var clearBtn = document.getElementById('clearRouteBtn');
+                if(clearBtn) toggleRoute('clear', clearBtn);
+            },
+            toggle: false
+        });
 
         map.on('moveend', function() {
             var center = map.getCenter();
@@ -419,7 +462,6 @@
             if (opening) target.classList.remove('collapsed');
         }
 
-        // 🌟 核心新增：手繪空間範圍過濾引擎
         function executeCustomGeofence(bufferPolygon) {
             if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
             if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
@@ -429,7 +471,6 @@
             currentRouteType = 'custom';
             isRoutePlaying = true;
 
-            // 畫出橘黃色的自訂保護罩以作區別
             currentGeoFenceBufferLayer = L.geoJSON(bufferPolygon, { style: { color: '#f39c12', weight: 2, opacity: 0.8, fillColor: '#f39c12', fillOpacity: 0.2 } }).addTo(map);
 
             routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), bufferPolygon));
@@ -457,25 +498,19 @@
             setTimeout(playNextRoutePoint, 1500);
         }
 
-        // 監聽手繪完成事件
         map.on('pm:create', function(e) {
             var layer = e.layer;
-            var shape = e.shape; // 'Line', 'Polygon', 'Rectangle'
+            var shape = e.shape; 
             var geojson = layer.toGeoJSON();
             var searchPolygon;
 
             if (shape === 'Line' || shape === 'LineString') {
-                // 如果是畫線，自動向外擴張 200 公尺
                 searchPolygon = turf.buffer(geojson, 200, { units: 'meters' });
             } else {
-                // 如果是多邊形或矩形，直接使用該範圍
                 searchPolygon = geojson;
             }
 
-            // 畫完後自動隱除原始草圖，改由我們的統一路線系統接管
             map.removeLayer(layer);
-
-            // 執行自訂空間魔法
             executeCustomGeofence(searchPolygon);
         });
 
@@ -487,6 +522,10 @@
                 currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
                 document.getElementById('clearRouteBtn').style.display = 'none';
                 if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+                
+                // 🌟 當我們呼叫 clear 時，順便幫忙清掉殘留的繪製草圖
+                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
+                
                 filterMarkers(); return;
             }
 
@@ -497,8 +536,6 @@
             if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
             else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
             else if (type.startsWith('geofence')) {
-                
-                // 寫入使用者親自手繪的終極精準座標
                 var p = { 
                     yanshui: [
                         [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
@@ -542,7 +579,6 @@
                 var riverKey = type.split('_')[1];
                 var riverLine = turf.lineString(p[riverKey]);
                 
-                // 200公尺空間魔法保護罩
                 var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                 currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
