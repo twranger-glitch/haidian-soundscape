@@ -134,21 +134,10 @@
         .leaflet-control-layers-expanded { padding: 12px 18px !important; background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(10px); }
         .leaflet-control-layers label { font-size: 13px; font-weight: 800; color: #2c3e50; cursor: pointer; margin-bottom: 5px; display: flex; align-items: center; }
 
-        /* 給繪圖工具的按鈕自訂間距 */
         .leaflet-pm-toolbar { margin-top: 20px !important; margin-right: 20px !important; box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important; border: none !important; border-radius: 12px !important; overflow: hidden; }
         
-        /* 🌟 強制修正：讓一鍵清除按鈕的 Emoji 正確顯示 */
-        .custom-clear-icon {
-            background-image: none !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-        }
-        .custom-clear-icon::before {
-            content: "🗑️";
-            font-size: 16px;
-            display: block;
-        }
+        .custom-clear-icon { background-image: none !important; display: flex !important; justify-content: center !important; align-items: center !important; }
+        .custom-clear-icon::before { content: "🗑️"; font-size: 16px; display: block; }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
@@ -230,7 +219,9 @@
                 <button class="route-btn" onclick="toggleRoute('culture', this)">🚶 聚落記憶尋寶 (依類別)</button>
                 
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">🌊 鹽水溪畔 200m 深度走讀</button>
-                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m 走讀</button>
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m</button>
+                
+                <button class="route-btn" style="border-left: 4px solid #27ae60;" onclick="toggleRoute('geofence_shanhai', this)">🌳 山海圳綠道 200m 深度走讀</button>
                 
                 <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！\n\n⚠️ 如果想要清除手繪的線條與範圍，請點擊右上角的「🗑️ (垃圾桶)」按鈕一鍵清除！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
 
@@ -266,7 +257,7 @@
                 <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d;">Haidian Hidden Library</span></h2>
                 <div class="modal-tag">Hidden below, growing beyond.</div>
                 <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
-                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳、山海圳綠道，進行一場聽覺的田野調查。</p>
                 <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
                 <div class="quote-block">
                     <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
@@ -333,15 +324,16 @@
             editMode: false,
             dragMode: false,
             cutPolygon: false,
-            removalMode: true
+            removalMode: true,
+            rotateMode: false // 🌟 取消了沒用的圖層旋轉按鈕
         });
 
-        // 🌟 使用 CSS 類別強制注入 🗑️ 圖示
+        // 使用 CSS 類別強制注入 🗑️ 圖示的一鍵清除按鈕
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'custom',
             title: '一鍵清除所有自訂路線與圖層 (Clear All)',
-            className: 'custom-clear-icon', // 👈 指定在 CSS 裡面寫好的 Class
+            className: 'custom-clear-icon', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
@@ -583,11 +575,31 @@
                         [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
                         [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
                         [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
+                    ],
+                    // 🌳 山海圳綠道：直接套用嘉南大圳鹽水溪排水線的高精度座標！
+                    shanhai: [
+                        [120.271733, 23.108189], [120.271038, 23.105101], [120.270575, 23.104705], [120.270641, 23.103944],
+                        [120.270459, 23.102986], [120.270906, 23.102575], [120.270945, 23.101577], [120.270845, 23.101480],
+                        [120.270995, 23.099969], [120.270967, 23.099612], [120.270792, 23.097123], [120.270542, 23.096418],
+                        [120.266026, 23.095475], [120.265564, 23.094727], [120.265462, 23.094005], [120.265518, 23.091660],
+                        [120.265629, 23.091261], [120.269064, 23.088363], [120.269416, 23.087848], [120.269379, 23.086982],
+                        [120.269296, 23.086447], [120.269139, 23.086209], [120.265131, 23.084858], [120.263988, 23.084731],
+                        [120.260765, 23.083720], [120.259342, 23.082692], [120.258908, 23.082548], [120.257116, 23.082650],
+                        [120.256276, 23.082497], [120.253598, 23.080228], [120.253080, 23.079565], [120.252896, 23.077889],
+                        [120.252535, 23.077404], [120.252101, 23.077175], [120.251853, 23.076717], [120.251955, 23.075459],
+                        [120.251345, 23.074278], [120.251291, 23.074205], [120.248718, 23.071947], [120.245708, 23.066739],
+                        [120.243336, 23.062568], [120.240793, 23.060216], [120.236847, 23.056810], [120.230292, 23.051061],
+                        [120.226851, 23.045736], [120.220451, 23.036356], [120.216766, 23.030920], [120.212424, 23.028814],
+                        [120.208260, 23.028657], [120.193166, 23.029837], [120.189832, 23.029168], [120.176875, 23.025377],
+                        [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
+                        [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
+                        [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
                     ] 
                 };
                 
                 var riverKey = type.split('_')[1];
                 var riverLine = turf.lineString(p[riverKey]);
+                
                 var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                 currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
@@ -597,7 +609,8 @@
             if (routePointsData.length < 2) { 
                 if (type.startsWith('geofence')) {
                     alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但您仍可查看藍色的空間涵蓋範圍！快來投稿吧！');
-                    markerCluster.clearLayers(); routeMarkerObjects = [];
+                    markerCluster.clearLayers();
+                    routeMarkerObjects = [];
                     routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
                     map.addLayer(markerCluster); 
                     if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
