@@ -74,16 +74,14 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
+        /* 🎵 完美回歸：播放器上下分層與防擠壓 CSS */
         .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 15px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
         .global-player.active { bottom: 20px; } 
-        
         .player-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
         .player-title { font-weight: 800; color: #2c3e50; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
-        
         .waveform-wrapper { position: relative; width: 100%; height: 35px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f8f9fa; }
         .wave-base { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.6; }
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
-        
         .player-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
         .player-control-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 20px; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; }
         .volume-control { display: flex; align-items: center; gap: 8px; }
@@ -121,7 +119,6 @@
         .cat-default { background: #f1f2f6; color: #7f8c8d; }  
         .sound-desc { font-size: 14px; color: #7f8c8d; line-height: 1.6; margin: 0 0 18px 0; text-align: justify; }
         
-        /* 🌟 按鈕 UI 優化：增強點擊回饋 */
         .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 10px 15px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(39,174,96,0.25); }
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
         .btn-play-main:active { transform: translateY(0); box-shadow: 0 2px 5px rgba(39,174,96,0.25); }
@@ -152,6 +149,7 @@
             .drawer-panel { width: 280px; } 
             .nav-buttons { overflow-x: visible; white-space: nowrap; max-width: none; gap: 6px; }
             
+            /* 🎵 播放器完美手機版：垂直堆疊 */
             .global-player { flex-direction: column; padding: 15px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
             .global-player.active { bottom: 0; } 
             .player-main { width: 100%; margin-bottom: 5px; }
@@ -225,7 +223,7 @@
                 
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">🌊 鹽水溪畔 200m 深度走讀</button>
                 <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">💧 嘉南大圳 鹽水溪排水線 200m 走讀</button>
-                <button class="route-btn" style="border-left: 4px solid #2ecc71;" onclick="toggleRoute('geofence_shanhai', this)">🌳 山海圳綠道 200m 走讀 (直達玉山)</button>
+                <button class="route-btn" style="border-left: 4px solid #2ecc71;" onclick="toggleRoute('geofence_shanhai', this)">🌳 山海圳綠道 200m 走讀 (雲端載入)</button>
 
                 <button class="route-btn" style="border-left: 4px solid #f39c12;" onclick="alert('✏️ 啟用自訂空間範圍：\n\n1. 請點擊地圖右上角的【繪圖工具列】(可選擇畫線或畫多邊形)。\n2. 在地圖上點擊描繪您想探索的範圍。\n3. 點擊最後一點完成，系統會自動向外擴張並為您生成專屬路線！\n\n⚠️ 如果想要清除手繪的線條與範圍，請點擊右上角的「🗑️ 一鍵清除」按鈕！')">✏️ 啟用自訂空間範圍 (在地圖上手繪)</button>
 
@@ -280,17 +278,11 @@
     </div>
     
     <script>
-        // 🌟 修正 3：加入 maxZoom: 21，允許地圖數位放大，防破圖
-        var map = L.map('map', { zoomControl: false, maxZoom: 21 }).setView([23.0485, 120.1985], 15);
+        // 🗺️ 修正 2：移除有毒的 maxNativeZoom 與 maxZoom，確保 Firefox 穩定運作
+        var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        // 🌟 修正 3：TileLayer 加入 maxNativeZoom 防止請求不存在的圖片
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
-            attribution: '&copy; CARTO', maxNativeZoom: 19, maxZoom: 21 
-        });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { 
-            attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', 
-            maxNativeZoom: 19, maxZoom: 21 
-        });
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>' });
 
         taiwanLayer.addTo(map);
 
@@ -392,8 +384,8 @@
                 else { timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`; }
             }
 
-            // 🌟 修正 2：加入 preventDefault 和 stopPropagation 確保手機版不會誤關 Popup
-            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="event.preventDefault(); event.stopPropagation(); startGlobalPlayback('${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> 播放聲音記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
+            // 🎵 修正 1：移除阻斷事件，讓播放按鈕「一鍵生效」！
+            var audioHTML = item.audioUrl ? `<button class="btn-play-main" onclick="startGlobalPlayback('${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> 播放聲音記錄</button>` : `<p style="background:#f39c12; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; font-weight:bold; margin-top:10px;">📷 生態影像記錄</p>`;
             var cardHTML = `
                 <div class="sound-card">
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
@@ -417,7 +409,9 @@
                 </div>`;
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
-            marker.on('click', () => { if(item.audioUrl) prepareGlobalPlayer(item.uid); isRoutePlaying = false; });
+            
+            // 將觸發行為改到 marker 本身，確保開啟卡片時重設狀態
+            marker.on('click', () => { isRoutePlaying = false; });
             return marker;
         }
 
@@ -520,6 +514,7 @@
             executeCustomGeofence(searchPolygon);
         });
 
+        // 🌟 修正 3：山海圳改為外部載入架構 (解決效能與龐大資料問題)
         function toggleRoute(type, btnElement) {
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
             if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
@@ -536,24 +531,59 @@
             btnElement.classList.add('active');
             document.getElementById('clearRouteBtn').style.display = 'block';
 
-            if (type === 'nature') routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
-            else if (type === 'culture') routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
+            if (type === 'nature') {
+                routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
+                executeStandardRoute();
+            }
+            else if (type === 'culture') {
+                routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
+                executeStandardRoute();
+            }
+            else if (type === 'geofence_shanhai') {
+                // 山海圳：採用 Google Sheet / CSV 外部動態載入的正規作法
+                alert("⏳ 正在準備載入山海圳綠道全線圖資...");
+                
+                // TODO: 圖書老師，請將下方的網址替換為你放在 Google 雲端的山海圳 CSV 直連網址！
+                var csvUrl = "請在此填入您的 CSV 網址"; 
+                
+                if(csvUrl === "請在此填入您的 CSV 網址") {
+                    alert("⚠️ 系統提示：老師，您需要將山海圳的 CSV 檔案網址填入程式碼中的 csvUrl 變數，系統才能抓取十幾萬筆的高精度資料喔！");
+                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
+                    return;
+                }
+
+                fetch(csvUrl)
+                .then(res => res.text())
+                .then(csv => {
+                    // 解析 CSV 轉換為 [經度, 緯度] 陣列的邏輯會寫在這裡
+                    // 等您放上網址後，我們可以一起把這段打通！
+                    alert("圖資下載成功，準備啟動空間魔法！");
+                }).catch(err => {
+                    alert("載入失敗，請檢查 CSV 網址是否正確公開！");
+                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
+                });
+            }
             else if (type.startsWith('geofence')) {
+                // 鹽水溪與嘉南大圳：維持你辛苦手繪的極致精準版
                 var p = { 
                     yanshui: [
-                        [120.278082, 23.055971], [120.277402, 23.057865], [120.276693, 23.058741], [120.275840, 23.059217],
-                        [120.273942, 23.059387], [120.273506, 23.059518], [120.271241, 23.060411], [120.270186, 23.060333],
-                        [120.268861, 23.059964], [120.267648, 23.059643], [120.263499, 23.059301], [120.261885, 23.058176],
-                        [120.261047, 23.058055], [120.259500, 23.058256], [120.258176, 23.058002], [120.257432, 23.057663],
-                        [120.254188, 23.057239], [120.252838, 23.057555], [120.250074, 23.058318], [120.248145, 23.058798],
-                        [120.246779, 23.058294], [120.245615, 23.057913], [120.245096, 23.057611], [120.243972, 23.056357],
-                        [120.243519, 23.056051], [120.241879, 23.054373], [120.240862, 23.052705], [120.238140, 23.050626],
-                        [120.234711, 23.048841], [120.228307, 23.045147], [120.226278, 23.042779], [120.221986, 23.033718],
-                        [120.219988, 23.028595], [120.216065, 23.025032], [120.213404, 23.024235], [120.208039, 23.023504],
-                        [120.201555, 23.022707], [120.194821, 23.020193], [120.189216, 23.017587], [120.183618, 23.014040],
-                        [120.181478, 23.012433], [120.180948, 23.011767], [120.175765, 23.007813], [120.166969, 23.005165],
-                        [120.163335, 23.005619], [120.158741, 23.006261], [120.154729, 23.005319], [120.147016, 23.002277],
-                        [120.142968, 23.001136], [120.141640, 22.999745], [120.138099, 22.993783]
+                        [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
+                        [120.27584039175895, 23.05921724368109], [120.2739422242592, 23.059387104064925], [120.27350655424726, 23.059518930599694],
+                        [120.2712411395911, 23.060411543154373], [120.27018662376139, 23.06033385960511], [120.26886115815427, 23.059964335654627],
+                        [120.26764857984784, 23.059643471306813], [120.26349983285843, 23.05930129515714], [120.26188599978201, 23.05817662130849],
+                        [120.26104757571056, 23.058055584982483], [120.25950026652282, 23.058256333640728], [120.25817684700559, 23.05800217814506],
+                        [120.25743206076987, 23.057663327674405], [120.2541884164761, 23.057239581979474], [120.25283848536998, 23.05755592133056],
+                        [120.2500743878162, 23.058318600797904], [120.24814599555151, 23.05879847973216], [120.24677991369902, 23.05829409719483],
+                        [120.24561564440518, 23.057913636093204], [120.24509624542281, 23.057611289377135], [120.24397231051154, 23.05635720183335],
+                        [120.24351919458041, 23.056051400053036], [120.24187966600437, 23.054373504952522], [120.24086287141245, 23.052705654860617],
+                        [120.23814053401446, 23.0506269168569], [120.23471109545989, 23.048841639655777], [120.22830788475119, 23.045147425533955],
+                        [120.22627856940932, 23.042779030007566], [120.22198625837723, 23.03371889460604], [120.21998846571074, 23.02859525133836],
+                        [120.2160653710788, 23.025032341399523], [120.21340421269593, 23.024235029547228], [120.20803944247677, 23.023504132770995],
+                        [120.20155526350982, 23.022707627184147], [120.19482101993754, 23.02019305113072], [120.18921656345344, 23.017587051277644],
+                        [120.18361849583766, 23.014040029201382], [120.18147834748504, 23.012433642878918], [120.18094854336033, 23.011767782344492],
+                        [120.17576574284755, 23.00781362154153], [120.16696924468056, 23.005165980507726], [120.16333587252535, 23.00561969571237],
+                        [120.15874176242727, 23.00626174830066], [120.15472979194732, 23.005319455699066], [120.14701687759828, 23.002277784871836],
+                        [120.14296840066538, 23.001136328022], [120.1416405455451, 22.999745274471707], [120.13809958714228, 22.9937837390831]
                     ], 
                     jianan: [
                         [120.271733, 23.108189], [120.271038, 23.105101], [120.270575, 23.104705], [120.270641, 23.103944],
@@ -572,36 +602,24 @@
                         [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
                         [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
                         [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
-                    ],
-                    // 🌟 史詩級新路線 (含 Turf 簡化魔法避免當機)
-                    shanhai: [
-                        [120.136844, 22.994410], [120.141528, 23.005439], [120.150635, 23.013497], [120.166292, 23.016696],
-                        [120.176875, 23.025377], [120.193166, 23.029837], [120.208260, 23.028657], [120.216766, 23.030920],
-                        [120.226851, 23.045736], [120.236847, 23.056810], [120.245708, 23.066739], [120.251345, 23.074278],
-                        [120.252896, 23.077889], [120.258908, 23.082548], [120.265131, 23.084858], [120.269064, 23.088363],
-                        [120.265564, 23.094727], [120.270995, 23.099969], [120.271733, 23.108189], [120.295000, 23.125000],
-                        [120.315000, 23.135000], [120.335000, 23.160000], [120.350000, 23.180000], [120.373500, 23.205500], 
-                        [120.395000, 23.215000], [120.420000, 23.225000], [120.450000, 23.235000], [120.485000, 23.240000],
-                        [120.510000, 23.242000], [120.540500, 23.245000], [120.580000, 23.260000], [120.610000, 23.275000], 
-                        [120.640000, 23.295000], [120.680000, 23.320000], [120.710000, 23.340000], [120.735000, 23.365000],
-                        [120.760000, 23.390000], [120.810000, 23.420000], [120.850000, 23.440000], [120.885000, 23.460000], 
-                        [120.910000, 23.465000], [120.957200, 23.467800]
                     ]
                 };
                 
                 var riverKey = type.split('_')[1];
                 var riverLine = turf.lineString(p[riverKey]);
-                
-                // 🌟 修正 3：加入自動簡化演算法，即便使用者輸入上萬個山海圳 GPS，也不會當機！
-                var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0005, highQuality: false});
-                var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
+                var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                 currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
                 routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                
+                executeStandardRoute(type);
             }
+        }
 
+        // 把共通的路線繪製邏輯抽出來，保持程式碼乾淨
+        function executeStandardRoute(type) {
             if (routePointsData.length < 2) { 
-                if (type.startsWith('geofence')) {
+                if (type && type.startsWith('geofence')) {
                     alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但您仍可查看藍色的空間涵蓋範圍！快來投稿吧！');
                     markerCluster.clearLayers();
                     routeMarkerObjects = [];
@@ -652,8 +670,15 @@
             currentAudioUid = uid; document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")";
             var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
             document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
-            globalAudio.pause(); globalAudio.src = item.audioUrl; document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; document.getElementById('globalPlayer').classList.add('active');
+            
+            // 🎵 確保點擊後直接播放，不再需要按兩次
+            globalAudio.src = item.audioUrl; 
+            globalAudio.play(); 
+            
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; document.getElementById('globalPlayer').classList.add('active');
         }
+        
+        function startGlobalPlayback(uid) { prepareGlobalPlayer(uid); isRoutePlaying = false; }
 
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
         function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; }
