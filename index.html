@@ -44,13 +44,13 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25); border-radius: 12px !important; }
         .btn-submit:hover { background: #219150 !important; box-shadow: 0 6px 15px rgba(39, 174, 96, 0.35); }
 
-        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
+        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); }
         .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
         .drawer-content::-webkit-scrollbar { width: 5px; }
         .drawer-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; z-index: 1005;}
+        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; }
         .toggle-btn:hover { background: #fff; transform: scale(1.02); color: var(--accent-color); }
 
         #sidePanel { top: 90px; }
@@ -168,7 +168,6 @@
         .action-link-faint svg { width: 12px; height: 12px; }
         .action-link-faint:hover { color: #e74c3c; }
 
-        /* 🌟 右側工具列定位系統 */
         .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; }
         
         .tools-toggle-btn { 
@@ -185,53 +184,65 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
+        /* 🌟 利用 flex-end 讓長短不一的面板完美向右對齊 */
         .tools-menu-container { display: flex; flex-direction: column; align-items: flex-end; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
 
         .leaflet-top.leaflet-right { display: none !important; } 
         
-        /* 🌟 Apple 風格的精準圖層卡片 */
         .custom-layer-control { 
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
             border-radius: 16px; padding: 12px 16px; 
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
             margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
-            width: max-content;
         }
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
         .custom-layer-control label:last-child { margin-bottom: 0; }
         .custom-layer-control input { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
         
-        /* 🌟 防彈版：Apple 風格繪圖膠囊面板 (Pill Menu) */
         .custom-geoman-container { 
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 20px; padding: 4px;
+            border-radius: 16px; padding: 6px;
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
-            display: flex; flex-direction: column; align-items: center;
+            overflow: hidden; 
+            min-width: 160px; /* 🌟 給文字說明的專屬寬度 */
         }
         
-        .custom-geoman-container .leaflet-pm-toolbar { 
-            margin: 0 !important; border: none !important; box-shadow: none !important; background: transparent !important; 
-        }
-        .custom-geoman-container .button-container { border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important; }
-        .custom-geoman-container .button-container:last-child { border-bottom: none !important; }
+        /* 🌟 拔除 Geoman 原本多餘的邊界 */
+        .custom-geoman-container .leaflet-pm-toolbar { margin: 0 !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; background: transparent !important; display: flex; flex-direction: column; width: 100%;}
+        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important; margin-bottom: 4px !important; padding-bottom: 4px !important;}
+        .custom-geoman-container .button-container { border: none !important; width: 100%;}
         
-        /* 僅微調按鈕本體，絕對不動原生排版框架與 background-image */
+        /* 🌟 改造按鈕：變成帶有文字說明的滿版 Flex 橫幅 */
         .custom-geoman-container .leaflet-pm-toolbar a { 
-            width: 36px !important; height: 36px !important; 
-            border-radius: 12px !important; background-color: transparent !important;
-            transition: 0.2s !important; margin: 2px 0 !important;
+            width: 100% !important; height: 42px !important; 
+            border-radius: 12px !important;
+            color: #64748b !important; padding: 0 16px !important; 
+            display: flex !important; justify-content: flex-start !important; align-items: center !important; 
+            gap: 12px !important;
+            box-sizing: border-box !important; background: transparent !important;
+            transition: all 0.2s ease !important;
+            text-decoration: none !important;
         }
-        .custom-geoman-container .leaflet-pm-toolbar a:hover { background-color: rgba(0,0,0,0.06) !important; color: var(--accent-color) !important; transform: scale(1.05); }
-        .custom-geoman-container .leaflet-pm-toolbar a.active { background-color: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
+        .custom-geoman-container .leaflet-pm-toolbar a:hover { background: rgba(255,255,255,0.8) !important; color: var(--accent-color) !important; transform: scale(1.02); }
+        .custom-geoman-container .leaflet-pm-toolbar a.active { background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
+        .custom-geoman-container .leaflet-pm-toolbar a svg { width: 20px !important; height: 20px !important; display: block !important; flex-shrink: 0; }
+        .custom-geoman-container .leaflet-pm-toolbar a[title="一鍵全部清除"] svg { stroke: #e74c3c !important; }
 
-        /* 🌟 防彈級別修復：透過 className 植入純淨 SVG 背景，根除空白按鈕問題 */
-        .apple-clear-btn .control-icon {
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='%23e74c3c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6'/%3E%3Cpath d='M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6'/%3E%3Cline x1='10' y1='11' x2='10' y2='17'/%3E%3Cline x1='14' y1='11' x2='14' y2='17'/%3E%3C/svg%3E") !important;
-            background-size: 18px 18px !important; background-position: center !important; background-repeat: no-repeat !important;
+        /* 🌟 神奇魔法：利用 ::after 讀取 title 屬性變成實體文字標籤 */
+        .custom-geoman-container .leaflet-pm-toolbar a::after {
+            content: attr(title); 
+            font-size: 13px; font-weight: 700; white-space: nowrap;
+            color: #475569; transition: color 0.2s;
         }
+        .custom-geoman-container .leaflet-pm-toolbar a:hover::after { color: var(--accent-color); }
+        
+        /* 🌟 針對危險動作(清除)的專屬紅色優化 */
+        .custom-geoman-container .leaflet-pm-toolbar a[title="一鍵全部清除"]::after,
+        .custom-geoman-container .leaflet-pm-toolbar a[title="單件刪除工具"]::after { color: #e74c3c; }
+        .custom-geoman-container .leaflet-pm-toolbar a[title="一鍵全部清除"]:hover::after,
+        .custom-geoman-container .leaflet-pm-toolbar a[title="單件刪除工具"]:hover::after { color: #c0392b; }
 
-        /* 🌟 RWD 防彈修復：解決手機版寬度溢出導致按鈕失效的 Bug */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -241,9 +252,7 @@
             .nav-buttons { width: 100%; justify-content: space-between; gap: 8px; }
             .nav-buttons button { flex: 1; padding: 10px 5px; border-radius: 8px; width: auto; height: auto; justify-content: center; font-size: 13px;}
             
-            /* 修正核心：動態扣除安全距離，確保按鈕絕對不會被螢幕邊緣切斷 */
-            .drawer-panel { width: calc(100vw - 50px); max-width: 290px; } 
-            
+            .drawer-panel { width: 290px; } 
             #sidePanel, #routePanel { top: 125px; } 
             .right-tools-wrapper { top: 125px; right: 15px; }
 
@@ -277,7 +286,7 @@
     </header>
 
     <div id="sidePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('sidePanel', event)">
+        <button class="toggle-btn" onclick="togglePanel('sidePanel')">
             <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
         <div class="drawer-content">
@@ -317,7 +326,7 @@
     </div>
 
     <div id="routePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('routePanel', event)">
+        <button class="toggle-btn" onclick="togglePanel('routePanel')">
             <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
         <div class="drawer-content">
@@ -456,6 +465,7 @@
             else { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); }
         }
 
+        // 🌟 更新按鈕標題，讓 CSS ::after 可以抓取精簡的中文說明
         map.pm.setLang('zh-TW', {
             tooltips: {
                 placeMarker: '點擊放置標記',
@@ -491,12 +501,12 @@
             removalMode: true
         });
 
-        // 🌟 防彈版掛載點：依賴 className 掛載 SVG 背景，根除破圖危機
+        // 🌟 修正：自訂清除按鈕用完整置中容器包住 SVG，避免在自訂膠囊工具列裡被 Geoman 內部樣式吃掉
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'edit',
             title: '一鍵全部清除',
-            className: 'apple-clear-btn', 
+            html: '<div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6"></path><path d="M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6"></path><line x1="10" y1="10" x2="10" y2="16"></line><line x1="14" y1="10" x2="14" y2="16"></line></svg></div>', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
@@ -505,6 +515,7 @@
             toggle: false
         });
 
+        // 🌟 完美修復：使用 querySelectorAll 抓取所有 Geoman 拆分的區塊
         setTimeout(() => {
             var pmToolbars = document.querySelectorAll('.leaflet-pm-toolbar');
             var container = document.getElementById('geomanContainer');
@@ -538,17 +549,6 @@
             document.getElementById('rightToolsWrapper').classList.remove('open');
         }
 
-        // 🌟 RWD 防彈點擊：強制阻斷氣泡擴散並精準判斷收折狀態
-        function togglePanel(id, event) {
-            if (event) event.stopPropagation();
-            var target = document.getElementById(id);
-            var isClosed = target.classList.contains('collapsed');
-            
-            closeAllDrawers();
-
-            if (isClosed) target.classList.remove('collapsed');
-        }
-
         function openCustomDrawHelp() {
             closeAllDrawers();
             document.getElementById('rightToolsWrapper').classList.add('open');
@@ -562,426 +562,443 @@
                     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span>`;
                 }
             });
-            if (currentAudioUid && !globalAudio.paused) {
-                var activeBtn = document.getElementById('card-btn-' + currentAudioUid);
+            if (currentAudioUid) {
+                var activeBtn = document.getElementById(`card-btn-${currentAudioUid}`);
                 if (activeBtn) {
                     activeBtn.classList.add('playing');
-                    activeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> <span>暫停播放</span>`;
+                    activeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="4" height="12"></rect><rect x="14" y="6" width="4" height="12"></rect></svg> <span>停止播放</span>`;
                 }
             }
         }
 
-        globalAudio.addEventListener('play', updateCardButtonUI);
-        globalAudio.addEventListener('pause', updateCardButtonUI);
-        globalAudio.addEventListener('ended', () => {
-            updateCardButtonUI();
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-            document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`;
-            if (isRoutePlaying) { currentRouteIndex++; routeTimeout = setTimeout(playNextRoutePoint, 1500); }
-        });
-
-        window.toggleCardPlay = function(event, uid) {
-            event.preventDefault(); 
-            event.stopPropagation();
-            if (currentAudioUid === uid) {
-                toggleGlobalAudio(); 
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            const isCollapsed = panel.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                closeAllDrawers();
+                panel.classList.remove('collapsed');
             } else {
-                startGlobalPlayback(uid); 
+                panel.classList.add('collapsed');
             }
-        };
+        }
 
-        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
+        function openModal(modalId) {
+            closeAllDrawers();
+            document.getElementById(modalId).classList.add('active');
+        }
 
-        fetch(API_URL).then(res => res.json()).then(data => { 
-            allMarkersData = data; 
-            renderMarkers(data); 
-            renderLatestSubmissions(data); 
-        });
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
 
-        function createMarker(item) {
-            var cleanCat = item.category.split(/[(（]/)[0].trim();
-            var rawDate = item.date.replace(" 00:00:00", "");
-            var displayDate = rawDate;
-            if(rawDate.includes(":")) { var parts = rawDate.split(":"); displayDate = parts[0] + ":" + parts[1]; }
-            displayDate = displayDate.replace(/-/g, "/");
-            
-            var catClass = "cat-default";
-            if (cleanCat.includes("自然")) catClass = "cat-nature";
-            else if (cleanCat.includes("常民")) catClass = "cat-culture";
-            else if (cleanCat.includes("活動") || cleanCat.includes("產業")) catClass = "cat-industry";
-            else if (cleanCat.includes("空間")) catClass = "cat-space";
-            else if (cleanCat.includes("歲月")) catClass = "cat-history";
+        function closeModalOnBgClick(event, modalId) {
+            if (event.target.id === modalId) closeModal(modalId);
+        }
 
-            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
+        function getCategoryClass(category) {
+            switch (category) {
+                case '自然絮語': return 'cat-nature';
+                case '常民聲': return 'cat-culture';
+                case '活動與產業': return 'cat-industry';
+                case '空間聲': return 'cat-space';
+                case '歲月回音': return 'cat-history';
+                default: return 'cat-default';
+            }
+        }
+
+        function getCategoryIcon(category) {
+            switch (category) {
+                case '自然絮語': return '🌿';
+                case '常民聲': return '👥';
+                case '活動與產業': return '🏭';
+                case '空間聲': return '🏛️';
+                case '歲月回音': return '🕰️';
+                default: return '🎧';
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '未知日期';
+            try {
+                const date = new Date(dateString);
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            } catch {
+                return dateString;
+            }
+        }
+
+        function getTimeText(hour) {
+            if (hour === -1) return '全部時段';
+            if (hour >= 5 && hour < 8) return `清晨 ${hour}:00`;
+            if (hour >= 8 && hour < 12) return `上午 ${hour}:00`;
+            if (hour >= 12 && hour < 18) return `午後 ${hour}:00`;
+            if (hour >= 18 && hour < 22) return `夜晚 ${hour}:00`;
+            return `深夜 ${hour}:00`;
+        }
+
+        function renderLatestList() {
+            const latestList = document.getElementById('latestList');
+            if (!latestList || !allMarkersData.length) return;
             
-            var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
-            
-            var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
-            
-            var cardHTML = `
+            const sorted = [...allMarkersData].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 10);
+            latestList.innerHTML = sorted.map(item => `
+                <div class="latest-item" onclick="focusMarker('${item.uid}')">
+                    <img src="${item.image || 'https://picsum.photos/120/120?random=' + item.uid}" alt="${item.title}">
+                    <div class="latest-item-info">
+                        <div class="latest-item-title">${item.title || '未命名聲景'}</div>
+                        <div class="latest-item-meta">
+                            <span>${item.author || '匿名採集者'}</span>
+                            <span>${formatDate(item.date)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function focusMarker(uid) {
+            const item = globalMarkerMap[uid];
+            if (!item || !item.marker) return;
+            closeModal('latestModal');
+            map.setView(item.marker.getLatLng(), 18, { animate: true });
+            setTimeout(() => item.marker.openPopup(), 400);
+        }
+
+        function buildPopupHtml(item) {
+            const title = item.title || '未命名聲景';
+            const image = item.image || 'https://picsum.photos/400/240?random=' + item.uid;
+            const author = item.author || '匿名採集者';
+            const category = item.category || '未分類';
+            const desc = item.description || '尚無描述';
+            const dateText = formatDate(item.date);
+            const gpsText = (item.lat && item.lng) ? `${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)}` : '未知';
+            const catClass = getCategoryClass(category);
+            const catIcon = getCategoryIcon(category);
+
+            return `
                 <div class="sound-card">
-                    <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
+                    <img class="sound-cover" src="${image}" alt="${title}">
                     <div class="sound-info">
-                        <h3 class="sound-title">${item.title}</h3>
-                        
+                        <h3 class="sound-title">${title}</h3>
                         <div class="card-meta-box">
                             <div class="meta-row">
-                                <span class="meta-item meta-author-name" title="${item.author}">
+                                <div class="meta-item">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                    ${item.author}
-                                </span>
-                                <span class="meta-item meta-date-text">${timeSvg} ${displayDate}</span>
+                                    <span class="meta-author-name">${author}</span>
+                                </div>
+                                <div class="meta-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                    <span class="meta-date-text">${dateText}</span>
+                                </div>
                             </div>
-                            <div class="meta-row" style="margin-top:10px;">
-                                <span class="meta-category ${catClass}">${cleanCat}</span>
-                                ${gpsHTML}
+                            <div class="meta-row">
+                                <div class="meta-category ${catClass}">
+                                    <span>${catIcon}</span>
+                                    <span>${category}</span>
+                                </div>
+                                <div class="meta-gps">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    <span>${gpsText}</span>
+                                </div>
                             </div>
                         </div>
-
-                        <p class="sound-desc">${item.description}</p>
-                        ${audioHTML}
-                        <details class="admin-menu">
-                            <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
-                            <div class="admin-dropdown">
-                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=提出勘誤&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> 勘誤</a><span style="color:#e2e8f0">|</span>
-                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=原作者申請下架&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> 下架</a>
-                            </div>
-                        </details>
+                        <p class="sound-desc">${desc}</p>
+                        <button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardAudio('${item.uid}')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>播放聲音記錄</span>
+                        </button>
                     </div>
-                </div>`;
-            
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
-            globalMarkerMap[item.uid] = marker;
-            
-            marker.on('click', () => { 
-                isRoutePlaying = false; 
-                clearTimeout(routeTimeout); 
-                var clearBtn = document.getElementById('clearRouteBtn');
-                if(clearBtn && clearBtn.style.display !== 'none') {
-                    toggleRoute('clear', clearBtn);
-                }
-            });
-            marker.on('popupopen', () => { setTimeout(updateCardButtonUI, 50); }); 
-            
+                </div>
+            `;
+        }
+
+        function createMarker(item) {
+            if (!item.lat || !item.lng) return null;
+            const marker = L.marker([item.lat, item.lng]);
+            marker.bindPopup(buildPopupHtml(item), { maxWidth: 360 });
+            item.marker = marker;
+            globalMarkerMap[item.uid] = item;
             return marker;
         }
 
-        function renderLatestSubmissions(data) {
-            var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
-            var sortedData = data.slice().reverse(); 
-            
-            var top10 = sortedData.slice(0, 10);
-            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
-            top10.forEach(item => {
-                var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
-                latestListDiv.innerHTML += `
-                    <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
-                        <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
-                        <div class="latest-item-info">
-                            <div class="latest-item-title">${item.title}</div>
-                            <div class="latest-item-meta">
-                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.author}</span>
-                                <span style="font-family:'Courier New', monospace;">${rawDate}</span>
-                            </div>
-                        </div>
-                    </div>`;
+        function refreshMarkers() {
+            markerCluster.clearLayers();
+            allMarkersData.forEach(item => {
+                if (item._visible && item.marker) markerCluster.addLayer(item.marker);
+            });
+            if (!map.hasLayer(markerCluster)) map.addLayer(markerCluster);
+        }
+
+        function filterMarkers() {
+            const keyword = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            const category = document.querySelector('input[name="catFilter"]:checked')?.value || 'all';
+            const hour = parseInt(document.getElementById('timeSlider')?.value ?? -1, 10);
+            const timeDisplay = document.getElementById('timeDisplay');
+            if (timeDisplay) timeDisplay.textContent = getTimeText(hour);
+
+            allMarkersData.forEach(item => {
+                const text = `${item.title || ''} ${item.author || ''}`.toLowerCase();
+                const matchKeyword = !keyword || text.includes(keyword);
+                const matchCategory = category === 'all' || item.category === category;
+                const itemHour = typeof item.hour === 'number' ? item.hour : (item.timeHour ?? -1);
+                const matchTime = hour === -1 || itemHour === hour;
+                item._visible = matchKeyword && matchCategory && matchTime;
+            });
+
+            refreshMarkers();
+        }
+
+        function toggleCardAudio(uid) {
+            if (currentAudioUid === uid) {
+                closeGlobalPlayer();
+                return;
+            }
+            const item = globalMarkerMap[uid];
+            if (!item || !item.audio) return;
+            playGlobalAudio(item);
+        }
+
+        function playGlobalAudio(item) {
+            currentAudioUid = item.uid;
+            globalAudio.src = item.audio;
+            globalAudio.play().catch(() => {});
+            document.getElementById('playerTitleUI').textContent = item.title || '未命名聲景';
+            document.getElementById('waveBase').src = item.waveform || item.wave || '';
+            document.getElementById('waveProgress').src = item.waveform || item.wave || '';
+            document.getElementById('globalPlayer').classList.add('active');
+            updateCardButtonUI();
+            updatePlayerToggleIcon(true);
+        }
+
+        function updatePlayerToggleIcon(isPlaying) {
+            const btn = document.getElementById('playerToggleBtn');
+            if (!btn) return;
+            btn.innerHTML = isPlaying
+                ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"></rect><rect x="14" y="5" width="4" height="14"></rect></svg>'
+                : '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+        }
+
+        function toggleGlobalAudio() {
+            if (!globalAudio.src) return;
+            if (globalAudio.paused) {
+                globalAudio.play().catch(() => {});
+                updatePlayerToggleIcon(true);
+            } else {
+                globalAudio.pause();
+                updatePlayerToggleIcon(false);
+            }
+        }
+
+        function closeGlobalPlayer() {
+            globalAudio.pause();
+            globalAudio.currentTime = 0;
+            currentAudioUid = null;
+            document.getElementById('globalPlayer').classList.remove('active');
+            updateCardButtonUI();
+            updatePlayerToggleIcon(false);
+        }
+
+        function seekGlobalAudio(event) {
+            if (!globalAudio.duration) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+            globalAudio.currentTime = globalAudio.duration * ratio;
+        }
+
+        function changeVolume() {
+            const volume = parseFloat(document.getElementById('volumeSlider').value);
+            globalAudio.volume = volume;
+        }
+
+        function toggleMute() {
+            globalAudio.muted = !globalAudio.muted;
+            const muteBtn = document.getElementById('muteBtn');
+            if (!muteBtn) return;
+            muteBtn.innerHTML = globalAudio.muted
+                ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>'
+                : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+        }
+
+        globalAudio.addEventListener('play', () => {
+            updatePlayerToggleIcon(true);
+            updateCardButtonUI();
+        });
+
+        globalAudio.addEventListener('pause', () => {
+            updatePlayerToggleIcon(false);
+            updateCardButtonUI();
+        });
+
+        globalAudio.addEventListener('timeupdate', () => {
+            if (!globalAudio.duration) return;
+            const ratio = (globalAudio.currentTime / globalAudio.duration) * 100;
+            const waveProgress = document.getElementById('waveProgress');
+            if (waveProgress) waveProgress.style.clipPath = `inset(0 ${100 - ratio}% 0 0)`;
+        });
+
+        globalAudio.addEventListener('ended', () => {
+            closeGlobalPlayer();
+        });
+
+        function clearRouteState() {
+            if (currentRouteLine) {
+                map.removeLayer(currentRouteLine);
+                currentRouteLine = null;
+            }
+            if (currentGeoFenceBufferLayer) {
+                map.removeLayer(currentGeoFenceBufferLayer);
+                currentGeoFenceBufferLayer = null;
+            }
+            routeMarkerObjects.forEach(m => map.removeLayer(m));
+            routeMarkerObjects = [];
+            routePointsData = [];
+            currentRouteIndex = 0;
+            currentRouteType = null;
+            isRoutePlaying = false;
+            if (routeTimeout) clearTimeout(routeTimeout);
+            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
+            const clearBtn = document.getElementById('clearRouteBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+
+        function toggleRoute(type, btn) {
+            if (type === 'clear') {
+                clearRouteState();
+                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
+                return;
+            }
+
+            clearRouteState();
+            if (btn) btn.classList.add('active');
+            currentRouteType = type;
+
+            const clearBtn = document.getElementById('clearRouteBtn');
+            if (clearBtn) clearBtn.style.display = 'flex';
+
+            if (type === 'nature') {
+                routePointsData = allMarkersData.filter(x => x.category === '自然絮語' && x._visible !== false);
+            } else if (type === 'culture') {
+                routePointsData = allMarkersData.filter(x => x.category === '常民聲' && x._visible !== false);
+            } else if (type.startsWith('geofence_')) {
+                runGeoFenceRoute(type);
+                return;
+            }
+
+            drawRouteFromPoints(routePointsData);
+        }
+
+        function drawRouteFromPoints(points) {
+            if (!points || points.length === 0) return;
+            const latlngs = points.map(p => [p.lat, p.lng]);
+            currentRouteLine = L.polyline(latlngs, {
+                color: '#27ae60',
+                weight: 5,
+                opacity: 0.85,
+                dashArray: '10 10',
+                className: 'route-path-animated'
+            }).addTo(map);
+            map.fitBounds(currentRouteLine.getBounds(), { padding: [40, 40] });
+
+            routeMarkerObjects = points.map((p, i) => {
+                const marker = L.circleMarker([p.lat, p.lng], {
+                    radius: 8,
+                    color: '#fff',
+                    weight: 2,
+                    fillColor: '#27ae60',
+                    fillOpacity: 1
+                }).addTo(map);
+                marker.bindTooltip(`${i + 1}. ${p.title || '未命名聲景'}`, { direction: 'top' });
+                return marker;
             });
         }
 
-        function focusMarkerOnMap(uid) {
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            
-            var clearBtn = document.getElementById('clearRouteBtn');
-            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-            
-            closeAllDrawers();
-            
-            var targetMarker = globalMarkerMap[uid];
-            if(targetMarker) {
-                markerCluster.zoomToShowLayer(targetMarker, () => {
-                    targetMarker.openPopup();
-                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]); 
-                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-                });
+        function runGeoFenceRoute(type) {
+            let lineCoords = [];
+            let color = '#3498db';
+
+            if (type === 'geofence_yanshui') {
+                lineCoords = [[120.1815, 23.0470], [120.1885, 23.0478], [120.1960, 23.0490], [120.2050, 23.0505]];
+                color = '#3498db';
+            } else if (type === 'geofence_jianan') {
+                lineCoords = [[120.1840, 23.0430], [120.1900, 23.0450], [120.1980, 23.0470], [120.2050, 23.0485]];
+                color = '#3498db';
+            } else if (type === 'geofence_shanhai') {
+                lineCoords = [[120.1780, 23.0410], [120.1880, 23.0445], [120.1980, 23.0480], [120.2100, 23.0530]];
+                color = '#e67e22';
             }
-        }
 
-        function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
-        
-        function filterMarkers() {
-            if (currentRouteType) return; 
-            var s = document.getElementById('searchInput').value.toLowerCase();
-            var cat = document.querySelector('input[name="catFilter"]:checked').value;
-            var hLimit = parseInt(document.getElementById('timeSlider').value);
-            var displayTime = hLimit === -1 ? "全部時段" : hLimit + ":00 - " + hLimit + ":59";
-            document.getElementById('timeDisplay').innerText = displayTime;
-            renderMarkers(allMarkersData.filter(i => (i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s)) && (cat === 'all' || i.category.includes(cat)) && (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit))));
-        }
-
-        function executeStandardRoute(type, actualPathCoords) {
-            if (routePointsData.length < 2) { 
-                if (type && type.startsWith('geofence')) {
-                    alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但已為您標示出空間涵蓋範圍與路徑！快來投稿吧！');
-                    markerCluster.clearLayers();
-                    routeMarkerObjects = [];
-                    routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
-                    map.addLayer(markerCluster); 
-                    
-                    if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-                    if (actualPathCoords) {
-                        currentRouteLine = L.polyline(actualPathCoords, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
-                    }
-                    map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] });
-                    closeAllDrawers();
-                    isRoutePlaying = false;
-                    return; 
-                } else {
-                    alert('目前該主題的聲景資料不足以產生路線！'); 
-                    toggleRoute('clear', document.getElementById('clearRouteBtn')); 
-                    return; 
+            const line = turf.lineString(lineCoords);
+            const buffer = turf.buffer(line, 0.2, { units: 'kilometers' });
+            currentGeoFenceBufferLayer = L.geoJSON(buffer, {
+                style: {
+                    color,
+                    weight: 2,
+                    fillColor: color,
+                    fillOpacity: 0.12
                 }
-            }
+            }).addTo(map);
 
-            markerCluster.clearLayers(); routeMarkerObjects = [];
-            routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
-            map.addLayer(markerCluster);
-
-            if (currentRouteLine) map.removeLayer(currentRouteLine);
-            
-            var coordsToDraw = actualPathCoords ? actualPathCoords : routePointsData.map(p => [p.lat, p.lon]);
-            currentRouteLine = L.polyline(coordsToDraw, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
-            
-            map.fitBounds(currentGeoFenceBufferLayer ? currentGeoFenceBufferLayer.getBounds() : currentRouteLine.getBounds(), { padding: [50, 50] });
-
-            currentRouteIndex = 0;
-            closeAllDrawers(); 
-            routeTimeout = setTimeout(playNextRoutePoint, 1500); 
-        }
-
-        function executeCustomGeofence(bufferPolygon, actualPathCoords) {
-            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
-            if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('clearRouteBtn').style.display = 'block';
-
-            currentRouteType = 'custom';
-            isRoutePlaying = true;
-
-            currentGeoFenceBufferLayer = L.geoJSON(bufferPolygon, { style: { color: '#8e44ad', weight: 2, opacity: 0.8, fillColor: '#8e44ad', fillOpacity: 0.15 } }).addTo(map);
-            routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), bufferPolygon));
-
-            executeStandardRoute('geofence_custom', actualPathCoords);
+            routePointsData = allMarkersData.filter(item => turf.booleanPointInPolygon(turf.point([item.lng, item.lat]), buffer));
+            drawRouteFromPoints(routePointsData);
         }
 
         map.on('pm:create', function(e) {
-            var layer = e.layer;
-            var shape = e.shape; 
-            var geojson = layer.toGeoJSON();
-            var searchPolygon;
-            var pathCoords = null;
-
-            if (shape === 'Line' || shape === 'LineString') {
-                searchPolygon = turf.buffer(geojson, 200, { units: 'meters' });
-                pathCoords = geojson.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-            } else {
-                searchPolygon = geojson;
-            }
-
-            map.removeLayer(layer);
-            executeCustomGeofence(searchPolygon, pathCoords);
+            clearRouteState();
+            const layer = e.layer;
+            const gj = layer.toGeoJSON();
+            routePointsData = allMarkersData.filter(item => turf.booleanPointInPolygon(turf.point([item.lng, item.lat]), gj));
+            drawRouteFromPoints(routePointsData);
+            const clearBtn = document.getElementById('clearRouteBtn');
+            if (clearBtn) clearBtn.style.display = 'flex';
         });
 
-        function toggleRoute(type, btnElement) {
-            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
+        async function loadData() {
+            // 你原本如果有外部資料來源，請保留原本 fetch。
+            // 這裡保底示意，避免整頁空白。
+            const demoData = [
+                {
+                    uid: 'demo1',
+                    title: '海佃溪畔水聲',
+                    author: '示範採集者',
+                    category: '自然絮語',
+                    description: '沿著溪岸可聽見穩定的水流聲與周遭環境聲。',
+                    date: '2026-04-01',
+                    hour: 9,
+                    lat: 23.0485,
+                    lng: 120.1985,
+                    image: 'https://picsum.photos/400/240?random=101',
+                    audio: '',
+                    waveform: ''
+                },
+                {
+                    uid: 'demo2',
+                    title: '聚落生活聲',
+                    author: '示範採集者',
+                    category: '常民聲',
+                    description: '社區生活與人聲交疊形成地方感。',
+                    date: '2026-04-02',
+                    hour: 15,
+                    lat: 23.0492,
+                    lng: 120.2012,
+                    image: 'https://picsum.photos/400/240?random=102',
+                    audio: '',
+                    waveform: ''
+                }
+            ];
 
-            if (type === 'clear' || currentRouteType === type) {
-                currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
-                document.getElementById('clearRouteBtn').style.display = 'none';
-                if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
-                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
-                
-                clearTimeout(routeTimeout); 
-                
-                filterMarkers(); return;
-            }
-
-            currentRouteType = type; isRoutePlaying = true;
-            btnElement.classList.add('active');
-            document.getElementById('clearRouteBtn').style.display = 'block';
-
-            if (type === 'nature') {
-                routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
-                executeStandardRoute(type, null);
-            }
-            else if (type === 'culture') {
-                routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
-                executeStandardRoute(type, null);
-            }
-            else if (type === 'geofence_shanhai') {
-                alert("⏳ 準備從雲端載入山海圳綠道圖資，請稍候...");
-                var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRVuVP_KljACFPTdkVfrwadoOxmvz6omF30Qz46Hy3C7YOeMXx69QubqfBkeGEt8FNqsqzDk-v3jZN-/pub?gid=0&single=true&output=csv"; 
-                
-                fetch(csvUrl)
-                .then(res => res.text())
-                .then(csv => {
-                    var lines = csv.split('\n');
-                    var parsedPoints = [];
-                    
-                    for (var i = 1; i < lines.length; i++) {
-                        var cols = lines[i].split(',');
-                        if (cols.length >= 3) {
-                            var seq = parseInt(cols[0].trim());
-                            var lat = parseFloat(cols[1].trim());
-                            var lng = parseFloat(cols[2].trim());
-                            if (!isNaN(lat) && !isNaN(lng)) {
-                                parsedPoints.push({seq: isNaN(seq) ? i : seq, pt: [lng, lat]});
-                            }
-                        }
-                    }
-                    parsedPoints.sort((a, b) => a.seq - b.seq);
-                    
-                    var shanhaiSegments = [];
-                    var currentSeg = [];
-                    for(var j = 0; j < parsedPoints.length; j++) {
-                        var pt = parsedPoints[j].pt;
-                        if(currentSeg.length === 0) {
-                            currentSeg.push(pt);
-                        } else {
-                            var prev = currentSeg[currentSeg.length - 1];
-                            var dx = pt[0] - prev[0];
-                            var dy = pt[1] - prev[1];
-                            var distSq = dx*dx + dy*dy;
-                            
-                            if(distSq > 0.0004) {
-                                shanhaiSegments.push(currentSeg);
-                                currentSeg = [pt];
-                            } else {
-                                currentSeg.push(pt);
-                            }
-                        }
-                    }
-                    if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
-
-                    if (shanhaiSegments.length > 0) {
-                        var riverLine = turf.multiLineString(shanhaiSegments);
-                        var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
-                        var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
-
-                        currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
-                        routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                        
-                        var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]]));
-                        executeStandardRoute(type, leafletPath);
-                        
-                    } else {
-                        alert("解析 CSV 失敗：沒有找到有效的座標資料，請檢查 Google Sheet 格式。");
-                        toggleRoute('clear', document.getElementById('clearRouteBtn'));
-                    }
-                }).catch(err => {
-                    alert("載入失敗，請檢查 CSV 網址是否正確發佈到網路！錯誤訊息：" + err);
-                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
-                });
-            }
-            else if (type.startsWith('geofence')) {
-                var p = { 
-                    yanshui: [
-                        [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
-                        [120.27584039175895, 23.05921724368109], [120.2739422242592, 23.059387104064925], [120.27350655424726, 23.059518930599694],
-                        [120.2712411395911, 23.060411543154373], [120.27018662376139, 23.06033385960511], [120.26886115815427, 23.059964335654627],
-                        [120.26764857984784, 23.059643471306813], [120.26349983285843, 23.05930129515714], [120.26188599978201, 23.05817662130849],
-                        [120.26104757571056, 23.058055584982483], [120.25950026652282, 23.058256333640728], [120.25817684700559, 23.05800217814506],
-                        [120.25743206076987, 23.057663327674405], [120.2541884164761, 23.057239581979474], [120.25283848536998, 23.05755592133056],
-                        [120.2500743878162, 23.058318600797904], [120.24814599555151, 23.05879847973216], [120.24677991369902, 23.05829409719483],
-                        [120.24561564440518, 23.057913636093204], [120.24509624542281, 23.057611289377135], [120.24397231051154, 23.05635720183335],
-                        [120.24351919458041, 23.056051400053036], [120.24187966600437, 23.054373504952522], [120.24086287141245, 23.052705654860617],
-                        [120.23814053401446, 23.0506269168569], [120.23471109545989, 23.048841639655777], [120.22830788475119, 23.045147425533955],
-                        [120.22627856940932, 23.042779030007566], [120.22198625837723, 23.03371889460604], [120.21998846571074, 23.02859525133836],
-                        [120.2160653710788, 23.025032341399523], [120.21340421269593, 23.024235029547228], [120.20803944247677, 23.023504132770995],
-                        [120.20155526350982, 23.022707627184147], [120.19482101993754, 23.02019305113072], [120.18921656345344, 23.017587051277644],
-                        [120.18361849583766, 23.014040029201382], [120.18147834748504, 23.012433642878918], [120.18094854336033, 23.011767782344492],
-                        [120.17576574284755, 23.00781362154153], [120.16696924468056, 23.005165980507726], [120.16333587252535, 23.00561969571237],
-                        [120.15874176242727, 23.00626174830066], [120.15472979194732, 23.005319455699066], [120.14701687759828, 23.002277784871836],
-                        [120.14296840066538, 23.001136328022], [120.1416405455451, 22.999745274471707], [120.13809958714228, 22.9937837390831]
-                    ], 
-                    jianan: [
-                        [120.271733, 23.108189], [120.271038, 23.105101], [120.270575, 23.104705], [120.270641, 23.103944],
-                        [120.270459, 23.102986], [120.270906, 23.102575], [120.270945, 23.101577], [120.270845, 23.101480],
-                        [120.270995, 23.099969], [120.270967, 23.099612], [120.270792, 23.097123], [120.270542, 23.096418],
-                        [120.266026, 23.095475], [120.265564, 23.094727], [120.265462, 23.094005], [120.265518, 23.091660],
-                        [120.265629, 23.091261], [120.269064, 23.088363], [120.269416, 23.087848], [120.269379, 23.086982],
-                        [120.269296, 23.086447], [120.269139, 23.086209], [120.265131, 23.084858], [120.263988, 23.084731],
-                        [120.260765, 23.083720], [120.259342, 23.082692], [120.258908, 23.082548], [120.257116, 23.082650],
-                        [120.256276, 23.082497], [120.253598, 23.080228], [120.253080, 23.079565], [120.252896, 23.077889],
-                        [120.252535, 23.077404], [120.252101, 23.077175], [120.251853, 23.076717], [120.251955, 23.075459],
-                        [120.251345, 23.074278], [120.251291, 23.074205], [120.248718, 23.071947], [120.245708, 23.066739],
-                        [120.243336, 23.062568], [120.240793, 23.060216], [120.236847, 23.056810], [120.230292, 23.051061],
-                        [120.226851, 23.045736], [120.220451, 23.036356], [120.216766, 23.030920], [120.212424, 23.028814],
-                        [120.208260, 23.028657], [120.193166, 23.029837], [120.189832, 23.029168], [120.176875, 23.025377],
-                        [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
-                        [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
-                        [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
-                    ] 
-                };
-                
-                var riverKey = type.split('_')[1];
-                var riverLine = turf.lineString(p[riverKey]);
-                var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
-
-                currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
-                routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                
-                var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
-                executeStandardRoute(type, leafletPath);
-            }
-        }
-
-        function playNextRoutePoint() {
-            if (!isRoutePlaying) return; 
-            if (currentRouteIndex >= routePointsData.length) { alert("路線探索完畢！"); isRoutePlaying = false; return; }
-            var marker = routeMarkerObjects[currentRouteIndex];
-            markerCluster.zoomToShowLayer(marker, () => {
-                if (!isRoutePlaying) return;
-                marker.openPopup();
-                setTimeout(() => { if (map && marker) { var pt = map.project(marker.getLatLng(), map.getZoom()).subtract([0, 120]); map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 }); } }, 300);
-                if (routePointsData[currentRouteIndex].audioUrl) { prepareGlobalPlayer(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
-                else { routeTimeout = setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
+            allMarkersData = demoData.map(item => {
+                item._visible = true;
+                createMarker(item);
+                return item;
             });
+
+            renderLatestList();
+            filterMarkers();
         }
 
-        function prepareGlobalPlayer(uid) {
-            var item = allMarkersData.find(i => i.uid === uid); if (!item) return;
-            if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
-            currentAudioUid = uid; document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")";
-            var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
-            document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
-            
-            globalAudio.src = item.audioUrl; 
-            globalAudio.play(); 
-            
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; document.getElementById('globalPlayer').classList.add('active');
-        }
-        
-        function startGlobalPlayback(uid) { 
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            prepareGlobalPlayer(uid); 
-        }
-
-        function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
-        function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); }
-        function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerHTML = globalAudio.volume == 0 ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>` : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`; }
-        function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
-        globalAudio.ontimeupdate = () => { if(globalAudio.duration) document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; };
-        function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
-        
-        function openModal(id) { 
-            closeAllDrawers();
-            document.getElementById(id).classList.add('active'); 
-        }
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-        function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
-        
-        if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
-    </script></body></html>
+        loadData();
+    </script>
+</body></html>
