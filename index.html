@@ -16,7 +16,7 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <script>
-        // 🌟 Apple iOS 裝置偵測：解決 iOS 系統鎖定音量桿控制的硬體限制
+        // 🌟 核心裝置偵測：辨識 iOS 裝置以優化音量控制介面
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
@@ -65,7 +65,7 @@
         .drawer-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
         .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; z-index: 1005; pointer-events: auto;}
-        .toggle-btn:hover { background: #fff; transform: scale(1.02); color: var(--accent-color); }
+        .toggle-btn:hover { color: var(--accent-color); background: #fff; }
 
         #sidePanel { top: 90px; }
         #routePanel { top: 90px; } 
@@ -97,7 +97,7 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        /* 🌟 桌機版：全局播放器排版 (Flexbox 單行) */
+        /* 🌟 播放器排版與即時秒數設計 */
         .global-player { 
             position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; 
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); 
@@ -117,6 +117,14 @@
         .waveform-wrapper { position: relative; width: 100%; height: 32px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f1f2f6; }
         .wave-base { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.6; }
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
+        
+        /* 🌟 秒數時間顯示膠囊 */
+        .player-time-display {
+            position: absolute; right: 6px; bottom: 6px;
+            background: rgba(15, 23, 42, 0.65); color: #fff;
+            font-size: 10px; font-family: 'Courier New', monospace; font-weight: 700;
+            padding: 2px 6px; border-radius: 8px; pointer-events: none; backdrop-filter: blur(4px);
+        }
         
         .volume-control { display: flex; align-items: center; gap: 8px; color: var(--text-muted); width: 130px; flex-shrink: 0;}
         .volume-slider { width: 100%; accent-color: var(--accent-color); cursor: pointer; height: 4px; }
@@ -148,9 +156,7 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 手機版卡片防截斷：加入內部捲動機制 (Scrollbar) */
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: 85vh; overflow-y: auto; scrollbar-width: none;}
-        .leaflet-popup-content-wrapper::-webkit-scrollbar { display: none; }
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
         .leaflet-container a.leaflet-popup-close-button {
@@ -183,7 +189,8 @@
         .meta-category { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.05);}
         
         .meta-gps { background: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'Courier New', monospace; color: #64748b; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; align-items: center; gap: 4px;}
-        .meta-gps svg { color: #e74c3c; width: 12px; height: 12px;}
+        .meta-gps svg { color: #e74c3c; width: 12px; height: 12px; margin-right: 2px;}
+        .meta-duration { margin-left: 6px; padding-left: 6px; border-left: 1px solid #cbd5e1; color: var(--text-main); }
 
         .cat-nature { background: #e8f8f5; color: #0f766e; }   
         .cat-culture { background: #fef9e7; color: #b45309; }  
@@ -225,7 +232,8 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-width: none; }
+        .tools-menu-container::-webkit-scrollbar { display: none; }
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
         .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
 
@@ -273,7 +281,7 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
-        /* 🌟 手機直式專屬優化 (Portrait) */
+        /* 🌟 手機直式排版 (Portrait) */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -290,7 +298,6 @@
 
             .draw-mode-hud { left: 10px; }
 
-            /* 🌟 Grid 排版：超級省空間的雙層播放器 + 胖手指音量條 */
             .global-player { 
                 display: grid; grid-template-columns: auto 1fr auto; 
                 grid-template-areas: "play main close" "vol vol vol"; 
@@ -298,9 +305,10 @@
             }
             .global-player.active { bottom: 15px; }
             
-            /* iOS 隱藏音量控制後，自動變更 Grid 配置 */
+            /* 🌟 防彈版 iOS 處理：僅隱藏拉桿，完美保留實用的緊急靜音按鈕！ */
             .ios-device .global-player { grid-template-areas: "play main close"; padding-bottom: 12px; }
-            .ios-device .volume-control { display: none !important; }
+            .ios-device .volume-slider { display: none !important; }
+            .ios-device .volume-control { width: auto; background: transparent; border: none; padding: 0; }
             
             .player-control-btn { grid-area: play; width: 42px; height: 42px; align-self: center;}
             .player-main { grid-area: main; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;}
@@ -308,7 +316,6 @@
             .waveform-wrapper { height: 24px; } 
             .close-player-btn { grid-area: close; align-self: center; }
             
-            /* 獨立一排且高度增加的胖手指音量槽 */
             .volume-control { grid-area: vol; width: 100%; display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 8px 14px; border-radius: 12px; box-sizing: border-box; border: 1px solid #e2e8f0; }
             .volume-slider { height: 24px; margin: 0; } 
 
@@ -318,31 +325,31 @@
             .sound-title { font-size: 18px; margin-bottom: 8px;}
         }
 
-        /* 🌟 專業系統必備：手機橫式專屬極致壓縮排版 (Landscape) */
+        /* 🌟 手機橫式滿血復活 (Landscape)：自動捲動、縮小佔位、防遮擋 */
         @media (max-height: 500px) and (orientation: landscape) {
             .glass-header { padding: 6px 16px; top: 10px; flex-direction: row; height: auto; gap: 15px; border-radius: 12px;}
             .project-title { font-size: 15px; width: auto; }
             .nav-buttons button { padding: 6px 10px; font-size: 12px; }
             
-            /* 橫向時高度嚴重不足，強制卡片開啟捲動，並縮小封面圖 */
-            .leaflet-popup-content-wrapper { max-height: 75vh; }
+            /* 讓卡片能在超級扁的螢幕中滑動，絕不破版 */
+            .leaflet-popup-content-wrapper { max-height: 85vh; overflow-y: auto; }
             .leaflet-popup-content { width: 260px !important; }
             .sound-cover { height: 80px; } 
             .sound-info { padding: 10px; }
             .sound-title { font-size: 16px; margin-bottom: 6px; }
             .card-meta-box { margin-bottom: 8px; padding: 8px; }
             
-            /* 橫向全螢幕時，抽屜不要佔滿全螢幕 */
+            /* 確保左側抽屜能正常滑動且不超出螢幕 */
             .drawer-content { max-height: calc(100vh - 80px); padding: 15px; }
             .drawer-panel { width: 300px; max-width: 80vw; }
             
-            /* 橫向播放器壓縮至極限 */
+            /* 播放器極致壓縮 */
             .global-player { bottom: -150px; padding: 6px 16px; border-radius: 12px 12px 0 0; gap: 10px; width: auto; max-width: 90%;}
             .global-player.active { bottom: 0; }
             .waveform-wrapper { height: 18px; }
             .player-control-btn { width: 36px; height: 36px; }
             .close-player-btn { width: 28px; height: 28px; }
-            .volume-control { display: none; } /* 橫屏直接隱藏音量，讓出空間給地圖 */
+            .volume-control { display: none; } 
         }
     </style></head><body>
 
@@ -517,6 +524,7 @@
             <div id="playerTitleUI" class="player-title">載入中...</div>
             <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
                 <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
+                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
             </div>
         </div>
         <div class="volume-control">
@@ -559,7 +567,7 @@
     </div>
     
     <script>
-        // 🌟 防彈版：初始座標精準定錨「海佃國小」，禁用 tap 防止手機誤觸失效
+        // 🌟 1. 初始座標定錨「海佃國小」
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.027803518305756, 120.20045732624777], 15);
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -748,6 +756,14 @@
             }
         }
 
+        // 🌟 4. 格式化時間腳本 (轉換為 mm:ss)
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            var m = Math.floor(seconds / 60);
+            var s = Math.floor(seconds % 60);
+            return (m < 10 ? '0'+m : m) + ':' + (s < 10 ? '0'+s : s);
+        }
+
         globalAudio.addEventListener('play', updateCardButtonUI);
         globalAudio.addEventListener('pause', updateCardButtonUI);
         globalAudio.addEventListener('ended', () => {
@@ -791,7 +807,15 @@
 
             var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
             
-            var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
+            // 🌟 5. 新增：作品長度佔位符，放入同一列排版中
+            var gpsHTML = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="meta-gps" title="錄音長度" style="color:var(--text-main);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:#2980b9;"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="M12 6v6l4 2"></path></svg>
+                        <span id="duration-${item.uid}">讀取中</span>
+                    </span>
+                    <span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>
+                </div>`;
             
             var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
             
@@ -809,7 +833,7 @@
                                 </span>
                                 <span class="meta-item meta-date-text">${timeSvg} ${displayDate}</span>
                             </div>
-                            <div class="meta-row" style="margin-top:10px;">
+                            <div class="meta-row" style="margin-top:10px; flex-wrap:wrap; gap:8px;">
                                 <span class="meta-category ${catClass}">${cleanCat}</span>
                                 ${gpsHTML}
                             </div>
@@ -827,13 +851,8 @@
                     </div>
                 </div>`;
             
-            // 🌟 核心防彈 Padding 演算法：為手機卡片上下預留絕對的「不被截斷」空間
-            var paddingTop = window.innerWidth <= 600 ? 60 : 90;
-            var paddingBottom = window.innerWidth <= 600 ? 180 : 100;
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { 
-                autoPanPaddingTopLeft: [10, paddingTop],
-                autoPanPaddingBottomRight: [10, paddingBottom]
-            });
+            // 🌟 2. 手機版防截斷：關閉原生 autoPan，統一採用自訂智慧偏移
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false });
             globalMarkerMap[item.uid] = marker;
             
             marker.on('click', (e) => { 
@@ -841,11 +860,35 @@
                 isRoutePlaying = false; 
                 clearTimeout(routeTimeout); 
                 var clearBtn = document.getElementById('clearRouteBtn');
-                if(clearBtn && clearBtn.style.display !== 'none') {
-                    toggleRoute('clear', clearBtn);
-                }
+                if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+                
+                // 智慧鏡頭偏移：保證卡片在手機版絕對不會被上面的瀏海或下方播放器蓋住
+                setTimeout(() => {
+                    var offset = window.innerWidth <= 600 ? 200 : 120; // 手機版保留底部200px空間給播放器
+                    var pt = map.project(marker.getLatLng(), map.getZoom());
+                    pt.y -= offset; 
+                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+                }, 300);
             });
-            marker.on('popupopen', () => { setTimeout(updateCardButtonUI, 50); }); 
+            
+            // 🌟 5. 智慧延遲加載音檔長度 (Lazy Load Duration)，保護手機效能
+            marker.on('popupopen', () => { 
+                setTimeout(updateCardButtonUI, 50); 
+                
+                if (item.audioUrl) {
+                    let durEl = document.getElementById('duration-' + item.uid);
+                    if (durEl && durEl.innerText === '讀取中') {
+                        let tempAudio = new Audio(item.audioUrl);
+                        tempAudio.addEventListener('loadedmetadata', () => {
+                            durEl.innerText = formatTime(tempAudio.duration);
+                        });
+                        tempAudio.addEventListener('error', () => { durEl.innerText = '未知'; });
+                    }
+                } else {
+                    let durEl = document.getElementById('duration-' + item.uid);
+                    if (durEl) durEl.innerText = '無音檔';
+                }
+            }); 
             
             return marker;
         }
@@ -885,9 +928,9 @@
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
                     targetMarker.openPopup();
-                    // 🌟 點擊清單跳轉：加大手機版的 offset，把卡片位置更精準推向中央偏上
-                    var offset = window.innerWidth <= 600 ? 160 : 120;
-                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, offset]); 
+                    var offset = window.innerWidth <= 600 ? 200 : 120;
+                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()); 
+                    pt.y -= offset;
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
                 });
             }
@@ -1142,6 +1185,7 @@
             currentAudioUid = uid; document.getElementById('playerTitleUI').innerText = item.title + " (採集者: " + item.author + ")";
             var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
             document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
+            document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; // 載入新音檔時重置秒數
             
             globalAudio.src = item.audioUrl; 
             globalAudio.play(); 
@@ -1159,7 +1203,15 @@
         function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); }
         function changeVolume() { globalAudio.volume = document.getElementById('volumeSlider').value; var mb = document.getElementById('muteBtn'); mb.innerHTML = globalAudio.volume == 0 ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>` : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`; }
         function toggleMute() { if(globalAudio.volume>0){ globalAudio.dataset.v=globalAudio.volume; globalAudio.volume=0; } else { globalAudio.volume=globalAudio.dataset.v||1; } document.getElementById('volumeSlider').value=globalAudio.volume; changeVolume(); }
-        globalAudio.ontimeupdate = () => { if(globalAudio.duration) document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; };
+        
+        // 🌟 4. 更新波型圖與秒數顯示
+        globalAudio.ontimeupdate = () => { 
+            if(globalAudio.duration) {
+                document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
+                document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration);
+            }
+        };
+        
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
         
         function openModal(id) { 
