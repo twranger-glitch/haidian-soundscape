@@ -189,7 +189,7 @@
 
         .leaflet-top.leaflet-right { display: none !important; } 
         
-        /* 🌟 Apple 風格的精準圖層卡片 (加入歷史地圖分隔線) */
+        /* 🌟 Apple 風格的精準圖層卡片 (加入歷史地圖分隔線與透明度拉桿) */
         .custom-layer-control { 
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
             border-radius: 16px; padding: 12px 16px; 
@@ -199,7 +199,7 @@
         }
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
         .custom-layer-control label:last-child { margin-bottom: 0; }
-        .custom-layer-control input { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
+        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
         
         .custom-geoman-container { 
             width: 48px; 
@@ -370,14 +370,24 @@
         </div>
         <div class="tools-menu-container">
             <div class="custom-layer-control">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px;">現代圖資</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">現代圖資</div>
                 <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 🇹🇼 臺灣精細地圖</label>
                 <label><input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 🌍 全球通用地圖</label>
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 8px 0;">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px;">歷史套疊 (自動以臺灣地圖打底)</div>
+                
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+                
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
                 <label><input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 📜 1904 臺灣堡圖</label>
                 <label><input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value)"> 📜 1921 臺灣堡圖</label>
                 <label><input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 🗺️ 1895 臺南府迅速測圖</label>
+                
+                <div id="opacityControl" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px; font-weight:700;">
+                        <span>歷史圖層透明度</span>
+                        <span id="opacityValue">80%</span>
+                    </div>
+                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+                </div>
             </div>
             <div id="geomanContainer" class="custom-geoman-container"></div>
         </div>
@@ -455,37 +465,51 @@
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        // 🌟 定義所有圖層：包含現代與歷史圖層
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
         
-        var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/gis/twhgis/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
-        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 18, opacity: 1.0 });
-        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 18, opacity: 1.0 });
-        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=Tainan1895-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 18, opacity: 1.0 });
+        // 🌟 更新：中研院歷史圖資的精準 API 端點與格式，加入 maxNativeZoom 解決過度放大變白畫面的 Bug
+        var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
+        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
+        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
+        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
         
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
 
         taiwanLayer.addTo(map);
 
-        // 🌟 更新：支援多圖層與雙層底圖打底機制的切換邏輯
         function switchBasemap(val) {
-            // 清除所有的歷史圖層與全球圖層
             if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
             allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+
+            var opacityCtrl = document.getElementById('opacityControl');
 
             if (val === 'global') {
                 if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
                 map.addLayer(globalLayer);
+                opacityCtrl.style.display = 'none';
             } else {
-                // 只要不是選全球地圖，底層一律鋪上台灣精細地圖 (防止歷史圖層破圖或無資料時空白)
+                // 只要不是選全球地圖，底層一律鋪上台灣精細地圖 (防止歷史圖層拉太近或無資料時變全白)
                 if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
 
                 // 根據選項加上歷史疊圖在最上層
-                if (val === 'history_1904') history1904Layer.addTo(map);
-                else if (val === 'history_1921') history1921Layer.addTo(map);
-                else if (val === 'history_tainan') historyTainanLayer.addTo(map);
+                if (val.startsWith('history')) {
+                    opacityCtrl.style.display = 'block';
+                    if (val === 'history_1904') map.addLayer(history1904Layer);
+                    else if (val === 'history_1921') map.addLayer(history1921Layer);
+                    else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
+                } else {
+                    opacityCtrl.style.display = 'none';
+                }
             }
+        }
+
+        // 🌟 新增：歷史地圖透明度連動控制
+        function updateOpacity(val) {
+            document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
+            history1904Layer.setOpacity(val);
+            history1921Layer.setOpacity(val);
+            historyTainanLayer.setOpacity(val);
         }
 
         map.pm.setLang('zh-TW', {
@@ -544,7 +568,6 @@
             }
         }, 100);
 
-        // 🌟 更新：支援歷史圖層狀態下，滑動到國外自動補全球圖資的防呆邊界
         map.on('moveend', function() {
             var center = map.getCenter();
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
