@@ -31,11 +31,9 @@
         
         svg { flex-shrink: 0; }
 
-        /* 🌟 防彈版刊頭：徹底消除幽靈判定區 */
         .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; pointer-events: auto; }
         .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s 0.4s; }
 
-        /* 🌟 完美的 Apple iOS 風格下拉把手 */
         .header-pull-tab { position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.1); border-top: none; border-radius: 0 0 16px 16px; width: 100px; height: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 2000; cursor: pointer; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
         .header-pull-tab.visible { transform: translate(-50%, 0); }
         .header-pull-tab .pull-line { width: 32px; height: 4px; background: #cbd5e1; border-radius: 2px; }
@@ -53,7 +51,6 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25); border-radius: 12px !important; }
         .btn-submit:hover { background: #219150 !important; box-shadow: 0 6px 15px rgba(39, 174, 96, 0.35); }
 
-        /* 🌟 防彈面板：容器本身透明不可點，只允許內部內容可點，杜絕任何幽靈遮擋 */
         .drawer-panel { position: absolute; left: var(--panel-offset); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); }
         
@@ -140,16 +137,15 @@
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
-        /* 🌟 極致優化：深色高對比、超明顯的手機版卡片關閉 (X) 按鈕 */
         .leaflet-container a.leaflet-popup-close-button {
             position: absolute; top: 10px; right: 10px;
             width: 34px; height: 34px;
-            background: rgba(15, 23, 42, 0.75) !important; /* 加深底色確保對比 */
+            background: rgba(15, 23, 42, 0.75) !important; 
             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
             color: #ffffff !important; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
             font-size: 20px; font-weight: bold; text-decoration: none;
-            border: 1px solid rgba(255,255,255,0.3); /* 加個小亮邊更立體 */
+            border: 1px solid rgba(255,255,255,0.3);
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             transition: all 0.2s ease; z-index: 100;
         }
@@ -196,7 +192,6 @@
         .action-link-faint svg { width: 12px; height: 12px; }
         .action-link-faint:hover { color: #e74c3c; }
 
-        /* 🌟 防彈版右側選單：外圍設定為穿透，內部按鈕才可點，杜絕幽靈判定 */
         .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         
         .tools-toggle-btn { 
@@ -214,8 +209,9 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        /* 🌟 核彈級隱藏：不僅透明，而且 visibility:hidden 強制封殺所有 Geoman 的霸道 hover 事件 */
-        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        /* 🌟 防彈版容器：加入隱藏滾動、絕對隱形、最大高度限制 */
+        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-width: none; }
+        .tools-menu-container::-webkit-scrollbar { display: none; }
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
         .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
 
@@ -266,6 +262,7 @@
             background-repeat: no-repeat !important;
         }
 
+        /* 🌟 手機版極致變形：Geoman 垂直膠囊轉換為水平膠囊，省下所有垂直空間 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -279,6 +276,16 @@
             
             #sidePanel, #routePanel { top: 125px; } 
             .right-tools-wrapper { top: 125px; right: 15px; }
+
+            /* 手機板高度再優化，確保選單不會被底層播放器遮住 */
+            .tools-menu-container { max-height: calc(100vh - 140px); }
+
+            /* 🌟 手機專屬：Geoman 水平膠囊設計 */
+            .custom-geoman-container { width: auto; flex-direction: row; border-radius: 20px; padding: 4px 6px; }
+            .custom-geoman-container .leaflet-pm-toolbar { flex-direction: row; width: auto; gap: 2px; }
+            .custom-geoman-container .button-container { width: auto; }
+            .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: none !important; border-right: 1px solid rgba(148, 163, 184, 0.2) !important; padding-bottom: 0 !important; margin-bottom: 0 !important; padding-right: 6px !important; margin-right: 2px !important; }
+            .custom-geoman-container .leaflet-pm-toolbar a { margin: 0 2px !important; }
 
             .global-player { flex-direction: column; padding: 18px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
             .global-player.active { bottom: 0; } 
@@ -499,10 +506,8 @@
     </div>
     
     <script>
-        // 🌟 防彈修復 1：加入 tap: false 解決 Leaflet iOS 手機版 300ms 點擊延遲與滑動失效 Bug
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0485, 120.1985], 15);
         
-        // 🌟 防彈修復 2：拔除強制 zIndex，讓 Leaflet 依照 DOM 原生順序渲染，解決 iOS 隱形 GPU 遮擋問題
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
         
@@ -764,7 +769,6 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
-            // 🌟 確保 marker 點擊不會影響到底層地圖的 click 事件
             marker.on('click', (e) => { 
                 L.DomEvent.stopPropagation(e);
                 isRoutePlaying = false; 
