@@ -31,11 +31,14 @@
         
         svg { flex-shrink: 0; }
 
-        /* 🌟 加入過場動畫，準備給智慧刊頭使用 */
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease; }
+        /* 🌟 防彈版刊頭：加入 visibility 避免幽靈判定區吃掉點擊 */
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; }
         
-        /* 🌟 隱藏刊頭的 class */
-        .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; }
+        .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s 0.4s; }
+
+        /* 🌟 新增：Apple 風格的小把手 (Pull Tab) */
+        .header-pull-tab { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.5); border-top: none; border-radius: 0 0 16px 16px; width: 60px; height: 28px; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 1000; cursor: pointer; opacity: 0; visibility: hidden; pointer-events: none; transition: all 0.3s ease; }
+        .header-pull-tab.visible { opacity: 1; visibility: visible; pointer-events: auto; }
 
         .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
@@ -134,7 +137,6 @@
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.15); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
-        /* 🌟 極致優化：浮動玻璃質感關閉 X 按鈕 */
         .leaflet-container a.leaflet-popup-close-button {
             position: absolute; top: 12px; right: 12px;
             width: 32px; height: 32px;
@@ -146,9 +148,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             transition: all 0.2s ease; z-index: 100;
         }
-        .leaflet-container a.leaflet-popup-close-button:hover {
-            background: #e74c3c !important; color: white !important; transform: scale(1.05);
-        }
+        .leaflet-container a.leaflet-popup-close-button:hover { background: #e74c3c !important; color: white !important; transform: scale(1.05); }
         .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; }
 
         .sound-card { display: flex; flex-direction: column; background: #fff; }
@@ -207,8 +207,9 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        .tools-menu-container { display: flex; flex-direction: column; align-items: flex-end; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
-        .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+        /* 🌟 防彈版選單：加入 visibility: hidden，徹底消滅 Geoman 的隱形按鈕 */
+        .tools-menu-container { display: flex; flex-direction: column; align-items: flex-end; opacity: 0; pointer-events: none; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; visibility: visible; transform: translateY(0) scale(1); }
 
         .leaflet-top.leaflet-right { display: none !important; } 
         
@@ -299,6 +300,10 @@
             </button>
         </nav>
     </header>
+    
+    <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c3e50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </div>
 
     <div id="sidePanel" class="drawer-panel collapsed">
         <button class="toggle-btn" onclick="togglePanel('sidePanel', event)">
@@ -603,19 +608,25 @@
             }
         });
         
-        // 🌟 智慧刊頭互動邏輯 (僅在手機版作用)
+        // 🌟 智慧刊頭互動邏輯 (僅在手機版作用) + 把手連動
         function updateHeaderVisibility(hide) {
             if (window.innerWidth <= 600) {
                 var header = document.querySelector('.glass-header');
-                if (hide) header.classList.add('hidden-up');
-                else header.classList.remove('hidden-up');
+                var pullTab = document.getElementById('headerPullTab');
+                if (hide) {
+                    header.classList.add('hidden-up');
+                    if (pullTab) pullTab.classList.add('visible');
+                } else {
+                    header.classList.remove('hidden-up');
+                    if (pullTab) pullTab.classList.remove('visible');
+                }
             }
         }
         
-        map.on('dragstart', () => updateHeaderVisibility(true)); // 滑動地圖時隱藏
-        map.on('click', () => updateHeaderVisibility(false));    // 點擊地圖時顯示
-        map.on('popupopen', () => updateHeaderVisibility(true)); // 開啟卡片時隱藏，讓出版面
-        map.on('popupclose', () => updateHeaderVisibility(false)); // 關閉卡片時顯示
+        map.on('dragstart', () => updateHeaderVisibility(true)); 
+        map.on('click', () => updateHeaderVisibility(false));    
+        map.on('popupopen', () => updateHeaderVisibility(true)); 
+        map.on('popupclose', () => updateHeaderVisibility(false)); 
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
@@ -742,9 +753,7 @@
                     </div>
                 </div>`;
             
-            // 🌟 動態設定安全距離：桌機 90px，手機版因為刊頭已隱藏，只需預留 50px 避開瀏海
-            var paddingTop = window.innerWidth <= 600 ? 50 : 90;
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, paddingTop] });
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
             marker.on('click', () => { 
@@ -795,7 +804,6 @@
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
                     targetMarker.openPopup();
-                    // 🌟 動態設定跳轉後的偏移量
                     var offset = window.innerWidth <= 600 ? 50 : 120;
                     var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, offset]); 
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
