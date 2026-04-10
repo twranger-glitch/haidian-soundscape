@@ -126,8 +126,25 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
+        /* 🌟 優化：重新設計 Leaflet 卡片的關閉 (X) 按鈕，變得超明顯且好按！ */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.15); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
+        .leaflet-container a.leaflet-popup-close-button {
+            position: absolute; top: 12px; right: 12px;
+            width: 32px; height: 32px;
+            background: rgba(15, 23, 42, 0.55) !important; 
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            color: #ffffff !important; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 22px; font-weight: 300; text-decoration: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transition: all 0.2s ease; z-index: 100;
+        }
+        .leaflet-container a.leaflet-popup-close-button:hover {
+            background: #e74c3c !important; color: white !important; transform: scale(1.05);
+        }
+        .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; } /* 微調 X 的垂直置中 */
+
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
         .sound-info { padding: 20px; }
@@ -189,7 +206,6 @@
 
         .leaflet-top.leaflet-right { display: none !important; } 
         
-        /* 🌟 Apple 風格的精準圖層卡片 (加入歷史地圖分隔線與透明度拉桿) */
         .custom-layer-control { 
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
             border-radius: 16px; padding: 12px 16px; 
@@ -465,14 +481,16 @@
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19 });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
+        // 🌟 防彈層級設定：精細地圖在底層(1)，歷史地圖在上層(2)，絕對不干擾座標標記(600)
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
         
-        // 🌟 更新：中研院歷史圖資的精準 API 端點與格式，加入 maxNativeZoom 解決過度放大變白畫面的 Bug
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
-        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
-        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
-        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8 });
+        
+        // 🌟 效能優化與防破圖：keepBuffer 預先載入，maxNativeZoom 防止放大變白畫面
+        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
 
@@ -489,10 +507,8 @@
                 map.addLayer(globalLayer);
                 opacityCtrl.style.display = 'none';
             } else {
-                // 只要不是選全球地圖，底層一律鋪上台灣精細地圖 (防止歷史圖層拉太近或無資料時變全白)
                 if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
 
-                // 根據選項加上歷史疊圖在最上層
                 if (val.startsWith('history')) {
                     opacityCtrl.style.display = 'block';
                     if (val === 'history_1904') map.addLayer(history1904Layer);
@@ -504,7 +520,6 @@
             }
         }
 
-        // 🌟 新增：歷史地圖透明度連動控制
         function updateOpacity(val) {
             document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
             history1904Layer.setOpacity(val);
@@ -573,7 +588,7 @@
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
             var selectedBasemap = document.querySelector('input[name="basemap"]:checked').value;
             
-            if (selectedBasemap !== 'global') { // 使用者選了台灣相關的圖層 (包含歷史圖層)
+            if (selectedBasemap !== 'global') { 
                 if (inTaiwan) {
                     if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
                     if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
