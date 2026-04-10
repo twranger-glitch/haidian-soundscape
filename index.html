@@ -31,7 +31,12 @@
         
         svg { flex-shrink: 0; }
 
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); }
+        /* 🌟 加入過場動畫，準備給智慧刊頭使用 */
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease; }
+        
+        /* 🌟 隱藏刊頭的 class */
+        .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; }
+
         .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
         .project-title span.sub-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-left: 5px; }
@@ -126,9 +131,10 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 優化：重新設計 Leaflet 卡片的關閉 (X) 按鈕，變得超明顯且好按！ */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.15); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
+        
+        /* 🌟 極致優化：浮動玻璃質感關閉 X 按鈕 */
         .leaflet-container a.leaflet-popup-close-button {
             position: absolute; top: 12px; right: 12px;
             width: 32px; height: 32px;
@@ -143,7 +149,7 @@
         .leaflet-container a.leaflet-popup-close-button:hover {
             background: #e74c3c !important; color: white !important; transform: scale(1.05);
         }
-        .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; } /* 微調 X 的垂直置中 */
+        .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; }
 
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
@@ -481,13 +487,11 @@
     <script>
         var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        // 🌟 防彈層級設定：精細地圖在底層(1)，歷史地圖在上層(2)，絕對不干擾座標標記(600)
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
         
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
         
-        // 🌟 效能優化與防破圖：keepBuffer 預先載入，maxNativeZoom 防止放大變白畫面
         var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
@@ -598,6 +602,20 @@
                 }
             }
         });
+        
+        // 🌟 智慧刊頭互動邏輯 (僅在手機版作用)
+        function updateHeaderVisibility(hide) {
+            if (window.innerWidth <= 600) {
+                var header = document.querySelector('.glass-header');
+                if (hide) header.classList.add('hidden-up');
+                else header.classList.remove('hidden-up');
+            }
+        }
+        
+        map.on('dragstart', () => updateHeaderVisibility(true)); // 滑動地圖時隱藏
+        map.on('click', () => updateHeaderVisibility(false));    // 點擊地圖時顯示
+        map.on('popupopen', () => updateHeaderVisibility(true)); // 開啟卡片時隱藏，讓出版面
+        map.on('popupclose', () => updateHeaderVisibility(false)); // 關閉卡片時顯示
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
@@ -724,7 +742,9 @@
                     </div>
                 </div>`;
             
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
+            // 🌟 動態設定安全距離：桌機 90px，手機版因為刊頭已隱藏，只需預留 50px 避開瀏海
+            var paddingTop = window.innerWidth <= 600 ? 50 : 90;
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, paddingTop] });
             globalMarkerMap[item.uid] = marker;
             
             marker.on('click', () => { 
@@ -775,7 +795,9 @@
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
                     targetMarker.openPopup();
-                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]); 
+                    // 🌟 動態設定跳轉後的偏移量
+                    var offset = window.innerWidth <= 600 ? 50 : 120;
+                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, offset]); 
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
                 });
             }
