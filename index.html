@@ -31,14 +31,15 @@
         
         svg { flex-shrink: 0; }
 
-        /* 🌟 防彈版刊頭：加入 visibility 避免幽靈判定區吃掉點擊 */
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; }
-        
+        /* 🌟 防彈版刊頭：徹底消除幽靈判定區 */
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; pointer-events: auto; }
         .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s 0.4s; }
 
-        /* 🌟 新增：Apple 風格的小把手 (Pull Tab) */
-        .header-pull-tab { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.5); border-top: none; border-radius: 0 0 16px 16px; width: 60px; height: 28px; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 1000; cursor: pointer; opacity: 0; visibility: hidden; pointer-events: none; transition: all 0.3s ease; }
-        .header-pull-tab.visible { opacity: 1; visibility: visible; pointer-events: auto; }
+        /* 🌟 完美的 Apple iOS 風格下拉把手 */
+        .header-pull-tab { position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.1); border-top: none; border-radius: 0 0 16px 16px; width: 100px; height: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 2000; cursor: pointer; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
+        .header-pull-tab.visible { transform: translate(-50%, 0); }
+        .header-pull-tab .pull-line { width: 32px; height: 4px; background: #cbd5e1; border-radius: 2px; }
+        .header-pull-tab .pull-text { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 1px; line-height: 1; }
 
         .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
@@ -52,13 +53,15 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25); border-radius: 12px !important; }
         .btn-submit:hover { background: #219150 !important; box-shadow: 0 6px 15px rgba(39, 174, 96, 0.35); }
 
-        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
+        /* 🌟 防彈面板：容器本身透明不可點，只允許內部內容可點，杜絕任何幽靈遮擋 */
+        .drawer-panel { position: absolute; left: var(--panel-offset); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); }
-        .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
+        
+        .drawer-content { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.5); padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; pointer-events: auto; }
         .drawer-content::-webkit-scrollbar { width: 5px; }
         .drawer-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; z-index: 1005;}
+        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; z-index: 1005; pointer-events: auto;}
         .toggle-btn:hover { background: #fff; transform: scale(1.02); color: var(--accent-color); }
 
         #sidePanel { top: 90px; }
@@ -134,18 +137,20 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.15); padding: 0;}
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
+        /* 🌟 極致優化：深色高對比、超明顯的手機版卡片關閉 (X) 按鈕 */
         .leaflet-container a.leaflet-popup-close-button {
-            position: absolute; top: 12px; right: 12px;
-            width: 32px; height: 32px;
-            background: rgba(15, 23, 42, 0.55) !important; 
-            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            position: absolute; top: 10px; right: 10px;
+            width: 34px; height: 34px;
+            background: rgba(15, 23, 42, 0.75) !important; /* 加深底色確保對比 */
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
             color: #ffffff !important; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            font-size: 22px; font-weight: 300; text-decoration: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            font-size: 20px; font-weight: bold; text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.3); /* 加個小亮邊更立體 */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             transition: all 0.2s ease; z-index: 100;
         }
         .leaflet-container a.leaflet-popup-close-button:hover { background: #e74c3c !important; color: white !important; transform: scale(1.05); }
@@ -191,9 +196,11 @@
         .action-link-faint svg { width: 12px; height: 12px; }
         .action-link-faint:hover { color: #e74c3c; }
 
-        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; }
+        /* 🌟 防彈版右側選單：外圍設定為穿透，內部按鈕才可點，杜絕幽靈判定 */
+        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         
         .tools-toggle-btn { 
+            pointer-events: auto;
             width: 48px; height: 48px; 
             background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.5));
             backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
@@ -207,9 +214,10 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        /* 🌟 防彈版選單：加入 visibility: hidden，徹底消滅 Geoman 的隱形按鈕 */
-        .tools-menu-container { display: flex; flex-direction: column; align-items: flex-end; opacity: 0; pointer-events: none; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
-        .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; visibility: visible; transform: translateY(0) scale(1); }
+        /* 🌟 核彈級隱藏：不僅透明，而且 visibility:hidden 強制封殺所有 Geoman 的霸道 hover 事件 */
+        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+        .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
 
         .leaflet-top.leaflet-right { display: none !important; } 
         
@@ -302,7 +310,8 @@
     </header>
     
     <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c3e50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        <div class="pull-line"></div>
+        <div class="pull-text">顯示選單</div>
     </div>
 
     <div id="sidePanel" class="drawer-panel collapsed">
@@ -490,16 +499,18 @@
     </div>
     
     <script>
-        var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
+        // 🌟 防彈修復 1：加入 tap: false 解決 Leaflet iOS 手機版 300ms 點擊延遲與滑動失效 Bug
+        var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0485, 120.1985], 15);
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
+        // 🌟 防彈修復 2：拔除強制 zIndex，讓 Leaflet 依照 DOM 原生順序渲染，解決 iOS 隱形 GPU 遮擋問題
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19 });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
         
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
         
-        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
+        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
+        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
         
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
 
@@ -608,7 +619,6 @@
             }
         });
         
-        // 🌟 智慧刊頭互動邏輯 (僅在手機版作用) + 把手連動
         function updateHeaderVisibility(hide) {
             if (window.innerWidth <= 600) {
                 var header = document.querySelector('.glass-header');
@@ -624,9 +634,7 @@
         }
         
         map.on('dragstart', () => updateHeaderVisibility(true)); 
-        map.on('click', () => updateHeaderVisibility(false));    
         map.on('popupopen', () => updateHeaderVisibility(true)); 
-        map.on('popupclose', () => updateHeaderVisibility(false)); 
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
@@ -756,7 +764,9 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
-            marker.on('click', () => { 
+            // 🌟 確保 marker 點擊不會影響到底層地圖的 click 事件
+            marker.on('click', (e) => { 
+                L.DomEvent.stopPropagation(e);
                 isRoutePlaying = false; 
                 clearTimeout(routeTimeout); 
                 var clearBtn = document.getElementById('clearRouteBtn');
