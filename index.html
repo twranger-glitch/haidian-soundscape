@@ -1,4 +1,6 @@
-<!DOCTYPE html><html lang="zh-TW"><head>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>海佃溪遊記 | 聲音地景計畫</title>
@@ -16,29 +18,14 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <style>
-        :root { 
-            --panel-offset: 20px; 
-            --accent-color: #27ae60; 
-            --text-main: #2c3e50; 
-            --text-muted: #7f8c8d;
-            --glass-bg: rgba(255, 255, 255, 0.75);
-            --glass-border: rgba(255, 255, 255, 0.5);
-            --glass-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
-            --glass-blur: blur(20px);
-        }
+        :root { --panel-offset: 20px; --accent-color: #27ae60; --text-main: #2c3e50; --text-muted: #7f8c8d; }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
         
         svg { flex-shrink: 0; }
 
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; pointer-events: auto; }
-        .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s 0.4s; }
-
-        .header-pull-tab { position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.1); border-top: none; border-radius: 0 0 16px 16px; width: 100px; height: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 2000; cursor: pointer; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
-        .header-pull-tab.visible { transform: translate(-50%, 0); }
-        .header-pull-tab .pull-line { width: 32px; height: 4px; background: #cbd5e1; border-radius: 2px; }
-        .header-pull-tab .pull-text { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 1px; line-height: 1; }
-
+        /* 🌟 頂部導覽列基礎樣式 */
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); }
         .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
         .project-title span.sub-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-left: 5px; }
@@ -51,14 +38,13 @@
         .btn-submit { background: var(--accent-color) !important; color: white !important; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25); border-radius: 12px !important; }
         .btn-submit:hover { background: #219150 !important; box-shadow: 0 6px 15px rgba(39, 174, 96, 0.35); }
 
-        .drawer-panel { position: absolute; left: var(--panel-offset); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
+        .drawer-panel { position: absolute; left: var(--panel-offset); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 999; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.5); }
         .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); }
-        
-        .drawer-content { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.5); padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; pointer-events: auto; }
+        .drawer-content { padding: 25px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
         .drawer-content::-webkit-scrollbar { width: 5px; }
         .drawer-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; z-index: 1005; pointer-events: auto;}
+        .toggle-btn { position: absolute; right: -36px; width: 36px; height: 64px; background: rgba(255, 255, 255, 0.95); border-radius: 0 16px 16px 0; border: 1px solid rgba(255,255,255,0.5); border-left: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); box-shadow: 6px 0 12px rgba(0,0,0,0.06); transition: 0.2s; }
         .toggle-btn:hover { background: #fff; transform: scale(1.02); color: var(--accent-color); }
 
         #sidePanel { top: 90px; }
@@ -91,7 +77,7 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 16px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6);}
+        .global-player { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 16px 25px; gap: 20px; z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6);}
         .global-player.active { bottom: 20px; } 
         
         .player-main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -113,7 +99,7 @@
         .close-player-btn { background: transparent; border: none; color: #bdc3c7; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; width: 32px; height: 32px; border-radius: 50%; transition: 0.2s;}
         .close-player-btn:hover { background: #f1f2f6; color: #e74c3c;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: 0.3s ease; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box { background: white; border-radius: 20px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
         .modal-close-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.05); color: #555; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; justify-content: center; align-items: center; z-index: 10; transition: 0.2s;}
@@ -134,24 +120,8 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0;}
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.15); padding: 0;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
-        
-        .leaflet-container a.leaflet-popup-close-button {
-            position: absolute; top: 10px; right: 10px;
-            width: 34px; height: 34px;
-            background: rgba(15, 23, 42, 0.75) !important; 
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            color: #ffffff !important; border-radius: 50%;
-            display: flex; justify-content: center; align-items: center;
-            font-size: 20px; font-weight: bold; text-decoration: none;
-            border: 1px solid rgba(255,255,255,0.3);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: all 0.2s ease; z-index: 100;
-        }
-        .leaflet-container a.leaflet-popup-close-button:hover { background: #e74c3c !important; color: white !important; transform: scale(1.05); }
-        .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; }
-
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; }
         .sound-info { padding: 20px; }
@@ -192,87 +162,34 @@
         .action-link-faint svg { width: 12px; height: 12px; }
         .action-link-faint:hover { color: #e74c3c; }
 
-        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
+        /* 🌟 右側工具列：完美原生級的收折與分家設計 */
+        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; }
         
-        .tools-toggle-btn { 
-            pointer-events: auto;
-            width: 48px; height: 48px; 
-            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.5));
-            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 16px; 
-            display: flex; justify-content: center; align-items: center; 
-            box-shadow: var(--glass-shadow); 
-            border: 1px solid var(--glass-border); 
-            cursor: pointer; color: var(--text-main); 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            margin-bottom: 12px;
-        }
-        .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
+        .tools-toggle-btn { width: 44px; height: 44px; background: white; border-radius: 12px; display: flex; justify-content: center; align-items: center; box-shadow: 0 6px 16px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; cursor: pointer; color: var(--text-main); transition: 0.2s; margin-bottom: 12px;}
+        .tools-toggle-btn:hover { color: var(--accent-color); transform: scale(1.05); }
 
-        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
-        .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
-        .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
+        /* 利用包裹容器控制顯示/隱藏與過場動畫 */
+        .tools-menu-container { display: flex; flex-direction: column; opacity: 0; pointer-events: none; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
+        .right-tools-wrapper.open .tools-menu-container { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
 
+        /* 隱藏原生 Leaflet 右上角容器，將控制器轉移到我們的容器內 */
         .leaflet-top.leaflet-right { display: none !important; } 
         
-        .custom-layer-control { 
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 16px; padding: 12px 16px; 
-            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
-            margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
-            width: max-content;
-        }
+        .custom-layer-control { background: #fff; border-radius: 12px; padding: 10px 14px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); }
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
         .custom-layer-control label:last-child { margin-bottom: 0; }
-        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
         
-        /* 🌟 重大進化：將繪圖工具升級為「左側懸浮膠囊 (Draw Mode HUD)」 */
-        .draw-mode-hud {
-            position: absolute;
-            z-index: 1500;
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 20px; padding: 6px;
-            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-            opacity: 0; visibility: hidden; pointer-events: none;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            
-            /* 預設：左側中央漂浮 */
-            left: 20px; top: 50%; transform: translateY(-50%) translateX(-20px);
-        }
-        .draw-mode-hud.active {
-            opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(-50%) translateX(0);
-        }
-        
-        /* HUD 內部的 Geoman 按鈕樣式重置 */
-        .custom-geoman-container { display: flex; flex-direction: column; width: 100%; align-items: center; }
-        .custom-geoman-container .leaflet-pm-toolbar { margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 4px; background: transparent !important; box-shadow: none !important;}
-        .custom-geoman-container .button-container { border: none !important; }
-        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: 1px solid rgba(148, 163, 184, 0.3) !important; padding-bottom: 4px !important; margin-bottom: 0 !important; }
-        
-        .custom-geoman-container a { width: 36px !important; height: 36px !important; border-radius: 12px !important; color: #475569 !important; display: flex !important; justify-content: center !important; align-items: center !important; transition: 0.2s !important; margin: 0 !important; background: transparent !important; text-decoration: none !important;}
-        .custom-geoman-container a:hover { background: rgba(0,0,0,0.06) !important; color: var(--accent-color) !important; transform: scale(1.05); }
-        .custom-geoman-container a.active { background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
-        .custom-geoman-container a .control-icon { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; height: 100% !important; }
-        .custom-geoman-container a svg { width: 18px !important; height: 18px !important; display: block !important; flex-shrink: 0 !important; }
-
-        .custom-clear-icon {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e74c3c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6'/%3E%3Cpath d='M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6'/%3E%3Cline x1='10' y1='11' x2='10' y2='17'/%3E%3Cline x1='14' y1='11' x2='14' y2='17'/%3E%3C/svg%3E") !important;
-            background-size: 18px 18px !important; 
-            background-position: center !important; 
-            background-repeat: no-repeat !important;
-        }
-
-        /* 退出繪圖模式專用紅色按鈕 */
-        .hud-close-btn {
-            width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c;
-            border: none; cursor: pointer; display: flex; justify-content: center; align-items: center;
-            transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0;
-        }
-        .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
+        /* 裝載 Geoman 工具列的完美盒子 */
+        .custom-geoman-container { border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; overflow: hidden; background: #fff; }
+        .custom-geoman-container .leaflet-pm-toolbar { margin: 0 !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
+        .custom-geoman-container .button-container { border-bottom: 1px solid #f1f5f9; }
+        .custom-geoman-container .button-container:last-child { border-bottom: none; }
+        .custom-geoman-container a { color: #64748b !important; padding: 0 !important; width: 44px !important; height: 44px !important; display: flex !important; justify-content: center !important; align-items: center !important; box-sizing: border-box !important;}
+        .custom-geoman-container a:hover { color: var(--accent-color) !important; background: #f8fafc !important; }
 
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
+            /* 🌟 手機版完美回歸：雙行大氣排版 */
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
             .project-title { font-size: 18px; width: 100%; justify-content: flex-start; flex-direction: row;}
             .project-title span.sub-title { font-size: 12px; margin-left: 5px; color: var(--text-muted); display: inline-block; margin-top:0;} 
@@ -280,9 +197,8 @@
             .nav-buttons { width: 100%; justify-content: space-between; gap: 8px; }
             .nav-buttons button { flex: 1; padding: 10px 5px; border-radius: 8px; width: auto; height: auto; justify-content: center; font-size: 13px;}
             
-            .drawer-panel { width: calc(100vw - 50px); max-width: 290px; } 
-            
-            #sidePanel, #routePanel { top: 125px; } 
+            .drawer-panel { width: 290px; } 
+            #sidePanel, #routePanel { top: 125px; } /* 避開長高的 Header */
             .right-tools-wrapper { top: 125px; right: 15px; }
 
             .global-player { flex-direction: column; padding: 18px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
@@ -293,11 +209,10 @@
             .player-controls { width: 100%; justify-content: space-between; }
             .volume-control { flex: 1; margin: 0 15px; } 
             .volume-slider { width: 100%; height: 6px; } 
-
-            /* 手機版：繪圖 HUD 更靠左邊，完全不干擾中間地圖 */
-            .draw-mode-hud { left: 10px; }
         }
-    </style></head><body>
+    </style>
+</head>
+<body>
 
     <header class="glass-header">
         <h1 class="project-title">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
@@ -316,21 +231,9 @@
             </button>
         </nav>
     </header>
-    
-    <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
-        <div class="pull-line"></div>
-        <div class="pull-text">顯示選單</div>
-    </div>
-
-    <div id="drawModeHUD" class="draw-mode-hud">
-        <div id="geomanContainer" class="custom-geoman-container"></div>
-        <button class="hud-close-btn" onclick="exitDrawMode()" title="退出手繪模式">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-    </div>
 
     <div id="sidePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('sidePanel', event)">
+        <button class="toggle-btn" onclick="togglePanel('sidePanel')">
             <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
         <div class="drawer-content">
@@ -370,7 +273,7 @@
     </div>
 
     <div id="routePanel" class="drawer-panel collapsed">
-        <button class="toggle-btn" onclick="togglePanel('routePanel', event)">
+        <button class="toggle-btn" onclick="togglePanel('routePanel')">
             <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
         <div class="drawer-content">
@@ -402,7 +305,6 @@
                     山海圳綠道 (直達玉山)
                 </button>
                 <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
-                
                 <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
                     手繪自訂走讀範圍
@@ -417,31 +319,16 @@
     </div>
 
     <div id="rightToolsWrapper" class="right-tools-wrapper">
-        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖與圖層工具">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4L4 8l8 4 8-4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 16l8 4 8-4"></path></svg>
+        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖與繪圖工具">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
         </div>
         <div class="tools-menu-container">
             <div class="custom-layer-control">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">現代圖資</div>
                 <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 🇹🇼 臺灣精細地圖</label>
                 <label><input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 🌍 全球通用地圖</label>
-                
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
-                
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label><input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 📜 1904 臺灣堡圖</label>
-                <label><input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value)"> 📜 1921 臺灣堡圖</label>
-                <label><input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 🗺️ 1895 臺南府迅速測圖</label>
-                
-                <div id="opacityControl" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px; font-weight:700;">
-                        <span>歷史圖層透明度</span>
-                        <span id="opacityValue">80%</span>
-                    </div>
-                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
-                </div>
             </div>
-            </div>
+            <div id="geomanContainer" class="custom-geoman-container"></div>
+        </div>
     </div>
 
     <div id="map"></div>
@@ -514,50 +401,16 @@
     </div>
     
     <script>
-        var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0485, 120.1985], 15);
+        var map = L.map('map', { zoomControl: false }).setView([23.0485, 120.1985], 15);
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
-        
-        var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
-        
-        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        
-        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
-
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>' });
         taiwanLayer.addTo(map);
 
+        // 🌟 自訂底圖切換器邏輯
         function switchBasemap(val) {
-            if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
-            allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
-
-            var opacityCtrl = document.getElementById('opacityControl');
-
-            if (val === 'global') {
-                if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
-                map.addLayer(globalLayer);
-                opacityCtrl.style.display = 'none';
-            } else {
-                if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
-
-                if (val.startsWith('history')) {
-                    opacityCtrl.style.display = 'block';
-                    if (val === 'history_1904') map.addLayer(history1904Layer);
-                    else if (val === 'history_1921') map.addLayer(history1921Layer);
-                    else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
-                } else {
-                    opacityCtrl.style.display = 'none';
-                }
-            }
-        }
-
-        function updateOpacity(val) {
-            document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
-            history1904Layer.setOpacity(val);
-            history1921Layer.setOpacity(val);
-            historyTainanLayer.setOpacity(val);
+            if (val === 'global') { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); } 
+            else { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); }
         }
 
         map.pm.setLang('zh-TW', {
@@ -574,13 +427,14 @@
             },
             actions: { cancel: '取消', finish: '完成', removeLastVertex: '移除最後一點' },
             buttonTitles: {
-                drawPolyButton: '畫多邊形範圍',
-                drawLineButton: '畫折線路徑',
-                drawRectButton: '畫矩形範圍',
-                deleteButton: '單件刪除工具'
+                drawPolyButton: '繪製自訂範圍 (多邊形)',
+                drawLineButton: '繪製自訂路線 (折線)',
+                drawRectButton: '繪製矩形範圍',
+                deleteButton: '刪除圖層 (橡皮擦)'
             }
         });
 
+        // 啟動 Geoman 工具箱
         var geomanControl = map.pm.addControls({
             position: 'topright',
             drawMarker: false,
@@ -595,11 +449,12 @@
             removalMode: true
         });
 
+        // 🌟 加入純 SVG 版的一鍵清除按鈕，不再消失！
         map.pm.Toolbar.createCustomControl({
             name: 'clearAllBtn',
             block: 'edit',
-            title: '一鍵全部清除',
-            className: 'custom-clear-icon', 
+            title: '一鍵清除所有自訂路線與圖層 (Clear All)',
+            html: '<div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; color:#e74c3c;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></div>', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
@@ -608,86 +463,47 @@
             toggle: false
         });
 
+        // 🌟 優雅分家：將系統預設生成的 Geoman 工具列，無縫轉移到我們自訂的面板裡！
         setTimeout(() => {
-            var pmToolbars = document.querySelectorAll('.leaflet-pm-toolbar');
+            var pmToolbar = document.querySelector('.leaflet-pm-toolbar');
             var container = document.getElementById('geomanContainer');
-            if (pmToolbars.length > 0 && container) {
-                pmToolbars.forEach(tb => container.appendChild(tb));
-            }
+            if (pmToolbar && container) container.appendChild(pmToolbar);
         }, 100);
 
         map.on('moveend', function() {
             var center = map.getCenter();
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
-            var selectedBasemap = document.querySelector('input[name="basemap"]:checked').value;
+            var isTaiwanLayerOn = document.querySelector('input[value="taiwan"]').checked;
             
-            if (selectedBasemap !== 'global') { 
-                if (inTaiwan) {
-                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
-                    if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
-                } else {
-                    if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
-                    if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
-                }
+            if (isTaiwanLayerOn) {
+                if (inTaiwan && !map.hasLayer(taiwanLayer)) { map.removeLayer(globalLayer); map.addLayer(taiwanLayer); } 
+                else if (!inTaiwan && !map.hasLayer(globalLayer)) { map.removeLayer(taiwanLayer); map.addLayer(globalLayer); }
             }
         });
-        
-        function updateHeaderVisibility(hide) {
-            if (window.innerWidth <= 600) {
-                var header = document.querySelector('.glass-header');
-                var pullTab = document.getElementById('headerPullTab');
-                if (hide) {
-                    header.classList.add('hidden-up');
-                    if (pullTab) pullTab.classList.add('visible');
-                } else {
-                    header.classList.remove('hidden-up');
-                    if (pullTab) pullTab.classList.remove('visible');
-                }
-            }
-        }
-        
-        map.on('dragstart', () => updateHeaderVisibility(true)); 
-        map.on('popupopen', () => updateHeaderVisibility(true)); 
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
+        
         var routeTimeout = null; 
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
+        // 一次關閉所有抽屜，保持地圖乾淨
         function closeAllDrawers() {
             document.getElementById('sidePanel').classList.add('collapsed');
             document.getElementById('routePanel').classList.add('collapsed');
             document.getElementById('rightToolsWrapper').classList.remove('open');
         }
 
-        function togglePanel(id, event) {
-            if (event) event.stopPropagation();
-            var target = document.getElementById(id);
-            var isClosed = target.classList.contains('collapsed');
-            
-            closeAllDrawers();
-
-            if (isClosed) target.classList.remove('collapsed');
-        }
-
-        // 🌟 開啟左側獨立繪圖模式 HUD
         function openCustomDrawHelp() {
             closeAllDrawers();
-            document.getElementById('drawModeHUD').classList.add('active');
-            
-            setTimeout(() => {
-                alert('進入手繪模式！\n\n1. 請點選畫面左側的繪圖按鈕描繪範圍。\n2. 系統將自動為您導航該範圍的專屬路線！\n\n(完成後可點選紅色 X 退出模式)');
-            }, 100);
+            document.getElementById('rightToolsWrapper').classList.add('open');
+            alert('啟用自訂空間範圍：\n\n1. 請點選地圖右上角的【🛠️地圖工具列】(可選擇畫線或多邊形)。\n2. 在地圖上描繪您想探索的範圍。\n3. 系統將為您自動導航該範圍的專屬路線！\n\n(若要清除範圍，請點擊垃圾桶圖示)');
         }
 
-        // 🌟 退出繪圖模式
-        function exitDrawMode() {
-            document.getElementById('drawModeHUD').classList.remove('active');
-        }
-
+        // 🌟 卡片按鈕完美同步
         function updateCardButtonUI() {
             document.querySelectorAll('.btn-play-main').forEach(btn => {
                 if (btn.id && btn.id.startsWith('card-btn-')) {
@@ -747,6 +563,7 @@
 
             var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
             
+            // 🌟 重新設計美感拉滿的雙層儀表板 GPS 資訊盒
             var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
             
             var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
@@ -786,13 +603,18 @@
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPanPaddingTopLeft: [0, 90] });
             globalMarkerMap[item.uid] = marker;
             
-            marker.on('click', (e) => { 
-                L.DomEvent.stopPropagation(e);
+            // 🌟 核心防呆：只要點擊地標，立刻取消走讀的背景播放排程
+            marker.on('click', () => { 
                 isRoutePlaying = false; 
                 clearTimeout(routeTimeout); 
                 var clearBtn = document.getElementById('clearRouteBtn');
                 if(clearBtn && clearBtn.style.display !== 'none') {
                     toggleRoute('clear', clearBtn);
+                }
+                
+                // 點擊卡片後，自動播放該作品
+                if (item.audioUrl) {
+                    setTimeout(() => startGlobalPlayback(item.uid), 400);
                 }
             });
             marker.on('popupopen', () => { setTimeout(updateCardButtonUI, 50); }); 
@@ -800,6 +622,7 @@
             return marker;
         }
 
+        // 🌟 物理暴力反轉法，保證 100% 照順序！
         function renderLatestSubmissions(data) {
             var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
             var sortedData = data.slice().reverse(); 
@@ -822,6 +645,7 @@
             });
         }
 
+        // 🌟 點擊最新上架：強制切斷導航、跳轉並自動瞬間播放
         function focusMarkerOnMap(uid) {
             isRoutePlaying = false; 
             clearTimeout(routeTimeout);
@@ -835,9 +659,16 @@
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
                     targetMarker.openPopup();
-                    var offset = window.innerWidth <= 600 ? 50 : 120;
-                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, offset]); 
+                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()).subtract([0, 120]); 
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+                    
+                    // 等待鏡頭飛過去之後，自動按下播放鍵！
+                    setTimeout(() => {
+                        var item = allMarkersData.find(i => i.uid === uid);
+                        if (item && item.audioUrl) {
+                            startGlobalPlayback(uid); 
+                        }
+                    }, 500);
                 });
             }
         }
@@ -852,6 +683,15 @@
             var displayTime = hLimit === -1 ? "全部時段" : hLimit + ":00 - " + hLimit + ":59";
             document.getElementById('timeDisplay').innerText = displayTime;
             renderMarkers(allMarkersData.filter(i => (i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s)) && (cat === 'all' || i.category.includes(cat)) && (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit))));
+        }
+
+        function togglePanel(id) {
+            var target = document.getElementById(id);
+            var opening = target.classList.contains('collapsed');
+            
+            closeAllDrawers();
+
+            if (opening) target.classList.remove('collapsed');
         }
 
         function executeStandardRoute(type, actualPathCoords) {
@@ -1119,4 +959,6 @@
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
         
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
-    </script></body></html>
+    </script>
+</body>
+</html>
