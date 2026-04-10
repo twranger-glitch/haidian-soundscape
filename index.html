@@ -209,9 +209,7 @@
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        /* 🌟 防彈版容器：加入隱藏滾動、絕對隱形、最大高度限制 */
-        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-width: none; }
-        .tools-menu-container::-webkit-scrollbar { display: none; }
+        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right;}
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
         .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
 
@@ -228,32 +226,35 @@
         .custom-layer-control label:last-child { margin-bottom: 0; }
         .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
         
-        .custom-geoman-container { 
-            width: 48px; 
+        /* 🌟 重大進化：將繪圖工具升級為「左側懸浮膠囊 (Draw Mode HUD)」 */
+        .draw-mode-hud {
+            position: absolute;
+            z-index: 1500;
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 20px; padding: 4px;
-            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
-            display: flex; flex-direction: column; align-items: center;
+            border-radius: 20px; padding: 6px;
+            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            opacity: 0; visibility: hidden; pointer-events: none;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            /* 預設：左側中央漂浮 */
+            left: 20px; top: 50%; transform: translateY(-50%) translateX(-20px);
+        }
+        .draw-mode-hud.active {
+            opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(-50%) translateX(0);
         }
         
-        .custom-geoman-container .leaflet-pm-toolbar { 
-            margin: 0 !important; border: none !important; box-shadow: none !important; background: transparent !important; 
-            display: flex; flex-direction: column; width: 100%;
-        }
-        .custom-geoman-container .button-container { border: none !important; width: 100%; display: flex; justify-content: center; }
+        /* HUD 內部的 Geoman 按鈕樣式重置 */
+        .custom-geoman-container { display: flex; flex-direction: column; width: 100%; align-items: center; }
+        .custom-geoman-container .leaflet-pm-toolbar { margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 4px; background: transparent !important; box-shadow: none !important;}
+        .custom-geoman-container .button-container { border: none !important; }
+        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: 1px solid rgba(148, 163, 184, 0.3) !important; padding-bottom: 4px !important; margin-bottom: 0 !important; }
         
-        .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { 
-            border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important; 
-            padding-bottom: 4px !important; margin-bottom: 4px !important;
-        }
-        
-        .custom-geoman-container .leaflet-pm-toolbar a { 
-            width: 36px !important; height: 36px !important; 
-            border-radius: 12px !important; background-color: transparent !important;
-            transition: 0.2s !important; margin: 2px 0 !important;
-        }
-        .custom-geoman-container .leaflet-pm-toolbar a:hover { background-color: rgba(0,0,0,0.06) !important; color: var(--accent-color) !important; transform: scale(1.05); }
-        .custom-geoman-container .leaflet-pm-toolbar a.active { background-color: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
+        .custom-geoman-container a { width: 36px !important; height: 36px !important; border-radius: 12px !important; color: #475569 !important; display: flex !important; justify-content: center !important; align-items: center !important; transition: 0.2s !important; margin: 0 !important; background: transparent !important; text-decoration: none !important;}
+        .custom-geoman-container a:hover { background: rgba(0,0,0,0.06) !important; color: var(--accent-color) !important; transform: scale(1.05); }
+        .custom-geoman-container a.active { background: rgba(39, 174, 96, 0.15) !important; color: var(--accent-color) !important; }
+        .custom-geoman-container a .control-icon { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; height: 100% !important; }
+        .custom-geoman-container a svg { width: 18px !important; height: 18px !important; display: block !important; flex-shrink: 0 !important; }
 
         .custom-clear-icon {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e74c3c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4.8c0-.99.81-1.8 1.8-1.8h4.4c.99 0 1.8.81 1.8 1.8V6'/%3E%3Cpath d='M18 6v12.2c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8V6'/%3E%3Cline x1='10' y1='11' x2='10' y2='17'/%3E%3Cline x1='14' y1='11' x2='14' y2='17'/%3E%3C/svg%3E") !important;
@@ -262,7 +263,14 @@
             background-repeat: no-repeat !important;
         }
 
-        /* 🌟 手機版極致變形：Geoman 垂直膠囊轉換為水平膠囊，省下所有垂直空間 */
+        /* 退出繪圖模式專用紅色按鈕 */
+        .hud-close-btn {
+            width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c;
+            border: none; cursor: pointer; display: flex; justify-content: center; align-items: center;
+            transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0;
+        }
+        .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
+
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -277,16 +285,6 @@
             #sidePanel, #routePanel { top: 125px; } 
             .right-tools-wrapper { top: 125px; right: 15px; }
 
-            /* 手機板高度再優化，確保選單不會被底層播放器遮住 */
-            .tools-menu-container { max-height: calc(100vh - 140px); }
-
-            /* 🌟 手機專屬：Geoman 水平膠囊設計 */
-            .custom-geoman-container { width: auto; flex-direction: row; border-radius: 20px; padding: 4px 6px; }
-            .custom-geoman-container .leaflet-pm-toolbar { flex-direction: row; width: auto; gap: 2px; }
-            .custom-geoman-container .button-container { width: auto; }
-            .custom-geoman-container .leaflet-pm-toolbar:not(:last-child) { border-bottom: none !important; border-right: 1px solid rgba(148, 163, 184, 0.2) !important; padding-bottom: 0 !important; margin-bottom: 0 !important; padding-right: 6px !important; margin-right: 2px !important; }
-            .custom-geoman-container .leaflet-pm-toolbar a { margin: 0 2px !important; }
-
             .global-player { flex-direction: column; padding: 18px 20px; width: 100%; box-sizing: border-box; border-radius: 24px 24px 0 0; bottom: -250px; }
             .global-player.active { bottom: 0; } 
             .player-main { width: 100%; margin-bottom: 8px; }
@@ -295,6 +293,9 @@
             .player-controls { width: 100%; justify-content: space-between; }
             .volume-control { flex: 1; margin: 0 15px; } 
             .volume-slider { width: 100%; height: 6px; } 
+
+            /* 手機版：繪圖 HUD 更靠左邊，完全不干擾中間地圖 */
+            .draw-mode-hud { left: 10px; }
         }
     </style></head><body>
 
@@ -319,6 +320,13 @@
     <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
         <div class="pull-line"></div>
         <div class="pull-text">顯示選單</div>
+    </div>
+
+    <div id="drawModeHUD" class="draw-mode-hud">
+        <div id="geomanContainer" class="custom-geoman-container"></div>
+        <button class="hud-close-btn" onclick="exitDrawMode()" title="退出手繪模式">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
     </div>
 
     <div id="sidePanel" class="drawer-panel collapsed">
@@ -394,6 +402,7 @@
                     山海圳綠道 (直達玉山)
                 </button>
                 <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
+                
                 <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
                     手繪自訂走讀範圍
@@ -408,7 +417,7 @@
     </div>
 
     <div id="rightToolsWrapper" class="right-tools-wrapper">
-        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖與繪圖工具">
+        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖與圖層工具">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4L4 8l8 4 8-4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path d="M4 16l8 4 8-4"></path></svg>
         </div>
         <div class="tools-menu-container">
@@ -432,8 +441,7 @@
                     <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
                 </div>
             </div>
-            <div id="geomanContainer" class="custom-geoman-container"></div>
-        </div>
+            </div>
     </div>
 
     <div id="map"></div>
@@ -508,14 +516,14 @@
     <script>
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0485, 120.1985], 15);
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19 });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19 });
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
         
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
         
-        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
-        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
-        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, keepBuffer: 4, updateWhenIdle: false });
+        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
 
@@ -665,10 +673,19 @@
             if (isClosed) target.classList.remove('collapsed');
         }
 
+        // 🌟 開啟左側獨立繪圖模式 HUD
         function openCustomDrawHelp() {
             closeAllDrawers();
-            document.getElementById('rightToolsWrapper').classList.add('open');
-            alert('啟用自訂空間範圍：\n\n1. 請點選地圖右上角的【地圖圖層按鈕】展開工具列。\n2. 在地圖上描繪您想探索的範圍。\n3. 系統將為您自動導航該範圍的專屬路線！\n\n(若要清除範圍，請點擊紅色垃圾桶圖示)');
+            document.getElementById('drawModeHUD').classList.add('active');
+            
+            setTimeout(() => {
+                alert('進入手繪模式！\n\n1. 請點選畫面左側的繪圖按鈕描繪範圍。\n2. 系統將自動為您導航該範圍的專屬路線！\n\n(完成後可點選紅色 X 退出模式)');
+            }, 100);
+        }
+
+        // 🌟 退出繪圖模式
+        function exitDrawMode() {
+            document.getElementById('drawModeHUD').classList.remove('active');
         }
 
         function updateCardButtonUI() {
