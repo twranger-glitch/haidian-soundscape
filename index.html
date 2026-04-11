@@ -37,19 +37,31 @@
         
         svg { flex-shrink: 0; }
 
-        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s; pointer-events: auto; }
+        .glass-header { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 950px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; z-index: 1000; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.4); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
         .glass-header.hidden-up { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0s 0.4s; }
+
+        /* 🌟 桌面版播放時，Banner 智慧縮小至左上角 */
+        @media (min-width: 601px) {
+            .glass-header.compact-mode {
+                width: auto; left: 20px; top: 20px; transform: translateX(0);
+                padding: 10px 18px; gap: 15px; border-radius: 16px;
+            }
+            .glass-header.compact-mode .project-title { font-size: 15px; }
+            .glass-header.compact-mode .project-title span.sub-title { display: none; }
+            .glass-header.compact-mode .nav-buttons button span { display: none; }
+            .glass-header.compact-mode .nav-buttons button { padding: 8px; border-radius: 50%; }
+        }
 
         .header-pull-tab { position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.1); border-top: none; border-radius: 0 0 16px 16px; width: 100px; height: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 2000; cursor: pointer; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
         .header-pull-tab.visible { transform: translate(-50%, 0); }
         .header-pull-tab .pull-line { width: 32px; height: 4px; background: #cbd5e1; border-radius: 2px; }
         .header-pull-tab .pull-text { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 1px; line-height: 1; }
 
-        .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px;}
+        .project-title { font-size: 18px; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; letter-spacing: 0.5px; transition: 0.3s;}
         .project-title span.main-title { color: var(--accent-color); margin: 0 6px; }
-        .project-title span.sub-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-left: 5px; }
+        .project-title span.sub-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-left: 5px; transition: 0.3s;}
         
-        .nav-buttons { display: flex; gap: 10px; align-items: center; }
+        .nav-buttons { display: flex; gap: 10px; align-items: center; transition: 0.3s;}
         .nav-buttons button { background: transparent; border: none; color: #34495e; font-size: 14px; font-weight: 700; cursor: pointer; padding: 8px 14px; border-radius: 8px; transition: 0.3s; display: flex; align-items: center; gap: 6px; }
         .nav-buttons button:hover { background: rgba(39, 174, 96, 0.08); color: var(--accent-color); }
         .btn-latest { color: #d35400 !important; }
@@ -106,6 +118,7 @@
             z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6); pointer-events: auto;
         }
         .global-player.active { bottom: 20px; } 
+        .global-player.force-hide { bottom: -250px !important; } /* 當側選單開啟時強力隱藏 */
         
         .player-control-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-color); color: white; border: none; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; transition: 0.2s; box-shadow: 0 4px 10px rgba(39,174,96,0.3);}
         .player-control-btn:hover { transform: scale(1.05); background: #219150;}
@@ -191,9 +204,12 @@
         
         .meta-author-name { font-weight: 800; color: var(--text-main); max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
         .meta-date-text { font-family: 'Courier New', Courier, monospace; letter-spacing: 0px; font-size: 11.5px; white-space: nowrap;}
-        .meta-category { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.05);}
         
-        .meta-gps { background: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'Courier New', monospace; color: #64748b; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; align-items: center; gap: 4px;}
+        /* 🌟 優化分類標籤與 GPS 的排版，超長字串防破版優化 */
+        .card-tags-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; align-items: center; margin-top: 10px; }
+        .meta-category { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.05); white-space: nowrap;}
+        
+        .meta-gps { background: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'Courier New', monospace; color: #64748b; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; align-items: center; gap: 4px; white-space: nowrap;}
         .meta-gps svg { color: #e74c3c; width: 12px; height: 12px;}
 
         .cat-nature { background: #e8f8f5; color: #0f766e; }   
@@ -250,9 +266,11 @@
             margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
             width: max-content;
         }
-        .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
+        /* 🌟 高質感 SVG 替換 Emoji */
+        .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: #34495e; font-weight: 700;}
+        .custom-layer-control label svg { color: var(--text-muted); }
         .custom-layer-control label:last-child { margin-bottom: 0; }
-        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; }
+        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; flex-shrink:0;}
         
         .draw-mode-hud {
             position: absolute; z-index: 1500;
@@ -365,15 +383,15 @@
         <nav class="nav-buttons">
             <button onclick="openModal('aboutModal')" title="關於我們">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                關於我們
+                <span>關於我們</span>
             </button>
             <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                最新上架
+                <span>最新上架</span>
             </button>
             <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" title="我要投稿">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                我要投稿
+                <span>我要投稿</span>
             </button>
         </nav>
     </header>
@@ -484,15 +502,35 @@
         <div class="tools-menu-container">
             <div class="custom-layer-control">
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">現代圖資</div>
-                <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 🇹🇼 臺灣精細地圖</label>
-                <label><input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 🌍 全球通用地圖</label>
+                <label>
+                    <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 
+                    臺灣精細地圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> 
+                    全球通用地圖
+                </label>
                 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label><input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 📜 1904 臺灣堡圖</label>
-                <label><input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value)"> 📜 1921 臺灣堡圖</label>
-                <label><input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 🗺️ 1895 臺南府迅速測圖</label>
+                <label>
+                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    1904 臺灣堡圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    1921 臺灣堡圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    1895 臺南府測圖
+                </label>
                 
                 <div id="opacityControl" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
                     <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px; font-weight:700;">
@@ -736,6 +774,7 @@
             document.getElementById('sidePanel').classList.add('collapsed');
             document.getElementById('routePanel').classList.add('collapsed');
             document.getElementById('rightToolsWrapper').classList.remove('open');
+            document.getElementById('globalPlayer').classList.remove('force-hide');
         }
 
         function togglePanel(id, event) {
@@ -745,7 +784,13 @@
             
             closeAllDrawers();
 
-            if (isClosed) target.classList.remove('collapsed');
+            if (isClosed) {
+                target.classList.remove('collapsed');
+                // 🌟 當側選單開啟時，強力隱藏播放條防遮擋
+                if(id === 'routePanel' || id === 'sidePanel') {
+                    document.getElementById('globalPlayer').classList.add('force-hide');
+                }
+            }
         }
 
         function openCustomDrawHelp() {
@@ -812,13 +857,17 @@
             renderLatestSubmissions(data); 
         });
 
-        // 🌟 智慧鏡頭偏移計算
+        // 🌟 智慧鏡頭偏移計算：當播放條升起時，自動將標記頂置，絕不遮擋上方圖片
         function getMapOffset() {
             var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
             var isMobile = window.innerWidth <= 600;
-            if (isLandscape) return 40; 
-            if (isMobile) return 180; // 絕對預留空間，保證卡片不被截頂
-            return 120;
+            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
+            
+            if (isLandscape) return isPlayerActive ? 120 : 40; 
+            // 手機版：若播放條開啟，大幅偏移 250px 確保卡片位於播放條上方
+            if (isMobile) return isPlayerActive ? 250 : 180; 
+            // 桌機版：若播放條開啟，偏移 180px 確保卡片完美置放於中間偏上
+            return isPlayerActive ? 180 : 120;
         }
 
         function createMarker(item) {
@@ -839,7 +888,7 @@
             var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
             var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
             
-            // 🌟 卡片還原原本的乾淨排版設計 (拔除秒數顯示)
+            // 🌟 卡片優化排版：將分類標籤與座標獨立為 .card-tags-row，優雅換行不破版
             var cardHTML = `
                 <div class="sound-card">
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
@@ -854,7 +903,7 @@
                                 </span>
                                 <span class="meta-item meta-date-text">${timeSvg} ${displayDate}</span>
                             </div>
-                            <div class="meta-row" style="margin-top:10px; flex-wrap:wrap; gap:8px;">
+                            <div class="card-tags-row">
                                 <span class="meta-category ${catClass}">${cleanCat}</span>
                                 ${gpsHTML}
                             </div>
@@ -1053,7 +1102,7 @@
                 executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                alert("⏳ 準備從雲端載入山海圳綠道圖資，請稍候...");
+                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
                 var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRVuVP_KljACFPTdkVfrwadoOxmvz6omF30Qz46Hy3C7YOeMXx69QubqfBkeGEt8FNqsqzDk-v3jZN-/pub?gid=0&single=true&output=csv"; 
                 
                 fetch(csvUrl)
@@ -1188,6 +1237,20 @@
             if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
             currentAudioUid = uid; 
             
+            // 🌟 桌機版：啟動播放時，將上層 Banner 優雅縮小至左上角
+            var header = document.querySelector('.glass-header');
+            if (header) header.classList.add('compact-mode');
+
+            // 🌟 觸發標記重新置中 (搭配升級版 getMapOffset)
+            setTimeout(() => {
+                var m = globalMarkerMap[uid];
+                if(m && map) {
+                    var pt = map.project(m.getLatLng(), map.getZoom());
+                    pt.y -= getMapOffset();
+                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+                }
+            }, 100);
+            
             var titleContainer = document.getElementById('playerTitleContainer');
             var titleUI = document.getElementById('playerTitleUI');
             
@@ -1221,7 +1284,15 @@
 
         // 🌟 防彈版音量切換：完全透過 .muted 操作，解除 iOS 限制
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
-        function closeGlobalPlayer() { globalAudio.pause(); document.getElementById('globalPlayer').classList.remove('active'); currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); }
+        
+        function closeGlobalPlayer() { 
+            globalAudio.pause(); 
+            document.getElementById('globalPlayer').classList.remove('active'); 
+            var header = document.querySelector('.glass-header');
+            if (header) header.classList.remove('compact-mode'); // 復原 Banner
+            currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
+        }
+        
         function toggleMute() { 
             globalAudio.muted = !globalAudio.muted;
             var mb = document.getElementById('muteBtn'); 
