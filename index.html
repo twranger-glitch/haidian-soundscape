@@ -53,7 +53,6 @@
             .glass-header.compact-mode .nav-buttons button .short-text { display: inline; }
             .glass-header.compact-mode .nav-buttons button { padding: 8px 12px; border-radius: 8px; font-size: 13px; gap: 4px; }
             
-            /* 桌面版隱藏 Modal 中重複的手機專用選項 */
             .mobile-only-modal { display: none !important; }
         }
 
@@ -179,7 +178,7 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 140px); overflow-y: auto;}
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 200px); overflow-y: auto;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
         .leaflet-container a.leaflet-popup-close-button {
@@ -290,7 +289,6 @@
         .layer-card-content { flex: 1; font-size: 14px; color: var(--text-main); font-weight: 700; display: flex; flex-direction: column;}
         .layer-card-content span { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; font-family: 'Courier New', monospace;}
 
-        /* 🌟 手機版隱藏桌面專用的重複圖層，極致壓縮主選單高度 */
         @media (max-width: 600px) {
             .desktop-only-history { display: none !important; }
         }
@@ -326,7 +324,6 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
-        /* 🌟 手機直立版 (Portrait) 極致優化 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -370,7 +367,6 @@
             .sound-title { font-size: 18px; margin-bottom: 8px;}
         }
 
-        /* 🌟 手機橫式滿血適配 (Landscape)：自動捲動、縮小佔位、防遮擋 */
         @media (max-height: 500px) and (orientation: landscape) {
             .glass-header { padding: 6px 16px; top: 10px; flex-direction: row; height: auto; gap: 15px; border-radius: 12px;}
             .project-title { font-size: 15px; width: auto; }
@@ -581,64 +577,64 @@
                     <label class="layer-card mobile-only-modal">
                         <input type="radio" name="basemap_modal" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1895 臺南府迅速測圖</strong>
+                            <strong style="color: var(--text-main);">1895 臺南府迅速測圖</strong>
                             <span>Tainan_1896B</span>
                         </div>
                     </label>
                     <label class="layer-card mobile-only-modal">
                         <input type="radio" name="basemap_modal" value="history_1904" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1904 臺灣堡圖</strong>
+                            <strong style="color: var(--text-main);">1904 臺灣堡圖</strong>
                             <span>JM20K_1904</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1874 府城街道圖</strong>
+                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
                             <span>Tainan_1875</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1921 臺灣堡圖</strong>
+                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
                             <span>JM20K_1921</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1900 臺南府城內外略圖</strong>
+                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
                             <span>Tainan_1900</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1907" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1907 臺南及安平市街圖</strong>
+                            <strong style="color: var(--text-main);">1907 臺南及安平市街圖</strong>
                             <span>Tainan_1907</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1911" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1911 臺南市區改正計畫圖</strong>
+                            <strong style="color: var(--text-main);">1911 臺南市區改正計畫圖</strong>
                             <span>Tainan_1911</span>
                         </div>
                     </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1920 臺南市區改正圖</strong>
+                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
                             <span>Tainan_1920</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1945" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong>1945 臺南市舊航照影像</strong>
-                            <span>美軍繪製臺灣城市地圖</span>
+                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
+                            <span>AM25K_1944B</span>
                         </div>
                     </label>
                 </div>
@@ -719,7 +715,6 @@
     </div>
     
     <script>
-        // 🌟 1. 初始座標精準定錨「海佃國小」，禁用 tap 防止手機誤觸失效
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.027803518305756, 120.20045732624777], 15);
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -735,9 +730,9 @@
         var history1907Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1907-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1911Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1911-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1920Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1920-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var history1945Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_aerialphoto_1945-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
-        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1907Layer, history1911Layer, history1920Layer, history1945Layer];
+        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1907Layer, history1911Layer, history1920Layer, history1944Layer];
 
         taiwanLayer.addTo(map);
 
@@ -745,7 +740,6 @@
             if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
             allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
-            // 🌟 修正2：雙向同步兩種 name 的 radio 狀態
             document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
             document.querySelectorAll('input[name="basemap_modal"][value="' + val + '"]').forEach(el => el.checked = true);
 
@@ -760,7 +754,7 @@
                 'history_1907': '1907 臺南及安平市街圖',
                 'history_1911': '1911 臺南市區改正計畫圖',
                 'history_1920': '1920 臺南市區改正圖',
-                'history_1945': '1945 臺南市舊航照影像'
+                'history_1944': '1944 美軍航照圖'
             };
             var extLabel = document.getElementById('activeExtendedLayerLabel');
             var extText = document.getElementById('extendedLayerNameText');
@@ -792,7 +786,7 @@
                     else if (val === 'history_1907') map.addLayer(history1907Layer);
                     else if (val === 'history_1911') map.addLayer(history1911Layer);
                     else if (val === 'history_1920') map.addLayer(history1920Layer);
-                    else if (val === 'history_1945') map.addLayer(history1945Layer);
+                    else if (val === 'history_1944') map.addLayer(history1944Layer);
                 } else {
                     opacityCtrl.style.display = 'none';
                 }
@@ -902,7 +896,18 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 1. 終極防遮擋引擎：統一由 popupopen 觸發，不再被動畫干擾
+        function getMapOffset() {
+            var H = window.innerHeight;
+            var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
+            var isMobile = window.innerWidth <= 600;
+            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
+            
+            if (isLandscape) return isPlayerActive ? 120 : 40; 
+            if (isMobile) return isPlayerActive ? 220 : 150; 
+            
+            return isPlayerActive ? (H * 0.25) : 120;
+        }
+
         map.on('popupopen', function(e) {
             updateHeaderVisibility(true);
             setTimeout(updateCardButtonUI, 50);
@@ -913,7 +918,7 @@
                     var pt = map.project(marker.getLatLng(), map.getZoom());
                     pt.y -= getMapOffset();
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-                }, 100); 
+                }, 50); 
             }
         });
 
@@ -1013,25 +1018,6 @@
             renderMarkers(data); 
             renderLatestSubmissions(data); 
         });
-
-        // 🌟 1. 修正版動態 Y 軸追蹤引擎
-        function getMapOffset() {
-            var H = window.innerHeight;
-            var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
-            var isMobile = window.innerWidth <= 600;
-            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
-            
-            if (isLandscape) return isPlayerActive ? 120 : 40; 
-            if (isMobile) return isPlayerActive ? 220 : 150; 
-            
-            if (!isMobile) {
-                if (isPlayerActive) {
-                    // 若螢幕高度夠，把目標點設在極深處，將標記推至螢幕底部邊緣
-                    return (H / 2) - 100;
-                }
-                return 150;
-            }
-        }
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
@@ -1386,7 +1372,6 @@
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
 
-            // 🌟 播放條升起時，手動觸發一次重新定心
             setTimeout(() => {
                 var m = globalMarkerMap[uid];
                 if(m && map && m.isPopupOpen()) {
