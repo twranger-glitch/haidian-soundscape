@@ -16,6 +16,7 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <script>
+        // 🌟 核心裝置偵測：辨識 iOS 裝置以啟動防彈級音量控制介面
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
@@ -896,8 +897,8 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
+        // 🌟 修正1：安全常數定位法，禁止在桌機版暴走
         function getMapOffset() {
-            var H = window.innerHeight;
             var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
             var isMobile = window.innerWidth <= 600;
             var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
@@ -905,7 +906,8 @@
             if (isLandscape) return isPlayerActive ? 120 : 40; 
             if (isMobile) return isPlayerActive ? 220 : 150; 
             
-            return isPlayerActive ? (H * 0.25) : 120;
+            // 🌟 修正：桌機版回歸穩定常數，捨棄危險的 H/2 暴力計算
+            return isPlayerActive ? 180 : 120;
         }
 
         map.on('popupopen', function(e) {
@@ -1372,7 +1374,11 @@
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
 
+            // 🌟 播放條升起時的二次平移 (僅限手機版)
             setTimeout(() => {
+                var isMobile = window.innerWidth <= 600;
+                if (!isMobile) return; // 🌟 修正：桌機版空間足夠，禁止二次平移，防止卡片被往上頂！
+
                 var m = globalMarkerMap[uid];
                 if(m && map && m.isPopupOpen()) {
                     var pt = map.project(m.getLatLng(), map.getZoom());
