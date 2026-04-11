@@ -16,7 +16,6 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <script>
-        // 🌟 核心裝置偵測：辨識 iOS 裝置以啟動防彈級音量控制介面
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
@@ -179,7 +178,8 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 200px); overflow-y: auto;}
+        /* 🌟 讓卡片內容不再被 CSS 暴力裁切，保證所有內容清晰可見 */
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
         .leaflet-container a.leaflet-popup-close-button {
@@ -527,6 +527,16 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> 
                     全球通用地圖
                 </label>
+                <label>
+                    <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect><circle cx="8" cy="8" r="2"></circle><path d="M21 15l-5-5L5 21"></path></svg> 
+                    ESRI 衛星影像
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg> 
+                    OSM 標準地圖
+                </label>
                 
                 <hr class="desktop-only-history" style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
@@ -575,11 +585,25 @@
                     更多歷史圖層
                 </h2>
                 <div class="more-layers-grid">
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
+                            <span>Tainan_1875</span>
+                        </div>
+                    </label>
                     <label class="layer-card mobile-only-modal">
                         <input type="radio" name="basemap_modal" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1895 臺南府迅速測圖</strong>
                             <span>Tainan_1896B</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
+                            <span>Tainan_1900</span>
                         </div>
                     </label>
                     <label class="layer-card mobile-only-modal">
@@ -590,10 +614,10 @@
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
-                            <span>Tainan_1875</span>
+                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
+                            <span>Tainan_1920</span>
                         </div>
                     </label>
                     <label class="layer-card">
@@ -601,34 +625,6 @@
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
                             <span>JM20K_1921</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
-                            <span>Tainan_1900</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1907" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1907 臺南及安平市街圖</strong>
-                            <span>Tainan_1907</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1911" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1911 臺南市區改正計畫圖</strong>
-                            <span>Tainan_1911</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
-                            <span>Tainan_1920</span>
                         </div>
                     </label>
                     <label class="layer-card">
@@ -720,31 +716,36 @@
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
+        
+        // 🌟 載入 OSM 與 ESRI
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, zIndex: 1 });
+        var esriSatLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri', maxZoom: 19, zIndex: 1 });
+
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
         
         var history1875Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1875-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        
         var history1900Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1900-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var history1907Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1907-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
-        var history1911Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1911-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1920Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1920-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
-        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1907Layer, history1911Layer, history1920Layer, history1944Layer];
+        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
+        var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
 
         taiwanLayer.addTo(map);
 
         function switchBasemap(val) {
-            if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
+            allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
             allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
             document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
             document.querySelectorAll('input[name="basemap_modal"][value="' + val + '"]').forEach(el => el.checked = true);
 
             var opacityCtrl = document.getElementById('opacityControl');
+            var extLabel = document.getElementById('activeExtendedLayerLabel');
+            var extText = document.getElementById('extendedLayerNameText');
             
             var extendedNames = {
                 'history_tainan': '1895 臺南府迅速測圖',
@@ -752,13 +753,9 @@
                 'history_1875': '1874 府城街道圖',
                 'history_1921': '1921 臺灣堡圖',
                 'history_1900': '1900 臺南府城內外略圖',
-                'history_1907': '1907 臺南及安平市街圖',
-                'history_1911': '1911 臺南市區改正計畫圖',
                 'history_1920': '1920 臺南市區改正圖',
                 'history_1944': '1944 美軍航照圖'
             };
-            var extLabel = document.getElementById('activeExtendedLayerLabel');
-            var extText = document.getElementById('extendedLayerNameText');
 
             if (val.startsWith('history')) {
                 extLabel.style.display = 'block';
@@ -771,11 +768,13 @@
             }
 
             if (val === 'global') {
-                if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
-                map.addLayer(globalLayer);
-                opacityCtrl.style.display = 'none';
+                map.addLayer(globalLayer); opacityCtrl.style.display = 'none';
+            } else if (val === 'osm') {
+                map.addLayer(osmLayer); opacityCtrl.style.display = 'none';
+            } else if (val === 'esri_sat') {
+                map.addLayer(esriSatLayer); opacityCtrl.style.display = 'none';
             } else {
-                if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
+                map.addLayer(taiwanLayer);
 
                 if (val.startsWith('history')) {
                     opacityCtrl.style.display = 'block';
@@ -784,12 +783,8 @@
                     else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
                     else if (val === 'history_1875') map.addLayer(history1875Layer);
                     else if (val === 'history_1900') map.addLayer(history1900Layer);
-                    else if (val === 'history_1907') map.addLayer(history1907Layer);
-                    else if (val === 'history_1911') map.addLayer(history1911Layer);
                     else if (val === 'history_1920') map.addLayer(history1920Layer);
                     else if (val === 'history_1944') map.addLayer(history1944Layer);
-                } else {
-                    opacityCtrl.style.display = 'none';
                 }
             }
         }
@@ -800,59 +795,28 @@
         }
 
         map.pm.setLang('zh-TW', {
-            tooltips: {
-                placeMarker: '點擊放置標記',
-                firstVertex: '點擊地圖放置第一個起點',
-                continueLine: '點擊繼續畫線',
-                finishLine: '點擊最後一個節點完成路線',
-                finishPoly: '點擊第一個起點完成多邊形',
-                finishRect: '點擊並拖曳繪製矩形',
-                edit: '拖曳節點以編輯形狀',
-                cut: '剪下圖層',
-                delete: '點擊你想刪除的圖層'
-            },
+            tooltips: { placeMarker: '點擊放置標記', firstVertex: '點擊地圖放置第一個起點', continueLine: '點擊繼續畫線', finishLine: '點擊最後一個節點完成路線', finishPoly: '點擊第一個起點完成多邊形', finishRect: '點擊並拖曳繪製矩形', edit: '拖曳節點以編輯形狀', cut: '剪下圖層', delete: '點擊你想刪除的圖層' },
             actions: { cancel: '取消', finish: '完成', removeLastVertex: '移除最後一點' },
-            buttonTitles: {
-                drawPolyButton: '畫多邊形範圍',
-                drawLineButton: '畫折線路徑',
-                drawRectButton: '畫矩形範圍',
-                deleteButton: '單件刪除工具'
-            }
+            buttonTitles: { drawPolyButton: '畫多邊形範圍', drawLineButton: '畫折線路徑', drawRectButton: '畫矩形範圍', deleteButton: '單件刪除工具' }
         });
 
         var geomanControl = map.pm.addControls({
-            position: 'topright',
-            drawMarker: false,
-            drawCircleMarker: false,
-            drawCircle: false,
-            drawText: false,
-            drawRectangle: true,
-            editMode: false,
-            dragMode: false,
-            cutPolygon: false,
-            rotateMode: false,
-            removalMode: true
+            position: 'topright', drawMarker: false, drawCircleMarker: false, drawCircle: false, drawText: false, drawRectangle: true, editMode: false, dragMode: false, cutPolygon: false, rotateMode: false, removalMode: true
         });
 
         map.pm.Toolbar.createCustomControl({
-            name: 'clearAllBtn',
-            block: 'edit',
-            title: '一鍵全部清除',
-            className: 'custom-clear-icon', 
+            name: 'clearAllBtn', block: 'edit', title: '一鍵全部清除', className: 'custom-clear-icon', 
             onClick: () => {
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 var clearBtn = document.getElementById('clearRouteBtn');
                 if(clearBtn) toggleRoute('clear', clearBtn);
-            },
-            toggle: false
+            }, toggle: false
         });
 
         setTimeout(() => {
             var pmToolbars = document.querySelectorAll('.leaflet-pm-toolbar');
             var container = document.getElementById('geomanContainer');
-            if (pmToolbars.length > 0 && container) {
-                pmToolbars.forEach(tb => container.appendChild(tb));
-            }
+            if (pmToolbars.length > 0 && container) { pmToolbars.forEach(tb => container.appendChild(tb)); }
         }, 100);
 
         map.on('moveend', function() {
@@ -862,13 +826,13 @@
             if (!checkedBasemap) return;
             var selectedBasemap = checkedBasemap.value;
             
-            if (selectedBasemap !== 'global') { 
-                if (inTaiwan) {
-                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
-                    if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
-                } else {
+            if (selectedBasemap === 'taiwan' || selectedBasemap.startsWith('history')) { 
+                if (!inTaiwan) {
                     if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
                     if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
+                } else {
+                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
+                    if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
                 }
             }
         });
@@ -897,32 +861,27 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 修正1：安全常數定位法，禁止在桌機版暴走
-        function getMapOffset() {
-            var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
-            var isMobile = window.innerWidth <= 600;
-            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
-            
-            if (isLandscape) return isPlayerActive ? 120 : 40; 
-            if (isMobile) return isPlayerActive ? 220 : 150; 
-            
-            // 🌟 修正：桌機版回歸穩定常數，捨棄危險的 H/2 暴力計算
-            return isPlayerActive ? 180 : 120;
-        }
-
+        // 🌟 終極防爆防遮擋：依賴 Leaflet 原生的 autoPanPaddingBottom，動態設定播放條高度預留空間
         map.on('popupopen', function(e) {
             updateHeaderVisibility(true);
             setTimeout(updateCardButtonUI, 50);
-
-            var marker = e.popup._source;
-            if (marker && marker.getLatLng) {
-                setTimeout(() => {
-                    var pt = map.project(marker.getLatLng(), map.getZoom());
-                    pt.y -= getMapOffset();
-                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-                }, 50); 
-            }
         });
+
+        function adjustMapPadding() {
+            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
+            // 手機版播放條較高，預留更多；桌機版較扁，預留 100px 足矣。
+            var paddingBottom = isPlayerActive ? (window.innerWidth <= 600 ? 200 : 100) : 10;
+            
+            map.options.popupPane = map.getPane('popupPane');
+            
+            // 透過修改每個 popup 的 options 來強迫 leaflet 重新計算 autoPan 空間
+            map.eachLayer(function(layer) {
+                if (layer instanceof L.Marker && layer.getPopup()) {
+                    layer.getPopup().options.autoPanPaddingBottomRight = L.point(10, paddingBottom);
+                    layer.getPopup().options.autoPanPaddingTopLeft = L.point(10, 80); 
+                }
+            });
+        }
 
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
@@ -1071,7 +1030,12 @@
                     </div>
                 </div>`;
             
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false });
+            // 🌟 啟用原生 autoPan 並設定預設安全距離
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { 
+                autoPan: true,
+                autoPanPaddingTopLeft: L.point(10, 80),
+                autoPanPaddingBottomRight: L.point(10, 10) 
+            });
             globalMarkerMap[item.uid] = marker;
             
             marker.on('click', (e) => { 
@@ -1374,16 +1338,15 @@
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
 
-            // 🌟 播放條升起時的二次平移 (僅限手機版)
+            document.getElementById('globalPlayer').classList.add('active');
+            
+            // 🌟 核心修正：觸發 Leaflet 原生安全邊界重新計算，強制把卡片推上去！
             setTimeout(() => {
-                var isMobile = window.innerWidth <= 600;
-                if (!isMobile) return; // 🌟 修正：桌機版空間足夠，禁止二次平移，防止卡片被往上頂！
-
+                adjustMapPadding();
                 var m = globalMarkerMap[uid];
                 if(m && map && m.isPopupOpen()) {
-                    var pt = map.project(m.getLatLng(), map.getZoom());
-                    pt.y -= getMapOffset();
-                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+                    // 只微調中心點，剩下交給 autoPan 處理
+                    map.panTo(m.getLatLng());
                 }
             }, 100);
             
@@ -1409,7 +1372,7 @@
             globalAudio.src = item.audioUrl; 
             globalAudio.play(); 
             
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; document.getElementById('globalPlayer').classList.add('active');
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
         }
         
         function startGlobalPlayback(uid) { 
@@ -1426,6 +1389,9 @@
             var header = document.querySelector('.glass-header');
             if (header) header.classList.remove('compact-mode'); 
             currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
+            
+            // 恢復原本的 padding
+            setTimeout(adjustMapPadding, 100);
         }
         
         function toggleMute() { 
