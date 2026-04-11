@@ -1,13 +1,4 @@
-沒問題！這就為您奉上**「終極完整版」**。
-
-我已經將您的原始代碼、所有補充的 DOM 與樣式，以及剛剛討論的**「CSS 變數 + JS 動態同步播放器高度解決方案」**完美融合為一個完整的 `.html` 檔案。
-
-您只需要**一鍵複製這整份程式碼**，貼上並覆蓋您原本的檔案，即可立刻看到完全修復、絲滑連動的手機版卡片閃避效果！🚀
-
-```html
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
+<!DOCTYPE html><html lang="zh-TW"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>海佃溪遊記 | 聲音地景計畫</title>
@@ -39,9 +30,6 @@
             --glass-border: rgba(255, 255, 255, 0.5);
             --glass-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
             --glass-blur: blur(20px);
-            
-            /* 👉 解決高度遮擋：動態播放器高度變數 */
-            --player-height: 0px; 
         }
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; background-color: #e9ecef; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
@@ -191,13 +179,6 @@
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 200px); overflow-y: auto;}
-        
-        /* 👉 解決高度遮擋：Leaflet Popup 動態 margin-bottom 屬性 */
-        .leaflet-popup {
-            margin-bottom: calc(var(--player-height) + 20px) !important;
-            transition: margin-bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
         .leaflet-container a.leaflet-popup-close-button {
@@ -394,242 +375,1055 @@
             .leaflet-popup-content-wrapper { max-height: 85vh; overflow-y: auto; pointer-events: auto; }
             .leaflet-popup-content { width: 260px !important; }
             .sound-cover { height: 80px; } 
+            .sound-info { padding: 10px; }
+            .sound-title { font-size: 16px; margin-bottom: 6px; }
+            .card-meta-box { margin-bottom: 8px; padding: 8px; }
             
-            /* UI 樣式補完 */
-            .sound-info { padding: 12px; }
-            #sidePanel, #routePanel { top: 70px; }
-            .global-player { bottom: -200px; padding: 6px 10px; }
-            .global-player.active { bottom: 10px; }
+            .drawer-content { max-height: calc(100vh - 60px); padding: 15px; pointer-events: auto;}
+            .drawer-panel { width: 320px; max-width: 60vw; }
+            .modal-box { max-height: 90vh; }
+            
+            .global-player { bottom: -150px; padding: 6px 16px; border-radius: 12px 12px 0 0; gap: 10px; width: auto; max-width: 90%;}
+            .global-player.active { bottom: 0; }
+            .waveform-wrapper { height: 18px; }
+            .player-control-btn { width: 36px; height: 36px; }
+            .close-player-btn { width: 28px; height: 28px; }
+            .volume-control { display: none; } 
         }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
+    </style></head><body>
 
-    <div class="glass-header" id="mainHeader">
-        <h1 class="project-title">
-            <span class="main-title">海佃溪遊記</span>
-            <span class="sub-title">聲音地景計畫</span>
-        </h1>
-        <div class="nav-buttons">
-            <button class="btn-latest" onclick="toggleModal('latestModal')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                <span class="short-text">最新</span><span class="full-text">最新動態</span>
+    <header class="glass-header">
+        <h1 class="project-title">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
+        <nav class="nav-buttons">
+            <button onclick="openModal('aboutModal')" title="關於我們">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span class="full-text">關於我們</span><span class="short-text">關於</span>
             </button>
-            <button class="btn-submit" onclick="toggleModal('submitModal')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
-                <span class="short-text">投稿</span><span class="full-text">參與投稿</span>
+            <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                <span class="full-text">最新上架</span><span class="short-text">新作</span>
             </button>
-        </div>
-    </div>
+            <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" title="我要投稿">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <span class="full-text">我要投稿</span><span class="short-text">投稿</span>
+            </button>
+        </nav>
+    </header>
     
-    <div class="header-pull-tab" id="headerPullTab">
+    <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
         <div class="pull-line"></div>
-        <div class="pull-text">MENU</div>
+        <div class="pull-text">顯示選單</div>
+    </div>
+
+    <div id="drawModeHUD" class="draw-mode-hud">
+        <div id="geomanContainer" class="custom-geoman-container"></div>
+        <button class="hud-close-btn" onclick="exitDrawMode()" title="退出手繪模式">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
     </div>
 
     <div id="sidePanel" class="drawer-panel collapsed">
+        <button class="toggle-btn" onclick="togglePanel('sidePanel', event)">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
         <div class="drawer-content">
-            <div class="panel-label">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                搜尋聲音地景
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    搜尋標題或採集者
+                </span>
+                <input type="text" id="searchInput" class="search-input" placeholder="輸入關鍵字..." oninput="filterMarkers()">
             </div>
-            <input type="text" class="search-input" placeholder="輸入關鍵字 (如：鳥鳴、水聲)...">
-            
-            <div class="panel-label" style="margin-top: 15px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                分類篩選
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 0;">
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    聲景類別篩選
+                </span>
+                <div class="filter-group">
+                    <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 所有聲景</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業" onchange="filterMarkers()"> 活動與產業</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
+                </div>
             </div>
-            <div class="filter-group">
-                <label class="filter-item"><input type="checkbox" checked> <span class="meta-category cat-nature">自然生態</span></label>
-                <label class="filter-item"><input type="checkbox" checked> <span class="meta-category cat-culture">人文活動</span></label>
-                <label class="filter-item"><input type="checkbox" checked> <span class="meta-category cat-industry">產業聚落</span></label>
-                <label class="filter-item"><input type="checkbox" checked> <span class="meta-category cat-history">歷史軌跡</span></label>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 0;">
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    時間軸探索
+                </span>
+                <p style="font-size:12px; color:#94a3b8; margin-top:0; margin-bottom:12px;">撥動滑桿探索不同時段的聲音</p>
+                <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
+                <div id="timeDisplay" class="time-display">全部時段</div>
             </div>
         </div>
-        <button class="toggle-btn" onclick="toggleDrawer('sidePanel')">
-            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"></path></svg>
-        </button>
     </div>
 
-    <div class="global-player" id="globalPlayer">
-        <button class="player-control-btn" id="playBtn" onclick="togglePlayState()">
-            <svg id="iconPlay" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
-            <svg id="iconPause" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>
+    <div id="routePanel" class="drawer-panel collapsed">
+        <button class="toggle-btn" onclick="togglePanel('routePanel', event)">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <div class="drawer-content">
+            <span class="panel-label">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
+                主題與空間走讀
+            </span>
+            <p style="font-size:12px; color:#94a3b8; margin-top:0; margin-bottom:12px;">選擇路線或空間魔法，系統將為您導航。</p>
+            <div class="route-list">
+                <button class="route-btn" onclick="toggleRoute('nature', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4-4 8-10 8-14a8 8 0 1 0-16 0c0 4 4 10 8 14z"></path></svg>
+                    綠色生態走讀 (依類別)
+                </button>
+                <button class="route-btn" onclick="toggleRoute('culture', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    聚落記憶尋寶 (依類別)
+                </button>
+                <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-3 4 6 2-3h4"></path></svg>
+                    鹽水溪畔 200m 走讀
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-3 4 6 2-3h4"></path></svg>
+                    嘉南大圳鹽水溪排水線
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #e67e22;" onclick="toggleRoute('geofence_shanhai', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l4 8 5-5 5 15H2L8 3z"></path></svg>
+                    山海圳綠道 (直達玉山)
+                </button>
+                <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
+                
+                <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                    手繪自訂走讀範圍
+                </button>
+
+                <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#fef2f2; color:#ef4444; border-color:#fca5a5; justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    結束路線任務
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rightToolsWrapper" class="right-tools-wrapper">
+        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+        </div>
+        <div class="tools-menu-container">
+            <div class="custom-layer-control">
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
+                <label>
+                    <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
+                    臺灣精細地圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
+                    全球通用地圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
+                    ESRI 衛星影像
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
+                    OSM 標準地圖
+                </label>
+                
+                <hr class="desktop-only-history" style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+                
+                <div class="desktop-only-history" style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">常用歷史套疊</div>
+                <label class="desktop-only-history">
+                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
+                    1895 臺南府迅速測圖
+                </label>
+                <label class="desktop-only-history">
+                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
+                    1904 臺灣堡圖
+                </label>
+                
+                <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
+                    <span style="color:#059669; font-weight:800;">目前載入：</span>
+                    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
+                </div>
+
+                <div id="opacityControl" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
+                        <span>透明度</span>
+                        <span id="opacityValue">80%</span>
+                    </div>
+                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+                </div>
+
+                <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    更多歷史圖層
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
+            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    更多歷史圖層
+                </h2>
+                <div class="more-layers-grid">
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
+                            <span>Tainan_1875</span>
+                        </div>
+                    </label>
+                    <label class="layer-card mobile-only-modal">
+                        <input type="radio" name="basemap_modal" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1895 臺南府迅速測圖</strong>
+                            <span>Tainan_1896B</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
+                            <span>Tainan_1900</span>
+                        </div>
+                    </label>
+                    <label class="layer-card mobile-only-modal">
+                        <input type="radio" name="basemap_modal" value="history_1904" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1904 臺灣堡圖</strong>
+                            <span>JM20K_1904</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
+                            <span>Tainan_1920</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
+                            <span>JM20K_1921</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
+                            <span>AM25K_1944B</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
+            <button class="modal-close-btn" onclick="closeModal('latestModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    最新上架聲景 (Top 10)
+                </h2>
+                <div id="latestList" class="latest-list">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="globalPlayer" class="global-player">
+        <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </button>
         <div class="player-main">
             <div class="player-header-row">
-                <div class="player-title-container">
-                    <h3 class="player-title" id="playerTitle">未選擇音軌</h3>
+                <div id="playerTitleContainer" class="player-title-container">
+                    <div id="playerTitleUI" class="player-title">載入中...</div>
                 </div>
-                <div class="player-time-display">00:00 / 03:45</div>
+                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
             </div>
-            <div class="waveform-wrapper">
-                <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--accent-color) 30%, #e2e8f0 30%);"></div>
+            <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
+                <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
             </div>
         </div>
         <div class="volume-control">
-            <div class="mute-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            </div>
-            <input type="range" class="volume-slider" min="0" max="100" value="80">
+            <span id="muteBtn" class="mute-icon" onclick="toggleMute()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </span>
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
         </div>
-        <button class="close-player-btn" onclick="closePlayer()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <button class="close-player-btn" onclick="closeGlobalPlayer()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
     </div>
 
-    <div class="modal-overlay" id="latestModal">
+    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
         <div class="modal-box">
-            <button class="modal-close-btn" onclick="toggleModal('latestModal')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <button class="modal-close-btn" onclick="closeModal('aboutModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
+            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
             <div class="modal-content">
-                <h2 class="modal-title">最新動態</h2>
-                <div class="latest-list">
-                    <div class="latest-item" onclick="openPlayer('清晨的紅樹林與白鷺鷥')">
-                        <div style="width: 64px; height: 64px; background: #cbd5e1; border-radius: 8px; flex-shrink: 0;"></div>
-                        <div class="latest-item-info">
-                            <div class="latest-item-title">清晨的紅樹林與白鷺鷥</div>
-                            <div class="latest-item-meta">
-                                <span>2026-04-12</span>
-                                <span class="meta-category cat-nature">自然生態</span>
-                            </div>
-                        </div>
-                    </div>
+                <h2 class="modal-title">海佃地圖<br><span style="font-size: 18px; color: #7f8c8d; font-family:'Courier New', Courier, monospace;">Haidian Hidden Library</span></h2>
+                <div class="modal-tag">Hidden below, growing beyond.</div>
+                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
+                <div class="quote-block">
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
+                    <p class="modal-text" style="font-size: 14px;">圖書室是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;">
+                <h3 class="modal-title" style="font-size: 18px;">聯絡我們</h3>
+                <p class="modal-text">若對本計畫有任何疑問，或想參與聲景地圖的協作與推廣，歡迎與圖書教師聯繫：</p>
+                <div style="background: #f8fafc; padding: 15px 20px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid #e2e8f0;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <div><strong style="color: #2c3e50; font-size:15px;">海佃國小 地下圖書室</strong><br><span style="font-size: 13px; color: #64748b; font-family:'Courier New', Courier, monospace;">Haidian Hidden Library</span></div>
                 </div>
             </div>
         </div>
     </div>
-
+    
     <script>
-        // 1. 初始化 Leaflet 地圖
-        const map = L.map('map', {
-            zoomControl: false, 
-            attributionControl: false
-        }).setView([23.033, 120.190], 14);
+        var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0278, 120.2004], 15);
+        
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
+        
+        // 🌟 新增 ESRI 衛星與 OSM 標準圖資
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, zIndex: 1 });
+        var esriSatLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri', maxZoom: 19, zIndex: 1 });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            maxZoom: 20
-        }).addTo(map);
+        var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
+        
+        var history1875Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1875-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1900Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1900-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1920Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1920-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
+        var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
 
-        // 2. UI 開關邏輯
-        function toggleDrawer(panelId) {
-            const panel = document.getElementById(panelId);
-            if (panel) panel.classList.toggle('collapsed');
-        }
+        taiwanLayer.addTo(map);
 
-        function toggleModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) modal.classList.toggle('active');
-        }
+        function switchBasemap(val) {
+            // 🌟 1. 卸載目前所有圖層
+            allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+            allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', function(e) {
-                if (e.target === this) this.classList.remove('active');
+            // 🌟 2. 雙向同步主選單與 Modal 的 radio 狀態
+            document.querySelectorAll('input[name="basemap"]').forEach(el => {
+                el.checked = (el.value === val);
             });
-        });
+            document.querySelectorAll('input[name="basemap_modal"]').forEach(el => {
+                el.checked = (el.value === val);
+            });
 
-        // 3. 🔥 解決高度遮擋：動態更新播放器高度給 CSS 變數
-        function updatePlayerHeight() {
-            const player = document.getElementById('globalPlayer');
-            if (!player) return;
+            var extLabel = document.getElementById('activeExtendedLayerLabel');
+            var extText = document.getElementById('extendedLayerNameText');
+            var opacityCtrl = document.getElementById('opacityControl');
+            
+            var histNames = {
+                'history_1875': '1874 府城街道圖',
+                'history_tainan': '1895 臺南府迅速測圖',
+                'history_1900': '1900 臺南府城內外略圖',
+                'history_1904': '1904 臺灣堡圖',
+                'history_1920': '1920 臺南市區改正圖',
+                'history_1921': '1921 臺灣堡圖',
+                'history_1944': '1944 美軍航照圖'
+            };
 
-            // 只有在 active 時計算高度，關閉時歸零
-            if (player.classList.contains('active')) {
-                // 手機版跟電腦版的底部預留距離(Gap)微調
-                const isMobile = window.innerWidth <= 600;
-                const bottomGap = isMobile ? 15 : 20; 
-                const totalHeight = player.offsetHeight + bottomGap;
+            // 🌟 3. 判斷並載入
+            if (val.startsWith('history')) {
+                extLabel.style.display = 'block'; 
+                extText.innerText = histNames[val];
+                opacityCtrl.style.display = 'block';
                 
-                document.documentElement.style.setProperty('--player-height', totalHeight + 'px');
+                // 桌機版隱藏主選單已有的提示
+                if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
+                    extLabel.style.display = 'none';
+                }
+                
+                // 🌟 自動切換：1944 強制搭配 ESRI 衛星
+                var base = (val === 'history_1944') ? esriSatLayer : taiwanLayer;
+                map.addLayer(base);
+                
+                // 載入歷史疊圖
+                if (val === 'history_1875') map.addLayer(history1875Layer);
+                else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
+                else if (val === 'history_1900') map.addLayer(history1900Layer);
+                else if (val === 'history_1904') map.addLayer(history1904Layer);
+                else if (val === 'history_1920') map.addLayer(history1920Layer);
+                else if (val === 'history_1921') map.addLayer(history1921Layer);
+                else if (val === 'history_1944') map.addLayer(history1944Layer);
+                
             } else {
-                document.documentElement.style.setProperty('--player-height', '0px');
+                extLabel.style.display = 'none'; 
+                opacityCtrl.style.display = 'none';
+                
+                // 載入現代圖資
+                if (val === 'global') map.addLayer(globalLayer);
+                else if (val === 'esri_sat') map.addLayer(esriSatLayer);
+                else if (val === 'osm') map.addLayer(osmLayer);
+                else map.addLayer(taiwanLayer);
             }
         }
 
-        // 監聽視窗變形 (如螢幕旋轉)
-        window.addEventListener('resize', updatePlayerHeight);
-
-        // 4. 播放器控制邏輯
-        let isPlaying = false;
-        function openPlayer(title) {
-            document.getElementById('playerTitle').innerText = title;
-            document.getElementById('globalPlayer').classList.add('active');
-            
-            // 🔥 呼叫更新高度 (加一點 setTimeout 確保 DOM 渲染取得正確尺寸)
-            setTimeout(updatePlayerHeight, 50);
-            
-            isPlaying = false; 
-            togglePlayState();
-            
-            // 關閉 Modal 以防重疊
-            const latestModal = document.getElementById('latestModal');
-            if (latestModal) latestModal.classList.remove('active');
+        function updateOpacity(val) {
+            document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
+            allHistoryLayers.forEach(l => l.setOpacity(val));
         }
 
-        function closePlayer() {
-            document.getElementById('globalPlayer').classList.remove('active');
-            
-            // 🔥 關閉播放器時，將高度歸零，讓 Popup 回到原位
-            updatePlayerHeight();
-            
-            isPlaying = true; 
-            togglePlayState();
-        }
-
-        function togglePlayState() {
-            isPlaying = !isPlaying;
-            const playIcon = document.getElementById('iconPlay');
-            const pauseIcon = document.getElementById('iconPause');
-            const playBtn = document.getElementById('playBtn');
-            
-            if (isPlaying) {
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-                playBtn.style.background = '#e74c3c'; 
-            } else {
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-                playBtn.style.background = 'var(--accent-color)';
-            }
-        }
-
-        // 5. 測試標記 (Marker) 與氣泡 (Popup) 生成
-        const sampleMarker = L.marker([23.033, 120.190]).addTo(map);
-        
-        const popupHTML = `
-            <div class="sound-card">
-                <div style="width: 100%; height: 140px; background: #94a3b8; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">聲音照片</div>
-                <div class="sound-info">
-                    <h3 class="sound-title">清晨的紅樹林與白鷺鷥</h3>
-                    <div class="card-meta-box">
-                        <div class="meta-row">
-                            <span class="meta-author-name">在地收音員</span>
-                            <span class="meta-date-text">2026-04-12</span>
-                        </div>
-                        <div class="card-tags-row">
-                            <span class="meta-category cat-nature">自然生態</span>
-                        </div>
-                    </div>
-                    <p class="sound-desc">海佃溪沿岸的紅樹林生態豐富，清晨時分可以聽見各種水鳥的鳴叫與水波拍打聲交織的自然交響樂。</p>
-                    <button class="btn-play-main" onclick="openPlayer('清晨的紅樹林與白鷺鷥')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
-                        播放聲音
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        sampleMarker.bindPopup(popupHTML, {
-            maxWidth: 320,
-            minWidth: 280,
-            className: 'custom-popup'
+        map.pm.setLang('zh-TW', {
+            tooltips: { placeMarker: '點擊放置標記', firstVertex: '點擊地圖放置第一個起點', continueLine: '點擊繼續畫線', finishLine: '點擊最後一個節點完成路線', finishPoly: '點擊第一個起點完成多邊形', finishRect: '點擊並拖曳繪製矩形', edit: '拖曳節點以編輯形狀', cut: '剪下圖層', delete: '點擊你想刪除的圖層' },
+            actions: { cancel: '取消', finish: '完成', removeLastVertex: '移除最後一點' },
+            buttonTitles: { drawPolyButton: '畫多邊形範圍', drawLineButton: '畫折線路徑', drawRectButton: '畫矩形範圍', deleteButton: '單件刪除工具' }
         });
 
+        var geomanControl = map.pm.addControls({ position: 'topright', drawMarker: false, drawCircleMarker: false, drawCircle: false, drawText: false, drawRectangle: true, editMode: false, dragMode: false, cutPolygon: false, rotateMode: false, removalMode: true });
+
+        map.pm.Toolbar.createCustomControl({
+            name: 'clearAllBtn', block: 'edit', title: '一鍵全部清除', className: 'custom-clear-icon', 
+            onClick: () => {
+                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
+                var clearBtn = document.getElementById('clearRouteBtn');
+                if(clearBtn) toggleRoute('clear', clearBtn);
+            }, toggle: false
+        });
+
+        setTimeout(() => {
+            var pmToolbars = document.querySelectorAll('.leaflet-pm-toolbar');
+            var container = document.getElementById('geomanContainer');
+            if (pmToolbars.length > 0 && container) { pmToolbars.forEach(tb => container.appendChild(tb)); }
+        }, 100);
+
+        map.on('moveend', function() {
+            var center = map.getCenter();
+            var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
+            
+            var checkedBasemap = document.querySelector('input[name="basemap"]:checked') || document.querySelector('input[name="basemap_modal"]:checked');
+            if (!checkedBasemap) return;
+            var selectedBasemap = checkedBasemap.value;
+            
+            if (selectedBasemap === 'taiwan' || selectedBasemap.startsWith('history')) { 
+                if (!inTaiwan) {
+                    if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
+                    if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
+                    if (map.hasLayer(esriSatLayer)) map.removeLayer(esriSatLayer);
+                } else {
+                    var underlying = (selectedBasemap === 'history_1944') ? esriSatLayer : taiwanLayer;
+                    if (!map.hasLayer(underlying)) map.addLayer(underlying);
+                    if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
+                }
+            }
+        });
+        
+        function updateHeaderVisibility(hide) {
+            if (window.innerWidth <= 600) {
+                var header = document.querySelector('.glass-header');
+                var pullTab = document.getElementById('headerPullTab');
+                if (hide) {
+                    header.classList.add('hidden-up');
+                    if (pullTab) pullTab.classList.add('visible');
+                } else {
+                    header.classList.remove('hidden-up');
+                    if (pullTab) pullTab.classList.remove('visible');
+                }
+            }
+        }
+        
+        map.on('dragstart', () => updateHeaderVisibility(true)); 
+        
+        var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
+        var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
+        var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
+        var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
+        var routeTimeout = null; 
+        var currentGeoFenceBufferLayer = null; 
+        var globalMarkerMap = {}; 
+
+        // 🌟 終極絕對定心引擎：透過像素偏移精準控制卡片著陸點
+        function getFocusOffset() {
+            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
+            var isMobile = window.innerWidth <= 600;
+            
+            // 抓取螢幕總高度
+            var H = window.innerHeight;
+            
+            // 播放條出現時的安全扣除高度 (確保底部不被遮擋)
+            var barH = isPlayerActive ? (isMobile ? 180 : 100) : 0;
+            
+            // 偏移公式：中心點 - (畫面下半部可用空間) + 40px安全距
+            return (H / 2) - barH - 40;
+        }
+
+        function forceFocusMarker(marker) {
+            if (!marker || !marker.getLatLng) return;
+            setTimeout(() => {
+                var pt = map.project(marker.getLatLng(), map.getZoom());
+                // 套用絕對 Y 軸偏移
+                pt.y -= getFocusOffset();
+                // 絕對平移，捨棄原生 autoPan
+                map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+            }, 100);
+        }
+
+        map.on('popupopen', function(e) {
+            updateHeaderVisibility(true);
+            forceFocusMarker(e.popup._source);
+            setTimeout(updateCardButtonUI, 50);
+        });
+
+        setTimeout(() => {
+            const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
+            uis.forEach(id => {
+                let el = document.getElementById(id);
+                // 防干擾：確保只有按鈕本身吃點擊
+                if(el) { L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); }
+            });
+            let header = document.querySelector('.glass-header');
+            if(header) { L.DomEvent.disableClickPropagation(header); L.DomEvent.disableScrollPropagation(header); }
+        }, 500);
+
+        function closeAllDrawers() {
+            document.getElementById('sidePanel').classList.add('collapsed');
+            document.getElementById('routePanel').classList.add('collapsed');
+            document.getElementById('rightToolsWrapper').classList.remove('open');
+            document.getElementById('globalPlayer').classList.remove('force-hide');
+        }
+
+        function togglePanel(id, event) {
+            if (event) event.stopPropagation();
+            var target = document.getElementById(id);
+            var isClosed = target.classList.contains('collapsed');
+            closeAllDrawers();
+
+            if (isClosed) {
+                target.classList.remove('collapsed');
+                if(id === 'routePanel' || id === 'sidePanel') {
+                    document.getElementById('globalPlayer').classList.add('force-hide');
+                }
+            }
+        }
+
+        function openCustomDrawHelp() {
+            closeAllDrawers();
+            closeGlobalPlayer(); 
+            map.closePopup();    
+            document.getElementById('drawModeHUD').classList.add('active');
+            
+            setTimeout(() => {
+                alert('進入手繪模式！\n\n1. 請點選畫面左側的繪圖按鈕描繪範圍。\n2. 系統將自動為您導航該範圍的專屬路線！\n\n(完成後可點選紅色 X 退出模式)');
+            }, 100);
+        }
+
+        function exitDrawMode() {
+            document.getElementById('drawModeHUD').classList.remove('active');
+        }
+
+        function updateCardButtonUI() {
+            document.querySelectorAll('.btn-play-main').forEach(btn => {
+                if (btn.id && btn.id.startsWith('card-btn-')) {
+                    btn.classList.remove('playing');
+                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span>`;
+                }
+            });
+            if (currentAudioUid && !globalAudio.paused) {
+                var activeBtn = document.getElementById('card-btn-' + currentAudioUid);
+                if (activeBtn) {
+                    activeBtn.classList.add('playing');
+                    activeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> <span>暫停播放</span>`;
+                }
+            }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            var m = Math.floor(seconds / 60);
+            var s = Math.floor(seconds % 60);
+            return (m < 10 ? '0'+m : m) + ':' + (s < 10 ? '0'+s : s);
+        }
+
+        globalAudio.addEventListener('play', updateCardButtonUI);
+        globalAudio.addEventListener('pause', updateCardButtonUI);
+        globalAudio.addEventListener('ended', () => {
+            updateCardButtonUI();
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+            document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`;
+            if (isRoutePlaying) { currentRouteIndex++; routeTimeout = setTimeout(playNextRoutePoint, 1500); }
+        });
+
+        window.toggleCardPlay = function(event, uid) {
+            event.preventDefault(); 
+            event.stopPropagation();
+            if (currentAudioUid === uid) {
+                toggleGlobalAudio(); 
+            } else {
+                startGlobalPlayback(uid); 
+            }
+        };
+
+        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
+
+        fetch(API_URL).then(res => res.json()).then(data => { 
+            allMarkersData = data; 
+            renderMarkers(data); 
+            renderLatestSubmissions(data); 
+        });
+
+        function createMarker(item) {
+            var cleanCat = item.category.split(/[(（]/)[0].trim();
+            var rawDate = item.date.replace(" 00:00:00", "");
+            var displayDate = rawDate;
+            if(rawDate.includes(":")) { var parts = rawDate.split(":"); displayDate = parts[0] + ":" + parts[1]; }
+            displayDate = displayDate.replace(/-/g, "/");
+            
+            var catClass = "cat-default";
+            if (cleanCat.includes("自然")) catClass = "cat-nature";
+            else if (cleanCat.includes("常民")) catClass = "cat-culture";
+            else if (cleanCat.includes("活動") || cleanCat.includes("產業")) catClass = "cat-industry";
+            else if (cleanCat.includes("空間")) catClass = "cat-space";
+            else if (cleanCat.includes("歲月")) catClass = "cat-history";
+
+            var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
+            var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
+            var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
+            
+            var cardHTML = `
+                <div class="sound-card">
+                    <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
+                    <div class="sound-info">
+                        <h3 class="sound-title">${item.title}</h3>
+                        
+                        <div class="card-meta-box">
+                            <div class="meta-row">
+                                <span class="meta-item meta-author-name" title="${item.author}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                    ${item.author}
+                                </span>
+                                <span class="meta-item meta-date-text">${timeSvg} ${displayDate}</span>
+                            </div>
+                            <div class="card-tags-row">
+                                <span class="meta-category ${catClass}">${cleanCat}</span>
+                                ${gpsHTML}
+                            </div>
+                        </div>
+
+                        <p class="sound-desc">${item.description}</p>
+                        ${audioHTML}
+                        <details class="admin-menu">
+                            <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
+                            <div class="admin-dropdown">
+                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=提出勘誤&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> 勘誤</a><span style="color:#e2e8f0">|</span>
+                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=原作者申請下架&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> 下架</a>
+                            </div>
+                        </details>
+                    </div>
+                </div>`;
+            
+            // 🌟 絕對禁用 Leaflet 原生的 autoPan 防碰撞機制，避免跟我們的手動平移發生衝突！
+            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false, offset: [0, -10] });
+            globalMarkerMap[item.uid] = marker;
+            
+            marker.on('click', (e) => { 
+                L.DomEvent.stopPropagation(e);
+                isRoutePlaying = false; 
+                clearTimeout(routeTimeout); 
+                var clearBtn = document.getElementById('clearRouteBtn');
+                if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+            });
+            
+            return marker;
+        }
+
+        function renderLatestSubmissions(data) {
+            var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
+            var sortedData = data.slice().reverse(); 
+            
+            var top10 = sortedData.slice(0, 10);
+            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
+            top10.forEach(item => {
+                var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
+                latestListDiv.innerHTML += `
+                    <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
+                        <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
+                        <div class="latest-item-info">
+                            <div class="latest-item-title">${item.title}</div>
+                            <div class="latest-item-meta">
+                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.author}</span>
+                                <span style="font-family:'Courier New', monospace;">${rawDate}</span>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function focusMarkerOnMap(uid) {
+            isRoutePlaying = false; 
+            clearTimeout(routeTimeout);
+            
+            var clearBtn = document.getElementById('clearRouteBtn');
+            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+            
+            closeAllDrawers();
+            
+            var targetMarker = globalMarkerMap[uid];
+            if(targetMarker) {
+                markerCluster.zoomToShowLayer(targetMarker, () => {
+                    targetMarker.openPopup();
+                });
+            }
+        }
+
+        function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
+        
+        function filterMarkers() {
+            if (currentRouteType) return; 
+            var s = document.getElementById('searchInput').value.toLowerCase();
+            var cat = document.querySelector('input[name="catFilter"]:checked').value;
+            var hLimit = parseInt(document.getElementById('timeSlider').value);
+            var displayTime = hLimit === -1 ? "全部時段" : hLimit + ":00 - " + hLimit + ":59";
+            document.getElementById('timeDisplay').innerText = displayTime;
+            renderMarkers(allMarkersData.filter(i => (i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s)) && (cat === 'all' || i.category.includes(cat)) && (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit))));
+        }
+
+        function executeStandardRoute(type, actualPathCoords) {
+            if (routePointsData.length < 2) { 
+                if (type && type.startsWith('geofence')) {
+                    alert('目前此範圍內的聲景作品不足 2 筆，無法啟動自動導航播放。但已為您標示出空間涵蓋範圍與路徑！快來投稿吧！');
+                    markerCluster.clearLayers();
+                    routeMarkerObjects = [];
+                    routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
+                    map.addLayer(markerCluster); 
+                    
+                    if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+                    if (actualPathCoords) {
+                        currentRouteLine = L.polyline(actualPathCoords, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
+                    }
+                    map.fitBounds(currentGeoFenceBufferLayer.getBounds(), { padding: [50, 50] });
+                    closeAllDrawers();
+                    isRoutePlaying = false;
+                    return; 
+                } else {
+                    alert('目前該主題的聲景資料不足以產生路線！'); 
+                    toggleRoute('clear', document.getElementById('clearRouteBtn')); 
+                    return; 
+                }
+            }
+
+            markerCluster.clearLayers(); routeMarkerObjects = [];
+            routePointsData.forEach(item => { var m = createMarker(item); routeMarkerObjects.push(m); markerCluster.addLayer(m); });
+            map.addLayer(markerCluster);
+
+            if (currentRouteLine) map.removeLayer(currentRouteLine);
+            
+            var coordsToDraw = actualPathCoords ? actualPathCoords : routePointsData.map(p => [p.lat, p.lon]);
+            currentRouteLine = L.polyline(coordsToDraw, { color: '#e74c3c', weight: 4, opacity: 0.8, dashArray: '10, 15', className: 'route-path-animated' }).addTo(map);
+            
+            map.fitBounds(currentGeoFenceBufferLayer ? currentGeoFenceBufferLayer.getBounds() : currentRouteLine.getBounds(), { padding: [50, 50] });
+
+            currentRouteIndex = 0;
+            closeAllDrawers(); 
+            routeTimeout = setTimeout(playNextRoutePoint, 1500); 
+        }
+
+        function executeCustomGeofence(bufferPolygon, actualPathCoords) {
+            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
+            if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('clearRouteBtn').style.display = 'block';
+
+            currentRouteType = 'custom';
+            isRoutePlaying = true;
+
+            currentGeoFenceBufferLayer = L.geoJSON(bufferPolygon, { style: { color: '#8e44ad', weight: 2, opacity: 0.8, fillColor: '#8e44ad', fillOpacity: 0.15 } }).addTo(map);
+            routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), bufferPolygon));
+
+            executeStandardRoute('geofence_custom', actualPathCoords);
+        }
+
+        map.on('pm:create', function(e) {
+            var layer = e.layer;
+            var shape = e.shape; 
+            var geojson = layer.toGeoJSON();
+            var searchPolygon;
+            var pathCoords = null;
+
+            if (shape === 'Line' || shape === 'LineString') {
+                searchPolygon = turf.buffer(geojson, 200, { units: 'meters' });
+                pathCoords = geojson.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+            } else {
+                searchPolygon = geojson;
+            }
+
+            map.removeLayer(layer);
+            executeCustomGeofence(searchPolygon, pathCoords);
+        });
+
+        function toggleRoute(type, btnElement) {
+            document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
+            if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
+
+            if (type === 'clear' || currentRouteType === type) {
+                currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
+                document.getElementById('clearRouteBtn').style.display = 'none';
+                if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+                map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
+                
+                clearTimeout(routeTimeout); 
+                
+                filterMarkers(); return;
+            }
+
+            currentRouteType = type; isRoutePlaying = true;
+            btnElement.classList.add('active');
+            document.getElementById('clearRouteBtn').style.display = 'block';
+
+            if (type === 'nature') {
+                routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
+                executeStandardRoute(type, null);
+            }
+            else if (type === 'culture') {
+                routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
+                executeStandardRoute(type, null);
+            }
+            else if (type === 'geofence_shanhai') {
+                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
+                var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRVuVP_KljACFPTdkVfrwadoOxmvz6omF30Qz46Hy3C7YOeMXx69QubqfBkeGEt8FNqsqzDk-v3jZN-/pub?gid=0&single=true&output=csv"; 
+                
+                fetch(csvUrl)
+                .then(res => res.text())
+                .then(csv => {
+                    var lines = csv.split('\n');
+                    var parsedPoints = [];
+                    
+                    for (var i = 1; i < lines.length; i++) {
+                        var cols = lines[i].split(',');
+                        if (cols.length >= 3) {
+                            var seq = parseInt(cols[0].trim());
+                            var lat = parseFloat(cols[1].trim());
+                            var lng = parseFloat(cols[2].trim());
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                parsedPoints.push({seq: isNaN(seq) ? i : seq, pt: [lng, lat]});
+                            }
+                        }
+                    }
+                    parsedPoints.sort((a, b) => a.seq - b.seq);
+                    
+                    var shanhaiSegments = [];
+                    var currentSeg = [];
+                    for(var j = 0; j < parsedPoints.length; j++) {
+                        var pt = parsedPoints[j].pt;
+                        if(currentSeg.length === 0) {
+                            currentSeg.push(pt);
+                        } else {
+                            var prev = currentSeg[currentSeg.length - 1];
+                            var dx = pt[0] - prev[0];
+                            var dy = pt[1] - prev[1];
+                            var distSq = dx*dx + dy*dy;
+                            
+                            if(distSq > 0.0004) {
+                                shanhaiSegments.push(currentSeg);
+                                currentSeg = [pt];
+                            } else {
+                                currentSeg.push(pt);
+                            }
+                        }
+                    }
+                    if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
+
+                    if (shanhaiSegments.length > 0) {
+                        var riverLine = turf.multiLineString(shanhaiSegments);
+                        var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
+                        var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
+
+                        currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
+                        routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                        
+                        var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]]));
+                        executeStandardRoute(type, leafletPath);
+                        
+                    } else {
+                        alert("解析 CSV 失敗：沒有找到有效的座標資料，請檢查 Google Sheet 格式。");
+                        toggleRoute('clear', document.getElementById('clearRouteBtn'));
+                    }
+                }).catch(err => {
+                    alert("載入失敗，請檢查 CSV 網址是否正確發佈到網路！錯誤訊息：" + err);
+                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
+                });
+            }
+            else if (type.startsWith('geofence')) {
+                var p = { 
+                    yanshui: [
+                        [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
+                        [120.27584039175895, 23.05921724368109], [120.2739422242592, 23.059387104064925], [120.27350655424726, 23.059518930599694],
+                        [120.2712411395911, 23.060411543154373], [120.27018662376139, 23.06033385960511], [120.26886115815427, 23.059964335654627],
+                        [120.26764857984784, 23.059643471306813], [120.26349983285843, 23.05930129515714], [120.26188599978201, 23.05817662130849],
+                        [120.26104757571056, 23.058055584982483], [120.25950026652282, 23.058256333640728], [120.25817684700559, 23.05800217814506],
+                        [120.25743206076987, 23.057663327674405], [120.2541884164761, 23.057239581979474], [120.25283848536998, 23.05755592133056],
+                        [120.2500743878162, 23.058318600797904], [120.24814599555151, 23.05879847973216], [120.24677991369902, 23.05829409719483],
+                        [120.24561564440518, 23.057913636093204], [120.24509624542281, 23.057611289377135], [120.24397231051154, 23.05635720183335],
+                        [120.24351919458041, 23.056051400053036], [120.24187966600437, 23.054373504952522], [120.24086287141245, 23.052705654860617],
+                        [120.23814053401446, 23.0506269168569], [120.23471109545989, 23.048841639655777], [120.22830788475119, 23.045147425533955],
+                        [120.22627856940932, 23.042779030007566], [120.22198625837723, 23.03371889460604], [120.21998846571074, 23.02859525133836],
+                        [120.2160653710788, 23.025032341399523], [120.21340421269593, 23.024235029547228], [120.20803944247677, 23.023504132770995],
+                        [120.20155526350982, 23.022707627184147], [120.19482101993754, 23.02019305113072], [120.18921656345344, 23.017587051277644],
+                        [120.18361849583766, 23.014040029201382], [120.18147834748504, 23.012433642878918], [120.18094854336033, 23.011767782344492],
+                        [120.17576574284755, 23.00781362154153], [120.16696924468056, 23.005165980507726], [120.16333587252535, 23.00561969571237],
+                        [120.15874176242727, 23.00626174830066], [120.15472979194732, 23.005319455699066], [120.14701687759828, 23.002277784871836],
+                        [120.14296840066538, 23.001136328022], [120.1416405455451, 22.999745274471707], [120.13809958714228, 22.9937837390831]
+                    ], 
+                    jianan: [
+                        [120.271733, 23.108189], [120.271038, 23.105101], [120.270575, 23.104705], [120.270641, 23.103944],
+                        [120.270459, 23.102986], [120.270906, 23.102575], [120.270945, 23.101577], [120.270845, 23.101480],
+                        [120.270995, 23.099969], [120.270967, 23.099612], [120.270792, 23.097123], [120.270542, 23.096418],
+                        [120.266026, 23.095475], [120.265564, 23.094727], [120.265462, 23.094005], [120.265518, 23.091660],
+                        [120.265629, 23.091261], [120.269064, 23.088363], [120.269416, 23.087848], [120.269379, 23.086982],
+                        [120.269296, 23.086447], [120.269139, 23.086209], [120.265131, 23.084858], [120.263988, 23.084731],
+                        [120.260765, 23.083720], [120.259342, 23.082692], [120.258908, 23.082548], [120.257116, 23.082650],
+                        [120.256276, 23.082497], [120.253598, 23.080228], [120.253080, 23.079565], [120.252896, 23.077889],
+                        [120.252535, 23.077404], [120.252101, 23.077175], [120.251853, 23.076717], [120.251955, 23.075459],
+                        [120.251345, 23.074278], [120.251291, 23.074205], [120.248718, 23.071947], [120.245708, 23.066739],
+                        [120.243336, 23.062568], [120.240793, 23.060216], [120.236847, 23.056810], [120.230292, 23.051061],
+                        [120.226851, 23.045736], [120.220451, 23.036356], [120.216766, 23.030920], [120.212424, 23.028814],
+                        [120.208260, 23.028657], [120.193166, 23.029837], [120.189832, 23.029168], [120.176875, 23.025377],
+                        [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
+                        [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
+                        [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
+                    ] 
+                };
+                
+                var riverKey = type.split('_')[1];
+                var riverLine = turf.lineString(p[riverKey]);
+                var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
+
+                currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
+                routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                
+                var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
+                executeStandardRoute(type, leafletPath);
+            }
+        }
+
+        function playNextRoutePoint() {
+            if (!isRoutePlaying) return; 
+            if (currentRouteIndex >= routePointsData.length) { alert("路線探索完畢！"); isRoutePlaying = false; return; }
+            var marker = routeMarkerObjects[currentRouteIndex];
+            markerCluster.zoomToShowLayer(marker, () => {
+                if (!isRoutePlaying) return;
+                marker.openPopup();
+                if (routePointsData[currentRouteIndex].audioUrl) { prepareGlobalPlayer(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
+                else { routeTimeout = setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
+            });
+        }
+
+        function prepareGlobalPlayer(uid) {
+            var item = allMarkersData.find(i => i.uid === uid); if (!item) return;
+            if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
+            currentAudioUid = uid; 
+            
+            var header = document.querySelector('.glass-header');
+            if (header) header.classList.add('compact-mode');
+            document.getElementById('globalPlayer').classList.add('active');
+
+            // 🌟 啟動播放時，強制對卡片重新執行絕對定位防爆下壓
+            var m = globalMarkerMap[uid];
+            if(m && m.isPopupOpen()) {
+                forceFocusMarker(m);
+            }
+            
+            var titleContainer = document.getElementById('playerTitleContainer');
+            var titleUI = document.getElementById('playerTitleUI');
+            var displayText = item.title + " (採集者: " + item.author + ")";
+            titleUI.innerText = displayText;
+            titleUI.classList.remove('marquee-text');
+            
+            setTimeout(() => {
+                if (titleUI.scrollWidth > titleContainer.clientWidth) {
+                    var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+                    titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
+                    titleUI.classList.add('marquee-text');
+                }
+            }, 100);
+
+            var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
+            document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
+            document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
+            
+            globalAudio.src = item.audioUrl; 
+            globalAudio.play(); 
+            
+            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
+        }
+        
+        function startGlobalPlayback(uid) { 
+            isRoutePlaying = false; 
+            clearTimeout(routeTimeout);
+            prepareGlobalPlayer(uid); 
+        }
+
+        function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
+        
+        function closeGlobalPlayer() { 
+            globalAudio.pause(); 
+            document.getElementById('globalPlayer').classList.remove('active'); 
+            var header = document.querySelector('.glass-header');
+            if (header) header.classList.remove('compact-mode'); 
+            currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
+        }
+        
+        function toggleMute() { 
+            globalAudio.muted = !globalAudio.muted;
+            var mb = document.getElementById('muteBtn'); 
+            if(globalAudio.muted || globalAudio.volume == 0) {
+                mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
+            } else {
+                mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+            }
+        }
+        function changeVolume() { 
+            globalAudio.volume = document.getElementById('volumeSlider').value; 
+            if(globalAudio.volume > 0 && globalAudio.muted) globalAudio.muted = false;
+            var mb = document.getElementById('muteBtn'); 
+            if(globalAudio.muted || globalAudio.volume == 0) mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
+            else mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+        }
+        
+        globalAudio.ontimeupdate = () => { 
+            if(globalAudio.duration) {
+                document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
+                document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration);
+            }
+        };
+        
+        function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
+        
+        function openModal(id) { closeAllDrawers(); document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
+        
+        if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
-</body>
-</html>
-```
+</body></html>
