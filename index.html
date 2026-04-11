@@ -54,6 +54,9 @@
             .glass-header.compact-mode .nav-buttons button .full-text { display: none; }
             .glass-header.compact-mode .nav-buttons button .short-text { display: inline; }
             .glass-header.compact-mode .nav-buttons button { padding: 8px 12px; border-radius: 8px; font-size: 13px; gap: 4px; }
+            
+            /* 桌面版隱藏 Modal 中重複的手機專用選項 */
+            .mobile-only-modal { display: none !important; }
         }
 
         .header-pull-tab { position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.1); border-top: none; border-radius: 0 0 16px 16px; width: 100px; height: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 2000; cursor: pointer; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; }
@@ -178,7 +181,7 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 修正4：為 popup 加上絕對防截斷高度限制，內容過長自動滾動，保證不破版 */
+        /* 🌟 防截斷高度限制，確保螢幕再小都不會超出畫面 */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 140px); overflow-y: auto;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
@@ -289,6 +292,11 @@
         .layer-card input { width: 18px; height: 18px; accent-color: var(--accent-color); margin:0;}
         .layer-card-content { flex: 1; font-size: 14px; color: var(--text-main); font-weight: 700; display: flex; flex-direction: column;}
         .layer-card-content span { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; font-family: 'Courier New', monospace;}
+
+        /* 🌟 手機版隱藏桌面專用圖層，極致縮減選單空間 */
+        @media (max-width: 600px) {
+            .desktop-only-history { display: none !important; }
+        }
 
         .draw-mode-hud {
             position: absolute; z-index: 1500;
@@ -526,32 +534,22 @@
                     全球通用地圖
                 </label>
                 
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+                <hr class="desktop-only-history" style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label>
-                    <input type="radio" name="basemap" value="history_1875" onchange="switchBasemap(this.value)"> 
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    1874 府城街道圖
-                </label>
-                <label>
+                <div class="desktop-only-history" style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
+                <label class="desktop-only-history">
                     <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
                     1895 臺南府迅速測圖
                 </label>
-                <label>
+                <label class="desktop-only-history">
                     <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     1904 臺灣堡圖
                 </label>
-                <label>
-                    <input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value)"> 
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    1921 臺灣堡圖
-                </label>
                 
-                <div id="activeExtendedLayerLabel" style="display:none; font-size:13px; color:var(--text-main); font-weight:800; background:#e8f8f5; padding:8px 12px; border-radius:8px; border:1px solid #a7f3d0; margin-bottom:10px;">
-                    <span style="color:#059669; font-size:11px; display:block; margin-bottom:2px;">目前載入的擴充圖層：</span>
+                <div id="activeExtendedLayerLabel" style="display:none; font-size:13px; color:var(--text-main); font-weight:800; background:#e8f8f5; padding:8px 12px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px; margin-bottom:10px;">
+                    <span style="color:#059669; font-size:11px; display:block; margin-bottom:2px;">目前載入的圖層：</span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                     <span id="extendedLayerNameText" style="color:var(--accent-color);"></span>
                 </div>
@@ -566,7 +564,7 @@
 
                 <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                    探索更多歷史圖層
+                    更多歷史圖層
                 </button>
             </div>
         </div>
@@ -578,14 +576,39 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             <div class="modal-content" style="padding: 30px 24px;">
-                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 8px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
                     更多歷史圖層
                 </h2>
-                <p style="text-align:center; font-size:13px; color:#64748b; margin-bottom:20px; line-height: 1.6;">
-                    資料介接自中央研究院 WMTS 服務。
-                </p>
                 <div class="more-layers-grid">
+                    <label class="layer-card mobile-only-modal">
+                        <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1895 臺南府迅速測圖</strong>
+                            <span>Tainan_1896B</span>
+                        </div>
+                    </label>
+                    <label class="layer-card mobile-only-modal">
+                        <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1904 臺灣堡圖</strong>
+                            <span>JM20K_1904</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1874 府城街道圖</strong>
+                            <span>Tainan_1875</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1921 臺灣堡圖</strong>
+                            <span>JM20K_1921</span>
+                        </div>
+                    </label>
                     <label class="layer-card">
                         <input type="radio" name="basemap" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
@@ -711,7 +734,6 @@
         var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         
-        // 🌟 更多圖層預先載入實例 (Lazy Loading，未啟用前絕不吃流量與資源)
         var history1900Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1900-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1907Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1907-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1911Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1911-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
@@ -726,10 +748,17 @@
             if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
             allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
+            // 確保主選單和 Modal 中的同名 radio 按鈕狀態同步
+            document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
+
             var opacityCtrl = document.getElementById('opacityControl');
             
-            // 🌟 圖層狀態連動處理
+            // 🌟 圖層狀態動態回饋機制
             var extendedNames = {
+                'history_tainan': '1895 臺南府迅速測圖',
+                'history_1904': '1904 臺灣堡圖',
+                'history_1875': '1874 府城街道圖',
+                'history_1921': '1921 臺灣堡圖',
                 'history_1900': '1900 臺南府城內外略圖',
                 'history_1907': '1907 臺南及安平市街圖',
                 'history_1911': '1911 臺南市區改正計畫圖',
@@ -739,9 +768,13 @@
             var extLabel = document.getElementById('activeExtendedLayerLabel');
             var extText = document.getElementById('extendedLayerNameText');
 
-            if (extendedNames[val]) {
+            if (val.startsWith('history')) {
                 extLabel.style.display = 'block';
                 extText.innerText = extendedNames[val];
+                // 桌機版中，若選擇的是主選單本來就有的圖層，則隱藏提示以維持畫面簡潔
+                if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
+                    extLabel.style.display = 'none';
+                }
             } else {
                 extLabel.style.display = 'none';
             }
@@ -899,7 +932,6 @@
 
             if (isClosed) {
                 target.classList.remove('collapsed');
-                // 🌟 當側選單開啟時，強力隱藏播放條防遮擋
                 if(id === 'routePanel' || id === 'sidePanel') {
                     document.getElementById('globalPlayer').classList.add('force-hide');
                 }
@@ -908,8 +940,8 @@
 
         function openCustomDrawHelp() {
             closeAllDrawers();
-            closeGlobalPlayer(); // 🌟 強制退除播放條
-            map.closePopup();    // 🌟 強制關閉卡片，絕對淨空版面
+            closeGlobalPlayer(); 
+            map.closePopup();    
             document.getElementById('drawModeHUD').classList.add('active');
             
             setTimeout(() => {
@@ -971,7 +1003,7 @@
             renderLatestSubmissions(data); 
         });
 
-        // 🌟 智慧鏡頭偏移計算：動態追蹤幾何高度，絕對保證頂部不破版！
+        // 🌟 智慧鏡頭偏移計算：桌機版高度防爆機制
         function getMapOffset() {
             var H = window.innerHeight;
             var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
@@ -981,13 +1013,13 @@
             if (isLandscape) return isPlayerActive ? 120 : 40; 
             if (isMobile) return isPlayerActive ? 250 : 180; 
             
-            // 桌機版動態追蹤：如果視窗高度較小 (< 800px)，改為從上方定位防破版；否則精準貼齊底部。
+            // 桌機版動態追蹤
             if (!isMobile) {
                 if (isPlayerActive) {
-                    if (H < 800) {
-                        return 500 - (H / 2); 
-                    }
-                    return (H / 2) - 150;
+                    // 若螢幕高度偏扁 (< 800px)，改由上方防破版定位 (讓地圖中心往上移，確保上方圖片可見)
+                    if (H < 800) return 500 - (H / 2); 
+                    // 若螢幕夠高，讓卡片完美坐在距離底部 100px 處
+                    return (H / 2) - 100;
                 }
                 return 120;
             }
@@ -1357,11 +1389,9 @@
             if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
             currentAudioUid = uid; 
             
-            // 🌟 桌機版：啟動播放時，將上層 Banner 優雅縮小至左上角
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
 
-            // 🌟 觸發標記重新置中 (搭配全新動態幾何 getMapOffset 計算)
             setTimeout(() => {
                 var m = globalMarkerMap[uid];
                 if(m && map) {
@@ -1408,7 +1438,7 @@
             globalAudio.pause(); 
             document.getElementById('globalPlayer').classList.remove('active'); 
             var header = document.querySelector('.glass-header');
-            if (header) header.classList.remove('compact-mode'); // 復原 Banner
+            if (header) header.classList.remove('compact-mode'); 
             currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
         }
         
