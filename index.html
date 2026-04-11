@@ -16,7 +16,6 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
     <script>
-        // 🌟 核心裝置偵測：辨識 iOS 裝置以啟動防彈級音量控制介面
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
@@ -42,7 +41,6 @@
 
         .nav-buttons button .short-text { display: none; }
 
-        /* 🌟 桌面版播放時，Banner 智慧縮小至左上角 */
         @media (min-width: 601px) {
             .glass-header.compact-mode {
                 width: auto; left: 20px; top: 20px; transform: translateX(0);
@@ -181,7 +179,6 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 防截斷高度限制，確保螢幕再小都不會超出畫面 */
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 140px); overflow-y: auto;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
@@ -293,7 +290,7 @@
         .layer-card-content { flex: 1; font-size: 14px; color: var(--text-main); font-weight: 700; display: flex; flex-direction: column;}
         .layer-card-content span { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; font-family: 'Courier New', monospace;}
 
-        /* 🌟 手機版隱藏桌面專用圖層，極致縮減選單空間 */
+        /* 🌟 手機版隱藏桌面專用的重複圖層，極致壓縮主選單高度 */
         @media (max-width: 600px) {
             .desktop-only-history { display: none !important; }
         }
@@ -582,63 +579,63 @@
                 </h2>
                 <div class="more-layers-grid">
                     <label class="layer-card mobile-only-modal">
-                        <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_tainan" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1895 臺南府迅速測圖</strong>
                             <span>Tainan_1896B</span>
                         </div>
                     </label>
                     <label class="layer-card mobile-only-modal">
-                        <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1904" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1904 臺灣堡圖</strong>
                             <span>JM20K_1904</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1874 府城街道圖</strong>
                             <span>Tainan_1875</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1921 臺灣堡圖</strong>
                             <span>JM20K_1921</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1900 臺南府城內外略圖</strong>
                             <span>Tainan_1900</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1907" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1907" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1907 臺南及安平市街圖</strong>
                             <span>Tainan_1907</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1911" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1911" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1911 臺南市區改正計畫圖</strong>
                             <span>Tainan_1911</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1920 臺南市區改正圖</strong>
                             <span>Tainan_1920</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap" value="history_1945" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="basemap_modal" value="history_1945" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong>1945 臺南市舊航照影像</strong>
                             <span>美軍繪製臺灣城市地圖</span>
@@ -748,12 +745,12 @@
             if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
             allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
-            // 確保主選單和 Modal 中的同名 radio 按鈕狀態同步
+            // 🌟 修正2：雙向同步兩種 name 的 radio 狀態
             document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
+            document.querySelectorAll('input[name="basemap_modal"][value="' + val + '"]').forEach(el => el.checked = true);
 
             var opacityCtrl = document.getElementById('opacityControl');
             
-            // 🌟 圖層狀態動態回饋機制
             var extendedNames = {
                 'history_tainan': '1895 臺南府迅速測圖',
                 'history_1904': '1904 臺灣堡圖',
@@ -771,7 +768,6 @@
             if (val.startsWith('history')) {
                 extLabel.style.display = 'block';
                 extText.innerText = extendedNames[val];
-                // 桌機版中，若選擇的是主選單本來就有的圖層，則隱藏提示以維持畫面簡潔
                 if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
                     extLabel.style.display = 'none';
                 }
@@ -867,7 +863,9 @@
         map.on('moveend', function() {
             var center = map.getCenter();
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
-            var selectedBasemap = document.querySelector('input[name="basemap"]:checked').value;
+            var checkedBasemap = document.querySelector('input[name="basemap"]:checked') || document.querySelector('input[name="basemap_modal"]:checked');
+            if (!checkedBasemap) return;
+            var selectedBasemap = checkedBasemap.value;
             
             if (selectedBasemap !== 'global') { 
                 if (inTaiwan) {
@@ -895,7 +893,6 @@
         }
         
         map.on('dragstart', () => updateHeaderVisibility(true)); 
-        map.on('popupopen', () => updateHeaderVisibility(true)); 
         
         var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
@@ -905,7 +902,21 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 終極防護：阻斷 UI 元件的所有點擊與捲動事件，防止穿透到地圖
+        // 🌟 1. 終極防遮擋引擎：統一由 popupopen 觸發，不再被動畫干擾
+        map.on('popupopen', function(e) {
+            updateHeaderVisibility(true);
+            setTimeout(updateCardButtonUI, 50);
+
+            var marker = e.popup._source;
+            if (marker && marker.getLatLng) {
+                setTimeout(() => {
+                    var pt = map.project(marker.getLatLng(), map.getZoom());
+                    pt.y -= getMapOffset();
+                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
+                }, 100); 
+            }
+        });
+
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
             uis.forEach(id => {
@@ -1003,7 +1014,7 @@
             renderLatestSubmissions(data); 
         });
 
-        // 🌟 智慧鏡頭偏移計算：桌機版高度防爆機制
+        // 🌟 1. 修正版動態 Y 軸追蹤引擎
         function getMapOffset() {
             var H = window.innerHeight;
             var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
@@ -1011,17 +1022,14 @@
             var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
             
             if (isLandscape) return isPlayerActive ? 120 : 40; 
-            if (isMobile) return isPlayerActive ? 250 : 180; 
+            if (isMobile) return isPlayerActive ? 220 : 150; 
             
-            // 桌機版動態追蹤
             if (!isMobile) {
                 if (isPlayerActive) {
-                    // 若螢幕高度偏扁 (< 800px)，改由上方防破版定位 (讓地圖中心往上移，確保上方圖片可見)
-                    if (H < 800) return 500 - (H / 2); 
-                    // 若螢幕夠高，讓卡片完美坐在距離底部 100px 處
+                    // 若螢幕高度夠，把目標點設在極深處，將標記推至螢幕底部邊緣
                     return (H / 2) - 100;
                 }
-                return 120;
+                return 150;
             }
         }
 
@@ -1084,17 +1092,7 @@
                 clearTimeout(routeTimeout); 
                 var clearBtn = document.getElementById('clearRouteBtn');
                 if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-                
-                setTimeout(() => {
-                    var pt = map.project(marker.getLatLng(), map.getZoom());
-                    pt.y -= getMapOffset(); 
-                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-                }, 50);
             });
-            
-            marker.on('popupopen', () => { 
-                setTimeout(updateCardButtonUI, 50); 
-            }); 
             
             return marker;
         }
@@ -1134,9 +1132,6 @@
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
                     targetMarker.openPopup();
-                    var pt = map.project(targetMarker.getLatLng(), map.getZoom()); 
-                    pt.y -= getMapOffset();
-                    map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
                 });
             }
         }
@@ -1378,7 +1373,6 @@
             markerCluster.zoomToShowLayer(marker, () => {
                 if (!isRoutePlaying) return;
                 marker.openPopup();
-                setTimeout(() => { if (map && marker) { var pt = map.project(marker.getLatLng(), map.getZoom()); pt.y -= getMapOffset(); map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 }); } }, 300);
                 if (routePointsData[currentRouteIndex].audioUrl) { prepareGlobalPlayer(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
                 else { routeTimeout = setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
             });
@@ -1392,9 +1386,10 @@
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
 
+            // 🌟 播放條升起時，手動觸發一次重新定心
             setTimeout(() => {
                 var m = globalMarkerMap[uid];
-                if(m && map) {
+                if(m && map && m.isPopupOpen()) {
                     var pt = map.project(m.getLatLng(), map.getZoom());
                     pt.y -= getMapOffset();
                     map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
