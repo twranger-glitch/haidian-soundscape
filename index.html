@@ -98,7 +98,6 @@
         .route-path-animated { animation: dashMap 20s linear infinite; }
         @keyframes dashMap { to { stroke-dashoffset: -1000; } }
 
-        /* 🌟 全局播放器 */
         .global-player { 
             position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 850px; 
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); 
@@ -114,30 +113,17 @@
         
         .player-main { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; justify-content: center;}
         
-        /* 🌟 跑馬燈專屬：智慧邊緣淡化與網格排版 */
         .player-header-row { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px; overflow: hidden; }
         
         .player-title-container { 
             flex: 1; overflow: hidden; white-space: nowrap; position: relative; min-width: 0;
-            /* Apple 風格：兩側漸層羽化，避免文字被生硬切斷 */
-            -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
-            mask-image: linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
+            -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%);
+            mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%);
         }
         
-        .player-title { 
-            display: inline-block; font-weight: 800; color: var(--text-main); font-size: 14px; margin: 0; 
-            white-space: nowrap; will-change: transform;
-        }
-        
-        /* 跑馬燈動畫 */
-        .marquee-text {
-            padding-left: 100%;
-            animation: marquee-anim 10s linear infinite;
-        }
-        @keyframes marquee-anim {
-            0% { transform: translate3d(0, 0, 0); }
-            100% { transform: translate3d(-100%, 0, 0); }
-        }
+        .player-title { display: inline-block; font-weight: 800; color: var(--text-main); font-size: 14px; margin: 0; white-space: nowrap; will-change: transform; }
+        .player-title.marquee-text { display: inline-flex; padding-left: 0; animation: marquee-anim 12s linear infinite; }
+        @keyframes marquee-anim { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         
         .player-time-display { font-size: 11px; font-family: 'Courier New', Courier, monospace; color: var(--text-muted); font-weight: 800; flex-shrink: 0; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 6px;}
 
@@ -199,17 +185,16 @@
         .sound-title { font-size: 20px; font-weight: 900; color: #1e272e; margin: 0 0 12px 0; letter-spacing: 0.5px; line-height: 1.3; }
         
         .card-meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;}
-        .meta-row { display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 13px; color: #64748b;}
+        .meta-row { display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 13px; color: #64748b; flex-wrap: wrap; gap: 6px;}
         .meta-item { display: flex; align-items: center; gap: 6px; font-weight: 600;}
         .meta-item svg { width: 14px; height: 14px; stroke-width: 2.5; }
         
         .meta-author-name { font-weight: 800; color: var(--text-main); max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-        .meta-date-text { font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px; font-size: 12px;}
+        .meta-date-text { font-family: 'Courier New', Courier, monospace; letter-spacing: 0px; font-size: 11.5px; white-space: nowrap;}
         .meta-category { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.05);}
         
         .meta-gps { background: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'Courier New', monospace; color: #64748b; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; align-items: center; gap: 4px;}
-        .meta-gps svg { color: #e74c3c; width: 12px; height: 12px; margin-right: 2px;}
-        .meta-duration { margin-left: 6px; padding-left: 6px; border-left: 1px solid #cbd5e1; color: var(--text-main); }
+        .meta-gps svg { color: #e74c3c; width: 12px; height: 12px;}
 
         .cat-nature { background: #e8f8f5; color: #0f766e; }   
         .cat-culture { background: #fef9e7; color: #b45309; }  
@@ -300,7 +285,7 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
-        /* 🌟 手機直式排版 (Portrait) */
+        /* 🌟 手機直立版 (Portrait) 極致優化 */
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -325,7 +310,7 @@
             }
             .global-player.active { bottom: 15px; }
             
-            /* iOS 裝置專屬設計：隱藏無效音量拉桿，保留實用的喇叭靜音按鈕！ */
+            /* 🌟 iOS 裝置專屬設計：隱藏無效音量拉桿，保留實用的喇叭靜音按鈕！ */
             .ios-device .volume-slider { display: none !important; }
             .ios-device .volume-control { width: auto; background: transparent; border: none; padding: 0; }
             
@@ -887,7 +872,7 @@
                     </div>
                 </div>`;
             
-            // 🌟 關閉原生 autoPan，改由程式精準控制定錨
+            // 🌟 2. 手機版防截斷：關閉原生 autoPan，統一採用自訂智慧偏移
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false });
             globalMarkerMap[item.uid] = marker;
             
@@ -1203,13 +1188,17 @@
             if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
             currentAudioUid = uid; 
             
-            // 🌟 核心防彈跑馬燈機制：自動判定字數，決定是否開啟滑動動畫
             var titleContainer = document.getElementById('playerTitleContainer');
             var titleUI = document.getElementById('playerTitleUI');
-            titleUI.innerText = item.title + " (採集者: " + item.author + ")";
+            
+            var displayText = item.title + " (採集者: " + item.author + ")";
+            titleUI.innerText = displayText;
             titleUI.classList.remove('marquee-text');
+            
             setTimeout(() => {
                 if (titleUI.scrollWidth > titleContainer.clientWidth) {
+                    var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+                    titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
                     titleUI.classList.add('marquee-text');
                 }
             }, 100);
