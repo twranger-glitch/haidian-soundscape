@@ -178,8 +178,8 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 讓卡片內容不再被 CSS 暴力裁切，保證所有內容清晰可見 */
-        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; }
+        /* 🌟 核心防截斷：保留充分高度讓內部滾動，不再被亂頂裁切 */
+        .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 160px); overflow-y: auto;}
         .leaflet-popup-content { margin: 0; width: 320px !important; }
         
         .leaflet-container a.leaflet-popup-close-button {
@@ -737,55 +737,60 @@
         taiwanLayer.addTo(map);
 
         function switchBasemap(val) {
-            allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
-            allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+            // 🌟 判斷是切換現代圖資還是歷史圖層
+            if (['global', 'taiwan', 'osm', 'esri_sat'].includes(val)) {
+                allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+                document.querySelectorAll('input[name="basemap"]').forEach(el => {
+                    if (el.value === val) el.checked = true;
+                });
+                
+                if (val === 'global') map.addLayer(globalLayer);
+                else if (val === 'taiwan') map.addLayer(taiwanLayer);
+                else if (val === 'osm') map.addLayer(osmLayer);
+                else if (val === 'esri_sat') map.addLayer(esriSatLayer);
+            } else {
+                allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+                allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
-            document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
-            document.querySelectorAll('input[name="basemap_modal"][value="' + val + '"]').forEach(el => el.checked = true);
+                document.querySelectorAll('input[name="basemap"][value="' + val + '"]').forEach(el => el.checked = true);
+                document.querySelectorAll('input[name="basemap_modal"][value="' + val + '"]').forEach(el => el.checked = true);
 
-            var opacityCtrl = document.getElementById('opacityControl');
-            var extLabel = document.getElementById('activeExtendedLayerLabel');
-            var extText = document.getElementById('extendedLayerNameText');
-            
-            var extendedNames = {
-                'history_tainan': '1895 臺南府迅速測圖',
-                'history_1904': '1904 臺灣堡圖',
-                'history_1875': '1874 府城街道圖',
-                'history_1921': '1921 臺灣堡圖',
-                'history_1900': '1900 臺南府城內外略圖',
-                'history_1920': '1920 臺南市區改正圖',
-                'history_1944': '1944 美軍航照圖'
-            };
+                var opacityCtrl = document.getElementById('opacityControl');
+                var extLabel = document.getElementById('activeExtendedLayerLabel');
+                var extText = document.getElementById('extendedLayerNameText');
+                
+                var extendedNames = {
+                    'history_tainan': '1895 臺南府迅速測圖',
+                    'history_1904': '1904 臺灣堡圖',
+                    'history_1875': '1874 府城街道圖',
+                    'history_1921': '1921 臺灣堡圖',
+                    'history_1900': '1900 臺南府城內外略圖',
+                    'history_1920': '1920 臺南市區改正圖',
+                    'history_1944': '1944 美軍航照圖'
+                };
 
-            if (val.startsWith('history')) {
                 extLabel.style.display = 'block';
                 extText.innerText = extendedNames[val];
                 if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
                     extLabel.style.display = 'none';
                 }
-            } else {
-                extLabel.style.display = 'none';
-            }
 
-            if (val === 'global') {
-                map.addLayer(globalLayer); opacityCtrl.style.display = 'none';
-            } else if (val === 'osm') {
-                map.addLayer(osmLayer); opacityCtrl.style.display = 'none';
-            } else if (val === 'esri_sat') {
-                map.addLayer(esriSatLayer); opacityCtrl.style.display = 'none';
-            } else {
-                map.addLayer(taiwanLayer);
-
-                if (val.startsWith('history')) {
-                    opacityCtrl.style.display = 'block';
-                    if (val === 'history_1904') map.addLayer(history1904Layer);
-                    else if (val === 'history_1921') map.addLayer(history1921Layer);
-                    else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
-                    else if (val === 'history_1875') map.addLayer(history1875Layer);
-                    else if (val === 'history_1900') map.addLayer(history1900Layer);
-                    else if (val === 'history_1920') map.addLayer(history1920Layer);
-                    else if (val === 'history_1944') map.addLayer(history1944Layer);
+                opacityCtrl.style.display = 'block';
+                
+                // 🌟 當選擇 1944 時，自動將底層搭配換為 ESRI 衛星影像，其餘預設為臺灣精細地圖
+                if (val === 'history_1944') {
+                    map.addLayer(esriSatLayer);
+                } else {
+                    map.addLayer(taiwanLayer);
                 }
+
+                if (val === 'history_1875') map.addLayer(history1875Layer);
+                else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
+                else if (val === 'history_1900') map.addLayer(history1900Layer);
+                else if (val === 'history_1904') map.addLayer(history1904Layer);
+                else if (val === 'history_1920') map.addLayer(history1920Layer);
+                else if (val === 'history_1921') map.addLayer(history1921Layer);
+                else if (val === 'history_1944') map.addLayer(history1944Layer);
             }
         }
 
@@ -830,8 +835,10 @@
                 if (!inTaiwan) {
                     if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
                     if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
+                    if (map.hasLayer(esriSatLayer)) map.removeLayer(esriSatLayer);
                 } else {
-                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
+                    var underlying = (selectedBasemap === 'history_1944') ? esriSatLayer : taiwanLayer;
+                    if (!map.hasLayer(underlying)) map.addLayer(underlying);
                     if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
                 }
             }
@@ -861,20 +868,11 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 終極防爆防遮擋：依賴 Leaflet 原生的 autoPanPaddingBottom，動態設定播放條高度預留空間
-        map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            setTimeout(updateCardButtonUI, 50);
-        });
-
+        // 🌟 動態設定 Leaflet 底層 AutoPan 的安全防護邊界
         function adjustMapPadding() {
             var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
-            // 手機版播放條較高，預留更多；桌機版較扁，預留 100px 足矣。
-            var paddingBottom = isPlayerActive ? (window.innerWidth <= 600 ? 200 : 100) : 10;
+            var paddingBottom = isPlayerActive ? (window.innerWidth <= 600 ? 220 : 100) : 10;
             
-            map.options.popupPane = map.getPane('popupPane');
-            
-            // 透過修改每個 popup 的 options 來強迫 leaflet 重新計算 autoPan 空間
             map.eachLayer(function(layer) {
                 if (layer instanceof L.Marker && layer.getPopup()) {
                     layer.getPopup().options.autoPanPaddingBottomRight = L.point(10, paddingBottom);
@@ -882,6 +880,11 @@
                 }
             });
         }
+
+        map.on('popupopen', function(e) {
+            updateHeaderVisibility(true);
+            setTimeout(updateCardButtonUI, 50);
+        });
 
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
@@ -1030,7 +1033,7 @@
                     </div>
                 </div>`;
             
-            // 🌟 啟用原生 autoPan 並設定預設安全距離
+            // 🌟 回歸 Leaflet 原生的 autoPan 引擎，我們只負責給定邊界距離，不再手動亂推地圖
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { 
                 autoPan: true,
                 autoPanPaddingTopLeft: L.point(10, 80),
@@ -1345,7 +1348,7 @@
                 adjustMapPadding();
                 var m = globalMarkerMap[uid];
                 if(m && map && m.isPopupOpen()) {
-                    // 只微調中心點，剩下交給 autoPan 處理
+                    // 🌟 絕對不手動做 y 軸下壓！只微調地圖中心至標記點，剩下的防碰撞與上推完全交給 Leaflet AutoPan 處理！
                     map.panTo(m.getLatLng());
                 }
             }, 100);
