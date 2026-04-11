@@ -42,7 +42,7 @@
 
         .nav-buttons button .short-text { display: none; }
 
-        /* 🌟 桌面版播放時，Banner 智慧縮小至左上角 (修正1：保留副標題、顯示短標題) */
+        /* 🌟 桌面版播放時，Banner 智慧縮小至左上角 */
         @media (min-width: 601px) {
             .glass-header.compact-mode {
                 width: auto; left: 20px; top: 20px; transform: translateX(0);
@@ -269,11 +269,27 @@
             margin-bottom: 12px; font-size: 13px; font-weight: 700; color: var(--text-main); 
             width: max-content;
         }
+        /* 🌟 高質感 SVG 替換 Emoji */
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: #34495e; font-weight: 700;}
         .custom-layer-control label svg { color: var(--text-muted); }
         .custom-layer-control label:last-child { margin-bottom: 0; }
         .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 16px; height: 16px; margin: 0; flex-shrink:0;}
         
+        .btn-more-layers {
+            width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #cbd5e1;
+            padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+            transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px;
+            margin-top: 10px; box-sizing: border-box;
+        }
+        .btn-more-layers:hover { background: #e2e8f0; color: var(--text-main); border-color: #94a3b8; }
+        
+        .more-layers-grid { display: flex; flex-direction: column; gap: 10px; }
+        .layer-card { display: flex; align-items: center; gap: 12px; background: #fff; padding: 12px 16px; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; margin:0;}
+        .layer-card:hover { border-color: var(--accent-color); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(39,174,96,0.1); }
+        .layer-card input { width: 18px; height: 18px; accent-color: var(--accent-color); margin:0;}
+        .layer-card-content { flex: 1; font-size: 14px; color: var(--text-main); font-weight: 700; display: flex; flex-direction: column;}
+        .layer-card-content span { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; font-family: 'Courier New', monospace;}
+
         .draw-mode-hud {
             position: absolute; z-index: 1500;
             background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
@@ -322,7 +338,6 @@
 
             .draw-mode-hud { left: 10px; }
 
-            /* 🌟 Grid 排版：完美壓縮空間並整合跑馬燈與靜音鍵 */
             .global-player { 
                 display: grid; grid-template-columns: auto 1fr auto auto; 
                 grid-template-areas: "play main vol close"; 
@@ -330,7 +345,6 @@
             }
             .global-player.active { bottom: 15px; }
             
-            /* 🌟 iOS 裝置專屬設計：隱藏無效音量拉桿，保留實用的喇叭靜音按鈕！ */
             .ios-device .volume-slider { display: none !important; }
             .ios-device .volume-control { width: auto; background: transparent; border: none; padding: 0; }
             
@@ -357,7 +371,6 @@
             .project-title { font-size: 15px; width: auto; }
             .nav-buttons button { padding: 6px 10px; font-size: 12px; }
             
-            /* 讓卡片能在超級扁的螢幕中滑動，絕不破版 */
             .leaflet-popup-content-wrapper { max-height: 85vh; overflow-y: auto; pointer-events: auto; }
             .leaflet-popup-content { width: 260px !important; }
             .sound-cover { height: 80px; } 
@@ -365,18 +378,16 @@
             .sound-title { font-size: 16px; margin-bottom: 6px; }
             .card-meta-box { margin-bottom: 8px; padding: 8px; }
             
-            /* 確保彈出視窗與抽屜能正常滑動且不超出螢幕 */
             .drawer-content { max-height: calc(100vh - 60px); padding: 15px; pointer-events: auto;}
             .drawer-panel { width: 320px; max-width: 60vw; }
             .modal-box { max-height: 90vh; }
             
-            /* 播放器極致壓縮 */
             .global-player { bottom: -150px; padding: 6px 16px; border-radius: 12px 12px 0 0; gap: 10px; width: auto; max-width: 90%;}
             .global-player.active { bottom: 0; }
             .waveform-wrapper { height: 18px; }
             .player-control-btn { width: 36px; height: 36px; }
             .close-player-btn { width: 28px; height: 28px; }
-            .volume-control { display: none; } /* 橫向空間太小，直接隱藏音量區給地圖讓路 */
+            .volume-control { display: none; } 
         }
     </style></head><body>
 
@@ -519,6 +530,16 @@
                 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:6px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
                 <label>
+                    <input type="radio" name="basemap" value="history_1875" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    1874 府城街道圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    1895 臺南府迅速測圖
+                </label>
+                <label>
                     <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     1904 臺灣堡圖
@@ -528,11 +549,6 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     1921 臺灣堡圖
                 </label>
-                <label>
-                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
-                    1895 臺南府測圖
-                </label>
                 
                 <div id="opacityControl" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
                     <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px; font-weight:700;">
@@ -540,6 +556,65 @@
                         <span id="opacityValue">80%</span>
                     </div>
                     <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+                </div>
+
+                <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    探索更多圖層
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
+            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 8px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    更多百年歷史圖層
+                </h2>
+                <p style="text-align:center; font-size:13px; color:#64748b; margin-bottom:20px; line-height: 1.6;">
+                    資料介接自中央研究院 WMTS 服務。<br><strong style="color:var(--accent-color);">極致效能保證：</strong>採延遲載入技術，未勾選前絕對不消耗任何流量與系統資源。
+                </p>
+                <div class="more-layers-grid">
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1900 臺南府城內外略圖</strong>
+                            <span>Tainan_1900</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1907" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1907 臺南及安平市街圖</strong>
+                            <span>Tainan_1907</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1911" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1911 臺南市區改正計畫圖</strong>
+                            <span>Tainan_1911</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1920 臺南市區改正圖</strong>
+                            <span>Tainan_1920</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap" value="history_1945" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong>1945 臺南市舊航照影像</strong>
+                            <span>美軍繪製臺灣城市地圖</span>
+                        </div>
+                    </label>
                 </div>
             </div>
         </div>
@@ -625,11 +700,19 @@
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
         
+        var history1875Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1875-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1904Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1904-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1921Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=JM20K_1921-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var historyTainanLayer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1896B-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         
-        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer];
+        // 🌟 更多圖層預先載入實例 (Lazy Loading，未啟用前絕不吃流量與資源)
+        var history1900Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1900-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1907Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1907-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1911Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1911-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1920Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1920-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+        var history1945Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_aerialphoto_1945-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
+
+        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1907Layer, history1911Layer, history1920Layer, history1945Layer];
 
         taiwanLayer.addTo(map);
 
@@ -651,6 +734,12 @@
                     if (val === 'history_1904') map.addLayer(history1904Layer);
                     else if (val === 'history_1921') map.addLayer(history1921Layer);
                     else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
+                    else if (val === 'history_1875') map.addLayer(history1875Layer);
+                    else if (val === 'history_1900') map.addLayer(history1900Layer);
+                    else if (val === 'history_1907') map.addLayer(history1907Layer);
+                    else if (val === 'history_1911') map.addLayer(history1911Layer);
+                    else if (val === 'history_1920') map.addLayer(history1920Layer);
+                    else if (val === 'history_1945') map.addLayer(history1945Layer);
                 } else {
                     opacityCtrl.style.display = 'none';
                 }
@@ -659,9 +748,7 @@
 
         function updateOpacity(val) {
             document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
-            history1904Layer.setOpacity(val);
-            history1921Layer.setOpacity(val);
-            historyTainanLayer.setOpacity(val);
+            allHistoryLayers.forEach(l => l.setOpacity(val));
         }
 
         map.pm.setLang('zh-TW', {
@@ -798,7 +885,7 @@
         function openCustomDrawHelp() {
             closeAllDrawers();
             closeGlobalPlayer(); // 🌟 修正3：強制退除播放條
-            map.closePopup();    // 🌟 修正3：強制關閉卡片，淨空版面
+            map.closePopup();    // 🌟 修正3：強制關閉卡片，絕對淨空版面
             document.getElementById('drawModeHUD').classList.add('active');
             
             setTimeout(() => {
@@ -826,7 +913,6 @@
             }
         }
 
-        // 🌟 格式化時間腳本 (轉換為 mm:ss)
         function formatTime(seconds) {
             if (isNaN(seconds)) return "00:00";
             var m = Math.floor(seconds / 60);
@@ -861,7 +947,7 @@
             renderLatestSubmissions(data); 
         });
 
-        // 🌟 智慧鏡頭偏移計算：修正2：桌機版依據螢幕高度動態回推，絕對保證不遮擋上方圖片
+        // 🌟 智慧鏡頭偏移計算：修正1：桌機版依據螢幕高度動態回推 50% 絕對保證不遮擋上方圖片
         function getMapOffset() {
             var isLandscape = window.matchMedia("(orientation: landscape) and (max-height: 600px)").matches;
             var isMobile = window.innerWidth <= 600;
@@ -926,7 +1012,6 @@
                     </div>
                 </div>`;
             
-            // 🌟 2. 手機版防截斷：關閉原生 autoPan，統一採用自訂智慧偏移
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false });
             globalMarkerMap[item.uid] = marker;
             
@@ -937,7 +1022,6 @@
                 var clearBtn = document.getElementById('clearRouteBtn');
                 if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
                 
-                // 智慧鏡頭偏移：精準預留底部空間，保證卡片完整！
                 setTimeout(() => {
                     var pt = map.project(marker.getLatLng(), map.getZoom());
                     pt.y -= getMapOffset(); 
@@ -1287,7 +1371,6 @@
             prepareGlobalPlayer(uid); 
         }
 
-        // 🌟 防彈版音量切換：完全透過 .muted 操作，解除 iOS 限制
         function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
         
         function closeGlobalPlayer() { 
