@@ -957,13 +957,21 @@
             }
         };
 
-        var API_URL = "https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec"; 
-
-        fetch(API_URL).then(res => res.json()).then(data => { 
-            allMarkersData = data; 
-            renderMarkers(data); 
-            renderLatestSubmissions(data); 
-        });
+// Phase 1: 改由 Firebase 讀取靜態快取資料，大幅提升載入速度
+        var API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json"; 
+        
+        fetch(API_URL)
+            .then(res => res.json())
+            .then(data => { 
+                var safeData = data || []; // 防呆：如果資料庫是空的，給個空陣列
+                allMarkersData = safeData; 
+                renderMarkers(safeData); 
+                renderLatestSubmissions(safeData); 
+            })
+            .catch(err => {
+                console.error("無法載入聲音地景資料：", err);
+                alert("無法連線至地圖資料庫，請檢查網路連線。");
+            });
 
         function createMarker(item) {
             var cleanCat = item.category.split(/[(（]/)[0].trim();
