@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.css" />
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
 
@@ -1392,15 +1395,114 @@
             else mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         }
         
+        // 追蹤是否已經送過 10 秒 log，避免重複送
+        let hasLogged10s = false;
+
+        globalAudio.addEventListener('play', () => {
+            hasLogged10s = false; // 每次按播放重置
+            // 記錄開始播放
+            if (currentAudioUid) logAction(currentAudioUid, 'play_start');
+        });
+
         globalAudio.ontimeupdate = () => { 
-            if(globalAudio.duration) {
+            if(globalAudio.duration) { 
                 document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
-                document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration);
-            }
+                document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration); 
+                
+                // 檢查是否播超過 10 秒，且還沒送過 log
+                if (globalAudio.currentTime > 10 && !hasLogged10s && currentAudioUid) {
+                    logAction(currentAudioUid, 'play_10s');
+                    hasLogged10s = true;
+                    console.log("已觸發 10 秒有效播放 Log！");
+                }
+            } 
         };
         
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
-        
+        // ==========================================
+        // Phase 2: Firebase Auth & Firestore 邏輯
+        // ==========================================
+
+        // 1. 初始化 Firebase (請換成你的 Config)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBXGNMbKedaTF2XjePRpFhNIv3NwRrmo_U",
+            authDomain: "haidian-soundscape.firebaseapp.com",
+            projectId: "haidian-soundscape",
+            storageBucket: "haidian-soundscape.firebasestorage.app",
+            messagingSenderId: "116926349938",
+            appId: "1:116926349938:web:5ace762dab874d323f78eb"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUser = null;
+
+        // 2. 監聽登入狀態
+        auth.onAuthStateChanged(user => {
+            currentUser = user;
+            updateAuthUI(user);
+        });
+
+        // 3. 登入/登出功能
+        function toggleLogin() {
+            if (currentUser) {
+                auth.signOut().then(() => alert("已登出"));
+            } else {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                auth.signInWithPopup(provider).catch(error => {
+                    console.error("登入失敗:", error);
+                    alert("登入失敗，請重試。");
+                });
+            }
+        }
+
+        // 4. 更新 UI (將選單中的「我要投稿」按鈕變成登入按鈕，或是新增一個登入按鈕)
+        function updateAuthUI(user) {
+            const navButtons = document.querySelector('.nav-buttons');
+            let authBtn = document.getElementById('authBtn');
+            
+            // 如果還沒有登入按鈕，建立一個
+            if (!authBtn) {
+                authBtn = document.createElement('button');
+                authBtn.id = 'authBtn';
+                authBtn.onclick = toggleLogin;
+                authBtn.style.marginLeft = '10px';
+                // 為了美觀，加上和 .btn-submit 類似的樣式，但用不同顏色
+                authBtn.className = 'btn-submit'; 
+                authBtn.style.background = '#3498db'; 
+                authBtn.style.boxShadow = '0 4px 12px rgba(52, 152, 219, 0.25)';
+                navButtons.appendChild(authBtn);
+            }
+
+            if (user) {
+                authBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span class="full-text">登出 (${user.displayName.split(' ')[0]})</span><span class="short-text">登出</span>
+                `;
+            } else {
+                authBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                    <span class="full-text">登入探險</span><span class="short-text">登入</span>
+                `;
+            }
+        }
+
+        // 5. 寫入日誌 (Log) 的核心功能
+        // eventType: 'play_start', 'play_10s', 'favorite'
+        function logAction(uid, eventType) {
+            // 如果沒登入，就用 'guest' 加上隨機碼當作 session
+            const userKey = currentUser ? currentUser.uid : 'guest_' + Math.random().toString(36).substr(2, 9);
+            
+            db.collection("traffic_log").add({
+                uid: uid,
+                eventType: eventType,
+                userKey: userKey,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(error => {
+                console.error("寫入 Log 失敗:", error);
+            });
+        }
         function openModal(id) { closeAllDrawers(); document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
