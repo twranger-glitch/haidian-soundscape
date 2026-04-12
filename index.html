@@ -1356,8 +1356,22 @@
             document.getElementById('waveBase').src = w(item.audioUrl, "bdc3c7"); document.getElementById('waveProgress').src = w(item.audioUrl, "27ae60"); document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
             document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
             
-            globalAudio.src = item.audioUrl; 
-            globalAudio.play(); 
+           // 替換音檔來源並設定 Fallback 備援機制
+        globalAudio.src = item.audioUrl;
+        
+        // 如果首選來源播放失敗 (通常是 CDN 爆了，或是 Drive 碰到防濫用機制)
+        globalAudio.onerror = function() {
+            console.warn("首選音檔載入失敗，準備啟動備援機制...");
+            if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
+                console.log("切換至備援音檔:", item.fallbackAudioUrl);
+                globalAudio.src = item.fallbackAudioUrl;
+                globalAudio.play().catch(e => console.error("備援音檔也無法播放", e));
+            } else {
+                alert("目前此聲音檔案流量過大，請稍後再試！");
+            }
+        };
+
+        globalAudio.play().catch(e => console.warn("瀏覽器自動播放限制，等待使用者互動", e));
             
             document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
         }
