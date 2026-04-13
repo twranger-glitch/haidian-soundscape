@@ -171,39 +171,44 @@
         .modal-content { padding: 30px; text-align: justify; }
         .modal-title { font-size: 22px; color: var(--text-main); margin: 0 0 8px 0; font-weight: 800; line-height: 1.3; display: flex; align-items: center; gap: 8px;}
         .modal-tag { display: inline-block; background: #f1f5f9; color: #475569; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; margin-bottom: 20px; border: 1px solid #e2e8f0; letter-spacing: 0.5px;}
-        .modal-text { font-size: 15px; color: #475569; line-height: 1.7; margin: 0 0 16px 0; }
+        
         .quote-block { margin-top: 24px; padding: 20px; background: #f8fafc; border-left: 4px solid var(--accent-color); border-radius: 0 12px 12px 0; }
 
+        /* 🌟 防爆內部滾動條與文字排版設定 */
+        .sound-desc { 
+            font-size: 13.5px; color: #475569; line-height: 1.6; 
+            margin: 0 0 12px 0; text-align: justify;
+            max-height: 90px; overflow-y: auto; padding-right: 6px;
+            scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+        }
+        .sound-desc::-webkit-scrollbar { width: 4px; }
+        .sound-desc::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .modal-text { font-size: 15px; color: #475569; line-height: 1.7; margin: 0 0 16px 0; }
+        
         .latest-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         
-        /* 🌟 SEL 高級質感 SVG 情緒徽章 樣式 */
+        /* 🌟 SEL 高級質感膠囊情緒徽章 樣式 */
         .reaction-box { 
-            display: flex; justify-content: space-around; background: #f8fafc; 
-            padding: 12px 5px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 12px;
+            display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px;
         }
         .reaction-btn { 
-            display: flex; flex-direction: column; align-items: center; gap: 6px; 
-            background: transparent; border: none; cursor: pointer; color: #94a3b8; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            font-size: 11px; font-weight: 800; letter-spacing: 0.5px; outline: none;
+            display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 4px; 
+            background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 20px; 
+            cursor: pointer; color: #64748b; 
+            transition: all 0.2s ease; 
+            font-size: 11px; font-weight: 700; padding: 6px 0; flex: 1;
+            outline: none;
         }
-        .reaction-btn svg { width: 22px; height: 22px; transition: all 0.3s ease; }
-        .reaction-btn:hover { color: #64748b; transform: translateY(-2px); }
-        .reaction-btn:active { transform: scale(0.9); }
+        .reaction-btn svg { width: 14px; height: 14px; transition: all 0.2s ease; }
+        .reaction-btn:hover { background: #e2e8f0; color: #475569; transform: translateY(-1px); }
+        .reaction-btn:active { transform: scale(0.95); }
         
-        /* 啟用狀態的專屬顏色與微透明漸層填滿 */
-        .reaction-btn.active { transform: translateY(-3px); }
-        .reaction-btn.active[data-type="calm"] { color: #10b981; filter: drop-shadow(0 4px 6px rgba(16, 185, 129, 0.2)); }
-        .reaction-btn.active[data-type="calm"] svg { fill: rgba(16, 185, 129, 0.15); }
-        
-        .reaction-btn.active[data-type="surprise"] { color: #f59e0b; filter: drop-shadow(0 4px 6px rgba(245, 158, 11, 0.2)); }
-        .reaction-btn.active[data-type="surprise"] svg { fill: rgba(245, 158, 11, 0.15); }
-        
-        .reaction-btn.active[data-type="curious"] { color: #3b82f6; filter: drop-shadow(0 4px 6px rgba(59, 130, 246, 0.2)); }
-        .reaction-btn.active[data-type="curious"] svg { fill: rgba(59, 130, 246, 0.15); }
-        
-        .reaction-btn.active[data-type="nostalgic"] { color: #8b5cf6; filter: drop-shadow(0 4px 6px rgba(139, 92, 246, 0.2)); }
-        .reaction-btn.active[data-type="nostalgic"] svg { fill: rgba(139, 92, 246, 0.15); }
+        /* 啟用狀態：精美柔和透明漸層 */
+        .reaction-btn.active { transform: translateY(-1px); border-color: transparent; }
+        .reaction-btn.active[data-type="calm"] { background: #ecfdf5; color: #10b981; border-color: #a7f3d0; box-shadow: 0 2px 6px rgba(16,185,129,0.15); }
+        .reaction-btn.active[data-type="surprise"] { background: #fffbeb; color: #f59e0b; border-color: #fde68a; box-shadow: 0 2px 6px rgba(245,158,11,0.15); }
+        .reaction-btn.active[data-type="curious"] { background: #eff6ff; color: #3b82f6; border-color: #bfdbfe; box-shadow: 0 2px 6px rgba(59,130,246,0.15); }
+        .reaction-btn.active[data-type="nostalgic"] { background: #f5f3ff; color: #8b5cf6; border-color: #ddd6fe; box-shadow: 0 2px 6px rgba(139,92,246,0.15); }
 
         .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
         .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
@@ -233,7 +238,7 @@
 
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; transition: 0.3s;}
-        .sound-info { padding: 18px; transition: 0.3s;}
+        .sound-info { padding: 16px 18px 18px 18px; transition: 0.3s;}
         .sound-title { font-size: 19px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
         
         .card-meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;}
@@ -256,8 +261,6 @@
         .cat-space { background: #ebf5fb; color: #0369a1; }    
         .cat-history { background: #f4ecf8; color: #7e22ce; }  
         .cat-default { background: #f1f5f9; color: #475569; }  
-
-        .sound-desc { font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 16px 0; text-align: justify; }
         
         .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 12px 15px; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(39,174,96,0.25); letter-spacing: 0.5px;}
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
@@ -265,7 +268,7 @@
         .btn-play-main.playing { background: #e74c3c; box-shadow: 0 4px 12px rgba(231,76,60,0.25); }
         .btn-play-main.playing:hover { background: #c0392b; box-shadow: 0 6px 15px rgba(231,76,60,0.35); }
         
-        .admin-menu { margin-top: 15px; text-align: right; }
+        .admin-menu { margin-top: 12px; text-align: right; }
         .admin-menu summary { font-size: 14px; color: #cbd5e1; cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; padding: 4px; border-radius: 4px;}
         .admin-menu summary:hover { color: #64748b; background: #f1f5f9;}
         .admin-dropdown { background: #fff; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 15px; margin-top: 6px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);}
@@ -391,12 +394,18 @@
             
             .close-player-btn { grid-area: close; align-self: center; }
 
-            /* 🌟 手機版極限高度防爆壓縮，確保有內部滾動條絕不裁切按鈕 */
+            /* 🌟 手機版極限高度防爆壓縮 */
             .leaflet-popup-content-wrapper { max-height: calc(100vh - 350px); }
             .leaflet-popup-content { width: 280px !important; }
             .sound-cover { height: 130px; }
-            .sound-info { padding: 15px; }
+            .sound-info { padding: 12px; }
             .sound-title { font-size: 18px; margin-bottom: 8px;}
+            
+            .sound-desc { max-height: 70px; font-size: 12px; margin-bottom: 8px; }
+            .reaction-btn { font-size: 10px; padding: 5px 0; gap: 3px; border-radius: 12px;}
+            .reaction-btn svg { width: 12px; height: 12px; }
+            .reaction-box { gap: 5px; margin-bottom: 8px; }
+            .card-meta-box { margin-bottom: 8px; padding: 10px; }
         }
 
         @media (max-height: 500px) and (orientation: landscape) {
@@ -944,6 +953,13 @@
             }, 100);
         }
 
+        map.on('popupopen', function(e) {
+            updateHeaderVisibility(true);
+            forceFocusMarker(e.popup._source);
+            setTimeout(updateCardButtonUI, 50);
+            setTimeout(updateFavoriteUI, 50); // 🌟 新增這行，確保卡片打開時愛心會變紅
+        });
+
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
             uis.forEach(id => {
@@ -1101,27 +1117,7 @@
                             </div>
                         </div>
 
-<p class="sound-desc">${item.description}</p>
-                        
-                        <div class="reaction-box" id="reaction-bar-${item.uid}">
-                            <button class="reaction-btn" data-type="calm" onclick="toggleReaction('${item.uid}', 'calm')" title="聽完覺得很平靜">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
-                                <span>平靜</span>
-                            </button>
-                            <button class="reaction-btn" data-type="surprise" onclick="toggleReaction('${item.uid}', 'surprise')" title="這個聲音讓我好驚喜">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                                <span>驚喜</span>
-                            </button>
-                            <button class="reaction-btn" data-type="curious" onclick="toggleReaction('${item.uid}', 'curious')" title="想一探究竟、引發好奇">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-                                <span>好奇</span>
-                            </button>
-                            <button class="reaction-btn" data-type="nostalgic" onclick="toggleReaction('${item.uid}', 'nostalgic')" title="有一種懷念、回味的感覺">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                <span>懷念</span>
-                            </button>
-                        </div>
-
+                        <p class="sound-desc">${item.description}</p>
                         ${audioHTML}
                         <details class="admin-menu">
                             <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
@@ -1748,92 +1744,6 @@
             originalStartGlobalPlayback(uid);
             setTimeout(updateFavoriteUI, 100); 
         };
-
-        // ==========================================
-        // Phase 2.6: SEL 情緒回音板 (Reactions)
-        // ==========================================
-        let userReactions = {}; // 格式: { soundUid: "calm" }
-
-        // 登入時抓取該使用者的所有情緒回音
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                db.collection("user_reactions").where("userId", "==", user.uid).get()
-                .then(snapshot => {
-                    userReactions = {};
-                    snapshot.forEach(doc => { userReactions[doc.data().soundUid] = doc.data().reactionType; });
-                    updateAllReactionsUI();
-                });
-            } else {
-                userReactions = {};
-                updateAllReactionsUI();
-            }
-        });
-
-        // 點擊情緒徽章時觸發
-        window.toggleReaction = function(uid, type) {
-            if (!currentUser) {
-                alert("🔒 請先點擊右上角「登入探險」，才能留下你的聽覺感受喔！");
-                return;
-            }
-
-            let docId = currentUser.uid + "_" + uid; 
-            let reactionRef = db.collection("user_reactions").doc(docId);
-            
-            let oldType = userReactions[uid];
-            
-            if (oldType === type) {
-                delete userReactions[uid];
-                updateReactionUI(uid);
-                reactionRef.delete();
-            } else {
-                userReactions[uid] = type;
-                updateReactionUI(uid);
-                reactionRef.set({
-                    userId: currentUser.uid,
-                    soundUid: uid,
-                    reactionType: type,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                logAction(uid, 'reaction_' + type);
-            }
-        };
-
-        // 更新單一卡片的情緒 UI
-        window.updateReactionUI = function(uid) {
-            let bar = document.getElementById('reaction-bar-' + uid);
-            if (!bar) return;
-            
-            let selectedType = userReactions[uid];
-            bar.querySelectorAll('.reaction-btn').forEach(btn => {
-                if (btn.dataset.type === selectedType) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
-        };
-
-        function updateAllReactionsUI() {
-            Object.keys(userReactions).forEach(uid => updateReactionUI(uid));
-        }
-
-        // 🌟 覆寫卡片開啟事件，確保 SEL 徽章狀態正確載入
-        const originalPopupOpen = map._events.popupopen ? map._events.popupopen[0].fn : null;
-        map.off('popupopen'); // 清除舊綁定
-        
-        map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            forceFocusMarker(e.popup._source);
-            setTimeout(updateCardButtonUI, 50);
-            setTimeout(updateFavoriteUI, 50);
-            
-            // 解析出 UID 並更新對應的 SEL 徽章
-            let popupContent = e.popup.getContent();
-            let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
-            if (uidMatch && uidMatch[1]) {
-                setTimeout(() => updateReactionUI(uidMatch[1]), 50);
-            }
-        });
 
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
