@@ -466,6 +466,17 @@
                 <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
                 <div id="timeDisplay" class="time-display">全部時段</div>
             </div>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 15px 0;">
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    專屬尋寶圖
+                </span>
+                <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--text-main); cursor:pointer; background:#fff0f2; padding:10px 12px; border-radius:10px; border:1px solid #ffe4e6; transition:0.2s;">
+                    <input type="checkbox" id="favFilterToggle" style="accent-color:#e11d48; width:16px; height:16px; margin:0;" onchange="filterMarkers()">
+                    只顯示我的收藏
+                </label>
+            </div>
         </div>
     </div>
 
@@ -1145,7 +1156,27 @@
             var hLimit = parseInt(document.getElementById('timeSlider').value);
             var displayTime = hLimit === -1 ? "全部時段" : hLimit + ":00 - " + hLimit + ":59";
             document.getElementById('timeDisplay').innerText = displayTime;
-            renderMarkers(allMarkersData.filter(i => (i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s)) && (cat === 'all' || i.category.includes(cat)) && (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit))));
+            
+            // 🌟 獲取愛心開關的狀態
+            var favToggle = document.getElementById('favFilterToggle');
+            var showOnlyFavs = favToggle ? favToggle.checked : false;
+            
+            // 防呆：沒登入不能用專屬尋寶圖
+            if (showOnlyFavs && !currentUser) {
+                alert("🔒 請先點擊右上角「登入探險」，才能啟用你的專屬尋寶圖喔！");
+                favToggle.checked = false;
+                showOnlyFavs = false;
+            }
+
+            // 綜合多重條件進行精準過濾
+            renderMarkers(allMarkersData.filter(i => {
+                var matchSearch = i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s);
+                var matchCat = (cat === 'all' || i.category.includes(cat));
+                var matchTime = (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit));
+                var matchFav = showOnlyFavs ? userFavorites.has(i.uid) : true; // 若開啟，則檢查是否在收藏庫內
+                
+                return matchSearch && matchCat && matchTime && matchFav;
+            }));
         }
 
         function executeStandardRoute(type, actualPathCoords) {
@@ -1481,12 +1512,10 @@
                 document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
                 document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration); 
                 
-                // 🔥 動態門檻：10秒 或 總長度的30%，取較小值
                 let threshold = Math.min(10, globalAudio.duration * 0.3);
                 
-                // 檢查是否達標，且還沒送過 log
                 if (globalAudio.currentTime > threshold && !hasLoggedPlay && currentAudioUid) {
-                    logAction(currentAudioUid, 'play_10s'); // 為了相容你的 GAS，事件名稱保持 play_10s
+                    logAction(currentAudioUid, 'play_10s'); 
                     hasLoggedPlay = true;
                     console.log(`已聽超過 ${threshold.toFixed(1)} 秒，觸發有效播放 Log！`);
                 }
@@ -1526,7 +1555,7 @@
 
         function updateAuthUI(user) {
             let navFavBtn = document.getElementById('navFavBtn');
-            if (navFavBtn) navFavBtn.style.display = user ? 'flex' : 'none'; // 🌟 登入才顯示收藏庫
+            if (navFavBtn) navFavBtn.style.display = user ? 'flex' : 'none'; 
             let authBtn = document.getElementById('authBtn');
             
             if (!authBtn) {
@@ -1640,6 +1669,11 @@
             });
 
             renderFavoritesList();
+            
+            let favToggle = document.getElementById('favFilterToggle');
+            if (favToggle && favToggle.checked) {
+                filterMarkers();
+            }
         }
 
         function renderFavoritesList() {
