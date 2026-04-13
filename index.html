@@ -1985,10 +1985,12 @@
         function checkAchievements() {
             if (!currentUser) return;
             
-            // 從目前的 userFavorites 中分析各類別數量
-            let counts = { nature: 0, culture: 0, history: 0, total: userFavorites.size };
+            // 🌟 修正：把「愛心收藏」和「SEL情緒」的作品 UID 合併，去重複計算！
+            let interactedUids = new Set([...userFavorites, ...Object.keys(userReactions)]);
             
-            userFavorites.forEach(uid => {
+            let counts = { nature: 0, culture: 0, history: 0, total: interactedUids.size };
+            
+            interactedUids.forEach(uid => {
                 let item = allMarkersData.find(i => i.uid === uid);
                 if (item) {
                     if (item.category.includes('自然') || item.category.includes('空間')) counts.nature++;
@@ -2050,11 +2052,17 @@
             });
         }
 
-        // 🌟 攔截之前的 toggleFavorite，在最後加上檢查成就的呼叫
+       // 🌟 攔截之前的 toggleFavorite 與 toggleReaction，在最後加上檢查成就的呼叫
         const originalToggleFavorite = toggleFavorite;
         toggleFavorite = function(targetUid) {
             originalToggleFavorite(targetUid);
             setTimeout(checkAchievements, 500); // 延遲檢查，等待資料庫更新
+        };
+
+        const originalToggleReaction = window.toggleReaction;
+        window.toggleReaction = function(uid, type) {
+            originalToggleReaction(uid, type);
+            setTimeout(checkAchievements, 500); // 🌟 修正：按下 SEL 徽章時，同樣觸發成就檢查！
         };
 
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
