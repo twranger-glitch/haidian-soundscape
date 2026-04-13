@@ -1317,7 +1317,7 @@
             markerCluster.zoomToShowLayer(marker, () => {
                 if (!isRoutePlaying) return;
                 marker.openPopup();
-                if (routePointsData[currentRouteIndex].audioUrl) { prepareGlobalPlayer(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
+                if (routePointsData[currentRouteIndex].audioUrl) { startGlobalPlayback(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
                 else { routeTimeout = setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
             });
         }
@@ -1352,9 +1352,6 @@ function startGlobalPlayback(uid) {
                 }
             }, 100);
 
-            var wPlace = document.getElementById('drivePlaceholder');
-            if(wPlace) wPlace.style.display = 'none'; 
-            
             var wBase = document.getElementById('waveBase');
             var wProg = document.getElementById('waveProgress');
             wBase.style.display = 'block';
@@ -1377,18 +1374,19 @@ function startGlobalPlayback(uid) {
             globalAudio.src = item.audioUrl;
             
             globalAudio.onerror = function() {
-                console.error("播放器錯誤，嘗試連結:", globalAudio.src);
-                if (globalAudio.src.includes('workers.dev') || globalAudio.src.includes('drive.google.com')) {
-                    alert("無法載入雲端音檔。這可能是因為 Google Drive 檔案未公開，或該檔案已被移動。");
+                console.warn("首選來源載入失敗，檢測是否需切換...");
+                if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
+                    globalAudio.src = item.fallbackAudioUrl;
+                    globalAudio.load();
+                    globalAudio.play().catch(e => console.error("備援載入也失敗"));
+                } else {
+                    console.error("所有音軌來源均失效");
                 }
             };
 
-            globalAudio.play().catch(e => console.warn("瀏覽器自動播放限制，等待使用者互動", e));
-            
+            globalAudio.play().catch(e => console.warn("等待使用者手動觸發播放", e));
             document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
         }
-        
-        function closeGlobalPlayer() { 
             globalAudio.pause(); 
             document.getElementById('globalPlayer').classList.remove('active'); 
             var header = document.querySelector('.glass-header');
