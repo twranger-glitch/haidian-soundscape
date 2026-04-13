@@ -640,7 +640,7 @@
         <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </button>
-        <div class="player-main">
+<div class="player-main">
             <div class="player-header-row">
                 <div id="playerTitleContainer" class="player-title-container">
                     <div id="playerTitleUI" class="player-title">載入中...</div>
@@ -648,11 +648,6 @@
                 <button id="favBtn" class="fav-btn" onclick="toggleFavorite()" title="加入我的收藏">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                 </button>
-                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
-            </div>
-                <div id="playerTitleContainer" class="player-title-container">
-                    <div id="playerTitleUI" class="player-title">載入中...</div>
-                </div>
                 <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
             </div>
             <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
@@ -1499,11 +1494,6 @@
 
         let currentUser = null;
 
-        // 2. 監聽登入狀態
-        auth.onAuthStateChanged(user => {
-            currentUser = user;
-            updateAuthUI(user);
-        });
 
         // 3. 登入/登出功能
         function toggleLogin() {
