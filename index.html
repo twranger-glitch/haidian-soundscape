@@ -1634,7 +1634,6 @@
                 favRef.delete().then(() => {
                     userFavorites.delete(uid);
                     updateFavoriteUI();
-                    // 🌟 修正：只有在「取消收藏」且「開啟尋寶圖」時，才重新繪製地圖！
                     let favToggle = document.getElementById('favFilterToggle');
                     if (favToggle && favToggle.checked) filterMarkers();
                 });
@@ -1670,42 +1669,6 @@
             });
 
             renderFavoritesList();
-            // 🌟 將重新繪製地圖的邏輯移出這裡，徹底解決打開卡片就消失的死迴圈！
-        }
-                });
-            } else {
-                let globalBtn = document.getElementById('favBtn');
-                let cardBtn = document.getElementById('card-fav-' + uid);
-                if (globalBtn && uid === currentAudioUid) globalBtn.classList.add('active');
-                if (cardBtn) cardBtn.classList.add('active');
-                
-                favRef.set({
-                    userId: currentUser.uid,
-                    soundUid: uid,
-                    addedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }).then(() => {
-                    userFavorites.add(uid);
-                    updateFavoriteUI();
-                    logAction(uid, 'favorite');
-                });
-            }
-        }
-
-        function updateFavoriteUI() {
-            let favBtn = document.getElementById('favBtn');
-            if (favBtn) {
-                if (currentAudioUid && userFavorites.has(currentAudioUid)) favBtn.classList.add('active');
-                else favBtn.classList.remove('active');
-            }
-            
-            document.querySelectorAll('.sound-card .fav-btn').forEach(btn => {
-                let uid = btn.id.replace('card-fav-', '');
-                if (userFavorites.has(uid)) btn.classList.add('active');
-                else btn.classList.remove('active');
-            });
-
-            renderFavoritesList();
-            // 🌟 將重新繪製地圖的邏輯移出這裡，徹底解決打開卡片就消失的死迴圈！
         }
 
         function renderFavoritesList() {
