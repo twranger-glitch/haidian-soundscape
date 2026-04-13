@@ -174,7 +174,34 @@
         .modal-tag { display: inline-block; background: #f1f5f9; color: #475569; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; margin-bottom: 20px; border: 1px solid #e2e8f0; letter-spacing: 0.5px;}
         .modal-text { font-size: 15px; color: #475569; line-height: 1.7; margin: 0 0 16px 0; }
         .quote-block { margin-top: 24px; padding: 20px; background: #f8fafc; border-left: 4px solid var(--accent-color); border-radius: 0 12px 12px 0; }
-
+/* 🌟 SEL 高級質感 SVG 情緒徽章 樣式 */
+        .reaction-box { 
+            display: flex; justify-content: space-around; background: #f8fafc; 
+            padding: 12px 5px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 12px;
+        }
+        .reaction-btn { 
+            display: flex; flex-direction: column; align-items: center; gap: 6px; 
+            background: transparent; border: none; cursor: pointer; color: #94a3b8; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size: 11px; font-weight: 800; letter-spacing: 0.5px; outline: none;
+        }
+        .reaction-btn svg { width: 22px; height: 22px; transition: all 0.3s ease; }
+        .reaction-btn:hover { color: #64748b; transform: translateY(-2px); }
+        .reaction-btn:active { transform: scale(0.9); }
+        
+        /* 啟用狀態的專屬顏色與微透明漸層填滿 */
+        .reaction-btn.active { transform: translateY(-3px); }
+        .reaction-btn.active[data-type="calm"] { color: #10b981; filter: drop-shadow(0 4px 6px rgba(16, 185, 129, 0.2)); }
+        .reaction-btn.active[data-type="calm"] svg { fill: rgba(16, 185, 129, 0.15); }
+        
+        .reaction-btn.active[data-type="surprise"] { color: #f59e0b; filter: drop-shadow(0 4px 6px rgba(245, 158, 11, 0.2)); }
+        .reaction-btn.active[data-type="surprise"] svg { fill: rgba(245, 158, 11, 0.15); }
+        
+        .reaction-btn.active[data-type="curious"] { color: #3b82f6; filter: drop-shadow(0 4px 6px rgba(59, 130, 246, 0.2)); }
+        .reaction-btn.active[data-type="curious"] svg { fill: rgba(59, 130, 246, 0.15); }
+        
+        .reaction-btn.active[data-type="nostalgic"] { color: #8b5cf6; filter: drop-shadow(0 4px 6px rgba(139, 92, 246, 0.2)); }
+        .reaction-btn.active[data-type="nostalgic"] svg { fill: rgba(139, 92, 246, 0.15); }
         .latest-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
         .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
@@ -1080,6 +1107,26 @@
                         </div>
 
                         <p class="sound-desc">${item.description}</p>
+                        
+                        <div class="reaction-box" id="reaction-bar-${item.uid}">
+                            <button class="reaction-btn" data-type="calm" onclick="toggleReaction('${item.uid}', 'calm')" title="聽完覺得很平靜">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
+                                <span>平靜</span>
+                            </button>
+                            <button class="reaction-btn" data-type="surprise" onclick="toggleReaction('${item.uid}', 'surprise')" title="這個聲音讓我好驚喜">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>驚喜</span>
+                            </button>
+                            <button class="reaction-btn" data-type="curious" onclick="toggleReaction('${item.uid}', 'curious')" title="想一探究竟、引發好奇">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                                <span>好奇</span>
+                            </button>
+                            <button class="reaction-btn" data-type="nostalgic" onclick="toggleReaction('${item.uid}', 'nostalgic')" title="有一種懷念、回味的感覺">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>懷念</span>
+                            </button>
+                        </div>
+
                         ${audioHTML}
                         <details class="admin-menu">
                             <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
@@ -1706,7 +1753,101 @@
             originalStartGlobalPlayback(uid);
             setTimeout(updateFavoriteUI, 100); 
         };
+const originalStartGlobalPlayback = startGlobalPlayback;
+        startGlobalPlayback = function(uid) {
+            originalStartGlobalPlayback(uid);
+            setTimeout(updateFavoriteUI, 100); 
+        };
 
+        // ==========================================
+        // Phase 2.6: SEL 情緒回音板 (Reactions)
+        // ==========================================
+        let userReactions = {}; // 格式: { soundUid: "calm" }
+
+        // 登入時抓取該使用者的所有情緒回音
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                db.collection("user_reactions").where("userId", "==", user.uid).get()
+                .then(snapshot => {
+                    userReactions = {};
+                    snapshot.forEach(doc => { userReactions[doc.data().soundUid] = doc.data().reactionType; });
+                    updateAllReactionsUI();
+                });
+            } else {
+                userReactions = {};
+                updateAllReactionsUI();
+            }
+        });
+
+        // 點擊情緒徽章時觸發
+        window.toggleReaction = function(uid, type) {
+            if (!currentUser) {
+                alert("🔒 請先點擊右上角「登入探險」，才能留下你的聽覺感受喔！");
+                return;
+            }
+
+            let docId = currentUser.uid + "_" + uid; 
+            let reactionRef = db.collection("user_reactions").doc(docId);
+            
+            let oldType = userReactions[uid];
+            
+            if (oldType === type) {
+                delete userReactions[uid];
+                updateReactionUI(uid);
+                reactionRef.delete();
+            } else {
+                userReactions[uid] = type;
+                updateReactionUI(uid);
+                reactionRef.set({
+                    userId: currentUser.uid,
+                    soundUid: uid,
+                    reactionType: type,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                logAction(uid, 'reaction_' + type);
+            }
+        };
+
+        // 更新單一卡片的情緒 UI
+        window.updateReactionUI = function(uid) {
+            let bar = document.getElementById('reaction-bar-' + uid);
+            if (!bar) return;
+            
+            let selectedType = userReactions[uid];
+            bar.querySelectorAll('.reaction-btn').forEach(btn => {
+                if (btn.dataset.type === selectedType) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        };
+
+        function updateAllReactionsUI() {
+            Object.keys(userReactions).forEach(uid => updateReactionUI(uid));
+        }
+
+        // 🌟 覆寫卡片開啟事件，確保 SEL 徽章狀態正確載入
+        const originalPopupOpen = map._events.popupopen ? map._events.popupopen[0].fn : null;
+        map.off('popupopen'); // 清除舊綁定
+        
+        map.on('popupopen', function(e) {
+            updateHeaderVisibility(true);
+            forceFocusMarker(e.popup._source);
+            setTimeout(updateCardButtonUI, 50);
+            setTimeout(updateFavoriteUI, 50);
+            
+            // 解析出 UID 並更新對應的 SEL 徽章
+            let popupContent = e.popup.getContent();
+            let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
+            if (uidMatch && uidMatch[1]) {
+                setTimeout(() => updateReactionUI(uidMatch[1]), 50);
+            }
+        });
+
+        if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
+    </script>
+</body></html>
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
 </body></html>
