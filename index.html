@@ -281,6 +281,7 @@
         .wall-badge.unlocked .mini-icon svg { color: white; }
         .wall-badge-name { font-size: 12px; font-weight: 800; color: #475569; }
         .wall-badge.unlocked .wall-badge-name { color: #b45309; }
+        .wall-badge-desc { font-size: 11px; color: #64748b; line-height: 1.4; margin-top: 4px; padding-top: 6px; border-top: 1px dashed #e2e8f0; }
 
         .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
         .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
@@ -466,18 +467,19 @@
             
             .close-player-btn { grid-area: close; align-self: center; }
 
-            /* 🌟 手機版極限高度防爆壓縮 */
-            .leaflet-popup-content-wrapper { max-height: calc(100vh - 350px); }
-            .leaflet-popup-content { width: 280px !important; }
-            .sound-cover { height: 130px; }
-            .sound-info { padding: 12px; }
-            .sound-title { font-size: 18px; margin-bottom: 8px;}
+            /* 🌟 手機版極限高度防爆壓縮與捲動修復 */
+            .leaflet-popup-content-wrapper { max-height: calc(100vh - 160px); display: flex; flex-direction: column; overflow: hidden; }
+            .leaflet-popup-content { width: 280px !important; max-height: calc(100vh - 160px); overflow-y: auto !important; padding-bottom: 10px; }
+            .sound-cover { height: 110px; flex-shrink: 0; }
+            .sound-info { padding: 12px; flex: 1; }
+            .sound-title { font-size: 17px; margin-bottom: 6px;}
             
-            .sound-desc { max-height: 70px; font-size: 12px; margin-bottom: 8px; }
-            .reaction-btn { font-size: 10px; padding: 5px 0; gap: 3px; border-radius: 12px;}
-            .reaction-btn svg { width: 12px; height: 12px; }
-            .reaction-box { gap: 5px; margin-bottom: 8px; }
-            .card-meta-box { margin-bottom: 8px; padding: 10px; }
+            .sound-desc { max-height: none; font-size: 13px; margin-bottom: 10px; overflow: visible; }
+            .reaction-section-title { margin: 6px 0 8px 0; font-size: 10.5px; padding: 3px 8px; }
+            .reaction-btn { font-size: 10.5px; padding: 6px 0; gap: 3px; border-radius: 12px;}
+            .reaction-btn svg { width: 13px; height: 13px; }
+            .reaction-box { gap: 5px; margin-bottom: 12px; }
+            .card-meta-box { margin-bottom: 8px; padding: 10px; gap: 8px; }
         }
 
         @media (max-height: 500px) and (orientation: landscape) {
@@ -919,7 +921,7 @@
                 'history_1944': '1944 美軍航照圖'
             };
 
-            // 🌟 3. 判斷並載入
+            // 🌟 3. 判判斷並載入
             if (val.startsWith('history')) {
                 extLabel.style.display = 'block'; 
                 extText.innerText = histNames[val];
@@ -1082,7 +1084,6 @@
 
             if (isClosed) {
                 target.classList.remove('collapsed');
-                // 🌟 修正：拔除 force-hide 機制，讓播放條永遠保持可見狀態！
             }
         }
 
@@ -1154,13 +1155,12 @@
             updateCardButtonUI();
         };
 
-// Phase 1: 改由 Firebase 讀取靜態快取資料，大幅提升載入速度
         var API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json"; 
         
         fetch(API_URL)
             .then(res => res.json())
             .then(data => { 
-                var safeData = data || []; // 防呆：如果資料庫是空的，給個空陣列
+                var safeData = data || []; 
                 allMarkersData = safeData; 
                 renderMarkers(safeData); 
                 renderLatestSubmissions(safeData); 
@@ -1249,7 +1249,6 @@
                     </div>
                 </div>`;
             
-            // 🌟 絕對禁用 Leaflet 原生 autoPan 防碰撞機制，避免跟我們的手動平移發生衝突！
             var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false, offset: [0, -10] });
             globalMarkerMap[item.uid] = marker;
             
@@ -1313,23 +1312,20 @@
             var displayTime = hLimit === -1 ? "全部時段" : hLimit + ":00 - " + hLimit + ":59";
             document.getElementById('timeDisplay').innerText = displayTime;
             
-            // 🌟 獲取愛心開關的狀態
             var favToggle = document.getElementById('favFilterToggle');
             var showOnlyFavs = favToggle ? favToggle.checked : false;
             
-            // 防呆：沒登入不能用專屬尋寶圖
             if (showOnlyFavs && !currentUser) {
                 alert("🔒 請先點擊右上角「登入探險」，才能啟用你的專屬尋寶圖喔！");
                 favToggle.checked = false;
                 showOnlyFavs = false;
             }
 
-            // 綜合多重條件進行精準過濾
             renderMarkers(allMarkersData.filter(i => {
                 var matchSearch = i.title.toLowerCase().includes(s) || i.author.toLowerCase().includes(s);
                 var matchCat = (cat === 'all' || i.category.includes(cat));
                 var matchTime = (hLimit === -1 || (i.date.match(/\s(\d{2}):/) && parseInt(i.date.match(/\s(\d{2}):/)[1]) === hLimit));
-                var matchFav = showOnlyFavs ? userFavorites.has(i.uid) : true; // 若開啟，則檢查是否在收藏庫內
+                var matchFav = showOnlyFavs ? userFavorites.has(i.uid) : true; 
                 
                 return matchSearch && matchCat && matchTime && matchFav;
             }));
@@ -1981,7 +1977,7 @@
             }
         });
 
-// 核心邏輯：每次動作或打開成就牆時，檢查是否滿足條件
+        // 核心邏輯：每次動作或打開成就牆時，檢查是否滿足條件
         window.checkAchievements = function() {
             if (!currentUser) return;
             
@@ -2045,16 +2041,17 @@
             Object.values(BADGE_DATA).forEach(badge => {
                 let isUnlocked = unlockedBadges.has(badge.id);
                 grid.innerHTML += `
-                    <div class="wall-badge ${isUnlocked ? 'unlocked' : ''}">
+                    <div class="wall-badge ${isUnlocked ? 'unlocked' : ''}" title="解鎖條件：${badge.desc}">
                         <div class="mini-icon">${badge.svg}</div>
                         <div class="wall-badge-name">${badge.name}</div>
-                        <div style="font-size:10px; color:#94a3b8; margin-top:2px;">${isUnlocked ? '已解鎖' : '未解鎖'}</div>
+                        <div style="font-size:10px; color:#94a3b8; font-weight: 800;">${isUnlocked ? '🔓 已解鎖' : '🔒 未解鎖'}</div>
+                        <div class="wall-badge-desc">${badge.desc}</div>
                     </div>
                 `;
             });
         }
 
-       // 🌟 攔截之前的 toggleFavorite 與 toggleReaction，在最後加上檢查成就的呼叫
+        // 🌟 攔截之前的 toggleFavorite 與 toggleReaction，在最後加上檢查成就的呼叫
         const originalToggleFavorite = toggleFavorite;
         toggleFavorite = function(targetUid) {
             originalToggleFavorite(targetUid);
