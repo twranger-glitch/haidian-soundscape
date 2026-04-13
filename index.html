@@ -133,7 +133,8 @@
         @keyframes marquee-anim { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         
         .player-time-display { font-size: 11px; font-family: 'Courier New', Courier, monospace; color: var(--text-muted); font-weight: 800; flex-shrink: 0; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 6px;}
-.fav-btn {
+        
+        .fav-btn {
             background: transparent; border: none; cursor: pointer; color: #cbd5e1;
             display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             padding: 4px; flex-shrink: 0; outline: none;
@@ -148,6 +149,7 @@
             50% { transform: scale(1.3); }
             100% { transform: scale(1); }
         }
+        
         .waveform-wrapper { position: relative; width: 100%; height: 32px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f1f2f6; }
         .wave-base { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.6; }
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
@@ -400,11 +402,11 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                 <span class="full-text">關於我們</span><span class="short-text">關於</span>
             </button>
-            <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
-                <button class="btn-latest" onclick="openModal('favoritesModal')" title="我的收藏" id="navFavBtn" style="display: none; color: #e11d48 !important;">
+            <button class="btn-latest" onclick="openModal('favoritesModal')" title="我的收藏" id="navFavBtn" style="display: none; color: #e11d48 !important;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                 <span class="full-text">我的收藏</span><span class="short-text">收藏</span>
             </button>
+            <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 <span class="full-text">最新上架</span><span class="short-text">新作</span>
             </button>
@@ -660,7 +662,7 @@
         <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </button>
-<div class="player-main">
+        <div class="player-main">
             <div class="player-header-row">
                 <div id="playerTitleContainer" class="player-title-container">
                     <div id="playerTitleUI" class="player-title">載入中...</div>
@@ -1467,19 +1469,10 @@
             else mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         }
         
-        // 追蹤是否已經送過 10 秒 log，避免重複送
-        let hasLogged10s = false;
+        let hasLoggedPlay = false;
 
         globalAudio.addEventListener('play', () => {
-            hasLogged10s = false; // 每次按播放重置
-            // 記錄開始播放
-            if (currentAudioUid) logAction(currentAudioUid, 'play_start');
-        });
-
-        let hasLoggedPlay = false; // 變數改名，避免混淆
-
-        globalAudio.addEventListener('play', () => {
-            hasLoggedPlay = false; // 每次按播放重置
+            hasLoggedPlay = false; 
             if (currentAudioUid) logAction(currentAudioUid, 'play_start');
         });
 
@@ -1501,11 +1494,10 @@
         };
         
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
+        
         // ==========================================
         // Phase 2: Firebase Auth & Firestore 邏輯
         // ==========================================
-
-        // 1. 初始化 Firebase (請換成你的 Config)
         const firebaseConfig = {
             apiKey: "AIzaSyBXGNMbKedaTF2XjePRpFhNIv3NwRrmo_U",
             authDomain: "haidian-soundscape.firebaseapp.com",
@@ -1520,8 +1512,6 @@
 
         let currentUser = null;
 
-
-        // 3. 登入/登出功能
         function toggleLogin() {
             if (currentUser) {
                 auth.signOut().then(() => alert("已登出"));
@@ -1534,23 +1524,20 @@
             }
         }
 
-        // 4. 更新 UI (將選單中的「我要投稿」按鈕變成登入按鈕，或是新增一個登入按鈕)
         function updateAuthUI(user) {
             let navFavBtn = document.getElementById('navFavBtn');
             if (navFavBtn) navFavBtn.style.display = user ? 'flex' : 'none'; // 🌟 登入才顯示收藏庫
             let authBtn = document.getElementById('authBtn');
             
-            // 如果還沒有登入按鈕，建立一個
             if (!authBtn) {
                 authBtn = document.createElement('button');
                 authBtn.id = 'authBtn';
                 authBtn.onclick = toggleLogin;
                 authBtn.style.marginLeft = '10px';
-                // 為了美觀，加上和 .btn-submit 類似的樣式，但用不同顏色
                 authBtn.className = 'btn-submit'; 
                 authBtn.style.background = '#3498db'; 
                 authBtn.style.boxShadow = '0 4px 12px rgba(52, 152, 219, 0.25)';
-                navButtons.appendChild(authBtn);
+                document.querySelector('.nav-buttons').appendChild(authBtn);
             }
 
             if (user) {
@@ -1566,12 +1553,8 @@
             }
         }
 
-        // 5. 寫入日誌 (Log) 的核心功能
-        // eventType: 'play_start', 'play_10s', 'favorite'
         function logAction(uid, eventType) {
-            // 如果沒登入，就用 'guest' 加上隨機碼當作 session
             const userKey = currentUser ? currentUser.uid : 'guest_' + Math.random().toString(36).substr(2, 9);
-            
             db.collection("traffic_log").add({
                 uid: uid,
                 eventType: eventType,
@@ -1584,12 +1567,12 @@
         function openModal(id) { closeAllDrawers(); document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
+        
         // ==========================================
         // Phase 2.5: Firebase 專屬收藏庫 (Favorites)
         // ==========================================
         let userFavorites = new Set();
 
-        // 監聽登入狀態改變時，去 Firestore 抓取該使用者的收藏清單
         auth.onAuthStateChanged(user => {
             currentUser = user;
             updateAuthUI(user);
@@ -1599,7 +1582,7 @@
                 .then(snapshot => {
                     userFavorites.clear();
                     snapshot.forEach(doc => userFavorites.add(doc.data().soundUid));
-                    updateFavoriteUI(); // 抓完更新愛心顏色
+                    updateFavoriteUI(); 
                 });
             } else {
                 userFavorites.clear();
@@ -1607,7 +1590,6 @@
             }
         });
 
-// 點擊愛心時觸發 (現在支援從卡片或播放器觸發)
         function toggleFavorite(targetUid) {
             if (!currentUser) {
                 alert("🔒 請先點擊右上角「登入探險」，登入後即可將這首聲音加入專屬收藏庫！");
@@ -1622,14 +1604,11 @@
             let favRef = db.collection("user_favorites").doc(docId);
 
             if (isFav) {
-                // 💔 取消收藏
                 favRef.delete().then(() => {
                     userFavorites.delete(uid);
                     updateFavoriteUI();
                 });
             } else {
-                // ❤️ 加入收藏
-                // 為了視覺體驗，先讓畫面上的按鈕變紅跳動
                 let globalBtn = document.getElementById('favBtn');
                 let cardBtn = document.getElementById('card-fav-' + uid);
                 if (globalBtn && uid === currentAudioUid) globalBtn.classList.add('active');
@@ -1647,27 +1626,22 @@
             }
         }
 
-        // 同步更新畫面上所有的愛心，並重新繪製收藏清單
         function updateFavoriteUI() {
-            // 1. 同步全局播放器
             let favBtn = document.getElementById('favBtn');
             if (favBtn) {
                 if (currentAudioUid && userFavorites.has(currentAudioUid)) favBtn.classList.add('active');
                 else favBtn.classList.remove('active');
             }
             
-            // 2. 同步地圖上的卡片愛心
             document.querySelectorAll('.sound-card .fav-btn').forEach(btn => {
                 let uid = btn.id.replace('card-fav-', '');
                 if (userFavorites.has(uid)) btn.classList.add('active');
                 else btn.classList.remove('active');
             });
 
-            // 3. 重新渲染「我的收藏庫」清單
             renderFavoritesList();
         }
 
-        // 渲染專屬收藏庫 UI
         function renderFavoritesList() {
             let listDiv = document.getElementById('favoritesList');
             if (!listDiv) return;
@@ -1704,14 +1678,6 @@
             setTimeout(updateFavoriteUI, 100); 
         };
 
-        // 🌟 小細節補丁：當使用者切換播放不同的作品時，也要更新愛心狀態
-        // 請確保你的 startGlobalPlayback 函式的結尾有呼叫 updateFavoriteUI()
-        // (為了不讓你改太多地方，我們可以用一個小技巧攔截它)
-        const originalStartGlobalPlayback = startGlobalPlayback;
-        startGlobalPlayback = function(uid) {
-            originalStartGlobalPlayback(uid);
-            setTimeout(updateFavoriteUI, 100); // 延遲一下確保 currentAudioUid 已更新
-        };
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
 </body></html>
