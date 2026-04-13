@@ -1981,13 +1981,12 @@
             }
         });
 
-        // 核心邏輯：每次動作後檢查是否滿足條件
-        function checkAchievements() {
+// 核心邏輯：每次動作或打開成就牆時，檢查是否滿足條件
+        window.checkAchievements = function() {
             if (!currentUser) return;
             
-            // 🌟 修正：把「愛心收藏」和「SEL情緒」的作品 UID 合併，去重複計算！
+            // 將「愛心收藏」和「SEL情緒」的作品 UID 合併，去重複計算
             let interactedUids = new Set([...userFavorites, ...Object.keys(userReactions)]);
-            
             let counts = { nature: 0, culture: 0, history: 0, total: interactedUids.size };
             
             interactedUids.forEach(uid => {
@@ -1999,7 +1998,9 @@
                 }
             });
 
-            // 判斷條件並觸發解鎖
+            // 🐞 除錯雷達：按 F12 打開 Console 可以看到系統算出的分數！
+            console.log(`🏆 目前成就進度 -> 總互動: ${counts.total} | 自然/空間: ${counts.nature} | 常民/產業: ${counts.culture} | 歲月: ${counts.history}`);
+
             let newBadges = [];
             if (counts.nature >= 3 && !unlockedBadges.has('eco_listener')) newBadges.push('eco_listener');
             if (counts.culture >= 5 && !unlockedBadges.has('village_tracker')) newBadges.push('village_tracker');
@@ -2008,17 +2009,15 @@
             if (newBadges.length > 0) {
                 newBadges.forEach(bId => unlockedBadges.add(bId));
                 
-                // 儲存到 Firebase
                 db.collection("user_achievements").doc(currentUser.uid).set({
                     badges: Array.from(unlockedBadges),
                     lastUnlockedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
 
-                // 觸發華麗彈窗 (如果有同時解鎖多個，顯示最高階的)
                 showUnlockAnimation(BADGE_DATA[newBadges[newBadges.length - 1]]);
-                renderAchievementWall();
+                renderAchievementWall(); // 重新繪製成就牆
             }
-        }
+        };
 
         function showUnlockAnimation(badgeData) {
             document.getElementById('unlockedBadgeIcon').innerHTML = badgeData.svg;
@@ -2036,6 +2035,9 @@
         }
 
         function renderAchievementWall() {
+            // 🌟 升級：每次打開成就牆，先強制對一次帳，補發漏掉的徽章！
+            checkAchievements(); 
+
             let grid = document.getElementById('achievementWallGrid');
             if(!grid) return;
             grid.innerHTML = '';
