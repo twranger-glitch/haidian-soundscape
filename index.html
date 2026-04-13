@@ -174,7 +174,17 @@
         .modal-tag { display: inline-block; background: #f1f5f9; color: #475569; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; margin-bottom: 20px; border: 1px solid #e2e8f0; letter-spacing: 0.5px;}
         .modal-text { font-size: 15px; color: #475569; line-height: 1.7; margin: 0 0 16px 0; }
         .quote-block { margin-top: 24px; padding: 20px; background: #f8fafc; border-left: 4px solid var(--accent-color); border-radius: 0 12px 12px 0; }
-/* 🌟 SEL 高級質感 SVG 情緒徽章 樣式 */
+
+        .latest-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
+        .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
+        .latest-item img { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
+        .latest-item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+        .latest-item-title { font-size: 15px; font-weight: 800; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
+        .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
+
+        /* 🌟 SEL 高級質感 SVG 情緒徽章 樣式 */
         .reaction-box { 
             display: flex; justify-content: space-around; background: #f8fafc; 
             padding: 12px 5px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 12px;
@@ -189,7 +199,6 @@
         .reaction-btn:hover { color: #64748b; transform: translateY(-2px); }
         .reaction-btn:active { transform: scale(0.9); }
         
-        /* 啟用狀態的專屬顏色與微透明漸層填滿 */
         .reaction-btn.active { transform: translateY(-3px); }
         .reaction-btn.active[data-type="calm"] { color: #10b981; filter: drop-shadow(0 4px 6px rgba(16, 185, 129, 0.2)); }
         .reaction-btn.active[data-type="calm"] svg { fill: rgba(16, 185, 129, 0.15); }
@@ -202,14 +211,6 @@
         
         .reaction-btn.active[data-type="nostalgic"] { color: #8b5cf6; filter: drop-shadow(0 4px 6px rgba(139, 92, 246, 0.2)); }
         .reaction-btn.active[data-type="nostalgic"] svg { fill: rgba(139, 92, 246, 0.15); }
-        .latest-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
-        .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
-        .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
-        .latest-item img { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
-        .latest-item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-        .latest-item-title { font-size: 15px; font-weight: 800; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
-        .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
         .leaflet-popup-content-wrapper { border-radius: 16px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.25); padding: 0; max-height: calc(100vh - 280px); }
         .leaflet-popup-content { margin: 0; width: 320px !important; }
@@ -942,13 +943,6 @@
             }, 100);
         }
 
-        map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            forceFocusMarker(e.popup._source);
-            setTimeout(updateCardButtonUI, 50);
-            setTimeout(updateFavoriteUI, 50); // 🌟 新增這行，確保卡片打開時愛心會變紅
-        });
-
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
             uis.forEach(id => {
@@ -1107,7 +1101,7 @@
                         </div>
 
                         <p class="sound-desc">${item.description}</p>
-                        
+
                         <div class="reaction-box" id="reaction-bar-${item.uid}">
                             <button class="reaction-btn" data-type="calm" onclick="toggleReaction('${item.uid}', 'calm')" title="聽完覺得很平靜">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
@@ -1648,9 +1642,6 @@
         let userFavorites = new Set();
 
         auth.onAuthStateChanged(user => {
-            currentUser = user;
-            updateAuthUI(user);
-            
             if (user) {
                 db.collection("user_favorites").where("userId", "==", user.uid).get()
                 .then(snapshot => {
@@ -1753,11 +1744,6 @@
             originalStartGlobalPlayback(uid);
             setTimeout(updateFavoriteUI, 100); 
         };
-const originalStartGlobalPlayback = startGlobalPlayback;
-        startGlobalPlayback = function(uid) {
-            originalStartGlobalPlayback(uid);
-            setTimeout(updateFavoriteUI, 100); 
-        };
 
         // ==========================================
         // Phase 2.6: SEL 情緒回音板 (Reactions)
@@ -1845,9 +1831,6 @@ const originalStartGlobalPlayback = startGlobalPlayback;
             }
         });
 
-        if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
-    </script>
-</body></html>
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
 </body></html>
