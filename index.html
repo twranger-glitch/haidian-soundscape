@@ -1322,7 +1322,7 @@
             });
         }
 
-function prepareGlobalPlayer(uid) {
+function startGlobalPlayback(uid) {
             var item = allMarkersData.find(i => i.uid === uid); 
             if (!item) return;
             if (currentAudioUid === uid) { 
