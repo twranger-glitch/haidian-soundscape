@@ -1322,21 +1322,21 @@
             });
         }
 
-        function prepareGlobalPlayer(uid) {
-            var item = allMarkersData.find(i => i.uid === uid); if (!item) return;
-            if (currentAudioUid === uid) { document.getElementById('globalPlayer').classList.add('active'); return; }
+function prepareGlobalPlayer(uid) {
+            var item = allMarkersData.find(i => i.uid === uid); 
+            if (!item) return;
+            if (currentAudioUid === uid) { 
+                document.getElementById('globalPlayer').classList.add('active'); 
+                return; 
+            }
             currentAudioUid = uid; 
             
             var header = document.querySelector('.glass-header');
             if (header) header.classList.add('compact-mode');
-
             document.getElementById('globalPlayer').classList.add('active');
-            
-            // 🌟 啟動播放時，強制對卡片重新執行絕對定位防爆下壓
+
             var m = globalMarkerMap[uid];
-            if(m && m.isPopupOpen()) {
-                forceFocusMarker(m);
-            }
+            if(m && m.isPopupOpen()) { forceFocusMarker(m); }
             
             var titleContainer = document.getElementById('playerTitleContainer');
             var titleUI = document.getElementById('playerTitleUI');
@@ -1352,9 +1352,8 @@
                 }
             }, 100);
 
-// 由於 Cloudflare 代理已解除 CORS 封鎖，現在所有來源皆可直接繪製波形圖！
             var wPlace = document.getElementById('drivePlaceholder');
-            if(wPlace) wPlace.style.display = 'none'; // 隱藏備用提示
+            if(wPlace) wPlace.style.display = 'none'; 
             
             var wBase = document.getElementById('waveBase');
             var wProg = document.getElementById('waveProgress');
@@ -1362,47 +1361,32 @@
             wProg.style.display = 'block';
 
             var w = (u, c) => {
-                // 如果是 Cloudinary 來源，使用其內建波形圖引擎
-                if (u.includes('res.cloudinary')) {
+                if (u.includes('res.cloudinary.com')) {
                     return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
                 }
-                // 如果是 Cloudflare 代理來源，因為我們只有聲音檔，波形圖底圖我們可以給一張預設的漂亮漸層圖
-                // 或是用 Canvas 即時畫，但為了效能，這裡我們套用一張極簡公版波形圖
-                return "https://res.cloudinary.com/dcccnd4gk/image/upload/v1713000000/default_waveform_" + c + ".png"; // 這裡稍後會說明
+                const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
+                return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'%3E%3Cpath d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/%3E%3C/svg%3E`;
             };
             
             wBase.src = w(item.audioUrl, "bdc3c7");
             wProg.src = w(item.audioUrl, "27ae60");
             wProg.style.clipPath = 'inset(0 100% 0 0)';
+
             document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
             
-           // 替換音檔來源並設定 Fallback 備援機制
-        globalAudio.src = item.audioUrl;
-        
-        // 如果首選來源播放失敗 (通常是 CDN 爆了，或是 Drive 碰到防濫用機制)
-        globalAudio.onerror = function() {
-            console.warn("首選音檔載入失敗，準備啟動備援機制...");
-            if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
-                console.log("切換至備援音檔:", item.fallbackAudioUrl);
-                globalAudio.src = item.fallbackAudioUrl;
-                globalAudio.play().catch(e => console.error("備援音檔也無法播放", e));
-            } else {
-                alert("目前此聲音檔案流量過大，請稍後再試！");
-            }
-        };
+            globalAudio.src = item.audioUrl;
+            
+            globalAudio.onerror = function() {
+                console.error("播放器錯誤，嘗試連結:", globalAudio.src);
+                if (globalAudio.src.includes('workers.dev') || globalAudio.src.includes('drive.google.com')) {
+                    alert("無法載入雲端音檔。這可能是因為 Google Drive 檔案未公開，或該檔案已被移動。");
+                }
+            };
 
-        globalAudio.play().catch(e => console.warn("瀏覽器自動播放限制，等待使用者互動", e));
+            globalAudio.play().catch(e => console.warn("瀏覽器自動播放限制，等待使用者互動", e));
             
             document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
         }
-        
-        function startGlobalPlayback(uid) { 
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            prepareGlobalPlayer(uid); 
-        }
-
-        function toggleGlobalAudio() { if (globalAudio.paused) { globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } else { globalAudio.pause(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; } }
         
         function closeGlobalPlayer() { 
             globalAudio.pause(); 
