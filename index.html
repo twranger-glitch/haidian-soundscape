@@ -112,7 +112,6 @@
             z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6); pointer-events: auto;
         }
         .global-player.active { bottom: 20px; } 
-        .global-player.force-hide { bottom: -250px !important; } 
         
         .player-control-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-color); color: white; border: none; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; transition: 0.2s; box-shadow: 0 4px 10px rgba(39,174,96,0.3);}
         .player-control-btn:hover { transform: scale(1.05); background: #219150;}
@@ -176,6 +175,36 @@
         .quote-block { margin-top: 24px; padding: 20px; background: #f8fafc; border-left: 4px solid var(--accent-color); border-radius: 0 12px 12px 0; }
 
         .latest-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        
+        /* 🌟 SEL 高級質感 SVG 情緒徽章 樣式 */
+        .reaction-box { 
+            display: flex; justify-content: space-around; background: #f8fafc; 
+            padding: 12px 5px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 12px;
+        }
+        .reaction-btn { 
+            display: flex; flex-direction: column; align-items: center; gap: 6px; 
+            background: transparent; border: none; cursor: pointer; color: #94a3b8; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size: 11px; font-weight: 800; letter-spacing: 0.5px; outline: none;
+        }
+        .reaction-btn svg { width: 22px; height: 22px; transition: all 0.3s ease; }
+        .reaction-btn:hover { color: #64748b; transform: translateY(-2px); }
+        .reaction-btn:active { transform: scale(0.9); }
+        
+        /* 啟用狀態的專屬顏色與微透明漸層填滿 */
+        .reaction-btn.active { transform: translateY(-3px); }
+        .reaction-btn.active[data-type="calm"] { color: #10b981; filter: drop-shadow(0 4px 6px rgba(16, 185, 129, 0.2)); }
+        .reaction-btn.active[data-type="calm"] svg { fill: rgba(16, 185, 129, 0.15); }
+        
+        .reaction-btn.active[data-type="surprise"] { color: #f59e0b; filter: drop-shadow(0 4px 6px rgba(245, 158, 11, 0.2)); }
+        .reaction-btn.active[data-type="surprise"] svg { fill: rgba(245, 158, 11, 0.15); }
+        
+        .reaction-btn.active[data-type="curious"] { color: #3b82f6; filter: drop-shadow(0 4px 6px rgba(59, 130, 246, 0.2)); }
+        .reaction-btn.active[data-type="curious"] svg { fill: rgba(59, 130, 246, 0.15); }
+        
+        .reaction-btn.active[data-type="nostalgic"] { color: #8b5cf6; filter: drop-shadow(0 4px 6px rgba(139, 92, 246, 0.2)); }
+        .reaction-btn.active[data-type="nostalgic"] svg { fill: rgba(139, 92, 246, 0.15); }
+
         .latest-item { display: flex; gap: 16px; background: #fff; padding: 12px; border-radius: 12px; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s ease; align-items: center;}
         .latest-item:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
         .latest-item img { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
@@ -914,13 +943,6 @@
                 map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
             }, 100);
         }
-
-        map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            forceFocusMarker(e.popup._source);
-            setTimeout(updateCardButtonUI, 50);
-            setTimeout(updateFavoriteUI, 50); // 🌟 新增這行，確保卡片打開時愛心會變紅
-        });
 
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
