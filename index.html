@@ -133,7 +133,21 @@
         @keyframes marquee-anim { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         
         .player-time-display { font-size: 11px; font-family: 'Courier New', Courier, monospace; color: var(--text-muted); font-weight: 800; flex-shrink: 0; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 6px;}
-
+.fav-btn {
+            background: transparent; border: none; cursor: pointer; color: #cbd5e1;
+            display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 4px; flex-shrink: 0; outline: none;
+        }
+        .fav-btn:hover { color: #f43f5e; transform: scale(1.15); }
+        .fav-btn:active { transform: scale(0.9); }
+        .fav-btn.active { color: #e11d48; animation: heartBurst 0.4s ease-out forwards; }
+        .fav-btn.active svg { fill: #e11d48; }
+        
+        @keyframes heartBurst {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
         .waveform-wrapper { position: relative; width: 100%; height: 32px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f1f2f6; }
         .wave-base { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.6; }
         .wave-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; clip-path: inset(0 100% 0 0); }
@@ -628,6 +642,14 @@
         </button>
         <div class="player-main">
             <div class="player-header-row">
+                <div id="playerTitleContainer" class="player-title-container">
+                    <div id="playerTitleUI" class="player-title">載入中...</div>
+                </div>
+                <button id="favBtn" class="fav-btn" onclick="toggleFavorite()" title="加入我的收藏">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </button>
+                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
+            </div>
                 <div id="playerTitleContainer" class="player-title-container">
                     <div id="playerTitleUI" class="player-title">載入中...</div>
                 </div>
@@ -1433,16 +1455,26 @@
             if (currentAudioUid) logAction(currentAudioUid, 'play_start');
         });
 
+        let hasLoggedPlay = false; // 變數改名，避免混淆
+
+        globalAudio.addEventListener('play', () => {
+            hasLoggedPlay = false; // 每次按播放重置
+            if (currentAudioUid) logAction(currentAudioUid, 'play_start');
+        });
+
         globalAudio.ontimeupdate = () => { 
             if(globalAudio.duration) { 
                 document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
                 document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration); 
                 
-                // 檢查是否播超過 10 秒，且還沒送過 log
-                if (globalAudio.currentTime > 10 && !hasLogged10s && currentAudioUid) {
-                    logAction(currentAudioUid, 'play_10s');
-                    hasLogged10s = true;
-                    console.log("已觸發 10 秒有效播放 Log！");
+                // 🔥 動態門檻：10秒 或 總長度的30%，取較小值
+                let threshold = Math.min(10, globalAudio.duration * 0.3);
+                
+                // 檢查是否達標，且還沒送過 log
+                if (globalAudio.currentTime > threshold && !hasLoggedPlay && currentAudioUid) {
+                    logAction(currentAudioUid, 'play_10s'); // 為了相容你的 GAS，事件名稱保持 play_10s
+                    hasLoggedPlay = true;
+                    console.log(`已聽超過 ${threshold.toFixed(1)} 秒，觸發有效播放 Log！`);
                 }
             } 
         };
@@ -1535,7 +1567,88 @@
         function openModal(id) { closeAllDrawers(); document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function closeModalOnBgClick(e, id) { if (e.target.id === id) closeModal(id); }
-        
+        // ==========================================
+        // Phase 2.5: Firebase 專屬收藏庫 (Favorites)
+        // ==========================================
+        let userFavorites = new Set();
+
+        // 監聽登入狀態改變時，去 Firestore 抓取該使用者的收藏清單
+        auth.onAuthStateChanged(user => {
+            currentUser = user;
+            updateAuthUI(user);
+            
+            if (user) {
+                db.collection("user_favorites").where("userId", "==", user.uid).get()
+                .then(snapshot => {
+                    userFavorites.clear();
+                    snapshot.forEach(doc => userFavorites.add(doc.data().soundUid));
+                    updateFavoriteUI(); // 抓完更新愛心顏色
+                });
+            } else {
+                userFavorites.clear();
+                updateFavoriteUI();
+            }
+        });
+
+        // 點擊愛心時觸發
+        function toggleFavorite() {
+            if (!currentUser) {
+                alert("🔒 請先點擊右上角「登入探險」，登入後即可將這首聲音加入專屬收藏庫！");
+                // 也可以直接呼叫 toggleLogin() 強制跳出 Google 登入視窗
+                return;
+            }
+            if (!currentAudioUid) return;
+
+            let isFav = userFavorites.has(currentAudioUid);
+            // 建立獨一無二的關聯 ID (使用者UID + 作品UID)
+            let docId = currentUser.uid + "_" + currentAudioUid; 
+            let favRef = db.collection("user_favorites").doc(docId);
+            let favBtn = document.getElementById('favBtn');
+
+            if (isFav) {
+                // 💔 取消收藏
+                favRef.delete().then(() => {
+                    userFavorites.delete(currentAudioUid);
+                    updateFavoriteUI();
+                });
+            } else {
+                // ❤️ 加入收藏
+                // 先在前端呈現動畫，提升體驗
+                favBtn.classList.add('active'); 
+                
+                favRef.set({
+                    userId: currentUser.uid,
+                    soundUid: currentAudioUid,
+                    addedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => {
+                    userFavorites.add(currentAudioUid);
+                    updateFavoriteUI();
+                    
+                    // 🚀 關鍵：送出 log 給你的 GAS 結算系統，讓這首作品 +1 分！
+                    logAction(currentAudioUid, 'favorite');
+                });
+            }
+        }
+
+        // 更新愛心 UI 的狀態
+        function updateFavoriteUI() {
+            let favBtn = document.getElementById('favBtn');
+            if (!favBtn) return;
+            if (currentAudioUid && userFavorites.has(currentAudioUid)) {
+                favBtn.classList.add('active');
+            } else {
+                favBtn.classList.remove('active');
+            }
+        }
+
+        // 🌟 小細節補丁：當使用者切換播放不同的作品時，也要更新愛心狀態
+        // 請確保你的 startGlobalPlayback 函式的結尾有呼叫 updateFavoriteUI()
+        // (為了不讓你改太多地方，我們可以用一個小技巧攔截它)
+        const originalStartGlobalPlayback = startGlobalPlayback;
+        startGlobalPlayback = function(uid) {
+            originalStartGlobalPlayback(uid);
+            setTimeout(updateFavoriteUI, 100); // 延遲一下確保 currentAudioUid 已更新
+        };
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
 </body></html>
