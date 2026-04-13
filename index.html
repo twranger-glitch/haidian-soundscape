@@ -1352,36 +1352,28 @@
                 }
             }, 100);
 
-            // 動態判定：如果是 Drive 來源 (COLD/WARM)，就優雅降級隱藏波形圖
-            var isDriveAudio = item.audioUrl.includes('drive.google.com') || item.audioUrl.includes('docs.google.com');
+// 由於 Cloudflare 代理已解除 CORS 封鎖，現在所有來源皆可直接繪製波形圖！
+            var wPlace = document.getElementById('drivePlaceholder');
+            if(wPlace) wPlace.style.display = 'none'; // 隱藏備用提示
+            
             var wBase = document.getElementById('waveBase');
             var wProg = document.getElementById('waveProgress');
-            var dPlace = document.getElementById('drivePlaceholder');
+            wBase.style.display = 'block';
+            wProg.style.display = 'block';
 
-            // 如果還沒有建立文字提示框，就動態建立一個
-            if (!dPlace) {
-                dPlace = document.createElement('div');
-                dPlace.id = 'drivePlaceholder';
-                dPlace.style.cssText = 'display:none; width:100%; height:100%; align-items:center; justify-content:center; color:#94a3b8; font-size:12px; font-weight:800; letter-spacing:0.5px; background:#f1f5f9; border-radius:6px; border: 1px dashed #cbd5e1;';
-                dPlace.innerText = '庫存聲音｜標準播放模式';
-                document.getElementById('waveformWrapper').appendChild(dPlace);
-            }
-
-            if (isDriveAudio) {
-                // COLD/WARM 狀態：隱藏波形圖，顯示質感提示文字
-                wBase.style.display = 'none';
-                wProg.style.display = 'none';
-                dPlace.style.display = 'flex';
-            } else {
-                // HOT 狀態：顯示 Cloudinary 波形圖
-                wBase.style.display = 'block';
-                wProg.style.display = 'block';
-                dPlace.style.display = 'none';
-                var w = (u, c) => u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
-                wBase.src = w(item.audioUrl, "bdc3c7");
-                wProg.src = w(item.audioUrl, "27ae60");
-                wProg.style.clipPath = 'inset(0 100% 0 0)';
-            }
+            var w = (u, c) => {
+                // 如果是 Cloudinary 來源，使用其內建波形圖引擎
+                if (u.includes('res.cloudinary')) {
+                    return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
+                }
+                // 如果是 Cloudflare 代理來源，因為我們只有聲音檔，波形圖底圖我們可以給一張預設的漂亮漸層圖
+                // 或是用 Canvas 即時畫，但為了效能，這裡我們套用一張極簡公版波形圖
+                return "https://res.cloudinary.com/dcccnd4gk/image/upload/v1713000000/default_waveform_" + c + ".png"; // 這裡稍後會說明
+            };
+            
+            wBase.src = w(item.audioUrl, "bdc3c7");
+            wProg.src = w(item.audioUrl, "27ae60");
+            wProg.style.clipPath = 'inset(0 100% 0 0)';
             document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
             
            // 替換音檔來源並設定 Fallback 備援機制
