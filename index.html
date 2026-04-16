@@ -35,85 +35,69 @@
    import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
    import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, arrayUnion, arrayRemove, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
  
-   // 🌟 SVG 圖示元件（穩定版：單顆圖示獨立渲染，不再全頁 createIcons 掃描）
-   const normalizeIconName = (value = "") =>
-     String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
- 
+   // 🌟 SVG 圖示元件（終極穩定版：限定範圍渲染，解決疊影與圖示遺失問題）
    const Icon = ({ name, className = "w-5 h-5", fill = "none", strokeWidth = 2 }) => {
-     const [svgContent, setSvgContent] = useState("");
- 
+     const hostRef = useRef(null);
+
      useEffect(() => {
-       let mounted = true;
+       const host = hostRef.current;
+       if (!host) return;
+
+       let cancelled = false;
        let retries = 0;
- 
+
        const renderIcon = () => {
-         const lucideLib = window.lucide;
-         // 確保能抓到 icons 集合 (部分版本直接綁在 window.lucide 上)
-         const icons = lucideLib?.icons || lucideLib;
- 
-         if (!icons || Object.keys(icons).length === 0) {
+         if (cancelled) return;
+
+         if (!window.lucide || typeof window.lucide.createIcons !== 'function') {
            retries++;
-           if (mounted && retries < 20) {
-              setTimeout(renderIcon, 100);
-           } else if (mounted) {
-              setSvgContent(
-                `<svg class="${className}" fill="${fill}" stroke="currentColor" stroke-width="${strokeWidth}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`
-              );
+           if (retries < 20) {
+             setTimeout(renderIcon, 100);
+           } else {
+             // 載入失敗時的預設圖案
+             host.innerHTML = `<svg class="w-full h-full" fill="${fill}" stroke="currentColor" stroke-width="${strokeWidth}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`;
            }
            return;
          }
- 
+
+         // 1. 先徹底清空容器，避免殘留上一次的標籤導致「疊影」
+         host.innerHTML = '';
+         
+         const iTag = document.createElement('i');
+         iTag.setAttribute('data-lucide', name);
+         host.appendChild(iTag);
+
          try {
-           const normalizedTarget = normalizeIconName(name);
-           const matchedKey = Object.keys(icons).find(
-              key => normalizeIconName(key) === normalizedTarget
-           );
- 
-           const iconDef = matchedKey ? icons[matchedKey] : null;
- 
-           if (iconDef && typeof iconDef.toSvg === 'function') {
-              const html = iconDef.toSvg({
-                class: className,
-                fill: fill,
-                'stroke-width': strokeWidth,
-                'aria-hidden': 'true',
-                'focusable': 'false'
-              });
- 
-              if (mounted) setSvgContent(html);
-              return;
-           }
- 
-           console.warn(`Icon '${name}' 找不到，顯示預設圖示。`);
-           if (mounted) {
-              setSvgContent(
-                `<svg class="${className}" fill="${fill}" stroke="currentColor" stroke-width="${strokeWidth}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`
-              );
+           window.lucide.createIcons({
+             root: host, // 2. 限制只在此 span 內部替換，絕對不掃描全域 DOM
+             icons: window.lucide.icons || window.lucide,
+             attrs: {
+               class: 'w-full h-full', // 內部 SVG 永遠自動填滿外層
+               fill: fill,
+               'stroke-width': strokeWidth,
+             },
+           });
+
+           // 3. 移除原廠的 width/height 屬性，完全由外層的 Tailwind CSS 接管
+           const svg = host.querySelector('svg');
+           if (svg) {
+             svg.removeAttribute('width');
+             svg.removeAttribute('height');
+             svg.setAttribute('aria-hidden', 'true');
+             svg.setAttribute('focusable', 'false');
            }
          } catch (error) {
            console.error(`Icon '${name}' 渲染失敗:`, error);
-           if (mounted) {
-              setSvgContent(
-                `<svg class="${className}" fill="${fill}" stroke="currentColor" stroke-width="${strokeWidth}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`
-              );
-           }
+           host.innerHTML = `<svg class="w-full h-full" fill="${fill}" stroke="currentColor" stroke-width="${strokeWidth}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>`;
          }
        };
- 
+
        renderIcon();
-       return () => { mounted = false; };
-     }, [name, className, fill, strokeWidth]);
- 
-     if (!svgContent) {
-       return <span className={`inline-block ${className} flex-shrink-0`} />;
-     }
- 
-     return (
-       <span
-         dangerouslySetInnerHTML={{ __html: svgContent }}
-         className="inline-flex items-center justify-center flex-shrink-0 align-middle"
-       />
-     );
+       return () => { cancelled = true; };
+     }, [name, fill, strokeWidth]);
+
+     // 將 className 綁定在外層 span 上
+     return <span ref={hostRef} className={`inline-flex items-center justify-center shrink-0 ${className}`} />;
    };
  
    // 🔥 Firebase Web Config (融合動態環境變數支援)
@@ -193,7 +177,13 @@
        let isPreviewMode = false;
        const initAuth = async () => {
          try { 
-           // 加入自訂 Token 防護，確保沙盒環境連線正常
+           // 關鍵修復：等待 Firebase 從本機快取恢復上一回的登入連線
+           await auth.authStateReady();
+           
+           // 如果抓到現有的帳號 (例如剛重新整理)，就不呼叫匿名登入去覆蓋它
+           if (auth.currentUser) return;
+
+           // 沒抓到登入帳號的話，再看有沒有 Custom Token 或轉為訪客
            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
              await signInWithCustomToken(auth, __initial_auth_token);
            } else {
@@ -207,6 +197,7 @@
          }
        };
        initAuth();
+
        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
          if (!isPreviewMode) setUser(currentUser);
        });
@@ -468,7 +459,8 @@
  
        return (
          <div key={book.id} className={`group bg-white rounded-3xl shadow-sm border overflow-hidden flex flex-col transition-all duration-300 hover:shadow-2xl hover:-translate-y-1.5 ${isAchieved ? 'border-rose-300 ring-4 ring-rose-100/60' : isViped ? 'border-amber-300 ring-4 ring-amber-100/60' : 'border-slate-200 hover:border-indigo-300'}`}>
-           <div className="h-64 bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 flex items-center justify-center relative border-b border-slate-100 overflow-hidden">
+           {/* 修改了此處：放大高度 (h-72) 並移除封面的內距 (p-4)，讓封面更滿 */}
+           <div className="h-72 bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 flex items-center justify-center relative border-b border-slate-100 overflow-hidden">
                <div className="absolute top-3 left-3 flex flex-col gap-2 items-start z-10">
                   <span className={`px-3 py-1 text-xs font-bold rounded-lg shadow-md backdrop-blur-md border border-white/20 tracking-wide ${book.category === '套書續集' ? 'bg-blue-600/90 text-white' : 'bg-emerald-600/90 text-white'}`}>
                     {book.keyword || book.category}
@@ -489,7 +481,7 @@
                )}
                
                {book.coverUrl ? 
-                  <img src={book.coverUrl} alt="封面" className="w-full h-full object-contain bg-white p-4 drop-shadow-md group-hover:scale-105 transition-transform duration-500" loading="lazy"/> : 
+                  <img src={book.coverUrl} alt="封面" className="w-full h-full object-contain p-2 mix-blend-multiply group-hover:scale-105 transition-transform duration-500" loading="lazy"/> : 
                   <div className="flex flex-col items-center gap-3 text-slate-300">
                     <Icon name="image-off" className="w-12 h-12" />
                     <span className="text-xs font-bold tracking-widest uppercase">無封面</span>
@@ -506,12 +498,11 @@
               
               {renderAchievementStatus(isViped, votesCount, book.vipRequests?.[0]?.name, book.achiever?.name)}
  
+              {/* 精簡：移除了卡片內的注音與出版社 */}
               <div className="text-xs text-slate-600 mb-6 space-y-2.5 bg-slate-50/80 p-4 rounded-2xl border border-slate-100 mt-auto">
                 <p className="flex justify-between items-center gap-3"><span className="flex items-center gap-1.5 text-slate-400"><Icon name="calendar-days" className="w-4 h-4"/> 出版</span><span className="font-bold text-slate-700 text-right">{safeFormatDate(book.pubDate)}</span></p>
                 <p className="flex justify-between items-center gap-3"><span className="flex items-center gap-1.5 text-slate-400"><Icon name="barcode" className="w-4 h-4"/> ISBN</span><span className="font-mono text-slate-700 font-medium text-right break-all">{book.isbn || '—'}</span></p>
                 <p className="flex justify-between items-center gap-3"><span className="flex items-center gap-1.5 text-slate-400"><Icon name="circle-dollar-sign" className="w-4 h-4"/> 定價</span><span className="font-bold text-slate-700 text-right">{book.price ? `${Number(book.price) || 0} 元` : '—'}</span></p>
-                <p className="flex justify-between items-center gap-3"><span className="flex items-center gap-1.5 text-slate-400"><Icon name="badge-info" className="w-4 h-4"/> 注音</span><span className="font-bold text-slate-700 text-right">{book.hasBopomofo || '未標示'}</span></p>
-                <p className="flex justify-between items-center gap-3"><span className="flex items-center gap-1.5 text-slate-400"><Icon name="building-2" className="w-4 h-4"/> 出版社</span><span className="font-bold text-slate-700 text-right">{book.publisher || '未標示'}</span></p>
               </div>
               
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
@@ -584,11 +575,38 @@
                 <span>{wish.reason}</span>
               </div>
            )}
+
+           {/* 加入遺漏的集氣條狀態，包含愛心與快通券 */}
+           <div className="space-y-4 mb-5 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+             <div className="space-y-2">
+               <div className="flex justify-between items-center text-sm font-bold">
+                 <span className="flex items-center gap-1.5 text-rose-500"><Icon name="heart" className="w-4 h-4" fill="currentColor" strokeWidth={0}/> 集氣進度</span>
+                 <span className="text-slate-600">{votesCount} / 30</span>
+               </div>
+               <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                 <div className="bg-gradient-to-r from-rose-400 to-pink-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${Math.min((votesCount / 30) * 100, 100)}%` }}></div>
+               </div>
+             </div>
+             
+             <div className="space-y-2">
+               <div className="flex justify-between items-center text-sm font-bold">
+                 <span className="flex items-center gap-1.5 text-amber-600"><Icon name="ticket" className="w-4 h-4"/> 快通券狀態</span>
+                 <span className="text-slate-600">{isViped ? '1' : '0'} / 1</span>
+               </div>
+               <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                 <div className={`h-2.5 rounded-full transition-all duration-500 ${isViped ? 'bg-gradient-to-r from-amber-400 to-orange-500 w-full' : 'w-0'}`}></div>
+               </div>
+             </div>
+           </div>
            
            <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center gap-4">
-              {wish.vipCode && (
+              {wish.vipCode ? (
                  <div className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl flex items-center gap-2 shadow-sm">
-                    <Icon name="ticket" className="w-4 h-4"/> 快通券已附上
+                    <Icon name="ticket-check" className="w-4 h-4"/> 快通已啟用
+                 </div>
+              ) : (
+                 <div className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl flex items-center gap-2 shadow-sm">
+                    <Icon name="info" className="w-4 h-4"/> 尚缺快通券
                  </div>
               )}
               <button 
