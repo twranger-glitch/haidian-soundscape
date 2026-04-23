@@ -1777,14 +1777,8 @@
         };
 
         window.toggleGlobalAudio = function() {
-            // 增加防呆：確保有音檔才允許點擊播放
-            if (!currentAudioUid || !globalAudio.src) {
-                console.warn("尚未載入任何音檔");
-                return;
-            }
-        
             if (globalAudio.paused) {
-                globalAudio.play().catch(e => console.warn("播放失敗", e));
+                globalAudio.play();
                 document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
             } else {
                 globalAudio.pause();
@@ -1793,34 +1787,12 @@
             updateCardButtonUI();
         };
 
-        var API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json";
+        var API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json"; 
         
         fetch(API_URL)
             .then(res => res.json())
             .then(data => { 
-                var rawData = data || []; 
-                
-                // 1. 在源頭將所有資料清洗、補齊預設值，避免後續處理出錯炸掉
-                var safeData = rawData.map(item => ({
-                    ...item,
-                    uid: item.uid || 'guest_' + Math.random().toString(36).substr(2, 9),
-                    title: item.title || '未命名聲景',
-                    author: item.author || '匿名',
-                    category: item.category || '未分類',
-                    date: item.date || '2000-01-01 00:00:00', // 給予預設底線時間
-                    description: item.description || '尚無描述',
-                    coverUrl: item.coverUrl || '',
-                    lat: Number(item.lat) || 0,
-                    lon: Number(item.lon) || 0
-                })).filter(item => item.lat !== 0 && item.lon !== 0); // 剔除完全沒有座標的無效資料
-        
-                // 2. 直接在此處進行嚴謹的時間降冪排序 (最新的在最前面)
-                safeData.sort((a, b) => {
-                    var timeA = new Date(a.date.replace(/-/g, '/')).getTime() || 0;
-                    var timeB = new Date(b.date.replace(/-/g, '/')).getTime() || 0;
-                    return timeB - timeA; 
-                });
-        
+                var safeData = data || []; 
                 allMarkersData = safeData; 
                 renderMarkers(safeData); 
                 renderLatestSubmissions(safeData); 
@@ -1924,19 +1896,13 @@
         }
 
         function renderLatestSubmissions(data) {
-            var latestListDiv = document.getElementById('latestList');
-            latestListDiv.innerHTML = "";
+            var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
+            var sortedData = data.slice().reverse(); 
             
-            // 資料在 fetch 時已確保是最新的在前，直接取前 10 筆
-            var top10 = data.slice(0, 10);
-            
-            if(top10.length === 0) { 
-                latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; 
-                return;
-            }
-            
+            var top10 = sortedData.slice(0, 10);
+            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
             top10.forEach(item => {
-                var rawDate = item.date.replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
+                var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
                 latestListDiv.innerHTML += `
                     <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
                         <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
@@ -2294,20 +2260,11 @@
         }
         
         function closeGlobalPlayer() { 
-            globalAudio.pause();
+            globalAudio.pause(); 
             document.getElementById('globalPlayer').classList.remove('active'); 
             var header = document.querySelector('.glass-header');
             if (header) header.classList.remove('compact-mode'); 
-            
-            // 徹底重置播放器 UI，避免下次開啟殘留上一首的狀態
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-            document.getElementById('waveProgress').style.clipPath = 'inset(0 100% 0 0)';
-            document.getElementById('playerTimeDisplay').innerText = '00:00 / 00:00';
-        
-            currentAudioUid = null; 
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            updateCardButtonUI();
+            currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
         }
         
         function toggleMute() { 
