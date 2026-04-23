@@ -767,49 +767,20 @@
                 <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
 
                 <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
-                <label><input type="checkbox" id="hydro_74" onchange="toggleHydrologyLayer('74', this.checked)" style="accent-color:#0f766e;"> 海堤區線</label>
-                <label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
-                <label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
-                <label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+<label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
+<label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
+<label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
 
-                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
-                <label><input type="checkbox" id="hydro_75" onchange="toggleHydrologyLayer('75', this.checked)" style="accent-color:#0f766e;"> 區域排水治理線</label>
-                <label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
+<label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
 
-                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
-                <label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
-                <label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
+<label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
+<label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
 
-                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
-                <label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
-                <label><input type="checkbox" id="hydro_173" onchange="toggleHydrologyLayer('173', this.checked)" style="accent-color:#0f766e;"> 地層下陷相關站點</label>
-                <label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
-
-                <details style="margin-top:10px;">
-                    <summary style="cursor:pointer; font-size:11px; color:#0f766e; font-weight:800;">展開進階水文圖層</summary>
-                    <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #a5f3fc;">
-                        <div style="font-size:11px; color:#164e63; font-weight:800; margin:0 0 6px 0;">水庫細項</div>
-                        <label><input type="checkbox" id="hydro_98" onchange="toggleHydrologyLayer('98', this.checked)" style="accent-color:#0f766e;"> 水庫外圍範圍</label>
-                        <label><input type="checkbox" id="hydro_99" onchange="toggleHydrologyLayer('99', this.checked)" style="accent-color:#0f766e;"> 水庫內圍範圍</label>
-                        <label><input type="checkbox" id="hydro_107" onchange="toggleHydrologyLayer('107', this.checked)" style="accent-color:#0f766e;"> 水庫子集水區</label>
-                        <label><input type="checkbox" id="hydro_108" onchange="toggleHydrologyLayer('108', this.checked)" style="accent-color:#0f766e;"> 水庫/水源保護相關範圍</label>
-
-                        <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">保護區細項</div>
-                        <label><input type="checkbox" id="hydro_104" onchange="toggleHydrologyLayer('104', this.checked)" style="accent-color:#0f766e;"> 保護區外圍</label>
-                        <label><input type="checkbox" id="hydro_105" onchange="toggleHydrologyLayer('105', this.checked)" style="accent-color:#0f766e;"> 保護區內圍</label>
-
-                        <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水進階</div>
-                        <label><input type="checkbox" id="hydro_110" onchange="toggleHydrologyLayer('110', this.checked)" style="accent-color:#0f766e;"> 地下水管制區 2</label>
-                        <label><input type="checkbox" id="hydro_111" onchange="toggleHydrologyLayer('111', this.checked)" style="accent-color:#0f766e;"> 地下水管制區 1</label>
-                        <label><input type="checkbox" id="hydro_169" onchange="toggleHydrologyLayer('169', this.checked)" style="accent-color:#0f766e;"> 地下水區域</label>
-                        <label><input type="checkbox" id="hydro_170" onchange="toggleHydrologyLayer('170', this.checked)" style="accent-color:#0f766e;"> 地下水管制區2(另一版)</label>
-                        <label><input type="checkbox" id="hydro_171" onchange="toggleHydrologyLayer('171', this.checked)" style="accent-color:#0f766e;"> 地下水管制區</label>
-                        <label><input type="checkbox" id="hydro_172" onchange="toggleHydrologyLayer('172', this.checked)" style="accent-color:#0f766e;"> 深井/地下水井</label>
-                        <label><input type="checkbox" id="hydro_176" onchange="toggleHydrologyLayer('176', this.checked)" style="accent-color:#0f766e;"> 地下水觀測井(a)</label>
-                        <label><input type="checkbox" id="hydro_177" onchange="toggleHydrologyLayer('177', this.checked)" style="accent-color:#0f766e;"> 地下水觀測井(e)</label>
-                        <label><input type="checkbox" id="hydro_178" onchange="toggleHydrologyLayer('178', this.checked)" style="accent-color:#0f766e;"> 地下水水質監測站</label>
-                    </div>
-                </details>
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
+<label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
+<label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
             </div>
         </div>
     </div>
@@ -972,36 +943,17 @@ var floodScenarioMeta = {
 };
 
 var hydrologyLayerMeta = {
-    '74':  { label: '海堤區線' },
     '92':  { label: '海堤區域' },
     '76':  { label: '海岸緩衝區' },
     '77':  { label: '海岸保護區' },
-    '75':  { label: '區域排水治理線' },
     '91':  { label: '區域排水治理區' },
     '100': { label: '水庫範圍' },
     '106': { label: '水質水量保護區' },
     '112': { label: '地下水鹽化區' },
-    '173': { label: '地層下陷相關站點' },
-    '175': { label: '地層下陷監測站' },
-
-    '98':  { label: '水庫外圍範圍' },
-    '99':  { label: '水庫內圍範圍' },
-    '107': { label: '水庫子集水區' },
-    '108': { label: '水庫/水源保護相關範圍' },
-    '104': { label: '保護區外圍' },
-    '105': { label: '保護區內圍' },
-    '110': { label: '地下水管制區2' },
-    '111': { label: '地下水管制區1' },
-    '169': { label: '地下水區域' },
-    '170': { label: '地下水管制區2(另一版)' },
-    '171': { label: '地下水管制區' },
-    '172': { label: '深井/地下水井' },
-    '176': { label: '地下水觀測井(a)' },
-    '177': { label: '地下水觀測井(e)' },
-    '178': { label: '地下水水質監測站' }
+    '175': { label: '地層下陷監測站' }
 };
 
-var recommendedHydrologyIds = ['74', '92', '76', '77', '75', '91', '100', '106', '112', '173', '175'];
+var recommendedHydrologyIds = ['92', '76', '77', '91', '100', '106', '112', '175'];
 
 var currentFloodLayer = null;
 var currentFloodLayerId = null;
