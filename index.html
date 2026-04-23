@@ -27,7 +27,7 @@
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
-<script>
+    <script>
         (function() {
             var ua = navigator.userAgent || navigator.vendor || window.opera;
             var isLine = (ua.indexOf("Line") > -1);
@@ -41,7 +41,7 @@
                     window.location.href = location.href + separator + 'openExternalBrowser=1';
                 }
                 
-                // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
+                // 2. 顯示極簡質感的引導擋板
                 document.addEventListener("DOMContentLoaded", function() {
                     var overlay = document.createElement('div');
                     overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
@@ -55,7 +55,6 @@
                         </div>
                     `;
                     document.body.appendChild(overlay);
-                    // 鎖死地圖與滾動
                     document.body.style.overflow = 'hidden'; 
                 });
             }
@@ -419,10 +418,9 @@
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
             width: 220px;
         }
-        .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: #34495e; font-weight: 700; font-size: 13px;}
+        .custom-layer-control label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #34495e; font-weight: 700; font-size: 13px;}
         .custom-layer-control label svg { color: var(--text-muted); }
-        .custom-layer-control label:last-child { margin-bottom: 0; }
-        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 17px; height: 17px; margin: 0; flex-shrink:0; cursor: pointer;}
+        .custom-layer-control input[type="radio"], .custom-layer-control input[type="checkbox"] { accent-color: var(--accent-color); width: 17px; height: 17px; margin: 0; flex-shrink:0; cursor: pointer;}
         
         .btn-more-layers {
             width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #cbd5e1;
@@ -507,7 +505,6 @@
             
             .close-player-btn { grid-area: close; align-self: center; }
 
-            /* 🌟 手機版極限高度防爆壓縮與捲動修復 */
             .leaflet-popup-content-wrapper { max-height: calc(100vh - 160px); display: flex; flex-direction: column; overflow: hidden; }
             .leaflet-popup-content { width: 280px !important; max-height: calc(100vh - 160px); overflow-y: auto !important; padding-bottom: 10px; }
             .sound-cover { height: 110px; flex-shrink: 0; }
@@ -690,19 +687,19 @@
         <div class="tools-menu-container">
             <div class="custom-layer-control">
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
                     臺灣精細地圖
                 </label>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
                     全球通用地圖
                 </label>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
                     ESRI 衛星影像
                 </label>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
                     OSM 標準地圖
                 </label>
@@ -710,11 +707,11 @@
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
                     1895 臺南府迅速測圖
                 </label>
-                <label>
+                <label style="margin-bottom:10px;">
                     <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
                     1904 臺灣堡圖
                 </label>
@@ -740,8 +737,8 @@
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署)</div>
-                <label>
-                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
+                <label style="margin-bottom:10px;">
+                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; margin-right:6px; flex-shrink:0;">
                     顯示淹水潛勢圖
                 </label>
 
@@ -775,8 +772,8 @@
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (獨立疊圖管理)</div>
-                <label>
-                    <input type="checkbox" id="hydrologyMasterToggle" onchange="toggleHydrologyPanel(this.checked)" style="accent-color:#0f766e; width:17px; height:17px; margin:0; flex-shrink:0;">
+                <label style="margin-bottom:10px;">
+                    <input type="checkbox" id="hydrologyMasterToggle" onchange="toggleHydrologyPanel(this.checked)" style="accent-color:#0f766e; width:17px; height:17px; margin:0; margin-right:6px; flex-shrink:0;">
                     啟用水文專區
                 </label>
 
@@ -798,27 +795,27 @@
                     <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
-                    <label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
-                    <label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
-                    <label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 海堤區域</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 海岸緩衝區</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 海岸保護區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
-                    <label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 區域排水治理區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
-                    <label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
-                    <label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 水庫範圍</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 水質水量保護區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
-                    <label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
-                    <label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 地下水鹽化區</label>
+                    <label style="margin-bottom:8px;"><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e; margin-right:6px;"> 地層下陷監測站</label>
                 </div>
 
                 <div style="border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;"></div>
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方災害圖資</div>
-                <label>
-                    <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; width:17px; height:17px; margin:0; flex-shrink:0;">
+                <label style="margin-bottom:10px;">
+                    <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; width:17px; height:17px; margin:0; margin-right:6px; flex-shrink:0;">
                     啟用官方災害圖資
                 </label>
 
@@ -840,18 +837,42 @@
                     <input type="range" id="officialHazardOpacity" min="0.1" max="1" step="0.05" value="0.6" style="width:100%; accent-color:#7c3aed; margin:0 0 10px 0;" oninput="updateOfficialHazardOpacity(this.value)">
 
                     <div style="font-size:11px; color:#4c1d95; font-weight:800; margin:10px 0 6px 0;">坡地災害與地質</div>
-                    <label><input type="checkbox" id="officialHazard_landslide_sensitive" onchange="toggleOfficialHazardLayer('landslide_sensitive', this.checked)" style="accent-color:#7c3aed;"> 山崩與地滑地質敏感區</label>
-                    <label><input type="checkbox" id="officialHazard_dislope" onchange="toggleOfficialHazardLayer('dislope', this.checked)" style="accent-color:#7c3aed;"> 順向坡目錄</label>
-                    <label><input type="checkbox" id="officialHazard_lidar" onchange="toggleOfficialHazardLayer('lidar', this.checked)" style="accent-color:#7c3aed;"> 光達判釋目錄</label>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_landslide_sensitive" onchange="toggleOfficialHazardLayer('landslide_sensitive', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 山崩與地滑地質敏感區</label>
+                        <div onclick="showHazardInfo('landslide_sensitive', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_dislope" onchange="toggleOfficialHazardLayer('dislope', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 順向坡目錄</label>
+                        <div onclick="showHazardInfo('dislope', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_lidar" onchange="toggleOfficialHazardLayer('lidar', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 光達判釋目錄</label>
+                        <div onclick="showHazardInfo('lidar', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
 
                     <div style="font-size:11px; color:#4c1d95; font-weight:800; margin:10px 0 6px 0;">基礎地質與地形</div>
-                    <label><input type="checkbox" id="officialHazard_gm50000" onchange="toggleOfficialHazardLayer('gm50000', this.checked)" style="accent-color:#7c3aed;"> 五萬分之一地質圖</label>
-                    <label><input type="checkbox" id="officialHazard_slp20" onchange="toggleOfficialHazardLayer('slp20', this.checked)" style="accent-color:#7c3aed;"> 全島數值地形坡度圖</label>
-                    <label><input type="checkbox" id="officialHazard_shadw20" onchange="toggleOfficialHazardLayer('shadw20', this.checked)" style="accent-color:#7c3aed;"> 全島數值地形多向陰影圖</label>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_gm50000" onchange="toggleOfficialHazardLayer('gm50000', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 五萬分之一地質圖</label>
+                        <div onclick="showHazardInfo('gm50000', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_slp20" onchange="toggleOfficialHazardLayer('slp20', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 全島數值地形坡度圖</label>
+                        <div onclick="showHazardInfo('slp20', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_shadw20" onchange="toggleOfficialHazardLayer('shadw20', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 數值地形多向陰影圖</label>
+                        <div onclick="showHazardInfo('shadw20', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
 
                     <div style="font-size:11px; color:#4c1d95; font-weight:800; margin:10px 0 6px 0;">地震災害</div>
-                    <label><input type="checkbox" id="officialHazard_soil_liquefaction_1" onchange="toggleOfficialHazardLayer('soil_liquefaction_1', this.checked)" style="accent-color:#7c3aed;"> 土壤液化潛勢圖（初級）</label>
-                    <label><input type="checkbox" id="officialHazard_soil_liquefaction_2" onchange="toggleOfficialHazardLayer('soil_liquefaction_2', this.checked)" style="accent-color:#7c3aed;"> 土壤液化潛勢圖（中級）</label>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_soil_liquefaction_1" onchange="toggleOfficialHazardLayer('soil_liquefaction_1', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 土壤液化潛勢圖(初級)</label>
+                        <div onclick="showHazardInfo('soil_liquefaction', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_soil_liquefaction_2" onchange="toggleOfficialHazardLayer('soil_liquefaction_2', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 土壤液化潛勢圖(中級)</label>
+                        <div onclick="showHazardInfo('soil_liquefaction', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="pointer-events:none;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -969,35 +990,6 @@
         </div>
     </div>
 
-    <div id="globalPlayer" class="global-player">
-        <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        </button>
-        <div class="player-main">
-            <div class="player-header-row">
-                <div id="playerTitleContainer" class="player-title-container">
-                    <div id="playerTitleUI" class="player-title">載入中...</div>
-                </div>
-                <button id="favBtn" class="fav-btn" onclick="toggleFavorite()" title="加入我的收藏">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                </button>
-                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
-            </div>
-            <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
-                <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
-            </div>
-        </div>
-        <div class="volume-control">
-            <span id="muteBtn" class="mute-icon" onclick="toggleMute()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            </span>
-            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
-        </div>
-        <button class="close-player-btn" onclick="closeGlobalPlayer()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-    </div>
-
     <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
         <div class="modal-box">
             <button class="modal-close-btn" onclick="closeModal('aboutModal')">
@@ -1025,8 +1017,42 @@
             </div>
         </div>
     </div>
+
+    <div id="hazardInfoModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'hazardInfoModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 400px; transform: scale(0.95); transition: 0.3s;">
+            <button class="modal-close-btn" onclick="closeModal('hazardInfoModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: left; justify-content:flex-start; margin-bottom: 16px; color:#4c1d95;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span id="hazardInfoTitle">地質名詞</span>
+                </h2>
+                <div style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                    <p id="hazardInfoDesc" style="font-size: 15px; color: #475569; line-height: 1.7; margin: 0; text-align: justify;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
+        // 🌟 官方災害圖資 - 科普白話文小辭典
+        const hazardExplanations = {
+            'landslide_sensitive': { title: '山崩與地滑地質敏感區', desc: '就像是地球的「舊傷疤」。這裡過去曾經發生過山崩，或者地質比較脆弱，未來如果遇到大雨或地震，容易再次發生土石崩落。' },
+            'dislope': { title: '順向坡', desc: '想像一個溜滑梯！當地底岩層的傾斜方向跟山坡表面的傾斜方向一致時，就是順向坡。如果最底下的泥土被挖掉，上面的土石就很容易整塊滑下來。' },
+            'lidar': { title: '光達 (LiDAR) 判釋地形', desc: '這是一種超酷的透視眼技術！利用飛機在天上打雷射光穿透樹林，看到底下最真實的地表起伏，用來尋找隱藏的斷層或古老山崩痕跡。' },
+            'gm50000': { title: '五萬分之一地質圖', desc: '這是地質學家的尋寶圖。圖上不同的顏色代表腳底下踩的是不同年代、不同種類的岩石（如砂岩、頁岩），也會畫出地底下的斷層位置。' },
+            'slp20': { title: '全島數值地形坡度圖', desc: '這張圖用顏色告訴我們哪裡陡峭、哪裡平坦。顏色越深的地方代表越陡，通常也是比較危險、不適合開發的地方。' },
+            'shadw20': { title: '多向陰影圖', desc: '這就像是幫台灣的地形打上聚光燈！透過模擬太陽光照射，讓山脈跟山谷看起來產生 3D 立體感，非常適合觀察地形特徵。' },
+            'soil_liquefaction': { title: '土壤液化潛勢圖', desc: '強震發生時，地底下的沙子和水會因為劇烈搖晃而混合，原本堅硬的泥土會瞬間變成像泥漿一樣軟爛，導致上面的房子下沉或傾斜。' }
+        };
+        function showHazardInfo(key, event) {
+            if(event) { event.preventDefault(); event.stopPropagation(); }
+            document.getElementById('hazardInfoTitle').innerText = hazardExplanations[key].title;
+            document.getElementById('hazardInfoDesc').innerText = hazardExplanations[key].desc;
+            document.getElementById('hazardInfoModal').classList.add('active');
+        }
+
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0278, 120.2004], 15);
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -1293,7 +1319,7 @@
         }
 
         // ==========================================
-        // 🌟 官方災害圖資 (從官方 API 串接，修正 XYZ 對應)
+        // 🌟 官方災害圖資 (從官方 API 串接)
         // ==========================================
         var officialHazardTileMeta = {
             landslide_sensitive: {
@@ -1604,20 +1630,16 @@
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 終極絕對定心引擎：透過像素偏移精準控制卡片著陸點
         function getFocusOffset() {
             var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
             var isMobile = window.innerWidth <= 600;
             var H = window.innerHeight;
-            
-            // 播放條出現時的安全扣除高度：精準給定 120px，保證卡片與播放條之間留下完美間距，絕不推飛。
             var bottomMargin = 0;
             if (isMobile) {
                 bottomMargin = isPlayerActive ? 120 : 60;
             } else {
                 bottomMargin = isPlayerActive ? 140 : 80;
             }
-            
             return (H / 2) - bottomMargin;
         }
 
@@ -1625,9 +1647,7 @@
             if (!marker || !marker.getLatLng) return;
             setTimeout(() => {
                 var pt = map.project(marker.getLatLng(), map.getZoom());
-                // 套用絕對 Y 軸偏移
                 pt.y -= getFocusOffset();
-                // 絕對平移，捨棄原生 autoPan
                 map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
             }, 100);
         }
@@ -1636,7 +1656,6 @@
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
             uis.forEach(id => {
                 let el = document.getElementById(id);
-                // 防干擾：確保只有按鈕本身吃點擊
                 if(el) { L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); }
             });
             let header = document.querySelector('.glass-header');
