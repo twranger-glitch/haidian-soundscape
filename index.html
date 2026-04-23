@@ -680,22 +680,57 @@
                 </label>
                 
                 <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
-                    <span style="color:#059669; font-weight:800;">目前載入：</span>
-                    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
-                </div>
+    <span style="color:#059669; font-weight:800;">目前載入：</span>
+    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
+</div>
 
-                <div id="opacityControl" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
-                        <span>透明度</span>
-                        <span id="opacityValue">80%</span>
-                    </div>
-                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
-                </div>
+<div id="opacityControl" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
+        <span>透明度</span>
+        <span id="opacityValue">80%</span>
+    </div>
+    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+</div>
 
-                <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                    更多歷史圖層
-                </button>
+<hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+
+<div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署 WMS)</div>
+<label>
+    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)">
+    顯示淹水潛勢圖
+</label>
+
+<div id="floodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
+    <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">降雨情境</div>
+    <select id="floodScenario" onchange="changeFloodScenario(this.value)" style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;">
+        <option value="81" selected>24 小時 200 mm</option>
+        <option value="80">24 小時 350 mm</option>
+        <option value="79">24 小時 500 mm</option>
+        <option value="78">24 小時 650 mm</option>
+        <option value="84">12 小時 200 mm</option>
+        <option value="83">12 小時 300 mm</option>
+        <option value="82">12 小時 400 mm</option>
+        <option value="87">6 小時 150 mm</option>
+        <option value="86">6 小時 250 mm</option>
+        <option value="85">6 小時 350 mm</option>
+    </select>
+
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
+        <span>透明度</span>
+        <span id="floodOpacityValue">55%</span>
+    </div>
+    <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+        <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 200 mm</span>
+        <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
+    </div>
+</div>
+
+<button class="btn-more-layers" onclick="openModal('moreLayersModal')">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+    更多歷史圖層
+</button>
             </div>
         </div>
     </div>
@@ -890,9 +925,130 @@
         var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
-        var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
+var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
 
-        taiwanLayer.addTo(map);
+var floodWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
+var floodScenarioMeta = {
+    '81': { label: '24 小時 200 mm' },
+    '80': { label: '24 小時 350 mm' },
+    '79': { label: '24 小時 500 mm' },
+    '78': { label: '24 小時 650 mm' },
+    '84': { label: '12 小時 200 mm' },
+    '83': { label: '12 小時 300 mm' },
+    '82': { label: '12 小時 400 mm' },
+    '87': { label: '6 小時 150 mm' },
+    '86': { label: '6 小時 250 mm' },
+    '85': { label: '6 小時 350 mm' }
+};
+var currentFloodLayer = null;
+var currentFloodLayerId = null;
+
+map.createPane('floodPane');
+map.getPane('floodPane').style.zIndex = 350;
+map.getPane('floodPane').style.pointerEvents = 'none';
+
+function getFloodOpacityValue() {
+    var opacityEl = document.getElementById('floodOpacity');
+    return opacityEl ? parseFloat(opacityEl.value) : 0.55;
+}
+
+function getFloodSelectedId() {
+    var scenarioEl = document.getElementById('floodScenario');
+    return scenarioEl ? scenarioEl.value : '81';
+}
+
+function createFloodLayer(layerId) {
+    return L.tileLayer.wms(floodWmsBaseUrl, {
+        layers: String(layerId),
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        crs: L.CRS.EPSG4326,
+        uppercase: true,
+        pane: 'floodPane',
+        opacity: getFloodOpacityValue()
+    });
+}
+
+function ensureFloodLayer() {
+    var selectedId = getFloodSelectedId();
+    if (!currentFloodLayer || currentFloodLayerId !== selectedId) {
+        if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+            map.removeLayer(currentFloodLayer);
+        }
+        currentFloodLayer = createFloodLayer(selectedId);
+        currentFloodLayerId = selectedId;
+        currentFloodLayer.on('tileerror', function(err) {
+            console.warn('Flood WMS tile error:', err);
+        });
+    }
+    return currentFloodLayer;
+}
+
+function updateFloodLabels() {
+    var selectedId = getFloodSelectedId();
+    var meta = floodScenarioMeta[selectedId];
+    var titleEl = document.getElementById('floodLayerTitle');
+    if (titleEl && meta) titleEl.innerText = meta.label;
+}
+
+function toggleFloodLayer(checked) {
+    var panel = document.getElementById('floodControlPanel');
+    if (panel) panel.style.display = checked ? 'block' : 'none';
+    updateFloodLabels();
+
+    if (!checked) {
+        if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+            map.removeLayer(currentFloodLayer);
+        }
+        return;
+    }
+
+    var layer = ensureFloodLayer();
+    layer.setOpacity(getFloodOpacityValue());
+    if (!map.hasLayer(layer)) {
+        map.addLayer(layer);
+    }
+}
+
+function changeFloodScenario(val) {
+    var toggleEl = document.getElementById('floodToggle');
+    var wasEnabled = toggleEl && toggleEl.checked;
+
+    if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+        map.removeLayer(currentFloodLayer);
+    }
+
+    currentFloodLayer = null;
+    currentFloodLayerId = null;
+    updateFloodLabels();
+
+    if (wasEnabled) {
+        var layer = ensureFloodLayer();
+        layer.setOpacity(getFloodOpacityValue());
+        map.addLayer(layer);
+    }
+}
+
+function updateFloodOpacity(val) {
+    var opacityValueEl = document.getElementById('floodOpacityValue');
+    if (opacityValueEl) {
+        opacityValueEl.innerText = Math.round(parseFloat(val) * 100) + '%';
+    }
+    if (currentFloodLayer) {
+        currentFloodLayer.setOpacity(parseFloat(val));
+    }
+}
+
+function openFloodLegend() {
+    var selectedId = getFloodSelectedId();
+    var legendUrl = floodWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
+    window.open(legendUrl, '_blank');
+}
+
+taiwanLayer.addTo(map);
+updateFloodLabels();
+updateFloodOpacity(getFloodOpacityValue());
 
         function switchBasemap(val) {
             // 🌟 1. 卸載目前所有圖層
