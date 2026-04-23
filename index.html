@@ -644,202 +644,150 @@
     </div>
 
     <div id="rightToolsWrapper" class="right-tools-wrapper">
-        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-        </div>
-        <div class="tools-menu-container">
-            <div class="custom-layer-control">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
-                <label>
-                    <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
-                    臺灣精細地圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
-                    全球通用地圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
-                    ESRI 衛星影像
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
-                    OSM 標準地圖
-                </label>
-                
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
-                
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label>
-                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
-                    1895 臺南府迅速測圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
-                    1904 臺灣堡圖
-                </label>
-                
-                <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
-    <span style="color:#059669; font-weight:800;">目前載入：</span>
-    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
-</div>
-
-<div id="opacityControl" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
-    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
-        <span>透明度</span>
-        <span id="opacityValue">80%</span>
+    <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
     </div>
-    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
-</div>
 
-<hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+    <div class="tools-menu-container">
+        <div class="custom-layer-control">
+            <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
+            <label>
+                <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)">
+                臺灣精細地圖
+            </label>
+            <label>
+                <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)">
+                全球通用地圖
+            </label>
+            <label>
+                <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)">
+                ESRI 衛星影像
+            </label>
+            <label>
+                <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)">
+                OSM 標準地圖
+            </label>
 
-<div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署 WMS)</div>
-<label>
-    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)">
-    顯示淹水潛勢圖
-</label>
+            <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
 
-<div id="floodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
-    <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">降雨情境</div>
-    <select id="floodScenario" onchange="changeFloodScenario(this.value)" style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;">
-        <option value="81" selected>24 小時 200 mm</option>
-        <option value="80">24 小時 350 mm</option>
-        <option value="79">24 小時 500 mm</option>
-        <option value="78">24 小時 650 mm</option>
-        <option value="84">12 小時 200 mm</option>
-        <option value="83">12 小時 300 mm</option>
-        <option value="82">12 小時 400 mm</option>
-        <option value="87">6 小時 150 mm</option>
-        <option value="86">6 小時 250 mm</option>
-        <option value="85">6 小時 350 mm</option>
-    </select>
+            <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
+            <label>
+                <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)">
+                1895 臺南府迅速測圖
+            </label>
+            <label>
+                <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)">
+                1904 臺灣堡圖
+            </label>
 
-    <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
-        <span>透明度</span>
-        <span id="floodOpacityValue">55%</span>
-    </div>
-    <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
-
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
-        <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 200 mm</span>
-        <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
-    </div>
-</div>
-
-<button class="btn-more-layers" onclick="openModal('moreLayersModal')">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-    更多歷史圖層
-</button>
+            <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
+                <span style="color:#059669; font-weight:800;">目前載入：</span>
+                <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
             </div>
-        </div>
-    </div>
 
-    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
-        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
-            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <div id="opacityControl" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
+                    <span>透明度</span>
+                    <span id="opacityValue">80%</span>
+                </div>
+                <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+            </div>
+
+            <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                更多歷史圖層
             </button>
-            <div class="modal-content" style="padding: 30px 24px;">
-                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
-                    更多歷史圖層
-                </h2>
-                <div class="more-layers-grid">
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
-                            <span>Tainan_1875</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
-                            <span>Tainan_1900</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
-                            <span>Tainan_1920</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
-                            <span>JM20K_1921</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
-                            <span>AM25K_1944B</span>
-                        </div>
-                    </label>
+
+            <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
+            <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署 WMS)</div>
+            <label>
+                <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
+                顯示淹水潛勢圖
+            </label>
+
+            <div id="floodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
+                <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">降雨情境</div>
+                <select id="floodScenario" onchange="changeFloodScenario(this.value)" style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;">
+                    <option value="81" selected>24 小時 200 mm</option>
+                    <option value="80">24 小時 350 mm</option>
+                    <option value="79">24 小時 500 mm</option>
+                    <option value="78">24 小時 650 mm</option>
+                    <option value="84">12 小時 200 mm</option>
+                    <option value="83">12 小時 300 mm</option>
+                    <option value="82">12 小時 400 mm</option>
+                    <option value="87">6 小時 150 mm</option>
+                    <option value="86">6 小時 250 mm</option>
+                    <option value="85">6 小時 350 mm</option>
+                </select>
+
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
+                    <span>透明度</span>
+                    <span id="floodOpacityValue">55%</span>
+                </div>
+                <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
+
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+                    <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 200 mm</span>
+                    <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
                 </div>
             </div>
+
+            <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
+            <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (獨立疊圖管理)</div>
+            <label>
+                <input type="checkbox" id="hydrologyMasterToggle" onchange="toggleHydrologyPanel(this.checked)" style="accent-color:#0f766e; width:17px; height:17px; margin:0; flex-shrink:0;">
+                啟用水文專區
+            </label>
+
+            <div id="hydrologyControlPanel" style="display:none; margin-top:10px; padding:10px; background:#ecfeff; border:1px solid #a5f3fc; border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <span style="font-size:11px; color:#155e75; font-weight:800;">目前啟用圖層</span>
+                    <span id="hydrologyStatusText" style="font-size:11px; color:#0f766e; font-weight:800;">0 層</span>
+                </div>
+
+                <div style="display:flex; gap:6px; margin-bottom:10px;">
+                    <button type="button" onclick="setHydrologyRecommended(true)" style="flex:1; border:none; background:#0f766e; color:#fff; border-radius:8px; padding:8px 10px; font-size:11px; font-weight:800; cursor:pointer;">常用全開</button>
+                    <button type="button" onclick="clearAllHydrologyLayers()" style="flex:1; border:none; background:#334155; color:#fff; border-radius:8px; padding:8px 10px; font-size:11px; font-weight:800; cursor:pointer;">全部關閉</button>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#155e75; margin-bottom:5px; font-weight:700;">
+                    <span>整體透明度</span>
+                    <span id="hydrologyOpacityValue">55%</span>
+                </div>
+                <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
+
+                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
+<label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
+<label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
+<label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
+<label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
+<label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
+<label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+
+<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
+<label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
+<label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
+            </div>
         </div>
     </div>
+</div>
 
     <div id="map"></div>
-<div id="map"></div>
 
-    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
-        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
-            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-            <div class="modal-content" style="padding: 30px 24px;">
-                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
-                    更多歷史圖層
-                </h2>
-                <div class="more-layers-grid">
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
-                            <span>Tainan_1875</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
-                            <span>Tainan_1900</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
-                            <span>Tainan_1920</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
-                            <span>JM20K_1921</span>
-                        </div>
-                    </label>
-                    <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
-                        <div class="layer-card-content">
-                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
-                            <span>AM25K_1944B</span>
-                        </div>
-                    </label>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
     <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
         <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
             <button class="modal-close-btn" onclick="closeModal('latestModal')">
@@ -976,10 +924,11 @@
         var history1920Layer = L.tileLayer('https://gis.sinica.edu.tw/tainan/file-exists.php?img=Tainan_1920-png-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
         var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
-        var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
+var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
 var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
 
-var floodWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
+var wraWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
+
 var floodScenarioMeta = {
     '81': { label: '24 小時 200 mm' },
     '80': { label: '24 小時 350 mm' },
@@ -992,16 +941,43 @@ var floodScenarioMeta = {
     '86': { label: '6 小時 250 mm' },
     '85': { label: '6 小時 350 mm' }
 };
+
+var hydrologyLayerMeta = {
+    '92':  { label: '海堤區域' },
+    '76':  { label: '海岸緩衝區' },
+    '77':  { label: '海岸保護區' },
+    '91':  { label: '區域排水治理區' },
+    '100': { label: '水庫範圍' },
+    '106': { label: '水質水量保護區' },
+    '112': { label: '地下水鹽化區' },
+    '175': { label: '地層下陷監測站' }
+};
+
+var recommendedHydrologyIds = ['92', '76', '77', '91', '100', '106', '112', '175'];
+
 var currentFloodLayer = null;
 var currentFloodLayerId = null;
+var hydrologyLayers = {};
+
+map.createPane('hydrologyPane');
+map.getPane('hydrologyPane').style.zIndex = 340;
+map.getPane('hydrologyPane').style.pointerEvents = 'none';
 
 map.createPane('floodPane');
 map.getPane('floodPane').style.zIndex = 350;
 map.getPane('floodPane').style.pointerEvents = 'none';
 
-function getFloodOpacityValue() {
-    var opacityEl = document.getElementById('floodOpacity');
-    return opacityEl ? parseFloat(opacityEl.value) : 0.55;
+function createWraWmsLayer(layerId, paneName, opacityValue) {
+    return L.tileLayer.wms(wraWmsBaseUrl, {
+        layers: String(layerId),
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        crs: L.CRS.EPSG4326,
+        uppercase: true,
+        pane: paneName,
+        opacity: opacityValue
+    });
 }
 
 function getFloodSelectedId() {
@@ -1009,31 +985,25 @@ function getFloodSelectedId() {
     return scenarioEl ? scenarioEl.value : '81';
 }
 
-function createFloodLayer(layerId) {
-    return L.tileLayer.wms(floodWmsBaseUrl, {
-        layers: String(layerId),
-        format: 'image/png',
-        transparent: true,
-        version: '1.3.0',
-        crs: L.CRS.EPSG4326,
-        uppercase: true,
-        pane: 'floodPane',
-        opacity: getFloodOpacityValue()
-    });
+function getFloodOpacityValue() {
+    var opacityEl = document.getElementById('floodOpacity');
+    return opacityEl ? parseFloat(opacityEl.value) : 0.55;
 }
 
 function ensureFloodLayer() {
     var selectedId = getFloodSelectedId();
+
     if (!currentFloodLayer || currentFloodLayerId !== selectedId) {
         if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
             map.removeLayer(currentFloodLayer);
         }
-        currentFloodLayer = createFloodLayer(selectedId);
+        currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
         currentFloodLayerId = selectedId;
         currentFloodLayer.on('tileerror', function(err) {
             console.warn('Flood WMS tile error:', err);
         });
     }
+
     return currentFloodLayer;
 }
 
@@ -1047,6 +1017,7 @@ function updateFloodLabels() {
 function toggleFloodLayer(checked) {
     var panel = document.getElementById('floodControlPanel');
     if (panel) panel.style.display = checked ? 'block' : 'none';
+
     updateFloodLabels();
 
     if (!checked) {
@@ -1058,6 +1029,7 @@ function toggleFloodLayer(checked) {
 
     var layer = ensureFloodLayer();
     layer.setOpacity(getFloodOpacityValue());
+
     if (!map.hasLayer(layer)) {
         map.addLayer(layer);
     }
@@ -1094,82 +1066,177 @@ function updateFloodOpacity(val) {
 
 function openFloodLegend() {
     var selectedId = getFloodSelectedId();
-    var legendUrl = floodWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
+    var legendUrl = wraWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
     window.open(legendUrl, '_blank');
+}
+
+function getHydrologyOpacityValue() {
+    var opacityEl = document.getElementById('hydrologyOpacity');
+    return opacityEl ? parseFloat(opacityEl.value) : 0.55;
+}
+
+function ensureHydrologyLayer(layerId) {
+    if (!hydrologyLayers[layerId]) {
+        hydrologyLayers[layerId] = createWraWmsLayer(layerId, 'hydrologyPane', getHydrologyOpacityValue());
+        hydrologyLayers[layerId].on('tileerror', function(err) {
+            console.warn('Hydrology WMS tile error:', layerId, err);
+        });
+    }
+    return hydrologyLayers[layerId];
+}
+
+function toggleHydrologyPanel(checked) {
+    var panel = document.getElementById('hydrologyControlPanel');
+    if (panel) panel.style.display = checked ? 'block' : 'none';
+
+    if (!checked) {
+        clearAllHydrologyLayers();
+    } else {
+        syncHydrologyStatus();
+    }
+}
+
+function toggleHydrologyLayer(layerId, checked) {
+    var layer = ensureHydrologyLayer(layerId);
+
+    if (checked) {
+        layer.setOpacity(getHydrologyOpacityValue());
+        if (!map.hasLayer(layer)) map.addLayer(layer);
+    } else {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+    }
+
+    syncHydrologyStatus();
+}
+
+function updateHydrologyOpacity(val) {
+    var valueText = document.getElementById('hydrologyOpacityValue');
+    if (valueText) {
+        valueText.innerText = Math.round(parseFloat(val) * 100) + '%';
+    }
+
+    Object.keys(hydrologyLayers).forEach(function(layerId) {
+        hydrologyLayers[layerId].setOpacity(parseFloat(val));
+    });
+}
+
+function syncHydrologyStatus() {
+    var activeCount = 0;
+
+    Object.keys(hydrologyLayerMeta).forEach(function(layerId) {
+        var checkbox = document.getElementById('hydro_' + layerId);
+        var layer = hydrologyLayers[layerId];
+        var active = checkbox && checkbox.checked && layer && map.hasLayer(layer);
+        if (active) activeCount++;
+    });
+
+    var statusText = document.getElementById('hydrologyStatusText');
+    if (statusText) {
+        statusText.innerText = activeCount + ' 層';
+    }
+
+    var masterToggle = document.getElementById('hydrologyMasterToggle');
+    if (masterToggle) {
+        masterToggle.checked = activeCount > 0 || (document.getElementById('hydrologyControlPanel') && document.getElementById('hydrologyControlPanel').style.display === 'block');
+    }
+}
+
+function clearAllHydrologyLayers() {
+    Object.keys(hydrologyLayerMeta).forEach(function(layerId) {
+        var checkbox = document.getElementById('hydro_' + layerId);
+        if (checkbox) checkbox.checked = false;
+
+        if (hydrologyLayers[layerId] && map.hasLayer(hydrologyLayers[layerId])) {
+            map.removeLayer(hydrologyLayers[layerId]);
+        }
+    });
+
+    syncHydrologyStatus();
+}
+
+function setHydrologyRecommended(checked) {
+    var masterToggle = document.getElementById('hydrologyMasterToggle');
+    var panel = document.getElementById('hydrologyControlPanel');
+
+    if (masterToggle) masterToggle.checked = true;
+    if (panel) panel.style.display = 'block';
+
+    recommendedHydrologyIds.forEach(function(layerId) {
+        var checkbox = document.getElementById('hydro_' + layerId);
+        if (checkbox) {
+            checkbox.checked = checked;
+            toggleHydrologyLayer(layerId, checked);
+        }
+    });
 }
 
 taiwanLayer.addTo(map);
 updateFloodLabels();
 updateFloodOpacity(getFloodOpacityValue());
+updateHydrologyOpacity(getHydrologyOpacityValue());
+syncHydrologyStatus();
 
-        function switchBasemap(val) {
-            // 🌟 1. 卸載目前所有圖層
-            allModernLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
-            allHistoryLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+function switchBasemap(val) {
+    allModernLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
+    allHistoryLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
 
-            // 🌟 2. 雙向同步主選單與 Modal 的 radio 狀態
-            document.querySelectorAll('input[name="basemap"]').forEach(el => {
-                el.checked = (el.value === val);
-            });
-            document.querySelectorAll('input[name="basemap_modal"]').forEach(el => {
-                el.checked = (el.value === val);
-            });
+    document.querySelectorAll('input[name="basemap"]').forEach(function(el) {
+        el.checked = (el.value === val);
+    });
+    document.querySelectorAll('input[name="basemap_modal"]').forEach(function(el) {
+        el.checked = (el.value === val);
+    });
 
-            var extLabel = document.getElementById('activeExtendedLayerLabel');
-            var extText = document.getElementById('extendedLayerNameText');
-            var opacityCtrl = document.getElementById('opacityControl');
-            
-            var histNames = {
-                'history_1875': '1874 府城街道圖',
-                'history_tainan': '1895 臺南府迅速測圖',
-                'history_1900': '1900 臺南府城內外略圖',
-                'history_1904': '1904 臺灣堡圖',
-                'history_1920': '1920 臺南市區改正圖',
-                'history_1921': '1921 臺灣堡圖',
-                'history_1944': '1944 美軍航照圖'
-            };
+    var extLabel = document.getElementById('activeExtendedLayerLabel');
+    var extText = document.getElementById('extendedLayerNameText');
+    var opacityCtrl = document.getElementById('opacityControl');
+    
+    var histNames = {
+        'history_1875': '1874 府城街道圖',
+        'history_tainan': '1895 臺南府迅速測圖',
+        'history_1900': '1900 臺南府城內外略圖',
+        'history_1904': '1904 臺灣堡圖',
+        'history_1920': '1920 臺南市區改正圖',
+        'history_1921': '1921 臺灣堡圖',
+        'history_1944': '1944 美軍航照圖'
+    };
 
-            // 🌟 3. 判判斷並載入
-            if (val.startsWith('history')) {
-                extLabel.style.display = 'block'; 
-                extText.innerText = histNames[val];
-                opacityCtrl.style.display = 'block';
-                
-                // 桌機版隱藏主選單已有的提示
-                if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
-                    extLabel.style.display = 'none';
-                }
-                
-                // 🌟 自動切換：1944 強制搭配 ESRI 衛星
-                var base = (val === 'history_1944') ? esriSatLayer : taiwanLayer;
-                map.addLayer(base);
-                
-                // 載入歷史疊圖
-                if (val === 'history_1875') map.addLayer(history1875Layer);
-                else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
-                else if (val === 'history_1900') map.addLayer(history1900Layer);
-                else if (val === 'history_1904') map.addLayer(history1904Layer);
-                else if (val === 'history_1920') map.addLayer(history1920Layer);
-                else if (val === 'history_1921') map.addLayer(history1921Layer);
-                else if (val === 'history_1944') map.addLayer(history1944Layer);
-                
-            } else {
-                extLabel.style.display = 'none'; 
-                opacityCtrl.style.display = 'none';
-                
-                // 載入現代圖資
-                if (val === 'global') map.addLayer(globalLayer);
-                else if (val === 'esri_sat') map.addLayer(esriSatLayer);
-                else if (val === 'osm') map.addLayer(osmLayer);
-                else map.addLayer(taiwanLayer);
-            }
+    if (val.startsWith('history')) {
+        extLabel.style.display = 'block'; 
+        extText.innerText = histNames[val];
+        opacityCtrl.style.display = 'block';
+        
+        if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
+            extLabel.style.display = 'none';
         }
+        
+        var base = (val === 'history_1944') ? esriSatLayer : taiwanLayer;
+        map.addLayer(base);
+        
+        if (val === 'history_1875') map.addLayer(history1875Layer);
+        else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
+        else if (val === 'history_1900') map.addLayer(history1900Layer);
+        else if (val === 'history_1904') map.addLayer(history1904Layer);
+        else if (val === 'history_1920') map.addLayer(history1920Layer);
+        else if (val === 'history_1921') map.addLayer(history1921Layer);
+        else if (val === 'history_1944') map.addLayer(history1944Layer);
+        
+    } else {
+        extLabel.style.display = 'none'; 
+        opacityCtrl.style.display = 'none';
+        
+        if (val === 'global') map.addLayer(globalLayer);
+        else if (val === 'esri_sat') map.addLayer(esriSatLayer);
+        else if (val === 'osm') map.addLayer(osmLayer);
+        else map.addLayer(taiwanLayer);
+    }
+}
 
-        function updateOpacity(val) {
-            document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
-            allHistoryLayers.forEach(l => l.setOpacity(val));
-        }
-
+function updateOpacity(val) {
+    document.getElementById('opacityValue').innerText = Math.round(val * 100) + '%';
+    allHistoryLayers.forEach(function(l) { l.setOpacity(val); });
+}
+        
         map.pm.setLang('zh-TW', {
             tooltips: { placeMarker: '點擊放置標記', firstVertex: '點擊地圖放置第一個起點', continueLine: '點擊繼續畫線', finishLine: '點擊最後一個節點完成路線', finishPoly: '點擊第一個起點完成多邊形', finishRect: '點擊並拖曳繪製矩形', edit: '拖曳節點以編輯形狀', cut: '剪下圖層', delete: '點擊你想刪除的圖層' },
             actions: { cancel: '取消', finish: '完成', removeLastVertex: '移除最後一點' },
