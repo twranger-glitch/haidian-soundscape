@@ -331,7 +331,7 @@
         .cat-nature { background: #e8f8f5; color: #0f766e; }   
         .cat-culture { background: #fef9e7; color: #b45309; }  
         .cat-industry { background: #fbeee6; color: #c2410c; } 
-        .cat-space { background: #ebf5fb; color: #0369a1; }    
+        .cat-space { background: #ebf5fb; color: #0369a1; }   
         .cat-history { background: #f4ecf8; color: #7e22ce; }  
         .cat-default { background: #f1f5f9; color: #475569; }  
         
@@ -767,27 +767,68 @@
                 <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
 
                 <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
-<label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
-<label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
-<label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+                <label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
+                <label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
+                <label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
 
-<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
-<label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
+                <label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
 
-<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
-<label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
-<label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
+                <label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
+                <label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
 
-<div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
-<label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
-<label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
+                <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
+                <label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
+                <label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
             </div>
+
+            <div style="border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;"></div>
+
+            <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方災害圖資（免申請）</div>
+            <label>
+                <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; width:17px; height:17px; margin:0; flex-shrink:0;">
+                啟用官方災害圖資
+            </label>
+
+            <div id="officialHazardControlPanel" style="display:none; margin-top:10px; padding:10px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <span style="font-size:11px; color:#5b21b6; font-weight:800;">目前啟用圖層</span>
+                    <span id="officialHazardStatusText" style="font-size:11px; color:#6d28d9; font-weight:800;">0 層</span>
+                </div>
+
+                <div style="display:flex; gap:6px; margin-bottom:10px;">
+                    <button type="button" onclick="setOfficialHazardRecommended(true)" style="flex:1; border:none; background:#7c3aed; color:#fff; border-radius:8px; padding:8px 10px; font-size:11px; font-weight:800; cursor:pointer;">全部開啟</button>
+                    <button type="button" onclick="clearAllOfficialHazardLayers()" style="flex:1; border:none; background:#334155; color:#fff; border-radius:8px; padding:8px 10px; font-size:11px; font-weight:800; cursor:pointer;">全部關閉</button>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#5b21b6; margin-bottom:5px; font-weight:700;">
+                    <span>整體透明度</span>
+                    <span id="officialHazardOpacityValue">60%</span>
+                </div>
+                <input type="range" id="officialHazardOpacity" min="0.1" max="1" step="0.05" value="0.6" style="width:100%; accent-color:#7c3aed; margin:0 0 10px 0;" oninput="updateOfficialHazardOpacity(this.value)">
+
+                <div style="font-size:11px; color:#4c1d95; font-weight:800; margin:10px 0 6px 0;">坡地災害</div>
+                <label><input type="checkbox" id="officialHazard_landslide_sensitive" onchange="toggleOfficialHazardLayer('landslide_sensitive', this.checked)" style="accent-color:#7c3aed;"> 山崩與地滑地質敏感區</label>
+                <label><input type="checkbox" id="officialHazard_dislope" onchange="toggleOfficialHazardLayer('dislope', this.checked)" style="accent-color:#7c3aed;"> 順向坡</label>
+
+                <div style="font-size:11px; color:#4c1d95; font-weight:800; margin:10px 0 6px 0;">地震災害</div>
+                <label><input type="checkbox" id="officialHazard_soil_liquefaction_1" onchange="toggleOfficialHazardLayer('soil_liquefaction_1', this.checked)" style="accent-color:#7c3aed;"> 土壤液化潛勢圖（初級）</label>
+                <label><input type="checkbox" id="officialHazard_soil_liquefaction_2" onchange="toggleOfficialHazardLayer('soil_liquefaction_2', this.checked)" style="accent-color:#7c3aed;"> 土壤液化潛勢圖（中級）</label>
+
+                <div style="margin-top:10px; font-size:11px; color:#6b7280; line-height:1.5;">
+                    這一版只放已確認可直接接入的官方 WMTS。<br>
+                    海嘯、土石流、活動斷層我先不亂猜圖層代碼。
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
 
     <div id="map"></div>
-<div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
+
+    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
         <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
             <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -837,6 +878,7 @@
             </div>
         </div>
     </div>
+
     <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
         <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
             <button class="modal-close-btn" onclick="closeModal('latestModal')">
@@ -1219,11 +1261,180 @@ function setHydrologyRecommended(checked) {
     });
 }
 
+// ==========================================
+// 🌟 官方災害圖資 (免申請)
+// ==========================================
+var officialHazardTileMeta = {
+    landslide_sensitive: {
+        label: '山崩與地滑地質敏感區',
+        type: 'xyz',
+        url: 'https://landslide.geologycloud.tw/jlwmts/jetlink/SensitiveArea/GoogleMapsCompatible/{z}/{y}/{x}',
+        options: {
+            tileSize: 256,
+            opacity: 0.6,
+            pane: 'officialHazardPane'
+        }
+    },
+    dislope: {
+        label: '順向坡',
+        type: 'xyz',
+        url: 'https://landslide.geologycloud.tw/jlwmts/jetlink/Dislope/GoogleMapsCompatible/{z}/{y}/{x}',
+        options: {
+            tileSize: 256,
+            opacity: 0.6,
+            pane: 'officialHazardPane'
+        }
+    },
+    soil_liquefaction_1: {
+        label: '土壤液化潛勢圖（初級）',
+        type: 'xyz',
+        url: 'https://wmts.nlsc.gov.tw/wmts/SoilLiquefaction/default/GoogleMapsCompatible/{z}/{y}/{x}',
+        options: {
+            tileSize: 256,
+            opacity: 0.6,
+            pane: 'officialHazardPane'
+        }
+    },
+    soil_liquefaction_2: {
+        label: '土壤液化潛勢圖（中級）',
+        type: 'xyz',
+        url: 'https://wmts.nlsc.gov.tw/wmts/SoilLiquefaction2/default/GoogleMapsCompatible/{z}/{y}/{x}',
+        options: {
+            tileSize: 256,
+            opacity: 0.6,
+            pane: 'officialHazardPane'
+        }
+    }
+};
+
+var recommendedOfficialHazardIds = [
+    'landslide_sensitive',
+    'dislope',
+    'soil_liquefaction_1',
+    'soil_liquefaction_2'
+];
+
+var officialHazardLayers = {};
+
+map.createPane('officialHazardPane');
+map.getPane('officialHazardPane').style.zIndex = 345;
+map.getPane('officialHazardPane').style.pointerEvents = 'none';
+
+function getOfficialHazardOpacityValue() {
+    var opacityEl = document.getElementById('officialHazardOpacity');
+    return opacityEl ? parseFloat(opacityEl.value) : 0.6;
+}
+
+function ensureOfficialHazardLayer(layerId) {
+    if (!officialHazardLayers[layerId]) {
+        var meta = officialHazardTileMeta[layerId];
+        if (!meta) return null;
+
+        officialHazardLayers[layerId] = L.tileLayer(meta.url, meta.options);
+        officialHazardLayers[layerId].on('tileerror', function(err) {
+            console.warn('Official hazard tile error:', layerId, err);
+        });
+    }
+    return officialHazardLayers[layerId];
+}
+
+function toggleOfficialHazardPanel(checked) {
+    var panel = document.getElementById('officialHazardControlPanel');
+    if (panel) panel.style.display = checked ? 'block' : 'none';
+
+    if (!checked) {
+        clearAllOfficialHazardLayers();
+    } else {
+        syncOfficialHazardStatus();
+    }
+}
+
+function toggleOfficialHazardLayer(layerId, checked) {
+    var layer = ensureOfficialHazardLayer(layerId);
+    if (!layer) return;
+
+    if (checked) {
+        layer.setOpacity(getOfficialHazardOpacityValue());
+        if (!map.hasLayer(layer)) map.addLayer(layer);
+    } else {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+    }
+
+    syncOfficialHazardStatus();
+}
+
+function updateOfficialHazardOpacity(val) {
+    var valueText = document.getElementById('officialHazardOpacityValue');
+    if (valueText) {
+        valueText.innerText = Math.round(parseFloat(val) * 100) + '%';
+    }
+
+    Object.keys(officialHazardLayers).forEach(function(layerId) {
+        officialHazardLayers[layerId].setOpacity(parseFloat(val));
+    });
+}
+
+function syncOfficialHazardStatus() {
+    var activeCount = 0;
+
+    Object.keys(officialHazardTileMeta).forEach(function(layerId) {
+        var checkbox = document.getElementById('officialHazard_' + layerId);
+        var layer = officialHazardLayers[layerId];
+        var active = checkbox && checkbox.checked && layer && map.hasLayer(layer);
+        if (active) activeCount++;
+    });
+
+    var statusText = document.getElementById('officialHazardStatusText');
+    if (statusText) {
+        statusText.innerText = activeCount + ' 層';
+    }
+
+    var masterToggle = document.getElementById('officialHazardMasterToggle');
+    if (masterToggle) {
+        masterToggle.checked = activeCount > 0 || (
+            document.getElementById('officialHazardControlPanel') &&
+            document.getElementById('officialHazardControlPanel').style.display === 'block'
+        );
+    }
+}
+
+function clearAllOfficialHazardLayers() {
+    Object.keys(officialHazardTileMeta).forEach(function(layerId) {
+        var checkbox = document.getElementById('officialHazard_' + layerId);
+        if (checkbox) checkbox.checked = false;
+
+        if (officialHazardLayers[layerId] && map.hasLayer(officialHazardLayers[layerId])) {
+            map.removeLayer(officialHazardLayers[layerId]);
+        }
+    });
+
+    syncOfficialHazardStatus();
+}
+
+function setOfficialHazardRecommended(checked) {
+    var masterToggle = document.getElementById('officialHazardMasterToggle');
+    var panel = document.getElementById('officialHazardControlPanel');
+
+    if (masterToggle) masterToggle.checked = true;
+    if (panel) panel.style.display = 'block';
+
+    recommendedOfficialHazardIds.forEach(function(layerId) {
+        var checkbox = document.getElementById('officialHazard_' + layerId);
+        if (checkbox) {
+            checkbox.checked = checked;
+            toggleOfficialHazardLayer(layerId, checked);
+        }
+    });
+}
+
+// 初始化
 taiwanLayer.addTo(map);
 updateFloodLabels();
 updateFloodOpacity(getFloodOpacityValue());
 updateHydrologyOpacity(getHydrologyOpacityValue());
 syncHydrologyStatus();
+updateOfficialHazardOpacity(getOfficialHazardOpacityValue());
+syncOfficialHazardStatus();
 
 function switchBasemap(val) {
     allModernLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
