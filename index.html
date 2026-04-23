@@ -787,7 +787,59 @@
     </div>
 
     <div id="map"></div>
+<div id="map"></div>
 
+    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
+            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    更多歷史圖層
+                </h2>
+                <div class="more-layers-grid">
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
+                            <span>Tainan_1875</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
+                            <span>Tainan_1900</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
+                            <span>Tainan_1920</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
+                            <span>JM20K_1921</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
+                            <span>AM25K_1944B</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
     <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
         <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
             <button class="modal-close-btn" onclick="closeModal('latestModal')">
