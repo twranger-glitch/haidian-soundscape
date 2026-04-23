@@ -2,6 +2,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>海佃溪遊記 | 聲音地景計畫</title>
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="海佃溪遊記 | 聲音地景計畫">
+    <meta property="og:description" content="跟著海佃國小圖書室，沿著溪流與大圳，進行一場聽覺的田野調查。戴上耳機，一起聆聽台江的聲音！">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=1200&auto=format&fit=crop"> 
+    <meta property="og:url" content="https://twranger-glitch.github.io/haidian-soundscape/">
+    <meta property="og:site_name" content="海佃溪遊記">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="robots" content="noindex, nofollow" />
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -20,7 +27,40 @@
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) { document.documentElement.classList.add('ios-device'); }
     </script>
-
+<script>
+        (function() {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            var isLine = (ua.indexOf("Line") > -1);
+            var isFb = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1);
+            var isIG = (ua.indexOf("Instagram") > -1);
+            
+            if (isLine || isFb || isIG) {
+                // 1. 針對 LINE 的密技：嘗試加上參數促使它呼叫外部瀏覽器
+                if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
+                    var separator = location.href.indexOf('?') > -1 ? '&' : '?';
+                    window.location.href = location.href + separator + 'openExternalBrowser=1';
+                }
+                
+                // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
+                document.addEventListener("DOMContentLoaded", function() {
+                    var overlay = document.createElement('div');
+                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
+                    overlay.innerHTML = `
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
+                        <p style="font-size:15px; line-height:1.7; color:#94a3b8; margin-bottom:30px; font-weight:600;">LINE 或 FB 的內建瀏覽器無法完美支援<br>地圖引擎與背景聲音播放。</p>
+                        <div style="background:#1e293b; padding:20px 25px; border-radius:16px; border:1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700;">👇 請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span></p>
+                            <p style="margin:0; font-size:16px; color:#38bdf8; font-weight:800;">選擇「以預設瀏覽器開啟」<br>或「在 Safari 開啟」</p>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+                    // 鎖死地圖與滾動
+                    document.body.style.overflow = 'hidden'; 
+                });
+            }
+        })();
+    </script>
     <style>
         :root { 
             --panel-offset: 20px; 
