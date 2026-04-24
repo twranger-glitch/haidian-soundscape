@@ -1193,44 +1193,6 @@
             }
         }
 
-        function renderPlaceSearchResults(places, keyword) {
-            var resultBox = getPlaceSearchResultsBox();
-            resultBox.innerHTML = '';
-
-            if (!places || places.length === 0) {
-                resultBox.innerHTML = `
-                    <div style="position: relative; padding:10px 32px 10px 12px; border-radius:8px; background:#fffbeb; color:#b45309; font-size:12px; font-weight:800; border:1px solid #fde68a; line-height:1.6;">
-                        找不到名稱包含「${escapePlaceHtml(keyword)}」的地點。試試看其他關鍵字吧！
-                        <div onclick="document.getElementById('placeSearchResults').innerHTML=''" style="position: absolute; top: 8px; right: 8px; cursor: pointer; background: rgba(180, 83, 9, 0.1); border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; transition: 0.2s;" onmouseover="this.style.background='rgba(180, 83, 9, 0.2)'" onmouseout="this.style.background='rgba(180, 83, 9, 0.1)'" title="清除提示">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        </div>
-                    </div>`;
-                return;
-            }
-
-            var title = document.createElement('div');
-            title.style.cssText = 'padding:6px 10px; border-radius:6px; background:#ecfdf5; color:#047857; font-size:11px; font-weight:900; border:1px solid #a7f3d0; display:flex; justify-content:space-between;';
-            title.innerHTML = `<span>找到 ${places.length} 個結果</span> <span onclick="document.getElementById('placeSearchResults').innerHTML=''" style="cursor:pointer; color:#10b981;">清除</span>`;
-            resultBox.appendChild(title);
-
-            places.forEach(function(place, index) {
-                var btn = document.createElement('button');
-                btn.type = 'button';
-                // ✨ 高顏值清單排版
-                btn.style.cssText = 'width:100%; border:1px solid #e2e8f0; background:#f8fafc; border-radius:8px; padding:8px 10px; cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:4px; transition:0.2s;';
-                btn.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                        <span style="font-size:13px; font-weight:800; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${index + 1}. ${escapePlaceHtml(place.name)}</span>
-                        <span style="font-size:10px; font-weight:800; color:#e74c3c; background:#fff1f2; padding:2px 8px; border-radius:12px; border:1px solid #ffe4e6; flex-shrink:0;">前往</span>
-                    </div>
-                    <span style="font-size:11px; color:#64748b; font-family:'Courier New', monospace;">標籤：${escapePlaceHtml(place.type)}</span>
-                `;
-                btn.onmouseover = function() { btn.style.borderColor = '#e74c3c'; btn.style.backgroundColor = '#ffffff'; btn.style.boxShadow = '0 2px 8px rgba(231,76,60,0.1)'; };
-                btn.onmouseout = function() { btn.style.borderColor = '#e2e8f0'; btn.style.backgroundColor = '#f8fafc'; btn.style.boxShadow = 'none'; };
-                btn.onclick = function() { focusPlaceFromList(place.lat, place.lon, place.name, place.type); };
-                resultBox.appendChild(btn);
-            });
-        }
 
         function focusPlaceFromList(lat, lon, name, typeText) {
             map.flyTo([lat, lon], 17, { animate: true, duration: 1.2 });
@@ -2587,6 +2549,7 @@ fetch(API_URL, { cache: "no-store" })
             else mb.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         }
         
+        let loggedAudioUids = new Set(); // 🌟 使用 Set 記住此次連線聽過的所有作品
         let hasLoggedPlay = false;
 
         globalAudio.addEventListener('play', () => {
@@ -2595,16 +2558,17 @@ fetch(API_URL, { cache: "no-store" })
         });
 
         globalAudio.ontimeupdate = () => { 
-            if(globalAudio.duration) { 
+            if(globalAudio.duration && currentAudioUid) { 
                 document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
                 document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration); 
                 
                 let threshold = Math.min(10, globalAudio.duration * 0.3);
                 
-                if (globalAudio.currentTime > threshold && !hasLoggedPlay && currentAudioUid) {
+                // 🌟 只要這首歌被加入過 Set，就絕對不再發送 10s log
+                if (globalAudio.currentTime > threshold && !loggedAudioUids.has(currentAudioUid)) {
                     logAction(currentAudioUid, 'play_10s'); 
-                    hasLoggedPlay = true;
-                    console.log(`已聽超過 ${threshold.toFixed(1)} 秒，觸發有效播放 Log！`);
+                    loggedAudioUids.add(currentAudioUid); // 鎖定這首歌
+                    console.log(`有效聆聽：${currentAudioUid}`);
                 }
             } 
         };
@@ -2952,7 +2916,8 @@ fetch(API_URL, { cache: "no-store" })
                 }, { merge: true });
 
                 showUnlockAnimation(BADGE_DATA[newBadges[newBadges.length - 1]]);
-                renderAchievementWall(); // 重新繪製成就牆
+                // 🌟 註解掉此行，避免成就與渲染引發無限迴圈
+                // renderAchievementWall(); 
             }
         };
 
