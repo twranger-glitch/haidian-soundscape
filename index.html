@@ -1787,22 +1787,33 @@
             updateCardButtonUI();
         };
 
-        var API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json"; 
+        // 🌟 加上 ?t= 時間戳強制破除快取
+        const API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json?t=" + Date.now();
         
-        fetch(API_URL)
-            .then(res => res.json())
-            .then(data => { 
-                var safeData = data || []; 
-                allMarkersData = safeData; 
-                renderMarkers(safeData); 
-                renderLatestSubmissions(safeData); 
+        fetch(API_URL, { cache: "no-store" })
+            .then(async (res) => {
+                const json = await res.json();
+                if (!res.ok) throw new Error(json?.error || `HTTP 狀態碼 ${res.status}`);
+                if (!Array.isArray(json)) throw new Error("資料庫格式錯誤：不是陣列");
+                return json;
             })
-            .catch(err => {
-                console.error("無法載入聲音地景資料：", err);
-                alert("無法連線至地圖資料庫，請檢查網路連線。");
+            .then((data) => {
+                allMarkersData = data; 
+                renderMarkers(data);
+                renderLatestSubmissions(data);
+            })
+            .catch((err) => {
+                console.error("載入資料失敗：", err);
+                alert("地圖資料載入失敗，請確認網路連線：" + err.message);
             });
 
         function createMarker(item) {
+            // 🌟 新增防呆機制：如果欄位空缺自動補上預設值，防爆版
+            item.category = item.category || "未分類";
+            item.title = item.title || "無標題";
+            item.author = item.author || "海佃特派員";
+            item.date = item.date || "未知日期";
+            
             var cleanCat = item.category.split(/[(（]/)[0].trim();
             var rawDate = item.date.replace(" 00:00:00", "");
             var displayDate = rawDate;
@@ -1896,10 +1907,19 @@
         }
 
         function renderLatestSubmissions(data) {
-            var latestListDiv = document.getElementById('latestList'); latestListDiv.innerHTML = "";
-            var sortedData = data.slice().reverse(); 
+            var latestListDiv = document.getElementById('latestList'); 
+            if (!latestListDiv) return;
+            latestListDiv.innerHTML = "";
+
+            // 🌟 確保依照日期由新到舊排序
+            var sortedData = [...data].sort((a, b) => {
+                var da = new Date(a.date || 0).getTime();
+                var db = new Date(b.date || 0).getTime();
+                return db - da; 
+            });
             
             var top10 = sortedData.slice(0, 10);
+            // ... 下面保留您原本的 if(top10.length === 0) 和 top10.forEach 程式碼
             if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
             top10.forEach(item => {
                 var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
@@ -2328,13 +2348,22 @@
         function toggleLogin() {
             if (currentUser) {
                 auth.signOut().then(() => alert("已登出"));
-            } else {
-                const provider = new firebase.auth.GoogleAuthProvider();
-                auth.signInWithPopup(provider).catch(error => {
-                    console.error("登入失敗:", error);
-                    alert("登入失敗，請重試。");
-                });
+                return;
             }
+
+            const provider = new firebase.auth.GoogleAuthProvider();
+            // 🌟 判斷是否為行動裝置
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+            // 🌟 手機用跳轉登入 (Redirect)，桌機用彈出視窗 (Popup)
+            const loginAction = isMobile
+                ? auth.signInWithRedirect(provider)
+                : auth.signInWithPopup(provider);
+
+            loginAction.catch(error => {
+                console.error("登入失敗:", error);
+                alert("登入失敗：" + (error.message || "請重試"));
+            });
         }
 
         function updateAuthUI(user) {
