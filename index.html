@@ -50,7 +50,10 @@
                         <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
                         <p style="font-size:15px; line-height:1.7; color:#94a3b8; margin-bottom:30px; font-weight:600;">LINE 或 FB 的內建瀏覽器無法完美支援<br>地圖引擎與背景聲音播放。</p>
                         <div style="background:#1e293b; padding:20px 25px; border-radius:16px; border:1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700;">👇 請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span></p>
+                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span>
+</p>
                             <p style="margin:0; font-size:16px; color:#38bdf8; font-weight:800;">選擇「以預設瀏覽器開啟」<br>或「在 Safari 開啟」</p>
                         </div>
                     `;
@@ -470,14 +473,15 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
-        /* 🌟 分享圖示按鈕樣式 (極簡風格) */
-        .share-icon-btn {
+        /* 🌟 功能按鈕組樣式 (分享、導航、收藏) */
+        .share-icon-btn, .nav-icon-btn {
             background: transparent; border: none; cursor: pointer; color: #cbd5e1;
             display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             padding: 4px; flex-shrink: 0; outline: none;
         }
         .share-icon-btn:hover { color: #3b82f6; transform: scale(1.15); }
-        .share-icon-btn:active { transform: scale(0.9); }
+        .nav-icon-btn:hover { color: #10b981; transform: scale(1.15); }
+        .nav-icon-btn:active, .share-icon-btn:active { transform: scale(0.9); }
 
         @media (max-width: 600px) {
             :root { --panel-offset: 10px; }
@@ -596,14 +600,14 @@
         </button>
         <div class="drawer-content">
             <div>
-    <span class="panel-label">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        搜尋標題或採集者
-    </span>
-    <input type="text" id="searchInput" class="search-input" placeholder="輸入聲景標題或採集者..." oninput="filterMarkers()">
-</div>
-            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 15px 0;">
-            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    搜尋標題或採集者
+                </span>
+                <input type="text" id="searchInput" class="search-input" placeholder="輸入聲景標題或採集者..." oninput="filterMarkers()">
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;"> <div>
                 <span class="panel-label">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                     聲景類別篩選
@@ -617,8 +621,8 @@
                     <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
                 </div>
             </div>
-            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;">
-            <div>
+            
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;"> <div>
                 <span class="panel-label">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     時間軸探索
@@ -698,7 +702,9 @@
         </div>
         <div class="tools-menu-container">
             <div class="custom-layer-control">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">📍 搜尋特定地點</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800; display:flex; align-items:center; gap:4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 搜尋特定地點
+                </div>
                 <div style="display:flex; gap:6px; margin-bottom:4px;">
                     <input type="text" id="placeSearchInput" class="search-input" style="padding: 8px 12px; font-size:13px;" placeholder="輸入地名 (如: 台江)" onkeydown="if(event.key === 'Enter') searchPlaceName()">
                     <button onclick="searchPlaceName()" class="btn-submit" style="border-radius: 8px !important; padding: 0 12px; border: none; flex-shrink: 0;" title="開始搜尋">
@@ -1237,8 +1243,8 @@
                         <div style="font-weight:900; font-size:16px; color:#e74c3c; margin-bottom:8px; border-bottom: 2px dashed #fecdd3; padding-bottom: 8px;">
                             ${escapePlaceHtml(name)}
                         </div>
-                        <span style="font-size:11px; color:#64748b; font-weight:800; background:#f1f5f9; padding:4px 10px; border-radius:12px; border: 1px solid #e2e8f0;">
-                            🏷️ 類型：${escapePlaceHtml(typeText)}
+                        <span style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#64748b; font-weight:800; background:#f1f5f9; padding:4px 10px; border-radius:12px; border: 1px solid #e2e8f0;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> 類型：${escapePlaceHtml(typeText)}
                         </span>
                     </div>
                 `, { offset: [0, -35], closeButton: true, minWidth: 150 })
@@ -1978,7 +1984,7 @@ fetch(API_URL, { cache: "no-store" })
         function escapeHTML(str) {
             if (!str) return "";
             return String(str).replace(/[&<>'"]/g, function(tag) {
-                var charsToReplace = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
+                var charsToReplace = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#' + '39;' };
                 return charsToReplace[tag] || tag;
             });
         }
@@ -1996,7 +2002,7 @@ fetch(API_URL, { cache: "no-store" })
             if (!item) return alert("找不到這件作品");
 
             const shareUrl = item.shortUrl || (window.location.origin + window.location.pathname + "?work=" + uid);
-            const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，快戴上耳機來聽聽看！🎧`;
+            const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，快戴上耳機來聽聽看！`; // 🚀 移除 Emoji
 
             // 1. 嘗試優先使用手機原生分享面板
             if (navigator.share) {
@@ -2012,11 +2018,60 @@ fetch(API_URL, { cache: "no-store" })
             try {
                 // 將文案與網址合併複製
                 await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
-                alert("✅ 作品與網址已自動複製到剪貼簿！\n您可以直接貼上至 LINE 或其他通訊軟體分享。");
+                alert("作品與網址已自動複製到剪貼簿！\n您可以直接貼上至 LINE 或其他通訊軟體分享。");
             } catch (err) {
                 prompt("您的瀏覽器阻擋自動複製，請手動複製以下連結：", shareUrl);
             }
         };
+
+        // 🚀 開啟外部 Google Map 導航
+        window.openGoogleMap = function(event, lat, lon) {
+            event.preventDefault(); event.stopPropagation();
+            const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+            window.open(url, "_blank", "noopener");
+        };
+
+        // 🚀 修復：地點搜尋結果 UI (移除 br、增加 X)
+        function renderPlaceSearchResults(places, keyword) {
+            var resultBox = getPlaceSearchResultsBox();
+            resultBox.innerHTML = '';
+
+            if (!places || places.length === 0) {
+                resultBox.innerHTML = `
+                    <div style="position: relative; padding:10px 32px 10px 12px; border-radius:8px; background:#fffbeb; color:#b45309; font-size:12px; font-weight:800; border:1px solid #fde68a; line-height:1.6;">
+                        找不到名稱包含「${escapePlaceHtml(keyword)}」的地點。試試看其他關鍵字吧！
+                        <div onclick="document.getElementById('placeSearchResults').innerHTML=''" style="position: absolute; top: 8px; right: 8px; cursor: pointer; background: rgba(180, 83, 9, 0.1); border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; transition: 0.2s;" onmouseover="this.style.background='rgba(180, 83, 9, 0.2)'" onmouseout="this.style.background='rgba(180, 83, 9, 0.1)'" title="清除提示">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            var title = document.createElement('div');
+            title.style.cssText = 'padding:6px 10px; border-radius:6px; background:#ecfdf5; color:#047857; font-size:11px; font-weight:900; border:1px solid #a7f3d0; display:flex; justify-content:space-between;';
+            title.innerHTML = `<span>找到 ${places.length} 個結果</span> <span onclick="document.getElementById('placeSearchResults').innerHTML=''" style="cursor:pointer; color:#10b981;">清除</span>`;
+            resultBox.appendChild(title);
+
+            places.forEach(function(place, index) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                // ✨ 高顏值清單排版
+                btn.style.cssText = 'width:100%; border:1px solid #e2e8f0; background:#f8fafc; border-radius:8px; padding:8px 10px; cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:4px; transition:0.2s;';
+                btn.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <span style="font-size:13px; font-weight:800; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${index + 1}. ${escapePlaceHtml(place.name)}</span>
+                        <span style="font-size:10px; font-weight:800; color:#e74c3c; background:#fff1f2; padding:2px 8px; border-radius:12px; border:1px solid #ffe4e6; flex-shrink:0;">前往</span>
+                    </div>
+                    <span style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:8px; border: 1px solid #e2e8f0; font-family:'Courier New', monospace;">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> 類型：${escapePlaceHtml(place.type)}
+                    </span>
+                `;
+                btn.onmouseover = function() { btn.style.borderColor = '#e74c3c'; btn.style.backgroundColor = '#ffffff'; btn.style.boxShadow = '0 2px 8px rgba(231,76,60,0.1)'; };
+                btn.onmouseout = function() { btn.style.borderColor = '#e2e8f0'; btn.style.backgroundColor = '#f8fafc'; btn.style.boxShadow = 'none'; };
+                btn.onclick = function() { focusPlaceFromList(place.lat, place.lon, place.name, place.type); };
+                resultBox.appendChild(btn);
+            });
+        }
 
         function updateCurrentWorkUrl(uid) {
             const url = new URL(window.location.href);
@@ -2058,7 +2113,10 @@ fetch(API_URL, { cache: "no-store" })
                             <h3 class="sound-title" style="margin: 0; padding-right: 10px; line-height: 1.4;">${item.title}</h3>
                             <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: -2px;">
                                 <button class="share-icon-btn" onclick="shareWork(event, '${item.uid}')" title="分享作品">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                </button>
+                                <button class="nav-icon-btn" onclick="openGoogleMap(event, ${item.lat}, ${item.lon})" title="開啟 Google 地圖導航">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
                                 </button>
                                 <button id="card-fav-${item.uid}" class="fav-btn" onclick="toggleFavorite('${item.uid}')" title="加入收藏">
                                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
@@ -2193,7 +2251,7 @@ fetch(API_URL, { cache: "no-store" })
             var showOnlyFavs = favToggle ? favToggle.checked : false;
             
             if (showOnlyFavs && !currentUser) {
-                alert("🔒 請先點擊右上角「登入探險」，才能啟用你的專屬尋寶圖喔！");
+                alert("請先點擊右上角「登入探險」，才能啟用你的專屬尋寶圖喔！");
                 favToggle.checked = false;
                 showOnlyFavs = false;
             }
@@ -2659,7 +2717,7 @@ fetch(API_URL, { cache: "no-store" })
 
         function toggleFavorite(targetUid) {
             if (!currentUser) {
-                alert("🔒 請先點擊右上角「登入探險」，登入後即可將這首聲音加入專屬收藏庫！");
+                alert("請先點擊右上角「登入探險」，登入後即可將這首聲音加入專屬收藏庫！");
                 return;
             }
             
@@ -2716,7 +2774,7 @@ fetch(API_URL, { cache: "no-store" })
             if (!listDiv) return;
             
             if (userFavorites.size === 0) {
-                listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8; font-size:13px; line-height:1.6;">目前空空如也！<br>趕快去地圖上點擊 ❤️ 收藏你喜歡的聲音吧！</p>';
+                listDiv.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:13px; line-height:1.6; display:flex; flex-direction:column; align-items:center; gap:6px;"><span>目前空空如也！</span><span style="display:flex; align-items:center; gap:4px;">趕快去地圖上點擊 <svg width="14" height="14" viewBox="0 0 24 24" fill="#f43f5e" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> 收藏聲音吧！</span></div>';
                 return;
             }
             
@@ -2769,7 +2827,7 @@ fetch(API_URL, { cache: "no-store" })
 
         window.toggleReaction = function(uid, type) {
             if (!currentUser) {
-                alert("🔒 請先點擊右上角「登入探險」，才能留下你的聽覺感受喔！");
+                alert("請先點擊右上角「登入探險」，才能留下你的聽覺感受喔！");
                 return;
             }
 
@@ -2926,7 +2984,9 @@ fetch(API_URL, { cache: "no-store" })
                     <div class="wall-badge ${isUnlocked ? 'unlocked' : ''}" title="解鎖條件：${badge.desc}">
                         <div class="mini-icon">${badge.svg}</div>
                         <div class="wall-badge-name">${badge.name}</div>
-                        <div style="font-size:10px; color:#94a3b8; font-weight: 800;">${isUnlocked ? '🔓 已解鎖' : '🔒 未解鎖'}</div>
+                        <div style="font-size:10px; color:#94a3b8; font-weight: 800; display:flex; align-items:center; justify-content:center; gap:3px;">
+                            ${isUnlocked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg> 已解鎖' : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> 未解鎖'}
+                        </div>
                         <div class="wall-badge-desc">${badge.desc}</div>
                     </div>
                 `;
