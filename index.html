@@ -1066,6 +1066,7 @@
     </div>
     
     <script>
+        
         var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0278, 120.2004], 15);
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -1807,11 +1808,22 @@
                 alert("地圖資料載入失敗，請確認網路連線：" + err.message);
             });
 
+        // 🛡️ 核心資安更新：XSS 防護過濾器 (將危險字元轉為純文字，防止惡意腳本攻擊)
+        function escapeHTML(str) {
+            if (!str) return "";
+            return String(str).replace(/[&<>'"]/g, function(tag) {
+                var charsToReplace = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
+                return charsToReplace[tag] || tag;
+            });
+        }
+
         function createMarker(item) {
             // 🌟 新增防呆機制：如果欄位空缺自動補上預設值，防爆版
             item.category = item.category || "未分類";
-            item.title = item.title || "無標題";
-            item.author = item.author || "海佃特派員";
+            // 🛡️ 核心資安更新：使用 escapeHTML 清洗來自外部表單的文字
+            item.title = escapeHTML(item.title || "無標題");
+            item.author = escapeHTML(item.author || "海佃特派員");
+            item.description = escapeHTML(item.description || "");
             item.date = item.date || "未知日期";
             
             var cleanCat = item.category.split(/[(（]/)[0].trim();
