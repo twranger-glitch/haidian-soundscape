@@ -470,44 +470,16 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
-        /* 🌟 分享區塊樣式 (精緻化單按鈕) */
-        .card-share-container {
-            display: flex;
-            justify-content: center;
-            margin-top: 12px;
-            border-top: 1px dashed #e2e8f0;
-            padding-top: 12px;
+        /* 🌟 分享圖示按鈕樣式 (極簡風格) */
+        .share-icon-btn {
+            background: transparent; border: none; cursor: pointer; color: #cbd5e1;
+            display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 4px; flex-shrink: 0; outline: none;
         }
-        .btn-share-work {
-            background: #f8fafc;
-            color: #475569;
-            border: 1px solid #cbd5e1;
-            border-radius: 20px; /* 圓潤的膠囊造型 */
-            padding: 8px 18px;
-            font-size: 13px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-            letter-spacing: 0.5px;
-        }
-        .btn-share-work:hover {
-            background: #ffffff;
-            color: var(--accent-color);
-            border-color: var(--accent-color);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(39, 174, 96, 0.15);
-        }
-        .btn-share-work svg {
-            width: 15px;
-            height: 15px;
-            transition: 0.2s;
-        }
+        .share-icon-btn:hover { color: #3b82f6; transform: scale(1.15); }
+        .share-icon-btn:active { transform: scale(0.9); }
 
-        @media (max-width: 600px) { 
+        @media (max-width: 600px) {
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
             .project-title { font-size: 18px; width: 100%; justify-content: flex-start; flex-direction: row;}
@@ -2276,10 +2248,15 @@ fetch(API_URL, { cache: "no-store" })
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
                     <div class="sound-info">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-                            <h3 class="sound-title" style="margin: 0;">${item.title}</h3>
-                            <button id="card-fav-${item.uid}" class="fav-btn" onclick="toggleFavorite('${item.uid}')" style="margin: 0; padding: 0; padding-left: 10px;" title="加入收藏">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                            </button>
+                            <h3 class="sound-title" style="margin: 0; padding-right: 10px; line-height: 1.4;">${item.title}</h3>
+                            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: -2px;">
+                                <button class="share-icon-btn" onclick="shareWork(event, '${item.uid}')" title="分享作品">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                </button>
+                                <button id="card-fav-${item.uid}" class="fav-btn" onclick="toggleFavorite('${item.uid}')" title="加入收藏">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="card-meta-box">
@@ -2323,13 +2300,6 @@ fetch(API_URL, { cache: "no-store" })
 
                         ${audioHTML}
                         
-                        <div class="card-share-container">
-                            <button class="btn-share-work" onclick="shareWork(event, '${item.uid}')">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                                分享作品
-                            </button>
-                        </div>
-
                         <details class="admin-menu">
                             <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
                             <div class="admin-dropdown">
