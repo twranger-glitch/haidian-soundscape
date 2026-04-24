@@ -470,6 +470,24 @@
         .hud-close-btn { width: 36px; height: 36px; border-radius: 12px; background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; margin-top: 4px; padding: 0; flex-shrink: 0; }
         .hud-close-btn:hover { background: #e74c3c; color: white; transform: scale(1.05); }
 
+        /* 🌟 分享區塊樣式 */
+        .card-share-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 12px;
+        }
+        .btn-share-work, .btn-copy-work {
+            border: none; border-radius: 10px; padding: 10px 0;
+            font-size: 13px; font-weight: 800; cursor: pointer;
+            transition: 0.2s; flex: 1; display: flex; justify-content: center; align-items: center; gap: 6px;
+        }
+        .btn-share-work { background: #00B900; color: white; box-shadow: 0 4px 12px rgba(0, 185, 0, 0.2); }
+        .btn-share-work:hover { background: #00a000; transform: translateY(-2px); }
+        .btn-copy-work { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+        .btn-copy-work:hover { background: #e2e8f0; color: #1e293b; transform: translateY(-2px); }
+
         @media (max-width: 600px) { 
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
@@ -2134,7 +2152,7 @@
         // 🌟 加上 ?t= 時間戳強制破除快取
         const API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json?t=" + Date.now();
         
-        fetch(API_URL, { cache: "no-store" })
+fetch(API_URL, { cache: "no-store" })
             .then(async (res) => {
                 const json = await res.json();
                 if (!res.ok) throw new Error(json?.error || `HTTP 狀態碼 ${res.status}`);
@@ -2145,6 +2163,13 @@
                 allMarkersData = data; 
                 renderMarkers(data);
                 renderLatestSubmissions(data);
+
+                // 🚀 自動檢查網址是否帶有分享參數，有的話直接降落
+                const params = new URLSearchParams(window.location.search);
+                const workUid = params.get("work");
+                if (workUid) {
+                    setTimeout(() => { focusMarkerOnMap(workUid); }, 800);
+                }
             })
             .catch((err) => {
                 console.error("載入資料失敗：", err);
@@ -2158,6 +2183,53 @@
                 var charsToReplace = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
                 return charsToReplace[tag] || tag;
             });
+        }
+
+        // ==========================================
+        // 🚀 深層連結 (Deep Link) 與分享引擎
+        // ==========================================
+        function getWorkFromUid(uid) {
+            return allMarkersData.find(item => String(item.uid) === String(uid));
+        }
+
+        window.shareWork = async function(event, uid) {
+            event.preventDefault(); event.stopPropagation();
+            const item = getWorkFromUid(uid);
+            if (!item) return alert("找不到這件作品");
+
+            const shareUrl = window.location.origin + window.location.pathname + "?work=" + uid;
+            const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，快戴上耳機來聽聽看！🎧`;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: item.title, text: shareText, url: shareUrl });
+                    return;
+                } catch (err) { if (err.name === "AbortError") return; }
+            }
+
+            // Fallback：桌機直接開 LINE 分享視窗
+            const lineText = `${shareText}\n${shareUrl}`;
+            window.open(`https://line.me/R/share?text=${encodeURIComponent(lineText)}`, "_blank", "noopener");
+        };
+
+        window.copyWorkLink = async function(event, uid) {
+            event.preventDefault(); event.stopPropagation();
+            const item = getWorkFromUid(uid);
+            if (!item) return;
+
+            const shareUrl = window.location.origin + window.location.pathname + "?work=" + uid;
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                alert("✅ 專屬連結已複製！快去貼給朋友吧！");
+            } catch (err) {
+                prompt("請手動複製這個作品連結：", shareUrl);
+            }
+        };
+
+        function updateCurrentWorkUrl(uid) {
+            const url = new URL(window.location.href);
+            url.searchParams.set("work", uid);
+            history.replaceState(null, "", url.toString());
         }
 
         function createMarker(item) {
@@ -2237,6 +2309,18 @@
                         </div>
 
                         ${audioHTML}
+                        
+                        <div class="card-share-row">
+                            <button class="btn-share-work" onclick="shareWork(event, '${item.uid}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                傳給好友
+                            </button>
+                            <button class="btn-copy-work" onclick="copyWorkLink(event, '${item.uid}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                複製
+                            </button>
+                        </div>
+
                         <details class="admin-menu">
                             <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
                             <div class="admin-dropdown">
@@ -2261,38 +2345,9 @@
             return marker;
         }
 
-        function renderLatestSubmissions(data) {
-            var latestListDiv = document.getElementById('latestList'); 
-            if (!latestListDiv) return;
-            latestListDiv.innerHTML = "";
-
-            // 🌟 確保依照日期由新到舊排序
-            var sortedData = [...data].sort((a, b) => {
-                var da = new Date(a.date || 0).getTime();
-                var db = new Date(b.date || 0).getTime();
-                return db - da; 
-            });
-            
-            var top10 = sortedData.slice(0, 10);
-            // ... 下面保留您原本的 if(top10.length === 0) 和 top10.forEach 程式碼
-            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
-            top10.forEach(item => {
-                var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
-                latestListDiv.innerHTML += `
-                    <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
-                        <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
-                        <div class="latest-item-info">
-                            <div class="latest-item-title">${item.title}</div>
-                            <div class="latest-item-meta">
-                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.author}</span>
-                                <span style="font-family:'Courier New', monospace;">${rawDate}</span>
-                            </div>
-                        </div>
-                    </div>`;
-            });
-        }
-
         function focusMarkerOnMap(uid) {
+            updateCurrentWorkUrl(uid); // 🚀 點擊卡片時，默默把網址換成該作品的專屬網址
+
             isRoutePlaying = false; 
             clearTimeout(routeTimeout);
             
