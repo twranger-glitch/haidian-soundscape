@@ -642,7 +642,7 @@
                     只顯示我的收藏
                 </label>
             </div>
-            <button class="btn-more-layers" style="margin-top: 15px; background: #fffbeb; color: #b45309; border-color: #fde68a;" onclick="openModal('achievementWallModal')">
+            <button class="btn-more-layers" style="margin-top: 15px; background: #fffbeb; color: #b45309; border-color: #fde68a;" onclick="openAchievementWall()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-3.5 3.5c-.93.93-2.58.93-3.5 0v0c-.93-.93-.93-2.58 0-3.5L8.5 11.5"></path><path d="M15 8.5L18.5 5c.93-.93 2.58-.93 3.5 0v0c.93.93.93 2.58 0 3.5L18.5 12"></path><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
                 查看我的聲音獵人成就
             </button>
@@ -2550,12 +2550,11 @@ fetch(API_URL, { cache: "no-store" })
         }
         
         let loggedAudioUids = new Set(); // 🌟 使用 Set 記住此次連線聽過的所有作品
-        let hasLoggedPlay = false;
+        let loggedAudioUids = new Set();
 
-        globalAudio.addEventListener('play', () => {
-            hasLoggedPlay = false; 
-            if (currentAudioUid) logAction(currentAudioUid, 'play_start');
-        });
+globalAudio.addEventListener('play', () => {
+    if (currentAudioUid) logAction(currentAudioUid, 'play_start');
+});
 
         globalAudio.ontimeupdate = () => { 
             if(globalAudio.duration && currentAudioUid) { 
@@ -2936,9 +2935,14 @@ fetch(API_URL, { cache: "no-store" })
             }, 800);
         }
 
-        function renderAchievementWall() {
-            checkAchievements(); 
+        // 🌟 新增：專門負責打開成就牆的統籌函式
+        function openAchievementWall() {
+            checkAchievements();       // 1. 先結算最新成績
+            renderAchievementWall();   // 2. 根據成績畫出徽章
+            openModal('achievementWallModal'); // 3. 打開彈出視窗
+        }
 
+        function renderAchievementWall() {
             let grid = document.getElementById('achievementWallGrid');
             if(!grid) return;
             grid.innerHTML = '';
