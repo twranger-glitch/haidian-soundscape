@@ -2365,6 +2365,35 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
+        function renderLatestSubmissions(data) {
+            var latestListDiv = document.getElementById('latestList'); 
+            if (!latestListDiv) return;
+            latestListDiv.innerHTML = "";
+
+            // 🌟 確保依照日期由新到舊排序
+            var sortedData = [...data].sort((a, b) => {
+                var da = new Date(a.date || 0).getTime();
+                var db = new Date(b.date || 0).getTime();
+                return db - da; 
+            });
+            
+            var top10 = sortedData.slice(0, 10);
+            if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
+            top10.forEach(item => {
+                var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
+                latestListDiv.innerHTML += `
+                    <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
+                        <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
+                        <div class="latest-item-info">
+                            <div class="latest-item-title">${item.title}</div>
+                            <div class="latest-item-meta">
+                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.author}</span>
+                                <span style="font-family:'Courier New', monospace;">${rawDate}</span>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
         
         function filterMarkers() {
             if (currentRouteType) return; 
