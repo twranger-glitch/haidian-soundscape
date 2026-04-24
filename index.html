@@ -2197,7 +2197,7 @@ fetch(API_URL, { cache: "no-store" })
             const item = getWorkFromUid(uid);
             if (!item) return alert("找不到這件作品");
 
-            const shareUrl = window.location.origin + window.location.pathname + "?work=" + uid;
+            const shareUrl = item.shortUrl || (window.location.origin + window.location.pathname + "?work=" + uid);
             const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，快戴上耳機來聽聽看！🎧`;
 
             if (navigator.share) {
@@ -2217,7 +2217,7 @@ fetch(API_URL, { cache: "no-store" })
             const item = getWorkFromUid(uid);
             if (!item) return;
 
-            const shareUrl = window.location.origin + window.location.pathname + "?work=" + uid;
+            const shareUrl = item.shortUrl || (window.location.origin + window.location.pathname + "?work=" + uid);
             try {
                 await navigator.clipboard.writeText(shareUrl);
                 alert("✅ 專屬連結已複製！快去貼給朋友吧！");
