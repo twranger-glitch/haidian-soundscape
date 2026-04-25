@@ -154,97 +154,84 @@
             display: flex; align-items: center; padding: 12px 20px; gap: 16px; 
             z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6); pointer-events: auto;
         }
-        .global-player.active { bottom: 20px; } 
-                /* 🌟 桌機版精品迷你播放器：避免遮住作品小卡與聽覺回音區 */
+                .global-player.active { bottom: 20px; } 
+
+        /* 🌟 桌機版：播放器併入作品卡片，不再浮在地圖上遮擋內容 */
         @media (min-width: 601px) {
-            .global-player {
-                left: auto;
-                right: 24px;
-                bottom: -140px;
-                transform: translateY(20px) scale(0.98);
-                width: min(460px, calc(100vw - 48px));
-                max-width: 460px;
-                padding: 10px 14px;
-                gap: 12px;
-                border-radius: 26px;
-                background: rgba(255, 255, 255, 0.92);
-                backdrop-filter: blur(18px);
-                -webkit-backdrop-filter: blur(18px);
-                box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
-                border: 1px solid rgba(255,255,255,0.75);
-                transition: bottom 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-                            transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-                            width 0.3s ease,
-                            max-width 0.3s ease;
+            body.player-embedded .leaflet-popup .btn-play-main {
+                display: none !important;
             }
 
-            .global-player.active {
-                bottom: 24px;
-                transform: translateY(0) scale(1);
+            .leaflet-popup .global-player.embedded-player {
+                position: relative !important;
+                left: auto !important;
+                right: auto !important;
+                bottom: auto !important;
+                transform: none !important;
+
+                width: 100% !important;
+                max-width: none !important;
+                margin: 10px 0 0 0;
+                padding: 10px 12px;
+                gap: 10px;
+
+                border-radius: 18px;
+                background: rgba(248, 250, 252, 0.96);
+                border: 1px solid #e2e8f0;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 8px 18px rgba(15, 23, 42, 0.08);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+
+                z-index: auto !important;
+                box-sizing: border-box;
             }
 
-            .global-player:hover {
-                width: min(620px, calc(100vw - 48px));
-                max-width: 620px;
+            .leaflet-popup .global-player.embedded-player.active {
+                bottom: auto !important;
+                transform: none !important;
             }
 
-            .global-player .player-control-btn {
-                width: 46px;
-                height: 46px;
-                box-shadow: 0 8px 20px rgba(39,174,96,0.32);
+            .leaflet-popup .global-player.embedded-player .player-control-btn {
+                width: 42px;
+                height: 42px;
+                box-shadow: 0 6px 16px rgba(39,174,96,0.28);
             }
 
-            .global-player .player-main {
+            .leaflet-popup .global-player.embedded-player .player-main {
                 gap: 5px;
+                min-width: 0;
             }
 
-            .global-player .player-header-row {
+            .leaflet-popup .global-player.embedded-player .player-header-row {
                 gap: 8px;
             }
 
-            .global-player .player-title {
-                font-size: 13px;
-                max-width: 230px;
+            .leaflet-popup .global-player.embedded-player .player-title {
+                font-size: 12.5px;
+                max-width: 160px;
             }
 
-            .global-player:hover .player-title {
-                max-width: 380px;
+            .leaflet-popup .global-player.embedded-player .player-time-display {
+                font-size: 10.5px;
+                padding: 2px 6px;
             }
 
-            .global-player .player-time-display {
-                font-size: 11px;
-                padding: 3px 7px;
-            }
-
-            .global-player .waveform-wrapper {
-                height: 20px;
+            .leaflet-popup .global-player.embedded-player .waveform-wrapper {
+                height: 22px;
                 border-radius: 999px;
             }
 
-            .global-player .volume-control {
+            .leaflet-popup .global-player.embedded-player .volume-control {
+                display: none;
+            }
+
+            .leaflet-popup .global-player.embedded-player .close-player-btn {
                 width: 28px;
-                overflow: hidden;
-                transition: width 0.25s ease;
+                height: 28px;
             }
 
-            .global-player:hover .volume-control {
-                width: 120px;
-            }
-
-            .global-player .volume-slider {
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.2s ease;
-            }
-
-            .global-player:hover .volume-slider {
-                opacity: 1;
-                pointer-events: auto;
-            }
-
-            .global-player .close-player-btn {
-                width: 30px;
-                height: 30px;
+            .leaflet-popup .global-player.embedded-player #favBtn {
+                display: none;
             }
         }
         
@@ -2094,16 +2081,19 @@
             if (isRoutePlaying) { currentRouteIndex++; routeTimeout = setTimeout(playNextRoutePoint, 1500); }
         });
 
-        window.toggleCardPlay = function(event, uid) {
+                window.toggleCardPlay = function(event, uid) {
             event.preventDefault(); 
             event.stopPropagation();
+
             if (currentAudioUid === uid) {
+                mountGlobalPlayerIntoPopup_();
+                document.getElementById('globalPlayer').classList.add('active');
                 toggleGlobalAudio(); 
             } else {
                 startGlobalPlayback(uid); 
             }
         };
-
+        
         window.toggleGlobalAudio = function() {
             if (globalAudio.paused) {
                 globalAudio.play();
@@ -2370,13 +2360,18 @@ fetch(API_URL, { cache: "no-store" })
             
             var marker = null;
             if (hasGps) {
-                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
+                                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
     autoPan: true,
     keepInView: true,
     offset: [0, -28],
     autoPanPaddingTopLeft: [20, 95],
     autoPanPaddingBottomRight: [20, 110]
 });
+
+                marker.on('popupclose', function() {
+                    if (!isRoutePlaying) closeGlobalPlayer();
+                });
+
                 globalMarkerMap[item.uid] = marker;
                 
                 marker.on('click', (e) => { 
@@ -2753,7 +2748,8 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
 
             document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
             
-            globalAudio.src = item.audioUrl;
+                        globalAudio.src = item.audioUrl;
+            mountGlobalPlayerIntoPopup_();
             
             globalAudio.onerror = function() {
                 console.warn("首選來源載入失敗，檢測是否需切換...");
@@ -2770,12 +2766,70 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
             document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
         }
         
+                var globalPlayerElCache = null;
+
+        function getGlobalPlayerEl_() {
+            if (!globalPlayerElCache) {
+                globalPlayerElCache = document.getElementById('globalPlayer');
+            }
+            return globalPlayerElCache;
+        }
+
+        function restoreGlobalPlayerToBody_() {
+            var player = getGlobalPlayerEl_();
+            if (!player) return;
+
+            player.classList.remove('embedded-player');
+            document.body.classList.remove('player-embedded');
+
+            if (player.parentElement !== document.body) {
+                document.body.appendChild(player);
+            }
+        }
+
+        function mountGlobalPlayerIntoPopup_(retry) {
+            retry = retry || 0;
+
+            var player = getGlobalPlayerEl_();
+            if (!player) return;
+
+            var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+
+            if (isMobile) {
+                restoreGlobalPlayerToBody_();
+                return;
+            }
+
+            var target = document.querySelector('.leaflet-popup .sound-info');
+
+            if (!target) {
+                if (retry < 3) {
+                    setTimeout(function() {
+                        mountGlobalPlayerIntoPopup_(retry + 1);
+                    }, 80);
+                }
+                return;
+            }
+
+            player.classList.add('embedded-player');
+            document.body.classList.add('player-embedded');
+            target.appendChild(player);
+        }
+
         function closeGlobalPlayer() { 
             globalAudio.pause(); 
-            document.getElementById('globalPlayer').classList.remove('active'); 
+
+            var player = getGlobalPlayerEl_();
+            if (player) player.classList.remove('active');
+
+            restoreGlobalPlayerToBody_();
+
             var header = document.querySelector('.glass-header');
             if (header) header.classList.remove('compact-mode'); 
-            currentAudioUid = null; isRoutePlaying = false; clearTimeout(routeTimeout); 
+
+            currentAudioUid = null; 
+            isRoutePlaying = false; 
+            clearTimeout(routeTimeout); 
         }
         
         function toggleMute() { 
