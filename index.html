@@ -2060,33 +2060,6 @@ body.player-embedded .leaflet-popup .btn-play-main {
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 終極絕對定心引擎：透過像素偏移精準控制卡片著陸點
-        function getFocusOffset() {
-            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
-            var isMobile = window.innerWidth <= 600;
-            var H = window.innerHeight;
-            
-            // 播放條出現時的安全扣除高度：精準給定 120px，保證卡片與播放條之間留下完美間距，絕不推飛。
-            var bottomMargin = 0;
-            if (isMobile) {
-                bottomMargin = isPlayerActive ? 120 : 60;
-            } else {
-                bottomMargin = isPlayerActive ? 140 : 80;
-            }
-            
-            return (H / 2) - bottomMargin;
-        }
-
-        function forceFocusMarker(marker) {
-            if (!marker || !marker.getLatLng) return;
-            setTimeout(() => {
-                var pt = map.project(marker.getLatLng(), map.getZoom());
-                // 套用絕對 Y 軸偏移
-                pt.y -= getFocusOffset();
-                // 絕對平移，捨棄原生 autoPan
-                map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-            }, 100);
-        }
 
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
@@ -2801,47 +2774,51 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         }
 
         function playNextRoutePoint() {
-    if (!isRoutePlaying) return;
+    if (!isRoutePlaying) return;
 
-    if (currentRouteIndex >= routePointsData.length) {
-        alert("路線探索完畢！");
-        isRoutePlaying = false;
-        return;
-    }
+    if (currentRouteIndex >= routePointsData.length) {
+        alert("路線探索完畢！");
+        isRoutePlaying = false;
+        return;
+    }
 
-    var marker = routeMarkerObjects[currentRouteIndex];
-    var point = routePointsData[currentRouteIndex];
+    var marker = routeMarkerObjects[currentRouteIndex];
+    var point = routePointsData[currentRouteIndex];
 
-    if (!marker || !point) {
-        currentRouteIndex++;
-        playNextRoutePoint();
-        return;
-    }
+    if (!marker || !point) {
+        currentRouteIndex++;
+        playNextRoutePoint();
+        return;
+    }
 
-    markerCluster.zoomToShowLayer(marker, () => {
-        if (!isRoutePlaying) return;
+    markerCluster.zoomToShowLayer(marker, () => {
+        if (!isRoutePlaying) return;
 
-        restoreGlobalPlayerToBody_();
+        // 🌟 披上隱形斗篷：在拔出播放條回 Body 前，先讓它透明，防止在底部閃爍！
+        var player = getGlobalPlayerEl_();
+        if (player) player.style.opacity = '0';
 
-        marker.once('popupopen', function() {
-            if (!isRoutePlaying) return;
+        restoreGlobalPlayerToBody_();
 
-            setTimeout(function() {
-                if (point.audioUrl) {
-                    startGlobalPlayback(point.uid, { skipFocus: true, forceMount: true });
-                } else {
-                    routeTimeout = setTimeout(() => {
-                        if (isRoutePlaying) {
-                            currentRouteIndex++;
-                            playNextRoutePoint();
-                        }
-                    }, 4000);
-                }
-            }, 120);
-        });
+        marker.once('popupopen', function() {
+            if (!isRoutePlaying) return;
 
-        marker.openPopup();
-    });
+            setTimeout(function() {
+                if (point.audioUrl) {
+                    startGlobalPlayback(point.uid, { skipFocus: true });
+                } else {
+                    routeTimeout = setTimeout(() => {
+                        if (isRoutePlaying) {
+                            currentRouteIndex++;
+                            playNextRoutePoint();
+                        }
+                    }, 4000);
+                }
+            }, 120);
+        });
+
+        marker.openPopup();
+    });
 }
 
         function startGlobalPlayback(uid, options) {
@@ -2976,35 +2953,41 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         }
 
         function mountGlobalPlayerIntoPopup_(retry) {
-    retry = retry || 0;
+    retry = retry || 0;
 
-    var player = getGlobalPlayerEl_();
-    if (!player) return;
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
-    var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    var isRealMobile = isSmallScreen && isTouchDevice;
+    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+    var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    var isRealMobile = isSmallScreen && isTouchDevice;
 
-    if (isRealMobile) {
-        restoreGlobalPlayerToBody_();
-        return;
-    }
+    if (isRealMobile) {
+        restoreGlobalPlayerToBody_();
+        player.style.opacity = '1'; // 手機版確保現身
+        return;
+    }
 
-    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
+    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
 
-    if (!target) {
-        if (retry < 20) {
-            setTimeout(function() {
-                mountGlobalPlayerIntoPopup_(retry + 1);
-            }, 100);
+    if (!target) {
+        if (retry < 20) {
+            setTimeout(function() {
+                mountGlobalPlayerIntoPopup_(retry + 1);
+            }, 100);
+        } else {
+            player.style.opacity = '1'; // 安全防護，避免永遠隱形
         }
-        return;
-    }
+        return;
+    }
 
-    player.classList.add('embedded-player');
-    player.classList.add('active');
-    document.body.classList.add('player-embedded');
-    target.appendChild(player);
+    player.classList.add('embedded-player');
+    player.classList.add('active');
+    document.body.classList.add('player-embedded');
+    target.appendChild(player);
+    
+    // 🌟 搬移完成，脫下隱形斗篷
+    setTimeout(() => { player.style.opacity = '1'; }, 50);
 }
 
         function closeGlobalPlayer() { 
@@ -3340,17 +3323,17 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         map.off('popupopen'); 
         
         map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            forceFocusMarker(e.popup._source);
-            setTimeout(updateCardButtonUI, 50);
-            setTimeout(updateFavoriteUI, 50);
-            
-            let popupContent = e.popup.getContent();
-            let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
-            if (uidMatch && uidMatch[1]) {
-                setTimeout(() => updateReactionUI(uidMatch[1]), 50);
-            }
-        });
+            updateHeaderVisibility(true);
+            // 🌟 已移除 forceFocusMarker，避免點擊卡片時發生二次跳動
+            setTimeout(updateCardButtonUI, 50);
+            setTimeout(updateFavoriteUI, 50);
+            
+            let popupContent = e.popup.getContent();
+            let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
+            if (uidMatch && uidMatch[1]) {
+                setTimeout(() => updateReactionUI(uidMatch[1]), 50);
+            }
+        });
 
         // ==========================================
         // Phase 2.7: 聲音獵人 遊戲化成就系統
