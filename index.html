@@ -110,7 +110,16 @@
 
         .drawer-panel { position: absolute; left: var(--panel-offset); z-index: 1001; width: 320px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
         .drawer-panel:not(.collapsed) { pointer-events: auto; }
-        .drawer-panel.collapsed { transform: translateX(calc(-100% - var(--panel-offset) - 10px)); pointer-events: none;}
+        /* ===== [FIX START] 收合時仍允許 toggle-btn 被點擊 ===== */
+.drawer-panel.collapsed {
+    transform: translateX(calc(-100% - var(--panel-offset) - 10px));
+    pointer-events: auto;
+}
+
+.drawer-panel.collapsed .drawer-content {
+    pointer-events: none;
+}
+/* ===== [FIX END] ===== */
         
         .drawer-content { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; pointer-events: auto; max-height: calc(100vh - 160px); overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
 
@@ -973,10 +982,31 @@ body.player-embedded .leaflet-popup .btn-play-main {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     結束路線任務
                 </button>
+                
             </div>
         </div>
     </div>
-
+<!-- ===== [FIX-NEW START] 浮動結束路線任務按鈕（放在 drawer 外） ===== -->
+<button
+    class="route-btn"
+    onclick="toggleRoute('clear', document.getElementById('clearRouteBtn'))"
+    id="floatingClearRouteBtn"
+    style="
+        display:none;
+        position:fixed;
+        right:18px;
+        bottom:92px;
+        z-index:99999;
+        background:#fef2f2;
+        color:#ef4444;
+        border:1px solid #fca5a5;
+        justify-content:center;
+        box-shadow:0 10px 30px rgba(0,0,0,0.18);
+    "
+>
+    結束路線任務
+</button>
+<!-- ===== [FIX-NEW END] ===== -->
     <div id="rightToolsWrapper" class="right-tools-wrapper">
         <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
@@ -1373,7 +1403,13 @@ body.player-embedded .leaflet-popup .btn-play-main {
     
     <script>
         
-        var map = L.map('map', { zoomControl: false, tap: false }).setView([23.0278, 120.2004], 15);
+        /* ===== [FIX START] 路線播放中，點地圖不關閉作品卡片 ===== */
+var map = L.map('map', {
+    zoomControl: false,
+    tap: false,
+    closePopupOnClick: false
+}).setView([23.0278, 120.2004], 15);
+/* ===== [FIX END] ===== */
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
@@ -2494,9 +2530,16 @@ fetch(API_URL, { cache: "no-store" })
     autoPanPaddingBottomRight: [20, 110]
 });
 
-                marker.on('popupclose', function() {
-                    if (!isRoutePlaying) closeGlobalPlayer();
-                });
+                /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
+marker.on('popupclose', function() {
+    if (isRoutePlaying) {
+        restoreGlobalPlayerToBody_(false);
+        return;
+    }
+
+    closeGlobalPlayer();
+});
+/* ===== [FIX END] ===== */
 
                 globalMarkerMap[item.uid] = marker;
                 
@@ -2639,7 +2682,12 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
             if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
             if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('clearRouteBtn').style.display = 'block';
+            /* ===== [FIX-ROUTE-START START] ===== */
+document.getElementById('clearRouteBtn').style.display = 'block';
+
+var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
+if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
+/* ===== [FIX-ROUTE-START END] ===== */
 
             currentRouteType = 'custom';
             isRoutePlaying = true;
@@ -2675,6 +2723,8 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
             if (type === 'clear' || currentRouteType === type) {
                 currentRouteType = null; isRoutePlaying = false; closeGlobalPlayer();
                 document.getElementById('clearRouteBtn').style.display = 'none';
+                var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
+if (floatingClearBtn) floatingClearBtn.style.display = 'none';
                 if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
                 map.pm.getGeomanDrawLayers().forEach(l => map.removeLayer(l));
                 
@@ -2686,6 +2736,8 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
             currentRouteType = type; isRoutePlaying = true;
             btnElement.classList.add('active');
             document.getElementById('clearRouteBtn').style.display = 'block';
+            var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
+if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
 
             if (type === 'nature') {
                 routePointsData = allMarkersData.filter(i => i.category.includes('自然') || i.category.includes('空間')).slice(0, 5);
@@ -2816,11 +2868,19 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         function playNextRoutePoint() {
     if (!isRoutePlaying) return;
 
+    /* ===== [FIX-ROUTE-END START] ===== */
     if (currentRouteIndex >= routePointsData.length) {
         alert("路線探索完畢！");
         isRoutePlaying = false;
+
+        document.getElementById('clearRouteBtn').style.display = 'none';
+
+        var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
+        if (floatingClearBtn) floatingClearBtn.style.display = 'none';
+
         return;
     }
+    /* ===== [FIX-ROUTE-END END] ===== */
 
     var marker = routeMarkerObjects[currentRouteIndex];
     var point = routePointsData[currentRouteIndex];
