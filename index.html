@@ -2737,22 +2737,26 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     markerCluster.zoomToShowLayer(marker, () => {
         if (!isRoutePlaying) return;
 
-        // 重要：播放器若嵌在上一個 popup，先移回 body，
-        // 避免開啟下一張 popup 時被 Leaflet 一起移除。
         restoreGlobalPlayerToBody_();
 
-        marker.openPopup();
+        marker.once('popupopen', function() {
+            if (!isRoutePlaying) return;
 
-        if (point.audioUrl) {
-            startGlobalPlayback(point.uid, { skipFocus: true });
-        } else {
-            routeTimeout = setTimeout(() => {
-                if (isRoutePlaying) {
-                    currentRouteIndex++;
-                    playNextRoutePoint();
+            setTimeout(function() {
+                if (point.audioUrl) {
+                    startGlobalPlayback(point.uid, { skipFocus: true, forceMount: true });
+                } else {
+                    routeTimeout = setTimeout(() => {
+                        if (isRoutePlaying) {
+                            currentRouteIndex++;
+                            playNextRoutePoint();
+                        }
+                    }, 4000);
                 }
-            }, 4000);
-        }
+            }, 120);
+        });
+
+        marker.openPopup();
     });
 }
 
@@ -2888,33 +2892,36 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         }
 
         function mountGlobalPlayerIntoPopup_(retry) {
-            retry = retry || 0;
+    retry = retry || 0;
 
-            var player = getGlobalPlayerEl_();
-            if (!player) return;
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-            var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+    var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
 
-            if (isMobile) {
-                restoreGlobalPlayerToBody_();
-                return;
-            }
+    if (isMobile) {
+        restoreGlobalPlayerToBody_();
+        return;
+    }
 
-            var target = document.querySelector('.leaflet-popup .sound-info');
+    var popup = document.querySelector('.leaflet-popup');
+    var target = popup ? popup.querySelector('.sound-info') : null;
 
-            if (!target) {
-                if (retry < 3) {
-                    setTimeout(function() {
-                        mountGlobalPlayerIntoPopup_(retry + 1);
-                    }, 80);
-                }
-                return;
-            }
-
-            player.classList.add('embedded-player');
-            document.body.classList.add('player-embedded');
-            target.appendChild(player);
+    if (!target) {
+        if (retry < 12) {
+            setTimeout(function() {
+                mountGlobalPlayerIntoPopup_(retry + 1);
+            }, 100);
         }
+
+        return;
+    }
+
+    player.classList.add('embedded-player');
+    player.classList.add('active');
+    document.body.classList.add('player-embedded');
+    target.appendChild(player);
+}
 
         function closeGlobalPlayer() { 
             globalAudio.pause(); 
