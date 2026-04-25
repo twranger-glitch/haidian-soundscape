@@ -154,7 +154,15 @@
             display: flex; align-items: center; padding: 12px 20px; gap: 16px; 
             z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6); pointer-events: auto;
         }
-                .global-player.active { bottom: 20px; } 
+                .global-player.active { 
+    bottom: 20px; 
+}
+
+/* 🚫 如果正在嵌入卡片 or 被 suppress，禁止浮出 */
+.global-player.embedded-player.active,
+.global-player.suppress-floating.active {
+    bottom: -200px !important;
+} 
 
         /* 🌟 桌機版：播放器併入作品卡片，不再浮在地圖上遮擋內容 */
         @media (min-width: 601px) {
@@ -3008,7 +3016,6 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         return;
     }
 
-    player.classList.remove('suppress-floating');
 player.classList.remove('suppress-floating');
 player.classList.add('embedded-player');
 player.classList.add('active');
