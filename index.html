@@ -2075,35 +2075,64 @@
         globalAudio.addEventListener('play', updateCardButtonUI);
         globalAudio.addEventListener('pause', updateCardButtonUI);
         globalAudio.addEventListener('ended', () => {
-            updateCardButtonUI();
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-            document.getElementById('waveProgress').style.clipPath = `inset(0 100% 0 0)`;
-            if (isRoutePlaying) { currentRouteIndex++; routeTimeout = setTimeout(playNextRoutePoint, 1500); }
-        });
+    updateCardButtonUI();
+
+    var player = getGlobalPlayerEl_();
+    var toggleBtn = player ? player.querySelector('#playerToggleBtn') : null;
+    var waveProgress = player ? player.querySelector('#waveProgress') : null;
+
+    if (toggleBtn) {
+        toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+    }
+
+    if (waveProgress) {
+        waveProgress.style.clipPath = `inset(0 100% 0 0)`;
+    }
+
+    if (isRoutePlaying) {
+        currentRouteIndex++;
+        routeTimeout = setTimeout(playNextRoutePoint, 1500);
+    }
+});
 
                 window.toggleCardPlay = function(event, uid) {
-            event.preventDefault(); 
-            event.stopPropagation();
+    event.preventDefault();
+    event.stopPropagation();
 
-            if (currentAudioUid === uid) {
-                mountGlobalPlayerIntoPopup_();
-                document.getElementById('globalPlayer').classList.add('active');
-                toggleGlobalAudio(); 
-            } else {
-                startGlobalPlayback(uid); 
-            }
-        };
-        
-        window.toggleGlobalAudio = function() {
-            if (globalAudio.paused) {
-                globalAudio.play();
-                document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
-            } else {
-                globalAudio.pause();
-                document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-            }
-            updateCardButtonUI();
-        };
+    if (currentAudioUid === uid) {
+        var player = getGlobalPlayerEl_();
+        mountGlobalPlayerIntoPopup_();
+
+        if (player) {
+            player.classList.add('active');
+        }
+
+        toggleGlobalAudio();
+    } else {
+        startGlobalPlayback(uid, { skipFocus: true });
+    }
+};
+
+window.toggleGlobalAudio = function() {
+    var player = getGlobalPlayerEl_();
+    var toggleBtn = player ? player.querySelector('#playerToggleBtn') : null;
+
+    if (globalAudio.paused) {
+        globalAudio.play();
+
+        if (toggleBtn) {
+            toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+        }
+    } else {
+        globalAudio.pause();
+
+        if (toggleBtn) {
+            toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+        }
+    }
+
+    updateCardButtonUI();
+};
 
         // 🌟 加上 ?t= 時間戳強制破除快取
         const API_URL = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/soundscape_data.json?t=" + Date.now();
@@ -2688,83 +2717,154 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         }
 
         function playNextRoutePoint() {
-            if (!isRoutePlaying) return; 
-            if (currentRouteIndex >= routePointsData.length) { alert("路線探索完畢！"); isRoutePlaying = false; return; }
-            var marker = routeMarkerObjects[currentRouteIndex];
-            markerCluster.zoomToShowLayer(marker, () => {
-                if (!isRoutePlaying) return;
-                marker.openPopup();
-                if (routePointsData[currentRouteIndex].audioUrl) { startGlobalPlayback(routePointsData[currentRouteIndex].uid); globalAudio.play(); document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; } 
-                else { routeTimeout = setTimeout(() => { if (isRoutePlaying) { currentRouteIndex++; playNextRoutePoint(); } }, 4000); }
-            });
+    if (!isRoutePlaying) return;
+
+    if (currentRouteIndex >= routePointsData.length) {
+        alert("路線探索完畢！");
+        isRoutePlaying = false;
+        return;
+    }
+
+    var marker = routeMarkerObjects[currentRouteIndex];
+    var point = routePointsData[currentRouteIndex];
+
+    if (!marker || !point) {
+        currentRouteIndex++;
+        playNextRoutePoint();
+        return;
+    }
+
+    markerCluster.zoomToShowLayer(marker, () => {
+        if (!isRoutePlaying) return;
+
+        // 重要：播放器若嵌在上一個 popup，先移回 body，
+        // 避免開啟下一張 popup 時被 Leaflet 一起移除。
+        restoreGlobalPlayerToBody_();
+
+        marker.openPopup();
+
+        if (point.audioUrl) {
+            startGlobalPlayback(point.uid, { skipFocus: true });
+        } else {
+            routeTimeout = setTimeout(() => {
+                if (isRoutePlaying) {
+                    currentRouteIndex++;
+                    playNextRoutePoint();
+                }
+            }, 4000);
+        }
+    });
+}
+
+        function startGlobalPlayback(uid, options) {
+    options = options || {};
+
+    var item = allMarkersData.find(i => i.uid === uid);
+    if (!item) return;
+
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
+
+    if (currentAudioUid === uid) {
+        player.classList.add('active');
+        mountGlobalPlayerIntoPopup_();
+        return;
+    }
+
+    currentAudioUid = uid;
+
+    var header = document.querySelector('.glass-header');
+    if (header) {
+        header.classList.add('compact-mode');
+    }
+
+    player.classList.add('active');
+
+    // 只有「需要重新聚焦」的情境才移動畫面。
+    // 卡片播放鍵與路線播放會傳入 skipFocus: true，所以不會二次上移。
+    if (!options.skipFocus) {
+        var m = globalMarkerMap[uid];
+        if (m && m.isPopupOpen()) {
+            forceFocusMarker(m);
+        }
+    }
+
+    var titleContainer = player.querySelector('#playerTitleContainer');
+    var titleUI = player.querySelector('#playerTitleUI');
+    var displayText = item.title + " (採集者: " + item.author + ")";
+
+    if (titleUI) {
+        titleUI.innerText = displayText;
+        titleUI.classList.remove('marquee-text');
+    }
+
+    setTimeout(() => {
+        if (titleUI && titleContainer && titleUI.scrollWidth > titleContainer.clientWidth) {
+            var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
+            titleUI.classList.add('marquee-text');
+        }
+    }, 100);
+
+    var wBase = player.querySelector('#waveBase');
+    var wProg = player.querySelector('#waveProgress');
+
+    if (wBase) {
+        wBase.style.display = 'block';
+    }
+
+    if (wProg) {
+        wProg.style.display = 'block';
+    }
+
+    var w = (u, c) => {
+        if (u.includes('res.cloudinary.com')) {
+            return u
+                .replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`)
+                .replace(/\.[^.]+$/, '.png');
         }
 
-        function startGlobalPlayback(uid) {
-            var item = allMarkersData.find(i => i.uid === uid); 
-            if (!item) return;
-            if (currentAudioUid === uid) { 
-                document.getElementById('globalPlayer').classList.add('active'); 
-                return; 
-            }
-            currentAudioUid = uid; 
-            
-            var header = document.querySelector('.glass-header');
-            if (header) header.classList.add('compact-mode');
-            document.getElementById('globalPlayer').classList.add('active');
+        const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
 
-            var m = globalMarkerMap[uid];
-            if(m && m.isPopupOpen()) { forceFocusMarker(m); }
-            
-            var titleContainer = document.getElementById('playerTitleContainer');
-            var titleUI = document.getElementById('playerTitleUI');
-            var displayText = item.title + " (採集者: " + item.author + ")";
-            titleUI.innerText = displayText;
-            titleUI.classList.remove('marquee-text');
-            
-            setTimeout(() => {
-                if (titleUI.scrollWidth > titleContainer.clientWidth) {
-                    var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-                    titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
-                    titleUI.classList.add('marquee-text');
-                }
-            }, 100);
+        return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'%3E%3Cpath d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/%3E%3C/svg%3E`;
+    };
 
-            var wBase = document.getElementById('waveBase');
-            var wProg = document.getElementById('waveProgress');
-            wBase.style.display = 'block';
-            wProg.style.display = 'block';
+    if (wBase) {
+        wBase.src = w(item.audioUrl, "bdc3c7");
+    }
 
-            var w = (u, c) => {
-                if (u.includes('res.cloudinary.com')) {
-                    return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
-                }
-                const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
-                return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'%3E%3Cpath d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/%3E%3C/svg%3E`;
-            };
-            
-            wBase.src = w(item.audioUrl, "bdc3c7");
-            wProg.src = w(item.audioUrl, "27ae60");
-            wProg.style.clipPath = 'inset(0 100% 0 0)';
+    if (wProg) {
+        wProg.src = w(item.audioUrl, "27ae60");
+        wProg.style.clipPath = 'inset(0 100% 0 0)';
+    }
 
-            document.getElementById('playerTimeDisplay').innerText = "00:00 / 00:00"; 
-            
-                        globalAudio.src = item.audioUrl;
-            mountGlobalPlayerIntoPopup_();
-            
-            globalAudio.onerror = function() {
-                console.warn("首選來源載入失敗，檢測是否需切換...");
-                if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
-                    globalAudio.src = item.fallbackAudioUrl;
-                    globalAudio.load();
-                    globalAudio.play().catch(e => console.error("備援載入也失敗"));
-                } else {
-                    console.error("所有音軌來源均失效");
-                }
-            };
+    var timeDisplay = player.querySelector('#playerTimeDisplay');
+    if (timeDisplay) {
+        timeDisplay.innerText = "00:00 / 00:00";
+    }
 
-            globalAudio.play().catch(e => console.warn("等待使用者手動觸發播放", e));
-            document.getElementById('playerToggleBtn').innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; 
+    globalAudio.src = item.audioUrl;
+    mountGlobalPlayerIntoPopup_();
+
+    globalAudio.onerror = function() {
+        console.warn("首選來源載入失敗，檢測是否需切換...");
+
+        if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
+            globalAudio.src = item.fallbackAudioUrl;
+            globalAudio.load();
+            globalAudio.play().catch(e => console.error("備援載入也失敗"));
+        } else {
+            console.error("所有音軌來源均失效");
         }
+    };
+
+    globalAudio.play().catch(e => console.warn("等待使用者手動觸發播放", e));
+
+    var toggleBtn = player.querySelector('#playerToggleBtn');
+    if (toggleBtn) {
+        toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+    }
+}
         
                 var globalPlayerElCache = null;
 
@@ -2858,20 +2958,29 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         });
 
         globalAudio.ontimeupdate = () => { 
-            if(globalAudio.duration && currentAudioUid) { 
-                document.getElementById('waveProgress').style.clipPath = `inset(0 ${100-(globalAudio.currentTime/globalAudio.duration*100)}% 0 0)`; 
-                document.getElementById('playerTimeDisplay').innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration); 
-                
-                let threshold = Math.min(10, globalAudio.duration * 0.3);
-                
-                // 🌟 只要這首歌被加入過 Set，就絕對不再發送 10s log
-                if (globalAudio.currentTime > threshold && !loggedAudioUids.has(currentAudioUid)) {
-                    logAction(currentAudioUid, 'play_10s'); 
-                    loggedAudioUids.add(currentAudioUid); // 鎖定這首歌
-                    console.log(`有效聆聽：${currentAudioUid}`);
-                }
-            } 
-        };
+    if (globalAudio.duration && currentAudioUid) {
+        var player = getGlobalPlayerEl_();
+        var waveProgress = player ? player.querySelector('#waveProgress') : null;
+        var timeDisplay = player ? player.querySelector('#playerTimeDisplay') : null;
+
+        if (waveProgress) {
+            waveProgress.style.clipPath = `inset(0 ${100 - (globalAudio.currentTime / globalAudio.duration * 100)}% 0 0)`;
+        }
+
+        if (timeDisplay) {
+            timeDisplay.innerText = formatTime(globalAudio.currentTime) + ' / ' + formatTime(globalAudio.duration);
+        }
+        
+        let threshold = Math.min(10, globalAudio.duration * 0.3);
+        
+        // 🌟 只要這首歌被加入過 Set，就絕對不再發送 10s log
+        if (globalAudio.currentTime > threshold && !loggedAudioUids.has(currentAudioUid)) {
+            logAction(currentAudioUid, 'play_10s'); 
+            loggedAudioUids.add(currentAudioUid);
+            console.log(`有效聆聽：${currentAudioUid}`);
+        }
+    } 
+};
         
         function seekGlobalAudio(e) { var rect = document.getElementById('waveformWrapper').getBoundingClientRect(); globalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * globalAudio.duration; }
         
