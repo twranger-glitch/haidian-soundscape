@@ -2187,13 +2187,17 @@ fetch(API_URL, { cache: "no-store" })
             if(top10.length === 0) { latestListDiv.innerHTML = "<p style='font-size:12px; color:#94a3b8; text-align:center;'>目前尚無作品</p>"; return; }
             top10.forEach(item => {
                 var rawDate = (item.date || "").replace(" 00:00:00", "").split(" ")[0].replace(/-/g, "/"); 
+                // 🌟 明確清洗字串，不依賴 createMarker 的副作用
+                var safeTitle = escapeHTML(item.title || "無標題");
+                var safeAuthor = escapeHTML(item.author || "海佃特派員");
+
                 latestListDiv.innerHTML += `
                     <div class="latest-item" onclick="closeModal('latestModal'); focusMarkerOnMap('${item.uid}')">
                         <img src="${item.coverUrl}" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=100&auto=format&fit=crop'">
                         <div class="latest-item-info">
-                            <div class="latest-item-title">${item.title}</div>
+                            <div class="latest-item-title">${safeTitle}</div>
                             <div class="latest-item-meta">
-                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.author}</span>
+                                <span style="display:flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${safeAuthor}</span>
                                 <span style="font-family:'Courier New', monospace;">${rawDate}</span>
                             </div>
                         </div>
