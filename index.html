@@ -2834,14 +2834,15 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     markerCluster.zoomToShowLayer(marker, () => {
         if (!isRoutePlaying) return;
 
-        restoreGlobalPlayerToBody_();
+        restoreGlobalPlayerToBody_(true);
 
         marker.once('popupopen', function() {
             if (!isRoutePlaying) return;
 
             setTimeout(function() {
                 if (point.audioUrl) {
-                    startGlobalPlayback(point.uid, { skipFocus: true, forceMount: true });
+                    startGlobalPlayback(point.uid, { skipFocus: true });
+                    mountGlobalPlayerIntoPopup_();
                 } else {
                     routeTimeout = setTimeout(() => {
                         if (isRoutePlaying) {
@@ -2866,12 +2867,10 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     var player = getGlobalPlayerEl_();
     if (!player) return;
 
-    // 👉 如果是同一首音檔
     if (currentAudioUid === uid) {
         if (!player.classList.contains('suppress-floating')) {
             player.classList.add('active');
         }
-        mountGlobalPlayerIntoPopup_();
         return;
     }
 
@@ -2882,20 +2881,16 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         header.classList.add('compact-mode');
     }
 
-    // ❗關鍵：避免在 suppress 狀態時出現底部播放器
     if (!player.classList.contains('suppress-floating')) {
         player.classList.add('active');
     }
 
-    // 是否需要移動畫面
     if (!options.skipFocus) {
         var m = globalMarkerMap[uid];
         if (m && m.isPopupOpen()) {
             forceFocusMarker(m);
         }
     }
-
-    // ===== 以下維持原本邏輯 =====
 
     var titleContainer = player.querySelector('#playerTitleContainer');
     var titleUI = player.querySelector('#playerTitleUI');
@@ -2929,50 +2924,53 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
 
         const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
 
-        return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80'%3E%3Cpath d='M0 40 L800 40' stroke='${colorHex}'/%3E%3C/svg%3E`;
+        return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'%3E%3Cpath d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/%3E%3C/svg%3E`;
     };
 
     if (wBase) wBase.src = w(item.audioUrl, "bdc3c7");
+
     if (wProg) {
         wProg.src = w(item.audioUrl, "27ae60");
         wProg.style.clipPath = 'inset(0 100% 0 0)';
     }
 
     var timeDisplay = player.querySelector('#playerTimeDisplay');
-    if (timeDisplay) timeDisplay.innerText = "00:00 / 00:00";
+    if (timeDisplay) {
+        timeDisplay.innerText = "00:00 / 00:00";
+    }
 
     globalAudio.src = item.audioUrl;
-    mountGlobalPlayerIntoPopup_();
 
     globalAudio.onerror = function() {
+        console.warn("首選來源載入失敗，檢測是否需切換...");
+
         if (item.fallbackAudioUrl && globalAudio.src !== item.fallbackAudioUrl) {
             globalAudio.src = item.fallbackAudioUrl;
             globalAudio.load();
-            globalAudio.play().catch(() => {});
+            globalAudio.play().catch(e => console.error("備援載入也失敗"));
+        } else {
+            console.error("所有音軌來源均失效");
         }
     };
 
-    globalAudio.play().catch(() => {});
+    globalAudio.play().catch(e => console.warn("等待使用者手動觸發播放", e));
 
     var toggleBtn = player.querySelector('#playerToggleBtn');
     if (toggleBtn) {
-        toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-        </svg>`;
+        toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
     }
 }
         
                 var globalPlayerElCache = null;
 
-        function getGlobalPlayerEl_() {
-            if (!globalPlayerElCache) {
-                globalPlayerElCache = document.getElementById('globalPlayer');
-            }
-            return globalPlayerElCache;
-        }
+function getGlobalPlayerEl_() {
+    if (!globalPlayerElCache) {
+        globalPlayerElCache = document.getElementById('globalPlayer');
+    }
+    return globalPlayerElCache;
+}
 
-        function restoreGlobalPlayerToBody_(suppressFloating) {
+function restoreGlobalPlayerToBody_(suppressFloating) {
     var player = getGlobalPlayerEl_();
     if (!player) return;
 
@@ -2990,7 +2988,7 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     }
 }
 
-        function mountGlobalPlayerIntoPopup_(retry) {
+function mountGlobalPlayerIntoPopup_(retry) {
     retry = retry || 0;
 
     var player = getGlobalPlayerEl_();
@@ -3001,7 +2999,7 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     var isRealMobile = isSmallScreen && isTouchDevice;
 
     if (isRealMobile) {
-        restoreGlobalPlayerToBody_(true);
+        restoreGlobalPlayerToBody_();
         return;
     }
 
@@ -3016,11 +3014,11 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         return;
     }
 
-player.classList.remove('suppress-floating');
-player.classList.add('embedded-player');
-player.classList.add('active');
-document.body.classList.add('player-embedded');
-target.appendChild(player);
+    player.classList.remove('suppress-floating');
+    player.classList.add('embedded-player');
+    player.classList.add('active');
+    document.body.classList.add('player-embedded');
+    target.appendChild(player);
 }
 
         function closeGlobalPlayer() { 
