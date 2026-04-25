@@ -352,16 +352,7 @@
     box-sizing: border-box;
 }
 
-/* 🌟 小卡底部收緊，避免勘誤選單下方留太多空白 */
-.sound-info {
-    padding: 16px 18px 10px 18px;
-}
-
-.admin-menu {
-    margin-top: 8px;
-    margin-bottom: 0;
-}
-        
+       
         .leaflet-container a.leaflet-popup-close-button {
             position: absolute; top: 10px; right: 10px;
             width: 34px; height: 34px;
@@ -409,13 +400,104 @@
         .btn-play-main.playing { background: #e74c3c; box-shadow: 0 4px 12px rgba(231,76,60,0.25); }
         .btn-play-main.playing:hover { background: #c0392b; box-shadow: 0 6px 15px rgba(231,76,60,0.35); }
         
-        .admin-menu { margin-top: 12px; text-align: right; }
-        .admin-menu summary { font-size: 14px; color: #cbd5e1; cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; padding: 4px; border-radius: 4px;}
-        .admin-menu summary:hover { color: #64748b; background: #f1f5f9;}
-        .admin-dropdown { background: #fff; border-radius: 8px; padding: 8px 12px; display: inline-flex; gap: 15px; margin-top: 6px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);}
-        .action-link-faint { font-size: 12px; color: #94a3b8; text-decoration: none; font-weight: 700; transition: 0.2s; display: flex; align-items: center; gap: 4px;}
-        .action-link-faint svg { width: 12px; height: 12px; }
-        .action-link-faint:hover { color: #e74c3c; }
+                /* 勘誤選單改到標題右上角，不再佔用卡片底部空間 */
+        .admin-menu {
+            margin: 0;
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-menu summary {
+            font-size: 14px;
+            color: #cbd5e1;
+            cursor: pointer;
+            list-style: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        .admin-menu summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .admin-menu summary:hover {
+            color: #64748b;
+            background: #f1f5f9;
+        }
+
+        .card-admin-menu .admin-dropdown {
+            position: absolute;
+            right: 0;
+            top: 28px;
+            z-index: 9999;
+            background: #fff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: inline-flex;
+            gap: 15px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            white-space: nowrap;
+        }
+
+        .action-link-faint {
+            font-size: 12px;
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 700;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .action-link-faint svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .action-link-faint:hover {
+            color: #e74c3c;
+        }
+
+        /* 桌機版小卡高度微壓縮，讓封面更容易完整露出 */
+        .sound-info {
+            padding: 13px 18px 10px 18px;
+        }
+
+        .sound-title {
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .card-meta-box {
+            margin-bottom: 9px;
+            padding: 10px;
+            gap: 8px;
+        }
+
+        .sound-desc {
+            margin: 0 0 9px 0;
+            max-height: 76px;
+        }
+
+        .reaction-section-title {
+            margin: 4px 0 7px 0;
+        }
+
+        .reaction-box {
+            margin-bottom: 10px;
+        }
+
+        .btn-play-main {
+            padding: 11px 15px;
+        }
 
         .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         
@@ -2101,7 +2183,34 @@ fetch(API_URL, { cache: "no-store" })
             } else {
                 audioHTML = `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
             }
-            
+            var adminMenuHTML = `
+    <details class="admin-menu card-admin-menu" onclick="event.stopPropagation()">
+        <summary title="勘誤 / 下架">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="1"></circle>
+                <circle cx="12" cy="5" r="1"></circle>
+                <circle cx="12" cy="19" r="1"></circle>
+            </svg>
+        </summary>
+        <div class="admin-dropdown">
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=提出勘誤&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                勘誤
+            </a>
+            <span style="color:#e2e8f0">|</span>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=原作者申請下架&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                下架
+            </a>
+        </div>
+    </details>
+`;
             var cardHTML = `
                 <div class="sound-card">
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
@@ -2118,6 +2227,7 @@ fetch(API_URL, { cache: "no-store" })
                                 <button id="card-fav-${item.uid}" class="fav-btn" onclick="toggleFavorite('${item.uid}')" title="加入收藏">
                                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                                 </button>
+                                ${adminMenuHTML}
                             </div>
                         </div>
                         
@@ -2161,20 +2271,19 @@ fetch(API_URL, { cache: "no-store" })
                         </div>
 
                         ${audioHTML}
-                        
-                        <details class="admin-menu">
-                            <summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></summary>
-                            <div class="admin-dropdown">
-                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=提出勘誤&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> 勘誤</a><span style="color:#e2e8f0">|</span>
-                                <a href="https://docs.google.com/forms/d/e/1FAIpQLSdORjyp5IXZ_h6L7AaeFxXxJVbDEI2oqjCidzRnAfkJFODM1Q/viewform?usp=pp_url&entry.977398317=原作者申請下架&entry.111338985=${encodeURIComponent(item.title)}" target="_blank" class="action-link-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> 下架</a>
-                            </div>
-                        </details>
+                                                
                     </div>
                 </div>`;
             
             var marker = null;
             if (hasGps) {
-                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false, offset: [0, -10] });
+                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
+    autoPan: true,
+    keepInView: true,
+    offset: [0, -10],
+    autoPanPaddingTopLeft: [20, 130],
+    autoPanPaddingBottomRight: [20, 40]
+});
                 globalMarkerMap[item.uid] = marker;
                 
                 marker.on('click', (e) => { 
