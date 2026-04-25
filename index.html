@@ -234,6 +234,9 @@
                 display: none;
             }
         }
+.global-player.suppress-floating {
+    display: none !important;
+}
 .embedded-player-slot {
     width: 100%;
     margin-top: 10px;
@@ -2187,7 +2190,9 @@ body.player-embedded .leaflet-popup .btn-play-main {
         mountGlobalPlayerIntoPopup_();
 
         if (player) {
-            player.classList.add('active');
+            if (!player.classList.contains('suppress-floating')) {
+    player.classList.add('active');
+}
         }
 
         toggleGlobalAudio();
@@ -2963,17 +2968,23 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
             return globalPlayerElCache;
         }
 
-        function restoreGlobalPlayerToBody_() {
-            var player = getGlobalPlayerEl_();
-            if (!player) return;
+        function restoreGlobalPlayerToBody_(suppressFloating) {
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-            player.classList.remove('embedded-player');
-            document.body.classList.remove('player-embedded');
+    if (suppressFloating) {
+        player.classList.add('suppress-floating');
+    } else {
+        player.classList.remove('suppress-floating');
+    }
 
-            if (player.parentElement !== document.body) {
-                document.body.appendChild(player);
-            }
-        }
+    player.classList.remove('embedded-player');
+    document.body.classList.remove('player-embedded');
+
+    if (player.parentElement !== document.body) {
+        document.body.appendChild(player);
+    }
+}
 
         function mountGlobalPlayerIntoPopup_(retry) {
     retry = retry || 0;
@@ -2986,7 +2997,7 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     var isRealMobile = isSmallScreen && isTouchDevice;
 
     if (isRealMobile) {
-        restoreGlobalPlayerToBody_();
+        restoreGlobalPlayerToBody_(true);
         return;
     }
 
@@ -3001,10 +3012,11 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
         return;
     }
 
-    player.classList.add('embedded-player');
-    player.classList.add('active');
-    document.body.classList.add('player-embedded');
-    target.appendChild(player);
+    player.classList.remove('suppress-floating');
+player.classList.add('embedded-player');
+player.classList.add('active');
+document.body.classList.add('player-embedded');
+target.appendChild(player);
 }
 
         function closeGlobalPlayer() { 
