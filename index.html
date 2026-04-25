@@ -370,7 +370,7 @@
 
         .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; transition: 0.3s;}
-        .sound-info { padding: 16px 18px 18px 18px; transition: 0.3s;}
+        
         .sound-title { font-size: 19px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
         
         .card-meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;}
@@ -468,8 +468,9 @@
 
         /* 桌機版小卡高度微壓縮，讓封面更容易完整露出 */
         .sound-info {
-            padding: 13px 18px 10px 18px;
-        }
+    padding: 13px 18px 10px 18px;
+    transition: 0.3s;
+}
 
         .sound-title {
             font-size: 18px;
