@@ -155,6 +155,98 @@
             z-index: 2000; transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid rgba(255,255,255,0.6); pointer-events: auto;
         }
         .global-player.active { bottom: 20px; } 
+                /* 🌟 桌機版精品迷你播放器：避免遮住作品小卡與聽覺回音區 */
+        @media (min-width: 601px) {
+            .global-player {
+                left: auto;
+                right: 24px;
+                bottom: -140px;
+                transform: translateY(20px) scale(0.98);
+                width: min(460px, calc(100vw - 48px));
+                max-width: 460px;
+                padding: 10px 14px;
+                gap: 12px;
+                border-radius: 26px;
+                background: rgba(255, 255, 255, 0.92);
+                backdrop-filter: blur(18px);
+                -webkit-backdrop-filter: blur(18px);
+                box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+                border: 1px solid rgba(255,255,255,0.75);
+                transition: bottom 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+                            transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+                            width 0.3s ease,
+                            max-width 0.3s ease;
+            }
+
+            .global-player.active {
+                bottom: 24px;
+                transform: translateY(0) scale(1);
+            }
+
+            .global-player:hover {
+                width: min(620px, calc(100vw - 48px));
+                max-width: 620px;
+            }
+
+            .global-player .player-control-btn {
+                width: 46px;
+                height: 46px;
+                box-shadow: 0 8px 20px rgba(39,174,96,0.32);
+            }
+
+            .global-player .player-main {
+                gap: 5px;
+            }
+
+            .global-player .player-header-row {
+                gap: 8px;
+            }
+
+            .global-player .player-title {
+                font-size: 13px;
+                max-width: 230px;
+            }
+
+            .global-player:hover .player-title {
+                max-width: 380px;
+            }
+
+            .global-player .player-time-display {
+                font-size: 11px;
+                padding: 3px 7px;
+            }
+
+            .global-player .waveform-wrapper {
+                height: 20px;
+                border-radius: 999px;
+            }
+
+            .global-player .volume-control {
+                width: 28px;
+                overflow: hidden;
+                transition: width 0.25s ease;
+            }
+
+            .global-player:hover .volume-control {
+                width: 120px;
+            }
+
+            .global-player .volume-slider {
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s ease;
+            }
+
+            .global-player:hover .volume-slider {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .global-player .close-player-btn {
+                width: 30px;
+                height: 30px;
+            }
+        }
         
         .player-control-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-color); color: white; border: none; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; transition: 0.2s; box-shadow: 0 4px 10px rgba(39,174,96,0.3);}
         .player-control-btn:hover { transform: scale(1.05); background: #219150;}
