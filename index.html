@@ -334,39 +334,32 @@
         .latest-item-meta { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; font-weight: 600; align-items: center;}
         .latest-item-meta svg { margin-right: 4px; vertical-align: middle; }
 
-        /* 🌟 桌機版 popup 高度防爆：避免播放鍵與勘誤選單被切掉 */
+        /* 🌟 桌機版 popup：完整展開，不使用內部卷軸 */
 .leaflet-popup-content-wrapper {
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 15px 35px rgba(0,0,0,0.25);
     padding: 0;
-    max-height: calc(100vh - 180px);
-    display: flex;
-    flex-direction: column;
+    max-height: none;
 }
 
 .leaflet-popup-content {
     margin: 0;
     width: 320px !important;
-    max-height: calc(100vh - 180px);
-    overflow-y: auto !important;
-    overflow-x: hidden;
-    padding-bottom: 18px;
+    max-height: none;
+    overflow: visible !important;
+    padding-bottom: 0;
     box-sizing: border-box;
 }
 
-/* 🌟 桌機版 popup 捲軸美化 */
-.leaflet-popup-content::-webkit-scrollbar {
-    width: 6px;
+/* 🌟 小卡底部收緊，避免勘誤選單下方留太多空白 */
+.sound-info {
+    padding: 16px 18px 10px 18px;
 }
 
-.leaflet-popup-content::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 999px;
-}
-
-.leaflet-popup-content::-webkit-scrollbar-track {
-    background: transparent;
+.admin-menu {
+    margin-top: 8px;
+    margin-bottom: 0;
 }
         
         .leaflet-container a.leaflet-popup-close-button {
