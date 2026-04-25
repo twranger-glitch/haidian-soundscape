@@ -2064,8 +2064,18 @@ fetch(API_URL, { cache: "no-store" })
             else if (cleanCat.includes("歲月")) catClass = "cat-history";
 
             var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
-            var gpsHTML = `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>`;
-            var audioHTML = item.audioUrl ? `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>` : `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
+            
+            var hasGps = !isNaN(item.lat) && !isNaN(item.lon) && (item.lat !== 0 || item.lon !== 0);
+            var gpsHTML = hasGps ? `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>` : `<span class="meta-gps" style="color:#94a3b8; border-color:#e2e8f0;">📍 軌跡定位中...</span>`;
+            
+            var audioHTML = "";
+            if (item.isProcessing) {
+                audioHTML = `<p style="background:#f8fafc; color:#94a3b8; padding:12px; border-radius:10px; border:1px dashed #cbd5e1; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: badgeShine 2s linear infinite;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> 聲音正在雲端沖洗中...稍後回來聽！</p>`;
+            } else if (item.audioUrl) {
+                audioHTML = `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>`;
+            } else {
+                audioHTML = `<p style="background:#f1f5f9; color:#475569; padding:12px; border-radius:10px; border:1px solid #e2e8f0; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 純生態影像記錄</p>`;
+            }
             
             var cardHTML = `
                 <div class="sound-card">
@@ -2137,17 +2147,19 @@ fetch(API_URL, { cache: "no-store" })
                     </div>
                 </div>`;
             
-            var marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false, offset: [0, -10] });
-            globalMarkerMap[item.uid] = marker;
-            
-            marker.on('click', (e) => { 
-                L.DomEvent.stopPropagation(e);
-                isRoutePlaying = false; 
-                clearTimeout(routeTimeout); 
-                var clearBtn = document.getElementById('clearRouteBtn');
-                if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-            });
-            
+            var marker = null;
+            if (hasGps) {
+                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, { autoPan: false, offset: [0, -10] });
+                globalMarkerMap[item.uid] = marker;
+                
+                marker.on('click', (e) => { 
+                    L.DomEvent.stopPropagation(e);
+                    isRoutePlaying = false; 
+                    clearTimeout(routeTimeout); 
+                    var clearBtn = document.getElementById('clearRouteBtn');
+                    if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+                });
+            }
             return marker;
         }
 
@@ -2170,14 +2182,17 @@ fetch(API_URL, { cache: "no-store" })
             }
         }
 
-        function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => markerCluster.addLayer(createMarker(item))); map.addLayer(markerCluster); }
+function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => { var m = createMarker(item); if (m) markerCluster.addLayer(m); }); map.addLayer(markerCluster); }        
         function renderLatestSubmissions(data) {
             var latestListDiv = document.getElementById('latestList'); 
             if (!latestListDiv) return;
             latestListDiv.innerHTML = "";
 
+            // 🌟 核心過濾：只挑選「已經處理完成」的作品放入最新上架
+            var finishedData = data.filter(item => !item.isProcessing);
+
             // 🌟 確保依照日期由新到舊排序
-            var sortedData = [...data].sort((a, b) => {
+            var sortedData = finishedData.sort((a, b) => {
                 var da = new Date(a.date || 0).getTime();
                 var db = new Date(b.date || 0).getTime();
                 return db - da; 
