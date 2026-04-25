@@ -234,90 +234,7 @@
                 display: none;
             }
         }
-.embedded-player-slot {
-    width: 100%;
-    margin-top: 10px;
-}
-
-.embedded-player-slot:empty {
-    display: none;
-}
-
-body.player-embedded .leaflet-popup .btn-play-main {
-    display: none !important;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player {
-    position: relative !important;
-    left: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    transform: none !important;
-
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 10px 12px;
-    gap: 10px;
-
-    border-radius: 18px;
-    background: rgba(248, 250, 252, 0.96);
-    border: 1px solid #e2e8f0;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 8px 18px rgba(15, 23, 42, 0.08);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-
-    z-index: auto !important;
-    box-sizing: border-box;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player.active {
-    bottom: auto !important;
-    transform: none !important;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .player-control-btn {
-    width: 42px;
-    height: 42px;
-    box-shadow: 0 6px 16px rgba(39,174,96,0.28);
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .player-main {
-    gap: 5px;
-    min-width: 0;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .player-header-row {
-    gap: 8px;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .player-title {
-    font-size: 12.5px;
-    max-width: 160px;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .player-time-display {
-    font-size: 10.5px;
-    padding: 2px 6px;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .waveform-wrapper {
-    height: 22px;
-    border-radius: 999px;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .volume-control {
-    display: none;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player .close-player-btn {
-    width: 28px;
-    height: 28px;
-}
-
-.leaflet-popup .embedded-player-slot .global-player.embedded-player #favBtn {
-    display: none;
-}        
+        
         .player-control-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-color); color: white; border: none; cursor: pointer; flex-shrink: 0; display: flex; justify-content: center; align-items: center; transition: 0.2s; box-shadow: 0 4px 10px rgba(39,174,96,0.3);}
         .player-control-btn:hover { transform: scale(1.05); background: #219150;}
         .player-control-btn:active { transform: scale(0.95); }
@@ -2465,8 +2382,7 @@ fetch(API_URL, { cache: "no-store" })
                             </button>
                         </div>
 
-                                                ${audioHTML}
-                        <div id="embedded-player-slot-${item.uid}" class="embedded-player-slot"></div>
+                        ${audioHTML}
                                                 
                     </div>
                 </div>`;
@@ -2981,23 +2897,23 @@ function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}
     var player = getGlobalPlayerEl_();
     if (!player) return;
 
-    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
-    var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    var isRealMobile = isSmallScreen && isTouchDevice;
+    var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
 
-    if (isRealMobile) {
+    if (isMobile) {
         restoreGlobalPlayerToBody_();
         return;
     }
 
-    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
+    var popup = document.querySelector('.leaflet-popup');
+    var target = popup ? popup.querySelector('.sound-info') : null;
 
     if (!target) {
-        if (retry < 20) {
+        if (retry < 12) {
             setTimeout(function() {
                 mountGlobalPlayerIntoPopup_(retry + 1);
             }, 100);
         }
+
         return;
     }
 
