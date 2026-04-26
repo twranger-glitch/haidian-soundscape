@@ -784,8 +784,28 @@ body.player-embedded .leaflet-popup .btn-play-main {
             
             .drawer-panel { width: calc(100vw - 50px); max-width: 290px; } 
             
-            #sidePanel, #routePanel { top: 125px; } 
-            .right-tools-wrapper { top: 125px; right: 15px; }
+                        #sidePanel, #routePanel { top: 125px; } 
+
+            /* ✅ 手機版：圖層按鈕往下移，避免和「登入探險」重疊 */
+            .right-tools-wrapper {
+                top: 170px;
+                right: 12px;
+            }
+
+            /* ✅ 手機版：圖層選單限制高度，超出時可滑動 */
+            .tools-menu-container {
+                max-height: calc(100dvh - 245px);
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+                padding-bottom: 12px;
+            }
+
+            /* ✅ 手機版：避免選單太寬擠出畫面 */
+            .custom-layer-control {
+                width: min(260px, calc(100vw - 32px));
+                box-sizing: border-box;
+            }
 
             .draw-mode-hud { left: 10px; }
 
