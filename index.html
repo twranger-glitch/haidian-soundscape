@@ -2892,11 +2892,15 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
     }
 
     markerCluster.zoomToShowLayer(marker, () => {
-        if (!isRoutePlaying) return;
+        if (!isRoutePlaying) return;
 
-        restoreGlobalPlayerToBody_(true);
+        // 🌟 披上隱形斗篷：在拔出播放條回 Body 前，先讓它透明，防止在底部閃爍！
+        var player = getGlobalPlayerEl_();
+        if (player) player.style.opacity = '0';
 
-        marker.once('popupopen', function() {
+        restoreGlobalPlayerToBody_(true);
+
+        marker.once('popupopen', function() {
             if (!isRoutePlaying) return;
 
             setTimeout(function() {
@@ -2919,15 +2923,18 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
 }
 
         function startGlobalPlayback(uid, options) {
-    options = options || {};
+    options = options || {};
 
-    var item = allMarkersData.find(i => i.uid === uid);
-    if (!item) return;
+    var item = allMarkersData.find(i => i.uid === uid);
+    if (!item) return;
 
-    var player = getGlobalPlayerEl_();
-    if (!player) return;
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-    if (currentAudioUid === uid) {
+    // 🌟 防止點擊地標切換卡片時，播放條在底部閃現
+    player.style.opacity = '0';
+
+    if (currentAudioUid === uid) {
         if (!player.classList.contains('suppress-floating')) {
             player.classList.add('active');
         }
@@ -3049,38 +3056,43 @@ function restoreGlobalPlayerToBody_(suppressFloating) {
 }
 
 function mountGlobalPlayerIntoPopup_(retry) {
-    retry = retry || 0;
+    retry = retry || 0;
 
-    var player = getGlobalPlayerEl_();
-    if (!player) return;
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
-    var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    var isRealMobile = isSmallScreen && isTouchDevice;
+    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+    var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    var isRealMobile = isSmallScreen && isTouchDevice;
 
-    if (isRealMobile) {
-        restoreGlobalPlayerToBody_();
-        return;
-    }
+    if (isRealMobile) {
+        restoreGlobalPlayerToBody_();
+        player.style.opacity = '1'; // 手機版直接顯現
+        return;
+    }
 
-    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
+    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
 
-    if (!target) {
-        if (retry < 20) {
-            setTimeout(function() {
-                mountGlobalPlayerIntoPopup_(retry + 1);
-            }, 100);
+    if (!target) {
+        if (retry < 20) {
+            setTimeout(function() {
+                mountGlobalPlayerIntoPopup_(retry + 1);
+            }, 100);
+        } else {
+            player.style.opacity = '1'; // 安全防護，避免永遠隱形
         }
-        return;
-    }
+        return;
+    }
 
-    player.classList.remove('suppress-floating');
-    player.classList.add('embedded-player');
-    player.classList.add('active');
-    document.body.classList.add('player-embedded');
-    target.appendChild(player);
+    player.classList.remove('suppress-floating');
+    player.classList.add('embedded-player');
+    player.classList.add('active');
+    document.body.classList.add('player-embedded');
+    target.appendChild(player);
+    
+    // 🌟 搬移完成，脫下隱形斗篷，完美現身！
+    setTimeout(() => { player.style.opacity = '1'; }, 50);
 }
-
         function closeGlobalPlayer() { 
             globalAudio.pause(); 
 
