@@ -2915,9 +2915,13 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
         header.classList.add('compact-mode');
     }
 
-    player.classList.add('active');
+        player.classList.add('active');
 
-    var titleContainer = player.querySelector('#playerTitleContainer');
+    // ✅ 修正：第一次播放新作品時，立刻把播放器嵌入目前作品卡片
+    // 否則 player 仍停在 body 且 opacity = 0，會造成「有聲音但沒有波形圖」
+    mountGlobalPlayerIntoPopup_();
+
+    var titleContainer = player.querySelector('#playerTitleContainer');
     var titleUI = player.querySelector('#playerTitleUI');
     var displayText = item.title + " (採集者: " + item.author + ")";
 
