@@ -550,56 +550,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .leaflet-container a.leaflet-popup-close-button:hover { background: #e74c3c !important; color: white !important; transform: scale(1.05); }
         .leaflet-container a.leaflet-popup-close-button span { margin-top: -2px; }
 
-                .sound-card {
-            display: flex;
-            flex-direction: column;
-            background: #fff;
-            position: relative;
-            overflow: hidden;
-            transition: transform .25s ease, box-shadow .25s ease;
-        }
-
-        .sound-card.is-playing {
-            transform: translateY(-2px);
-            box-shadow:
-                0 18px 45px rgba(39, 174, 96, .22),
-                0 0 0 1px rgba(39, 174, 96, .18);
-        }
-
-        .sound-card.is-playing::after {
-            content: "";
-            position: absolute;
-            inset: -1px;
-            border-radius: inherit;
-            pointer-events: none;
-            background: radial-gradient(
-                circle at 50% 0%,
-                rgba(39,174,96,.24),
-                transparent 48%
-            );
-            animation: soundCardBreath 2.8s ease-in-out infinite;
-        }
-
-        .sound-card.is-playing .sound-cover {
-            filter: saturate(1.08) contrast(1.03);
-            transform: scale(1.015);
-        }
-
-        @keyframes soundCardBreath {
-            0%, 100% { opacity: .32; }
-            50% { opacity: .85; }
-        }
-
-        .marker-is-playing {
-            animation: markerPulse 1.8s ease-out infinite;
-            filter: drop-shadow(0 0 10px rgba(39,174,96,.65));
-        }
-
-        @keyframes markerPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.18); }
-        }
-
+        .sound-card { display: flex; flex-direction: column; background: #fff; }
         .sound-cover { width: 100%; height: 160px; object-fit: cover; transition: 0.3s;}
         
         .sound-title { font-size: 19px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
@@ -2246,10 +2197,7 @@ var map = L.map('map', {
 
         globalAudio.addEventListener('play', updateCardButtonUI);
         globalAudio.addEventListener('pause', updateCardButtonUI);
-                globalAudio.addEventListener('ended', () => {
-
-    clearPlayingVisualState_(); // ✅ 加這行
-
+        globalAudio.addEventListener('ended', () => {
     updateCardButtonUI();
 
     var player = getGlobalPlayerEl_();
@@ -2295,15 +2243,13 @@ window.toggleGlobalAudio = function() {
     var toggleBtn = player ? player.querySelector('#playerToggleBtn') : null;
 
     if (globalAudio.paused) {
-        if (currentAudioUid) setPlayingVisualState_(currentAudioUid);
         globalAudio.play();
 
         if (toggleBtn) {
             toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
         }
-        } else {
+    } else {
         globalAudio.pause();
-        clearPlayingVisualState_();
 
         if (toggleBtn) {
             toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
@@ -2502,26 +2448,70 @@ fetch(API_URL, { cache: "no-store" })
         </div>
     </details>
 `;
-                        var cardHTML = `
-    <div class="sound-card" data-work-uid="${item.uid}">
-        <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
-        <div class="sound-content">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                <div>
-                    <h3>${item.title}</h3>
-                    <p class="meta">採集者：${item.author || '匿名'}</p>
-                </div>
-                ${adminMenuHTML}
-            </div>
-            <p class="desc">${item.description || ''}</p>
-            ${audioHTML}
-            <div class="card-actions">
-                <button class="fav-btn" data-uid="${item.uid}" onclick="toggleFavorite(event, '${item.uid}')">♡ 收藏</button>
-                <button class="reaction-btn" data-uid="${item.uid}" onclick="toggleReactionPanel(event, '${item.uid}')">🙂 回應</button>
-            </div>
-        </div>
-    </div>
-`;
+            var cardHTML = `
+                <div class="sound-card">
+                    <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
+                    <div class="sound-info">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <h3 class="sound-title" style="margin: 0; padding-right: 10px; line-height: 1.4;">${item.title}</h3>
+                            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: -2px;">
+                                <button class="share-icon-btn" onclick="shareWork(event, '${item.uid}')" title="分享作品">
+                                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                </button>
+                                <button class="nav-icon-btn" onclick="openGoogleMap(event, ${item.lat}, ${item.lon})" title="開啟 Google 地圖導航">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                                </button>
+                                <button id="card-fav-${item.uid}" class="fav-btn" onclick="toggleFavorite('${item.uid}')" title="加入收藏">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                </button>
+                                ${adminMenuHTML}
+                            </div>
+                        </div>
+                        
+                        <div class="card-meta-box">
+                            <div class="meta-row">
+                                <span class="meta-item meta-author-name" title="${item.author}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                    ${item.author}
+                                </span>
+                                <span class="meta-item meta-date-text">${timeSvg} ${displayDate}</span>
+                            </div>
+                            <div class="card-tags-row">
+                                <span class="meta-category ${catClass}">${cleanCat}</span>
+                                ${gpsHTML}
+                            </div>
+                        </div>
+
+                        <p class="sound-desc">${item.description}</p>
+                        
+                        <div class="reaction-section-title">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            留下你的聽覺回音...
+                        </div>
+                        <div class="reaction-box" id="reaction-bar-${item.uid}">
+                            <button class="reaction-btn" data-type="calm" onclick="toggleReaction('${item.uid}', 'calm')" title="聽完覺得很平靜">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
+                                <span>平靜</span>
+                            </button>
+                            <button class="reaction-btn" data-type="surprise" onclick="toggleReaction('${item.uid}', 'surprise')" title="這個聲音讓我好驚喜">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>驚喜</span>
+                            </button>
+                            <button class="reaction-btn" data-type="curious" onclick="toggleReaction('${item.uid}', 'curious')" title="想一探究竟、引發好奇">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                                <span>好奇</span>
+                            </button>
+                            <button class="reaction-btn" data-type="nostalgic" onclick="toggleReaction('${item.uid}', 'nostalgic')" title="有一種懷念、回味的感覺">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>懷念</span>
+                            </button>
+                        </div>
+
+                                                ${audioHTML}
+                        <div id="embedded-player-slot-${item.uid}" class="embedded-player-slot"></div>
+                                                
+                    </div>
+                </div>`;
             
             var marker = null;
             if (hasGps) {
@@ -2920,68 +2910,69 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
             });
         }
 
-                function startGlobalPlayback(uid, options) {
-    options = options || {};
+        function startGlobalPlayback(uid, options) {
+    options = options || {};
 
-    var item = allMarkersData.find(i => i.uid === uid);
-    if (!item || !item.audioUrl) return;
+    var item = allMarkersData.find(i => i.uid === uid);
+    if (!item) return;
 
-    var player = getGlobalPlayerEl_();
-    if (!player) return;
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-    setPlayingVisualState_(uid);
+    // 🌟 防止轉場時播放條在底部閃現：先披上隱形斗篷
+    player.style.opacity = '0';
 
-    if (currentAudioUid === uid) {
-        player.classList.add('active');
-        mountGlobalPlayerIntoPopup_();
-        globalAudio.play().catch(e => console.warn("等待使用者手動觸發播放", e));
-        updateCardButtonUI();
-        return;
-    }
+    if (currentAudioUid === uid) {
+        player.classList.add('active');
+        mountGlobalPlayerIntoPopup_();
+        return;
+    }
 
-    currentAudioUid = uid;
+    currentAudioUid = uid;
 
-    var header = document.querySelector('.glass-header');
-    if (header) {
-        header.classList.add('compact-mode');
-    }
+    var header = document.querySelector('.glass-header');
+    if (header) {
+        header.classList.add('compact-mode');
+    }
 
-    player.classList.add('active');
+        player.classList.add('active');
 
+    // ✅ 修正：第一次播放新作品時，立刻把播放器嵌入目前作品卡片
+    // 否則 player 仍停在 body 且 opacity = 0，會造成「有聲音但沒有波形圖」
     mountGlobalPlayerIntoPopup_();
 
     var titleContainer = player.querySelector('#playerTitleContainer');
-    var titleUI = player.querySelector('#playerTitleUI');
-    var displayText = item.title + " (採集者: " + item.author + ")";
+    var titleUI = player.querySelector('#playerTitleUI');
+    var displayText = item.title + " (採集者: " + item.author + ")";
 
-    if (titleUI) {
-        titleUI.innerText = displayText;
-        titleUI.classList.remove('marquee-text');
-    }
+    if (titleUI) {
+        titleUI.innerText = displayText;
+        titleUI.classList.remove('marquee-text');
+    }
 
-    setTimeout(() => {
-        if (titleUI && titleContainer && titleUI.scrollWidth > titleContainer.clientWidth) {
-            var spacer = "          ";
-            titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
-            titleUI.classList.add('marquee-text');
-        }
-    }, 100);
+    setTimeout(() => {
+        if (titleUI && titleContainer && titleUI.scrollWidth > titleContainer.clientWidth) {
+            var spacer = "          ";
+            titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
+            titleUI.classList.add('marquee-text');
+        }
+    }, 100);
 
-    var wBase = player.querySelector('#waveBase');
-    var wProg = player.querySelector('#waveProgress');
+    var wBase = player.querySelector('#waveBase');
+    var wProg = player.querySelector('#waveProgress');
 
-    if (wBase) wBase.style.display = 'block';
-    if (wProg) wProg.style.display = 'block';
+    if (wBase) wBase.style.display = 'block';
+    if (wProg) wProg.style.display = 'block';
 
-    var w = (u, c) => {
-        if (u && u.includes('res.cloudinary.com')) {
-            return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
-        }
-
-        const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
+    // 🌟 徹底解決破圖問題：URL 安全編碼 SVG
+    var w = (u, c) => {
+        if (u && u.includes('res.cloudinary.com')) {
+            return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
+        }
+        const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
         const svgStr = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'><path d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/></svg>`;
-        return `data:image/svg+xml,${encodeURIComponent(svgStr)}`;
-    };
+        return `data:image/svg+xml,${encodeURIComponent(svgStr)}`;
+    };
 
     if (wBase) wBase.src = w(item.audioUrl, "bdc3c7");
 
@@ -3015,51 +3006,32 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
     if (toggleBtn) {
         toggleBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
     }
-
-    updateCardButtonUI();
 }
         
-                                var globalPlayerElCache = null;
+                var globalPlayerElCache = null;
 
-function clearPlayingVisualState_() {
-    document.querySelectorAll('.sound-card.is-playing').forEach(function(card) {
-        card.classList.remove('is-playing');
-    });
-
-    Object.keys(globalMarkerMap || {}).forEach(function(uid) {
-        var marker = globalMarkerMap[uid];
-        var el = marker && marker.getElement ? marker.getElement() : null;
-        if (el) el.classList.remove('marker-is-playing');
-    });
+function getGlobalPlayerEl_() {
+    if (!globalPlayerElCache) {
+        globalPlayerElCache = document.getElementById('globalPlayer');
+    }
+    return globalPlayerElCache;
 }
 
+function restoreGlobalPlayerToBody_(suppressFloating) {
+    var player = getGlobalPlayerEl_();
+    if (!player) return;
 
-
-function setPlayingVisualState_(uid) {
-
-    // 清掉舊的
-    document.querySelectorAll('.sound-card.is-playing').forEach(function(card) {
-        card.classList.remove('is-playing');
-    });
-
-    Object.keys(globalMarkerMap || {}).forEach(function(id) {
-        var m = globalMarkerMap[id];
-        var el = m && m.getElement ? m.getElement() : null;
-        if (el) el.classList.remove('marker-is-playing');
-    });
-
-    // 設卡片
-    var card = document.querySelector('.sound-card[data-work-uid="' + uid + '"]');
-    if (card) {
-        card.classList.add('is-playing');
+    if (suppressFloating) {
+        player.classList.add('suppress-floating');
+    } else {
+        player.classList.remove('suppress-floating');
     }
 
-    // 設 marker
-    var marker = globalMarkerMap && globalMarkerMap[uid];
-    var el = marker && marker.getElement ? marker.getElement() : null;
+    player.classList.remove('embedded-player');
+    document.body.classList.remove('player-embedded');
 
-    if (el) {
-        el.classList.add('marker-is-playing');
+    if (player.parentElement !== document.body) {
+        document.body.appendChild(player);
     }
 }
 
@@ -3105,9 +3077,8 @@ function mountGlobalPlayerIntoPopup_(retry) {
     setTimeout(() => { player.style.opacity = '1'; }, 50);
 }
     
-                        function closeGlobalPlayer() { 
+            function closeGlobalPlayer() { 
             globalAudio.pause(); 
-            clearPlayingVisualState_();
 
             var player = getGlobalPlayerEl_();
             if (player) player.classList.remove('active');
@@ -3362,9 +3333,9 @@ function mountGlobalPlayerIntoPopup_(retry) {
             listDiv.innerHTML = html;
         }
 
-                const originalStartGlobalPlayback = startGlobalPlayback;
-        startGlobalPlayback = function(uid, options) {
-            originalStartGlobalPlayback(uid, options);
+        const originalStartGlobalPlayback = startGlobalPlayback;
+        startGlobalPlayback = function(uid) {
+            originalStartGlobalPlayback(uid);
             setTimeout(updateFavoriteUI, 100); 
             setTimeout(() => updateReactionUI(uid), 100); // 🌟 連動更新徽章
         };
