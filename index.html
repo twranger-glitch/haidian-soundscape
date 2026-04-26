@@ -2107,34 +2107,7 @@ var map = L.map('map', {
         var currentGeoFenceBufferLayer = null; 
         var globalMarkerMap = {}; 
 
-        // 🌟 終極絕對定心引擎：透過像素偏移精準控制卡片著陸點
-        function getFocusOffset() {
-            var isPlayerActive = document.getElementById('globalPlayer').classList.contains('active');
-            var isMobile = window.innerWidth <= 600;
-            var H = window.innerHeight;
-            
-            // 播放條出現時的安全扣除高度：精準給定 120px，保證卡片與播放條之間留下完美間距，絕不推飛。
-            var bottomMargin = 0;
-            if (isMobile) {
-                bottomMargin = isPlayerActive ? 120 : 60;
-            } else {
-                bottomMargin = isPlayerActive ? 140 : 80;
-            }
-            
-            return (H / 2) - bottomMargin;
-        }
-
-        function forceFocusMarker(marker) {
-            if (!marker || !marker.getLatLng) return;
-            setTimeout(() => {
-                var pt = map.project(marker.getLatLng(), map.getZoom());
-                // 套用絕對 Y 軸偏移
-                pt.y -= getFocusOffset();
-                // 絕對平移，捨棄原生 autoPan
-                map.panTo(map.unproject(pt, map.getZoom()), { animate: true, duration: 0.5 });
-            }, 100);
-        }
-
+        
         setTimeout(() => {
             const uis = ['sidePanel', 'routePanel', 'rightToolsWrapper', 'drawModeHUD', 'globalPlayer'];
             uis.forEach(id => {
@@ -2531,15 +2504,15 @@ fetch(API_URL, { cache: "no-store" })
 });
 
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
-marker.on('popupclose', function() {
-    if (isRoutePlaying) {
-        restoreGlobalPlayerToBody_(false);
-        return;
-    }
-
-    closeGlobalPlayer();
-});
-/* ===== [FIX END] ===== */
+                marker.on('popupclose', function() {
+                    if (isRoutePlaying) {
+                        // 🌟 核心修復 1：換卡片時，退回底部的播放器必須保持隱形 (true)！
+                        restoreGlobalPlayerToBody_(true);
+                        return;
+                    }
+                    closeGlobalPlayer();
+                });
+                /* ===== [FIX END] ===== */
 
                 globalMarkerMap[item.uid] = marker;
                 
@@ -2866,61 +2839,56 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
         }
 
         function playNextRoutePoint() {
-    if (!isRoutePlaying) return;
+    if (!isRoutePlaying) return;
 
-    /* ===== [FIX-ROUTE-END START] ===== */
-    if (currentRouteIndex >= routePointsData.length) {
-        alert("路線探索完畢！");
-        isRoutePlaying = false;
+    if (currentRouteIndex >= routePointsData.length) {
+        alert("路線探索完畢！");
+        isRoutePlaying = false;
+        document.getElementById('clearRouteBtn').style.display = 'none';
+        var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
+        if (floatingClearBtn) floatingClearBtn.style.display = 'none';
+        return;
+    }
 
-        document.getElementById('clearRouteBtn').style.display = 'none';
+    var marker = routeMarkerObjects[currentRouteIndex];
+    var point = routePointsData[currentRouteIndex];
 
-        var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
-        if (floatingClearBtn) floatingClearBtn.style.display = 'none';
+    if (!marker || !point) {
+        currentRouteIndex++;
+        playNextRoutePoint();
+        return;
+    }
 
-        return;
-    }
-    /* ===== [FIX-ROUTE-END END] ===== */
-
-    var marker = routeMarkerObjects[currentRouteIndex];
-    var point = routePointsData[currentRouteIndex];
-
-    if (!marker || !point) {
-        currentRouteIndex++;
-        playNextRoutePoint();
-        return;
-    }
-
-    markerCluster.zoomToShowLayer(marker, () => {
+    markerCluster.zoomToShowLayer(marker, () => {
         if (!isRoutePlaying) return;
 
-        // 🌟 披上隱形斗篷：在拔出播放條回 Body 前，先讓它透明，防止在底部閃爍！
+        // 🌟 退回 Body 之前，先套上隱形斗篷，避免在底部閃爍！
         var player = getGlobalPlayerEl_();
         if (player) player.style.opacity = '0';
 
         restoreGlobalPlayerToBody_(true);
 
         marker.once('popupopen', function() {
-            if (!isRoutePlaying) return;
+                    if (!isRoutePlaying) return;
 
-            setTimeout(function() {
-                if (point.audioUrl) {
-                    startGlobalPlayback(point.uid, { skipFocus: true });
-                    mountGlobalPlayerIntoPopup_();
-                } else {
-                    routeTimeout = setTimeout(() => {
-                        if (isRoutePlaying) {
-                            currentRouteIndex++;
-                            playNextRoutePoint();
+                    // 🌟 核心修復 2：給 Leaflet 動畫 150ms 的喘息時間，並刪除重複的 mount 呼叫
+                    setTimeout(function() {
+                        if (point.audioUrl) {
+                            startGlobalPlayback(point.uid, { skipFocus: true });
+                        } else {
+                            routeTimeout = setTimeout(() => {
+                                if (isRoutePlaying) {
+                                    currentRouteIndex++;
+                                    playNextRoutePoint();
+                                }
+                            }, 4000);
                         }
-                    }, 4000);
-                }
-            }, 120);
-        });
+                    }, 150);
+                });
 
-        marker.openPopup();
-    });
-}
+                marker.openPopup();
+            });
+        }
 
         function startGlobalPlayback(uid, options) {
     options = options || {};
@@ -2931,68 +2899,56 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
     var player = getGlobalPlayerEl_();
     if (!player) return;
 
-    // 🌟 防止點擊地標切換卡片時，播放條在底部閃現
+    // 🌟 防止轉場時播放條在底部閃現：先披上隱形斗篷
     player.style.opacity = '0';
 
     if (currentAudioUid === uid) {
-        if (!player.classList.contains('suppress-floating')) {
-            player.classList.add('active');
-        }
-        return;
-    }
+        player.classList.add('active');
+        mountGlobalPlayerIntoPopup_();
+        return;
+    }
 
-    currentAudioUid = uid;
+    currentAudioUid = uid;
 
-    var header = document.querySelector('.glass-header');
-    if (header) {
-        header.classList.add('compact-mode');
-    }
+    var header = document.querySelector('.glass-header');
+    if (header) {
+        header.classList.add('compact-mode');
+    }
 
-    if (!player.classList.contains('suppress-floating')) {
-        player.classList.add('active');
-    }
+    player.classList.add('active');
 
-    if (!options.skipFocus) {
-        var m = globalMarkerMap[uid];
-        if (m && m.isPopupOpen()) {
-            forceFocusMarker(m);
-        }
-    }
+    var titleContainer = player.querySelector('#playerTitleContainer');
+    var titleUI = player.querySelector('#playerTitleUI');
+    var displayText = item.title + " (採集者: " + item.author + ")";
 
-    var titleContainer = player.querySelector('#playerTitleContainer');
-    var titleUI = player.querySelector('#playerTitleUI');
-    var displayText = item.title + " (採集者: " + item.author + ")";
+    if (titleUI) {
+        titleUI.innerText = displayText;
+        titleUI.classList.remove('marquee-text');
+    }
 
-    if (titleUI) {
-        titleUI.innerText = displayText;
-        titleUI.classList.remove('marquee-text');
-    }
+    setTimeout(() => {
+        if (titleUI && titleContainer && titleUI.scrollWidth > titleContainer.clientWidth) {
+            var spacer = "          ";
+            titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
+            titleUI.classList.add('marquee-text');
+        }
+    }, 100);
 
-    setTimeout(() => {
-        if (titleUI && titleContainer && titleUI.scrollWidth > titleContainer.clientWidth) {
-            var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            titleUI.innerHTML = `<span>${displayText}${spacer}</span><span>${displayText}${spacer}</span>`;
-            titleUI.classList.add('marquee-text');
-        }
-    }, 100);
+    var wBase = player.querySelector('#waveBase');
+    var wProg = player.querySelector('#waveProgress');
 
-    var wBase = player.querySelector('#waveBase');
-    var wProg = player.querySelector('#waveProgress');
+    if (wBase) wBase.style.display = 'block';
+    if (wProg) wProg.style.display = 'block';
 
-    if (wBase) wBase.style.display = 'block';
-    if (wProg) wProg.style.display = 'block';
-
-    var w = (u, c) => {
-        if (u.includes('res.cloudinary.com')) {
-            return u
-                .replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`)
-                .replace(/\.[^.]+$/, '.png');
-        }
-
-        const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
-
-        return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'%3E%3Cpath d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/%3E%3C/svg%3E`;
-    };
+    // 🌟 徹底解決破圖問題：URL 安全編碼 SVG
+    var w = (u, c) => {
+        if (u && u.includes('res.cloudinary.com')) {
+            return u.replace('/upload/', `/upload/fl_waveform,co_rgb:${c},b_transparent,w_800,h_80/`).replace(/\.[^.]+$/, '.png');
+        }
+        const colorHex = c === "27ae60" ? "%2327ae60" : "%23bdc3c7";
+        const svgStr = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 80' preserveAspectRatio='none'><path d='M0 40 L10 20 L20 60 L30 10 L40 70 L50 30 L60 50 L70 40 L80 15 L90 65 L100 35 L110 45 L120 25 L130 55 L140 40 L150 20 L160 60 L170 30 L180 50 L190 40 L200 10 L210 70 L220 30 L230 50 L240 40 L250 15 L260 65 L270 35 L280 45 L290 25 L300 55 L310 40 L320 20 L330 60 L340 30 L350 50 L360 40 L370 10 L380 70 L390 30 L400 50 L410 40 L420 15 L430 65 L440 35 L450 45 L460 25 L470 55 L480 40 L490 20 L500 60 L510 30 L520 50 L530 40 L540 10 L550 70 L560 30 L570 50 L580 40 L590 15 L600 65 L610 35 L620 45 L630 25 L640 55 L650 40 L660 20 L670 60 L680 30 L690 50 L700 40 L710 10 L720 70 L730 30 L740 50 L750 40 L760 15 L770 65 L780 35 L790 45 L800 25' fill='none' stroke='${colorHex}' stroke-width='2'/></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svgStr)}`;
+    };
 
     if (wBase) wBase.src = w(item.audioUrl, "bdc3c7");
 
@@ -3067,19 +3023,22 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
     if (isRealMobile) {
         restoreGlobalPlayerToBody_();
-        player.style.opacity = '1'; // 手機版直接顯現
+        player.style.opacity = '1'; // 手機版維持可見
         return;
     }
 
-    var target = currentAudioUid ? document.getElementById('embedded-player-slot-' + currentAudioUid) : null;
+    // 🌟 終極修復：不要依賴 ID，因為卡片切換時會有殘影。直接抓取「最後一個(最新)」開啟的 popup 插槽
+    var popups = document.querySelectorAll('.leaflet-popup');
+    var activePopup = popups.length > 0 ? popups[popups.length - 1] : null;
+    var target = activePopup ? activePopup.querySelector('.embedded-player-slot') : null;
 
     if (!target) {
-        if (retry < 20) {
+        if (retry < 15) { // 增加重試次數，等待卡片動畫完成
             setTimeout(function() {
                 mountGlobalPlayerIntoPopup_(retry + 1);
             }, 100);
         } else {
-            player.style.opacity = '1'; // 安全防護，避免永遠隱形
+            player.style.opacity = '1'; // 放棄搬移，至少脫下斗篷確保可見
         }
         return;
     }
@@ -3089,11 +3048,12 @@ function mountGlobalPlayerIntoPopup_(retry) {
     player.classList.add('active');
     document.body.classList.add('player-embedded');
     target.appendChild(player);
-    
-    // 🌟 搬移完成，脫下隱形斗篷，完美現身！
+
+    // 🌟 成功塞進新卡片後，脫下隱形斗篷！
     setTimeout(() => { player.style.opacity = '1'; }, 50);
 }
-        function closeGlobalPlayer() { 
+    
+            function closeGlobalPlayer() { 
             globalAudio.pause(); 
 
             var player = getGlobalPlayerEl_();
@@ -3426,9 +3386,8 @@ function mountGlobalPlayerIntoPopup_(retry) {
         map.off('popupopen'); 
         
         map.on('popupopen', function(e) {
-            updateHeaderVisibility(true);
-            forceFocusMarker(e.popup._source);
-            setTimeout(updateCardButtonUI, 50);
+            updateHeaderVisibility(true);
+            setTimeout(updateCardButtonUI, 50);
             setTimeout(updateFavoriteUI, 50);
             
             let popupContent = e.popup.getContent();
