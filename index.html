@@ -2497,7 +2497,7 @@ fetch(API_URL, { cache: "no-store" })
             if (hasGps) {
                                 marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
     autoPan: true,
-    keepInView: true,
+    keepInView: false,
     offset: [0, -28],
     autoPanPaddingTopLeft: [20, 95],
     autoPanPaddingBottomRight: [20, 110]
