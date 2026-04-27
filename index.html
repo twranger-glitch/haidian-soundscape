@@ -1501,10 +1501,11 @@ body.player-embedded .leaflet-popup .btn-play-main {
     
     <script>
         
-        /* ===== [FIX START] 路線播放中，點地圖不關閉作品卡片 ===== */
+        /* ===== [FIX START] 路線播放中，點地圖不關閉作品卡片 + 支援雙擊放大 ===== */
 var map = L.map('map', {
     zoomControl: false,
-    tap: false,
+    tap: true,                // 🌟 恢復手機版觸控偵測
+    doubleClickZoom: true,    // 🌟 確保雙擊放大開啟 (預設是 true，明確寫出來更保險)
     closePopupOnClick: false
 }).setView([23.0278, 120.2004], 15);
 /* ===== [FIX END] ===== */
