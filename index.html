@@ -35,47 +35,34 @@
             var isIG = (ua.indexOf("Instagram") > -1);
             
             if (isLine || isFb || isIG) {
-
-    if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
-        var separator = location.href.indexOf('?') > -1 ? '&' : '?';
-        window.location.href = location.href + separator + 'openExternalBrowser=1';
-    }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        var overlay = document.createElement('div');
-
-        overlay.style.cssText = `
-            position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
-            background:rgba(15,23,42,0.85);
-            z-index:999999;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            color:white;
-            text-align:center;
-            padding:20px;
-        `;
-
-        overlay.innerHTML = `
-            <div>
-                <h2 style="margin-bottom:10px;">請使用系統瀏覽器開啟</h2>
-                <p style="font-size:14px;">LINE / FB 內建瀏覽器不支援地圖播放</p>
-            </div>
-        `;
-
-        // ✅ 關鍵：不要阻擋地圖事件
-        overlay.style.pointerEvents = "none";
-
-        document.body.appendChild(overlay);
-
-        // ❌ 刪掉這行（會害死 popup）
-        // document.body.style.overflow = 'hidden';
-    });
-}
+                // 1. 針對 LINE 的密技：嘗試加上參數促使它呼叫外部瀏覽器
+                if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
+                    var separator = location.href.indexOf('?') > -1 ? '&' : '?';
+                    window.location.href = location.href + separator + 'openExternalBrowser=1';
+                }
+                
+                // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
+                document.addEventListener("DOMContentLoaded", function() {
+                    var overlay = document.createElement('div');
+                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
+                    overlay.innerHTML = `
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
+                        <p style="font-size:15px; line-height:1.7; color:#94a3b8; margin-bottom:30px; font-weight:600;">LINE 或 FB 的內建瀏覽器無法完美支援<br>地圖引擎與背景聲音播放。</p>
+                        <div style="background:#1e293b; padding:20px 25px; border-radius:16px; border:1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span>
+</p>
+                            <p style="margin:0; font-size:16px; color:#38bdf8; font-weight:800;">選擇「以預設瀏覽器開啟」<br>或「在 Safari 開啟」</p>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+                    // 鎖死地圖與滾動
+                    document.body.style.overflow = 'hidden'; 
+                });
+            }
+        })();
     </script>
     <style>
         :root { 
@@ -860,21 +847,9 @@ body.player-embedded .leaflet-popup .btn-play-main {
             
             .close-player-btn { grid-area: close; align-self: center; }
 
-            /* 🌟 徹底根除 Leaflet 捲軸無限迴圈崩潰 bug */
-            .leaflet-popup-content-wrapper { 
-                padding: 0; 
-                border-radius: 16px;
-                overflow: hidden; 
-                /* 🛑 絕對不可在這裡加上 display: flex 或 max-height，把尺寸控制權還給 Leaflet */
-            }
-            .leaflet-popup-content { 
-                width: 280px !important; 
-                max-height: calc(100vh - 140px); /* 🌟 只在這裡限制高度並觸發捲軸 */
-                overflow-y: auto !important; 
-                margin: 0; 
-                padding-bottom: 10px; 
-                -webkit-overflow-scrolling: touch;
-            }
+            /* 🌟 手機版極限高度防爆壓縮與捲動修復 */
+            .leaflet-popup-content-wrapper { max-height: calc(100vh - 160px); display: flex; flex-direction: column; overflow: hidden; }
+            .leaflet-popup-content { width: 280px !important; max-height: calc(100vh - 160px); overflow-y: auto !important; padding-bottom: 10px; }
             .sound-cover { height: 110px; flex-shrink: 0; }
             .sound-info { padding: 12px; flex: 1; }
             .sound-title { font-size: 17px; margin-bottom: 6px;}
@@ -1533,7 +1508,6 @@ var map = L.map('map', {
     doubleClickZoom: true,    // 🌟 確保雙擊放大開啟 (預設是 true，明確寫出來更保險)
     closePopupOnClick: false
 }).setView([23.0278, 120.2004], 15);
-        map.options.closePopupOnClick = false;
 /* ===== [FIX END] ===== */
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -2224,25 +2198,7 @@ var map = L.map('map', {
         
         map.on('dragstart', () => updateHeaderVisibility(true)); 
         
-        var markerCluster = L.markerClusterGroup({ 
-    maxClusterRadius: 40, 
-    spiderfyOnMaxZoom: false,        // 🌟 關閉最大縮放時的蜘蛛網展開
-    disableClusteringAtZoom: 18      // 🌟 放至最大時直接解散群聚，根除 iOS 衝突
-});
-
-// 🌟 新增 ChatGPT 提供的「穩定偏移」計算函式
-function getStableJitter_(key) {
-    var hash = 0;
-    key = String(key || "");
-    for (var i = 0; i < key.length; i++) {
-        hash = ((hash << 5) - hash) + key.charCodeAt(i);
-        hash |= 0;
-    }
-    // 約 0~2 公尺內偏移
-    var latOffset = ((hash % 21) - 10) * 0.000001;
-    var lonOffset = (((hash >> 4) % 21) - 10) * 0.000001;
-    return { lat: latOffset, lon: lonOffset };
-}
+        var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
@@ -2298,17 +2254,13 @@ function getStableJitter_(key) {
         function updateCardButtonUI() {
             document.querySelectorAll('.btn-play-main').forEach(btn => {
                 if (btn.id && btn.id.startsWith('card-btn-')) {
-                    // 🌟 終極防護：只有在按鈕「真的是播放中」的狀態時，才允許重寫 DOM 恢復原狀
-                    if (btn.classList.contains('playing')) {
-                        btn.classList.remove('playing');
-                        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span>`;
-                    }
+                    btn.classList.remove('playing');
+                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span>`;
                 }
             });
             if (currentAudioUid && !globalAudio.paused) {
                 var activeBtn = document.getElementById('card-btn-' + currentAudioUid);
-                // 🌟 同理，只有按鈕還沒變成「暫停」狀態時才重寫
-                if (activeBtn && !activeBtn.classList.contains('playing')) {
+                if (activeBtn) {
                     activeBtn.classList.add('playing');
                     activeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> <span>暫停播放</span>`;
                 }
@@ -2513,10 +2465,6 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function createMarker(item) {
-            // 🌟 終極破案：強制清洗座標型態！防止 Firebase 傳來髒字串導致 iOS 底層計算崩潰
-            item.lat = parseFloat(item.lat);
-            item.lon = parseFloat(item.lon);
-            
             // 🌟 新增防呆機制：如果欄位空缺自動補上預設值，防爆版
             item.category = item.category || "未分類";
             // 🛡️ 核心資安更新：使用 escapeHTML 清洗來自外部表單的文字
@@ -2545,8 +2493,7 @@ fetch(API_URL, { cache: "no-store" })
             
             var audioHTML = "";
             if (item.isProcessing) {
-                // 🌟 終極破案：移除無限旋轉動畫 (badgeShine)，防止微小像素變化造成 Flexbox 無限換行擠壓，導致 Leaflet 引擎燒機閃退！
-                audioHTML = `<p style="background:#f8fafc; color:#94a3b8; padding:12px; border-radius:10px; border:1px dashed #cbd5e1; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><span style="display:inline-block; width:16px; height:16px; flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> 聲音雲端沖洗中...請稍候</p>`;
+                audioHTML = `<p style="background:#f8fafc; color:#94a3b8; padding:12px; border-radius:10px; border:1px dashed #cbd5e1; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: badgeShine 2s linear infinite;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> 聲音正在雲端沖洗中...稍後回來聽！</p>`;
             } else if (item.audioUrl) {
                 audioHTML = `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>`;
             } else {
@@ -2647,20 +2594,13 @@ fetch(API_URL, { cache: "no-store" })
             
             var marker = null;
             if (hasGps) {
-                // 🌟 使用 ChatGPT 建議的「UID 穩定偏移 (Stable Jitter)」
-                var jitter = getStableJitter_(item.uid);
-                var displayLat = parseFloat(item.lat) + jitter.lat;
-                var displayLon = parseFloat(item.lon) + jitter.lon;
-
-                marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
-                    autoPan: false,           // 🛑 終極殺手鐧：徹底關閉地圖自動平移！
-                    keepInView: false,
-                    closeOnClick: false,      // 🌟 點擊地圖不誤關
-                    autoClose: false,         // 🌟 避免被其他事件強制關閉
-                    closeOnEscapeKey: false,
-                    offset: [0, -28]
-                    // (把 autoPanPaddingTopLeft 那些全部刪掉)
-                });
+                                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
+    autoPan: true,
+    keepInView: false,
+    offset: [0, -28],
+    autoPanPaddingTopLeft: [20, 95],
+    autoPanPaddingBottomRight: [20, 110]
+});
 
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
                 marker.on('popupclose', function() {
@@ -2676,7 +2616,7 @@ fetch(API_URL, { cache: "no-store" })
                 globalMarkerMap[item.uid] = marker;
                 
                 marker.on('click', (e) => { 
-                    // 🌟 刪除 stopPropagation，避免與 iOS Safari 觸控底層起衝突
+                    L.DomEvent.stopPropagation(e);
                     isRoutePlaying = false; 
                     clearTimeout(routeTimeout); 
                     var clearBtn = document.getElementById('clearRouteBtn');
@@ -2687,34 +2627,22 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function focusMarkerOnMap(uid) {
-    updateCurrentWorkUrl(uid);
+            updateCurrentWorkUrl(uid); // 🚀 點擊卡片時，默默把網址換成該作品的專屬網址
 
-    isRoutePlaying = false;
-    clearTimeout(routeTimeout);
-
-    var clearBtn = document.getElementById('clearRouteBtn');
-    if (clearBtn && clearBtn.style.display !== 'none') {
-        toggleRoute('clear', clearBtn);
-    }
-
-    closeAllDrawers();
-
-    var targetMarker = globalMarkerMap[uid];
-    if (!targetMarker) {
-        console.warn("找不到指定作品 marker:", uid);
-        return;
-    }
-
-    var latlng = targetMarker.getLatLng();
-
-    map.setView(latlng, 18, {
-        animate: false
-    });
-
-    setTimeout(function() {
-        targetMarker.openPopup();
-    }, 600);
-}
+            isRoutePlaying = false; 
+            clearTimeout(routeTimeout);
+            
+            var clearBtn = document.getElementById('clearRouteBtn');
+            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+            
+            closeAllDrawers();
+            
+            var targetMarker = globalMarkerMap[uid];
+            if(targetMarker) {
+                markerCluster.zoomToShowLayer(targetMarker, () => {
+                    targetMarker.openPopup();
+                });
+            }
         }
 
 function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => { var m = createMarker(item); if (m) markerCluster.addLayer(m); }); map.addLayer(markerCluster); }        
