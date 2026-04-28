@@ -847,9 +847,21 @@ body.player-embedded .leaflet-popup .btn-play-main {
             
             .close-player-btn { grid-area: close; align-self: center; }
 
-            /* 🌟 手機版極限高度防爆壓縮與捲動修復 */
-            .leaflet-popup-content-wrapper { max-height: calc(100vh - 160px); display: flex; flex-direction: column; overflow: hidden; }
-            .leaflet-popup-content { width: 280px !important; max-height: calc(100vh - 160px); overflow-y: auto !important; padding-bottom: 10px; }
+            /* 🌟 徹底根除 Leaflet 捲軸無限迴圈崩潰 bug */
+            .leaflet-popup-content-wrapper { 
+                padding: 0; 
+                border-radius: 16px;
+                overflow: hidden; 
+                /* 🛑 絕對不可在這裡加上 display: flex 或 max-height，把尺寸控制權還給 Leaflet */
+            }
+            .leaflet-popup-content { 
+                width: 280px !important; 
+                max-height: calc(100vh - 140px); /* 🌟 只在這裡限制高度並觸發捲軸 */
+                overflow-y: auto !important; 
+                margin: 0; 
+                padding-bottom: 10px; 
+                -webkit-overflow-scrolling: touch;
+            }
             .sound-cover { height: 110px; flex-shrink: 0; }
             .sound-info { padding: 12px; flex: 1; }
             .sound-title { font-size: 17px; margin-bottom: 6px;}
