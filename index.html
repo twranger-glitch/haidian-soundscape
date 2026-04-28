@@ -2198,7 +2198,25 @@ var map = L.map('map', {
         
         map.on('dragstart', () => updateHeaderVisibility(true)); 
         
-        var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
+        var markerCluster = L.markerClusterGroup({ 
+    maxClusterRadius: 40, 
+    spiderfyOnMaxZoom: false,        // 🌟 關閉最大縮放時的蜘蛛網展開
+    disableClusteringAtZoom: 18      // 🌟 放至最大時直接解散群聚，根除 iOS 衝突
+});
+
+// 🌟 新增 ChatGPT 提供的「穩定偏移」計算函式
+function getStableJitter_(key) {
+    var hash = 0;
+    key = String(key || "");
+    for (var i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash) + key.charCodeAt(i);
+        hash |= 0;
+    }
+    // 約 0~2 公尺內偏移
+    var latOffset = ((hash % 21) - 10) * 0.000001;
+    var lonOffset = (((hash >> 4) % 21) - 10) * 0.000001;
+    return { lat: latOffset, lon: lonOffset };
+}
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
@@ -2594,16 +2612,16 @@ fetch(API_URL, { cache: "no-store" })
             
             var marker = null;
             if (hasGps) {
-                // 🌟 終極破案：為可能完全重疊的座標加上微小隨機偏移 (約 1~3 公尺)
-                // 破解 iOS 上「完全重疊 -> 蜘蛛網展開 -> AutoPan平移 -> 誤判點擊 -> 瞬間閃退」的 Bug！
-                var renderLat = parseFloat(item.lat) + (Math.random() - 0.5) * 0.00005;
-                var renderLon = parseFloat(item.lon) + (Math.random() - 0.5) * 0.00005;
+                // 🌟 使用 ChatGPT 建議的「UID 穩定偏移 (Stable Jitter)」
+                var jitter = getStableJitter_(item.uid);
+                var displayLat = parseFloat(item.lat) + jitter.lat;
+                var displayLon = parseFloat(item.lon) + jitter.lon;
 
-                marker = L.marker([renderLat, renderLon]).bindPopup(cardHTML, {
+                marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
                     autoPan: true,
                     keepInView: false,
-                    closeOnClick: false,      // 🌟 確保點擊地圖不會誤關
-                    autoClose: false,         // 🌟 確保不會被其他事件強制關閉
+                    closeOnClick: false,      // 🌟 點擊地圖不誤關
+                    autoClose: false,         // 🌟 避免 iOS 誤判關閉
                     closeOnEscapeKey: false,
                     offset: [0, -28],
                     autoPanPaddingTopLeft: [20, 100],
