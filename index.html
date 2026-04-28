@@ -2594,13 +2594,21 @@ fetch(API_URL, { cache: "no-store" })
             
             var marker = null;
             if (hasGps) {
-                                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
-    autoPan: true,
-    keepInView: false,
-    offset: [0, -28],
-    autoPanPaddingTopLeft: [20, 95],
-    autoPanPaddingBottomRight: [20, 110]
-});
+                // 🌟 終極破案：為可能完全重疊的座標加上微小隨機偏移 (約 1~3 公尺)
+                // 破解 iOS 上「完全重疊 -> 蜘蛛網展開 -> AutoPan平移 -> 誤判點擊 -> 瞬間閃退」的 Bug！
+                var renderLat = parseFloat(item.lat) + (Math.random() - 0.5) * 0.00005;
+                var renderLon = parseFloat(item.lon) + (Math.random() - 0.5) * 0.00005;
+
+                marker = L.marker([renderLat, renderLon]).bindPopup(cardHTML, {
+                    autoPan: true,
+                    keepInView: false,
+                    closeOnClick: false,      // 🌟 確保點擊地圖不會誤關
+                    autoClose: false,         // 🌟 確保不會被其他事件強制關閉
+                    closeOnEscapeKey: false,
+                    offset: [0, -28],
+                    autoPanPaddingTopLeft: [20, 100],
+                    autoPanPaddingBottomRight: [20, 120]
+                });
 
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
                 marker.on('popupclose', function() {
