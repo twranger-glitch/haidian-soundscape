@@ -2483,6 +2483,10 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function createMarker(item) {
+            // 🌟 終極破案：強制清洗座標型態！防止 Firebase 傳來髒字串導致 iOS 底層計算崩潰
+            item.lat = parseFloat(item.lat);
+            item.lon = parseFloat(item.lon);
+            
             // 🌟 新增防呆機制：如果欄位空缺自動補上預設值，防爆版
             item.category = item.category || "未分類";
             // 🛡️ 核心資安更新：使用 escapeHTML 清洗來自外部表單的文字
