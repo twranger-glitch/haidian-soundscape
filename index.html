@@ -2682,12 +2682,17 @@ fetch(API_URL, { cache: "no-store" })
             
             closeAllDrawers();
             
-            var targetMarker = globalMarkerMap[uid];
-            if(targetMarker) {
-                markerCluster.zoomToShowLayer(targetMarker, () => {
-                    targetMarker.openPopup();
-                });
-            }
+            if (targetMarker) {
+    var latlng = targetMarker.getLatLng();
+
+    map.setView(latlng, 18, {
+        animate: false
+    });
+
+    setTimeout(function() {
+        targetMarker.openPopup();
+    }, 600);
+}
         }
 
 function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => { var m = createMarker(item); if (m) markerCluster.addLayer(m); }); map.addLayer(markerCluster); }        
