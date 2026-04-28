@@ -1518,6 +1518,17 @@ var map = L.map('map', {
     doubleClickZoom: true,
     closePopupOnClick: false
 }).setView([23.0278, 120.2004], 15);
+map.on('popupopen', function() {
+    console.log("🔥 popup opened");
+});
+
+map.on('popupclose', function() {
+    console.log("❌ popup closed");
+});
+
+map.on('click', function(e) {
+    console.log("🧨 map click", e);
+});
 /* ===== [FIX END] ===== */
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
@@ -3553,9 +3564,17 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
         // 🌟 覆寫卡片開啟事件，確保 SEL 徽章狀態正確載入
         const originalPopupOpen = map._events.popupopen ? map._events.popupopen[0].fn : null;
-        map.off('popupopen'); 
         
-        map.on('popupopen', function(e) {
+
+map.on('popupclose', function(e) {
+    console.log("❌ popup closed", e);
+    console.trace("誰關的 👇");
+});
+
+map.on('click', function(e) {
+    console.log("🧨 map click", e);
+});
+
     updateHeaderVisibility(true);
 
     // 🌟 阻止 iPhone 觸控事件穿透到底層地圖引發關閉
