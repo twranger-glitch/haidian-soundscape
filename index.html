@@ -35,34 +35,47 @@
             var isIG = (ua.indexOf("Instagram") > -1);
             
             if (isLine || isFb || isIG) {
-                // 1. 針對 LINE 的密技：嘗試加上參數促使它呼叫外部瀏覽器
-                if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
-                    var separator = location.href.indexOf('?') > -1 ? '&' : '?';
-                    window.location.href = location.href + separator + 'openExternalBrowser=1';
-                }
-                
-                // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
-                document.addEventListener("DOMContentLoaded", function() {
-                    var overlay = document.createElement('div');
-                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
-                    overlay.innerHTML = `
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                        <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
-                        <p style="font-size:15px; line-height:1.7; color:#94a3b8; margin-bottom:30px; font-weight:600;">LINE 或 FB 的內建瀏覽器無法完美支援<br>地圖引擎與背景聲音播放。</p>
-                        <div style="background:#1e293b; padding:20px 25px; border-radius:16px; border:1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
-    請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span>
-</p>
-                            <p style="margin:0; font-size:16px; color:#38bdf8; font-weight:800;">選擇「以預設瀏覽器開啟」<br>或「在 Safari 開啟」</p>
-                        </div>
-                    `;
-                    document.body.appendChild(overlay);
-                    // 鎖死地圖與滾動
-                    document.body.style.overflow = 'hidden'; 
-                });
-            }
-        })();
+
+    if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
+        var separator = location.href.indexOf('?') > -1 ? '&' : '?';
+        window.location.href = location.href + separator + 'openExternalBrowser=1';
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        var overlay = document.createElement('div');
+
+        overlay.style.cssText = `
+            position:fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background:rgba(15,23,42,0.85);
+            z-index:999999;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            color:white;
+            text-align:center;
+            padding:20px;
+        `;
+
+        overlay.innerHTML = `
+            <div>
+                <h2 style="margin-bottom:10px;">請使用系統瀏覽器開啟</h2>
+                <p style="font-size:14px;">LINE / FB 內建瀏覽器不支援地圖播放</p>
+            </div>
+        `;
+
+        // ✅ 關鍵：不要阻擋地圖事件
+        overlay.style.pointerEvents = "none";
+
+        document.body.appendChild(overlay);
+
+        // ❌ 刪掉這行（會害死 popup）
+        // document.body.style.overflow = 'hidden';
+    });
+}
     </script>
     <style>
         :root { 
@@ -1520,6 +1533,7 @@ var map = L.map('map', {
     doubleClickZoom: true,    // 🌟 確保雙擊放大開啟 (預設是 true，明確寫出來更保險)
     closePopupOnClick: false
 }).setView([23.0278, 120.2004], 15);
+        map.options.closePopupOnClick = false;
 /* ===== [FIX END] ===== */
         
         var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
