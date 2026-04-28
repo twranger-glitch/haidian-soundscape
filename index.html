@@ -2531,7 +2531,8 @@ fetch(API_URL, { cache: "no-store" })
             
             var audioHTML = "";
             if (item.isProcessing) {
-                audioHTML = `<p style="background:#f8fafc; color:#94a3b8; padding:12px; border-radius:10px; border:1px dashed #cbd5e1; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: badgeShine 2s linear infinite;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> 聲音正在雲端沖洗中...稍後回來聽！</p>`;
+                // 🌟 終極破案：移除無限旋轉動畫 (badgeShine)，防止微小像素變化造成 Flexbox 無限換行擠壓，導致 Leaflet 引擎燒機閃退！
+                audioHTML = `<p style="background:#f8fafc; color:#94a3b8; padding:12px; border-radius:10px; border:1px dashed #cbd5e1; text-align:center; font-size:13px; font-weight:800; margin-top:10px; display:flex; justify-content:center; align-items:center; gap:6px;"><span style="display:inline-block; width:16px; height:16px; flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> 聲音雲端沖洗中...請稍候</p>`;
             } else if (item.audioUrl) {
                 audioHTML = `<button id="card-btn-${item.uid}" class="btn-play-main" onclick="toggleCardPlay(event, '${item.uid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>播放聲音記錄</span></button>`;
             } else {
