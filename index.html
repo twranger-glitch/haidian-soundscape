@@ -554,14 +554,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .sound-cover { 
     width: 100%; 
     height: 160px; 
-    min-height: 160px; /* 固定高度防止跳動 */
+    min-height: 160px;
     object-fit: cover; 
     transition: 0.3s;
     -webkit-user-drag: none;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: manipulation; /* 🌟 減少 iOS 點擊延遲 */
-}   
+    touch-action: manipulation;
+    pointer-events: none;
+} 
         .sound-title { font-size: 19px; font-weight: 900; color: #1e272e; margin: 0 0 10px 0; letter-spacing: 0.5px; line-height: 1.3; }
         
         .card-meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;}
@@ -2483,9 +2484,24 @@ fetch(API_URL, { cache: "no-store" })
 item.date = item.date || "未知日期";
 
 // 🌟 1. 先定義預設圖網址，並在資料進入 HTML 前就處理好
-var DEFAULT_COVER_URL = "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop";
-item.coverUrl = (item.coverUrl && String(item.coverUrl).trim() && item.coverUrl !== "https://images.unsplash.com/photo-1618044733300-9472054094ee?q=80&w=600&auto=format&fit=crop") 
-                ? item.coverUrl : DEFAULT_COVER_URL;
+var DEFAULT_COVER_URL = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="360" viewBox="0 0 600 360">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="360" fill="url(#g)"/>
+  <circle cx="300" cy="150" r="54" fill="rgba(255,255,255,0.22)"/>
+  <path d="M278 120v72c0 18-16 31-36 31s-36-13-36-31 16-31 36-31c7 0 14 1 20 4v-73h96v34h-80z" fill="white" opacity="0.95"/>
+  <text x="300" y="292" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="white">聲音作品</text>
+</svg>
+`);
+
+var rawCover = item.coverUrl ? String(item.coverUrl).trim() : "";
+
+item.coverUrl = rawCover ? rawCover : DEFAULT_COVER_URL;
             
             var cleanCat = item.category.split(/[(（]/)[0].trim();
             var rawDate = item.date.replace(" 00:00:00", "");
@@ -2547,8 +2563,11 @@ item.coverUrl = (item.coverUrl && String(item.coverUrl).trim() && item.coverUrl 
   src="${item.coverUrl}" 
   class="sound-cover" 
   draggable="false"
+  loading="eager"
+  decoding="sync"
   onerror="this.onerror=null; this.src='${DEFAULT_COVER_URL}'"
 >
+
                     <div class="sound-info">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                             <h3 class="sound-title" style="margin: 0; padding-right: 10px; line-height: 1.4;">${item.title}</h3>
@@ -2621,6 +2640,7 @@ marker.bindPopup(cardHTML, {
     closeOnClick: false,
     autoClose: false,
     closeOnEscapeKey: false,
+    closeButton: false,
     offset: [0, -28],
     autoPanPaddingTopLeft: [20, 95],
     autoPanPaddingBottomRight: [20, 110]
@@ -2629,7 +2649,7 @@ marker.bindPopup(cardHTML, {
 // 移除 Leaflet bindPopup 預設 click toggle，避免 iPhone 實機雙觸發「開了又關」
 marker.off('click');
 
-marker.on('click touchend', function(e) {
+marker.on('click', function(e) {
     if (e && e.originalEvent) {
         L.DomEvent.stop(e.originalEvent);
     }
