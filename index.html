@@ -2613,15 +2613,44 @@ item.coverUrl = (item.coverUrl && String(item.coverUrl).trim() && item.coverUrl 
             
             var marker = null;
             if (hasGps) {
-                                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
+                                marker = L.marker([item.lat, item.lon]);
+
+marker.bindPopup(cardHTML, {
     autoPan: true,
     keepInView: false,
-    closeOnClick: false,      // 點擊地圖不關閉
-    autoClose: false,         // 🌟 關鍵：不自動關閉其他 Popup，防止 iOS 誤判
+    closeOnClick: false,
+    autoClose: false,
     closeOnEscapeKey: false,
     offset: [0, -28],
     autoPanPaddingTopLeft: [20, 95],
     autoPanPaddingBottomRight: [20, 110]
+});
+
+// 移除 Leaflet bindPopup 預設 click toggle，避免 iPhone 實機雙觸發「開了又關」
+marker.off('click');
+
+marker.on('click touchend', function(e) {
+    if (e && e.originalEvent) {
+        L.DomEvent.stop(e.originalEvent);
+    }
+
+    var now = Date.now();
+    if (marker._lastOpenTap && now - marker._lastOpenTap < 700) {
+        return;
+    }
+    marker._lastOpenTap = now;
+
+    isRoutePlaying = false;
+    clearTimeout(routeTimeout);
+
+    var clearBtn = document.getElementById('clearRouteBtn');
+    if (clearBtn && clearBtn.style.display !== 'none') {
+        toggleRoute('clear', clearBtn);
+    }
+
+    if (!marker.isPopupOpen()) {
+        marker.openPopup();
+    }
 });
 
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
@@ -2637,13 +2666,7 @@ item.coverUrl = (item.coverUrl && String(item.coverUrl).trim() && item.coverUrl 
 
                 globalMarkerMap[item.uid] = marker;
                 
-                marker.on('click', (e) => { 
-                    L.DomEvent.stopPropagation(e);
-                    isRoutePlaying = false; 
-                    clearTimeout(routeTimeout); 
-                    var clearBtn = document.getElementById('clearRouteBtn');
-                    if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-                });
+                
             }
             return marker;
         }
@@ -2662,7 +2685,9 @@ item.coverUrl = (item.coverUrl && String(item.coverUrl).trim() && item.coverUrl 
             var targetMarker = globalMarkerMap[uid];
             if(targetMarker) {
                 markerCluster.zoomToShowLayer(targetMarker, () => {
-                    targetMarker.openPopup();
+                    if (!targetMarker.isPopupOpen()) {
+    targetMarker.openPopup();
+}
                 });
             }
         }
