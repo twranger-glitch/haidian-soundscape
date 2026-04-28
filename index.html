@@ -2673,17 +2673,24 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function focusMarkerOnMap(uid) {
-            updateCurrentWorkUrl(uid); // 🚀 點擊卡片時，默默把網址換成該作品的專屬網址
+    updateCurrentWorkUrl(uid);
 
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            
-            var clearBtn = document.getElementById('clearRouteBtn');
-            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-            
-            closeAllDrawers();
-            
-            if (targetMarker) {
+    isRoutePlaying = false;
+    clearTimeout(routeTimeout);
+
+    var clearBtn = document.getElementById('clearRouteBtn');
+    if (clearBtn && clearBtn.style.display !== 'none') {
+        toggleRoute('clear', clearBtn);
+    }
+
+    closeAllDrawers();
+
+    var targetMarker = globalMarkerMap[uid];
+    if (!targetMarker) {
+        console.warn("找不到指定作品 marker:", uid);
+        return;
+    }
+
     var latlng = targetMarker.getLatLng();
 
     map.setView(latlng, 18, {
