@@ -2622,14 +2622,13 @@ fetch(API_URL, { cache: "no-store" })
                 var displayLon = parseFloat(item.lon) + jitter.lon;
 
                 marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
-                    autoPan: true,
+                    autoPan: false,           // 🛑 終極殺手鐧：徹底關閉地圖自動平移！
                     keepInView: false,
                     closeOnClick: false,      // 🌟 點擊地圖不誤關
-                    autoClose: false,         // 🌟 避免 iOS 誤判關閉
+                    autoClose: false,         // 🌟 避免被其他事件強制關閉
                     closeOnEscapeKey: false,
-                    offset: [0, -28],
-                    autoPanPaddingTopLeft: [20, 100],
-                    autoPanPaddingBottomRight: [20, 120]
+                    offset: [0, -28]
+                    // (把 autoPanPaddingTopLeft 那些全部刪掉)
                 });
 
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
