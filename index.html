@@ -2512,7 +2512,18 @@ var DEFAULT_COVER_URL = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent
 
 var rawCover = item.coverUrl ? String(item.coverUrl).trim() : "";
 
-item.coverUrl = rawCover ? rawCover : DEFAULT_COVER_URL;
+var rawCover = item.coverUrl ? String(item.coverUrl).trim() : "";
+
+var OLD_DEFAULT_COVERS = [
+    "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f",
+    "https://images.unsplash.com/photo-1618044733300-9472054094ee"
+];
+
+var isOldDefaultCover = OLD_DEFAULT_COVERS.some(function(url) {
+    return rawCover.indexOf(url) === 0;
+});
+
+item.coverUrl = (!rawCover || isOldDefaultCover) ? DEFAULT_COVER_URL : rawCover;
             
             var cleanCat = item.category.split(/[(（]/)[0].trim();
             var rawDate = item.date.replace(" 00:00:00", "");
@@ -3563,23 +3574,13 @@ function mountGlobalPlayerIntoPopup_(retry) {
         }
 
         // 🌟 覆寫卡片開啟事件，確保 SEL 徽章狀態正確載入
-        const originalPopupOpen = map._events.popupopen ? map._events.popupopen[0].fn : null;
-        
-
-map.on('popupclose', function(e) {
-    console.log("❌ popup closed", e);
-    console.trace("誰關的 👇");
-});
-
-map.on('click', function(e) {
-    console.log("🧨 map click", e);
-});
+map.on('popupopen', function(e) {
+    console.log("🔥 popup opened", e);
 
     updateHeaderVisibility(true);
 
-    // 🌟 阻止 iPhone 觸控事件穿透到底層地圖引發關閉
     setTimeout(function() {
-        var popupEl = e.popup.getElement();
+        var popupEl = e.popup && e.popup.getElement ? e.popup.getElement() : null;
         if (popupEl) {
             L.DomEvent.disableClickPropagation(popupEl);
             L.DomEvent.disableScrollPropagation(popupEl);
@@ -3594,13 +3595,24 @@ map.on('click', function(e) {
 
     setTimeout(updateCardButtonUI, 50);
     setTimeout(updateFavoriteUI, 50);
-            
-            let popupContent = e.popup.getContent();
-            let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
-            if (uidMatch && uidMatch[1]) {
-                setTimeout(() => updateReactionUI(uidMatch[1]), 50);
-            }
-        });
+
+    var popupContent = e.popup.getContent();
+    var uidMatch = String(popupContent).match(/card-fav-([a-zA-Z0-9_-]+)/);
+    if (uidMatch && uidMatch[1]) {
+        setTimeout(function() {
+            updateReactionUI(uidMatch[1]);
+        }, 50);
+    }
+});
+
+map.on('popupclose', function(e) {
+    console.log("❌ popup closed", e);
+    console.trace("誰關的 👇");
+});
+
+map.on('click', function(e) {
+    console.log("🧨 map click", e);
+});
 
         // ==========================================
         // Phase 2.7: 聲音獵人 遊戲化成就系統
