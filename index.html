@@ -14,7 +14,6 @@
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/esri-leaflet@3.0.15/dist/esri-leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
@@ -1634,18 +1633,58 @@ var map = L.map('map', {
             if(window.innerWidth <= 600) closeAllDrawers();
         }
 
-        var wraMapServerUrl = 'https://maps.wra.gov.tw/arcgis/rest/services/WMS/GIC_WMS/MapServer';
+        var wraWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
 
-function createWraWmsLayer(layerId, paneName, opacityValue) {
-    return L.esri.dynamicMapLayer({
-        url: wraMapServerUrl,
-        layers: [parseInt(layerId, 10)],
-        transparent: true,
-        opacity: opacityValue,
-        pane: paneName,
-        f: 'image'
-    });
-}
+        var floodScenarioMeta = {
+            '81': { label: '24 小時 200 mm' },
+            '80': { label: '24 小時 350 mm' },
+            '79': { label: '24 小時 500 mm' },
+            '78': { label: '24 小時 650 mm' },
+            '84': { label: '12 小時 200 mm' },
+            '83': { label: '12 小時 300 mm' },
+            '82': { label: '12 小時 400 mm' },
+            '87': { label: '6 小時 150 mm' },
+            '86': { label: '6 小時 250 mm' },
+            '85': { label: '6 小時 350 mm' }
+        };
+
+        var hydrologyLayerMeta = {
+            '92':  { label: '海堤區域' },
+            '76':  { label: '海岸緩衝區' },
+            '77':  { label: '海岸保護區' },
+            '91':  { label: '區域排水治理區' },
+            '100': { label: '水庫範圍' },
+            '106': { label: '水質水量保護區' },
+            '112': { label: '地下水鹽化區' },
+            '175': { label: '地層下陷監測站' }
+        };
+
+        var recommendedHydrologyIds = ['92', '76', '77', '91', '100', '106', '112', '175'];
+
+        var currentFloodLayer = null;
+        var currentFloodLayerId = null;
+        var hydrologyLayers = {};
+
+        map.createPane('hydrologyPane');
+        map.getPane('hydrologyPane').style.zIndex = 340;
+        map.getPane('hydrologyPane').style.pointerEvents = 'none';
+
+        map.createPane('floodPane');
+        map.getPane('floodPane').style.zIndex = 350;
+        map.getPane('floodPane').style.pointerEvents = 'none';
+
+        function createWraWmsLayer(layerId, paneName, opacityValue) {
+            return L.tileLayer.wms(wraWmsBaseUrl, {
+                layers: String(layerId),
+                format: 'image/png',
+                transparent: true,
+                version: '1.3.0',
+                crs: L.CRS.EPSG4326,
+                uppercase: true,
+                pane: paneName,
+                opacity: opacityValue
+            });
+        }
 
         function getFloodSelectedId() {
             var scenarioEl = document.getElementById('floodScenario');
@@ -1666,11 +1705,9 @@ function createWraWmsLayer(layerId, paneName, opacityValue) {
                 }
                 currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
                 currentFloodLayerId = selectedId;
-                currentFloodLayer.on('requesterror', function(err) {
-    console.warn('Flood ArcGIS layer request error:', err);
-});
-    }
-});
+                currentFloodLayer.on('tileerror', function(err) {
+                    console.warn('Flood WMS tile error:', err);
+                });
             }
 
             return currentFloodLayer;
@@ -1735,7 +1772,7 @@ function createWraWmsLayer(layerId, paneName, opacityValue) {
 
         function openFloodLegend() {
             var selectedId = getFloodSelectedId();
-            var legendUrl = wraMapServerUrl + '/' + encodeURIComponent(selectedId) + '/legend';
+            var legendUrl = wraWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
             window.open(legendUrl, '_blank');
         }
 
