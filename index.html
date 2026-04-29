@@ -2605,11 +2605,10 @@ fetch(API_URL, { cache: "no-store" })
             var marker = null;
             if (hasGps) {
                                 marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
-    autoPan: false,   // ⭐ 關鍵
-
+    autoPan: false,
     closeOnClick: false,
     autoClose: false,
-
+    closeButton: true,
     maxWidth: 320,
     minWidth: 280
 });
@@ -2646,23 +2645,39 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function focusMarkerOnMap(uid) {
-            updateCurrentWorkUrl(uid); // 🚀 點擊卡片時，默默把網址換成該作品的專屬網址
+    const marker = markerMap[uid];
+    if (!marker) return;
 
-            isRoutePlaying = false; 
-            clearTimeout(routeTimeout);
-            
-            var clearBtn = document.getElementById('clearRouteBtn');
-            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
-            
-            closeAllDrawers();
-            
-            var targetMarker = globalMarkerMap[uid];
-            if(targetMarker) {
-                markerCluster.zoomToShowLayer(targetMarker, () => {
-                    targetMarker.openPopup();
-                });
-            }
-        }
+    const openAfterMove = function() {
+        const latlng = marker.getLatLng();
+        const zoom = map.getZoom();
+
+        // 讓 marker 出現在畫面「中間偏下」
+        // 數字越大，marker 越往下
+        const offsetY = window.innerWidth <= 600 ? 130 : 90;
+
+        const point = map.project(latlng, zoom);
+        const targetCenter = map.unproject(
+            L.point(point.x, point.y - offsetY),
+            zoom
+        );
+
+        map.once('moveend', function() {
+            setTimeout(function() {
+                marker.openPopup();
+            }, 80);
+        });
+
+        map.panTo(targetCenter, {
+            animate: true,
+            duration: 0.35
+        });
+    };
+
+    markers.zoomToShowLayer(marker, function() {
+        setTimeout(openAfterMove, 120);
+    });
+}
 
 function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => { var m = createMarker(item); if (m) markerCluster.addLayer(m); }); map.addLayer(markerCluster); }        
         function renderLatestSubmissions(data) {
