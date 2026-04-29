@@ -2605,21 +2605,13 @@ fetch(API_URL, { cache: "no-store" })
             var marker = null;
             if (hasGps) {
                                 marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
-    autoPan: true,
-    keepInView: false,
+    autoPan: false,   // ⭐ 關鍵
 
-    // ⭐ 這兩個是核心
     closeOnClick: false,
     autoClose: false,
 
-    // ⭐ 建議加
-    closeButton: true,
     maxWidth: 320,
-    minWidth: 280,
-
-    offset: [0, -28],
-    autoPanPaddingTopLeft: [20, 95],
-    autoPanPaddingBottomRight: [20, 150]
+    minWidth: 280
 });
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
                 marker.on('popupclose', function(e) {
