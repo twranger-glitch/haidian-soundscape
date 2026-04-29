@@ -774,16 +774,6 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .nav-icon-btn:active, .share-icon-btn:active { transform: scale(0.9); }
 
         @media (max-width: 600px) {
-            .leaflet-popup-content-wrapper {
-        max-height: calc(100dvh - 190px);
-    }
-
-    .leaflet-popup-content {
-        max-height: calc(100dvh - 190px);
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
-    }
-}
             :root { --panel-offset: 10px; }
             .glass-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; border-radius: 16px; width: 94%; height: auto; gap: 10px; } 
             .project-title { font-size: 18px; width: 100%; justify-content: flex-start; flex-direction: row;}
@@ -2208,7 +2198,25 @@ var map = L.map('map', {
         
         map.on('dragstart', () => updateHeaderVisibility(true)); 
         
-        var markerCluster = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true });
+        var markerCluster = L.markerClusterGroup({ 
+            maxClusterRadius: 40, 
+            spiderfyOnMaxZoom: false,         // 🌟 關閉蜘蛛網，改用底下的穩定偏移
+            disableClusteringAtZoom: 18,      // 🌟 放大到極限時強制解散叢集
+            removeOutsideVisibleBounds: false // 🛑 核心防護：禁止移動時拔除地標
+        });
+
+        // 🌟 穩定偏移函式 (Stable Jitter) - 讓重疊座標根據 UID 產生微小且固定的偏移
+        function getStableJitter_(key) {
+            var hash = 0;
+            key = String(key || "");
+            for (var i = 0; i < key.length; i++) {
+                hash = ((hash << 5) - hash) + key.charCodeAt(i);
+                hash |= 0;
+            }
+            var latOffset = ((hash % 21) - 10) * 0.000005; // 約偏移 0.5 公尺
+            var lonOffset = (((hash >> 4) % 21) - 10) * 0.000005;
+            return { lat: latOffset, lon: lonOffset };
+        }
         var allMarkersData = [], globalAudio = new Audio(), currentAudioUid = null;
         var currentRouteType = null, currentRouteLine = null, isRoutePlaying = false;
         var routePointsData = [], routeMarkerObjects = [], currentRouteIndex = 0;
@@ -2604,31 +2612,31 @@ fetch(API_URL, { cache: "no-store" })
             
             var marker = null;
             if (hasGps) {
-                                marker = L.marker([item.lat, item.lon]).bindPopup(cardHTML, {
-    autoPan: false,
-    closeOnClick: false,
-    autoClose: false,
-    closeButton: true,
-    maxWidth: 320,
-    minWidth: 280
-});
+                // 🌟 套用穩定偏移，徹底避開完全重疊的蜘蛛網 Bug
+                var jitter = getStableJitter_(item.uid);
+                var displayLat = parseFloat(item.lat) + jitter.lat;
+                var displayLon = parseFloat(item.lon) + jitter.lon;
+
+                marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
+                    autoPan: true,            // 恢復平移，我們已經修好 Cluster 拔除問題了
+                    keepInView: false,
+                    closeOnClick: false,      // 🌟 iOS 防護：防止點擊地圖誤關
+                    autoClose: false,         // 🌟 iOS 防護：防止被其他事件強制關閉
+                    closeOnEscapeKey: false,
+                    offset: [0, -28],
+                    autoPanPaddingTopLeft: [15, 60],     // 稍微縮小留白，避免小螢幕極限排版擠爆
+                    autoPanPaddingBottomRight: [15, 80]
+                });
+
                 /* ===== [FIX START] 路線播放中 popup 被關閉時，不停止播放器也不破壞路線狀態 ===== */
-                marker.on('popupclose', function(e) {
-
-    const isMobile = window.matchMedia('(max-width: 600px)').matches;
-
-    if (isRoutePlaying) {
-        restoreGlobalPlayerToBody_(true);
-        return;
-    }
-
-    // ⭐ 防 iPhone / DevTools 秒關
-    if (isMobile && window.__justOpenedPopup) {
-        return;
-    }
-
-    closeGlobalPlayer();
-});
+                marker.on('popupclose', function() {
+                    if (isRoutePlaying) {
+                        // 🌟 核心修復 1：換卡片時，退回底部的播放器必須保持隱形 (true)！
+                        restoreGlobalPlayerToBody_(true);
+                        return;
+                    }
+                    closeGlobalPlayer();
+                });
                 /* ===== [FIX END] ===== */
 
                 globalMarkerMap[item.uid] = marker;
@@ -2645,39 +2653,23 @@ fetch(API_URL, { cache: "no-store" })
         }
 
         function focusMarkerOnMap(uid) {
-    const marker = markerMap[uid];
-    if (!marker) return;
+            updateCurrentWorkUrl(uid); // 🚀 點擊卡片時，默默把網址換成該作品的專屬網址
 
-    const openAfterMove = function() {
-        const latlng = marker.getLatLng();
-        const zoom = map.getZoom();
-
-        // 讓 marker 出現在畫面「中間偏下」
-        // 數字越大，marker 越往下
-        const offsetY = window.innerWidth <= 600 ? 130 : 90;
-
-        const point = map.project(latlng, zoom);
-        const targetCenter = map.unproject(
-            L.point(point.x, point.y - offsetY),
-            zoom
-        );
-
-        map.once('moveend', function() {
-            setTimeout(function() {
-                marker.openPopup();
-            }, 80);
-        });
-
-        map.panTo(targetCenter, {
-            animate: true,
-            duration: 0.35
-        });
-    };
-
-    markers.zoomToShowLayer(marker, function() {
-        setTimeout(openAfterMove, 120);
-    });
-}
+            isRoutePlaying = false; 
+            clearTimeout(routeTimeout);
+            
+            var clearBtn = document.getElementById('clearRouteBtn');
+            if(clearBtn && clearBtn.style.display !== 'none') toggleRoute('clear', clearBtn);
+            
+            closeAllDrawers();
+            
+            var targetMarker = globalMarkerMap[uid];
+            if(targetMarker) {
+                markerCluster.zoomToShowLayer(targetMarker, () => {
+                    targetMarker.openPopup();
+                });
+            }
+        }
 
 function renderMarkers(data) { markerCluster.clearLayers(); globalMarkerMap = {}; data.forEach(item => { var m = createMarker(item); if (m) markerCluster.addLayer(m); }); map.addLayer(markerCluster); }        
         function renderLatestSubmissions(data) {
@@ -3523,11 +3515,6 @@ function mountGlobalPlayerIntoPopup_(retry) {
         map.off('popupopen'); 
         
         map.on('popupopen', function(e) {
-            // ✅ 防止 iOS autoPan / touch 造成瞬間關閉
-    window.__justOpenedPopup = true;
-    setTimeout(() => {
-        window.__justOpenedPopup = false;
-    }, 500);
             updateHeaderVisibility(true);
             setTimeout(updateCardButtonUI, 50);
             setTimeout(updateFavoriteUI, 50);
