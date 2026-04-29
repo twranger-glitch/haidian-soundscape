@@ -1674,17 +1674,22 @@ var map = L.map('map', {
         map.getPane('floodPane').style.pointerEvents = 'none';
 
         function createWraWmsLayer(layerId, paneName, opacityValue) {
-            return L.tileLayer.wms(wraWmsBaseUrl, {
-                layers: String(layerId),
-                format: 'image/png',
-                transparent: true,
-                version: '1.3.0',
-                crs: L.CRS.EPSG4326,
-                uppercase: true,
-                pane: paneName,
-                opacity: opacityValue
-            });
-        }
+    return L.tileLayer.wms(wraWmsBaseUrl, {
+        layers: String(layerId),   // 先保留，但之後可能要換英文圖層名
+        styles: '',
+        format: 'image/png',
+        transparent: true,
+
+        // ⭐ 關鍵修改 ↓↓↓
+        version: '1.1.1',
+        uppercase: true,
+        // ❌ 移除 crs 設定（不要寫 EPSG4326）
+        // ⭐ 關鍵修改 ↑↑↑
+
+        pane: paneName,
+        opacity: opacityValue
+    });
+}
 
         function getFloodSelectedId() {
             var scenarioEl = document.getElementById('floodScenario');
@@ -1706,8 +1711,13 @@ var map = L.map('map', {
                 currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
                 currentFloodLayerId = selectedId;
                 currentFloodLayer.on('tileerror', function(err) {
-                    console.warn('Flood WMS tile error:', err);
-                });
+    console.warn('Flood WMS tile error:', err);
+
+    if (err.tile && err.tile.src) {
+        console.warn('Tile URL:', err.tile.src);
+        // 👉 把這個 URL 貼到瀏覽器開
+    }
+});
             }
 
             return currentFloodLayer;
