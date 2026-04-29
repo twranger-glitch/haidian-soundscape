@@ -1675,17 +1675,12 @@ var map = L.map('map', {
 
         function createWraWmsLayer(layerId, paneName, opacityValue) {
     return L.tileLayer.wms(wraWmsBaseUrl, {
-        layers: String(layerId),   // 先保留，但之後可能要換英文圖層名
+        layers: String(layerId),
         styles: '',
         format: 'image/png',
         transparent: true,
-
-        // ⭐ 關鍵修改 ↓↓↓
         version: '1.1.1',
         uppercase: true,
-        // ❌ 移除 crs 設定（不要寫 EPSG4326）
-        // ⭐ 關鍵修改 ↑↑↑
-
         pane: paneName,
         opacity: opacityValue
     });
@@ -1715,7 +1710,18 @@ var map = L.map('map', {
 
     if (err.tile && err.tile.src) {
         console.warn('Tile URL:', err.tile.src);
-        // 👉 把這個 URL 貼到瀏覽器開
+
+        fetch(err.tile.src)
+            .then(function(res) {
+                console.warn('WMS status:', res.status, res.statusText);
+                return res.text();
+            })
+            .then(function(text) {
+                console.warn('WMS response:', text.slice(0, 1000));
+            })
+            .catch(function(fetchErr) {
+                console.warn('Cannot read WMS response:', fetchErr);
+            });
     }
 });
             }
