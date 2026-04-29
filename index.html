@@ -14,6 +14,7 @@
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/esri-leaflet@3.0.15/dist/esri-leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
@@ -1633,56 +1634,16 @@ var map = L.map('map', {
             if(window.innerWidth <= 600) closeAllDrawers();
         }
 
-        var wraWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
+        var wraMapServerUrl = 'https://maps.wra.gov.tw/arcgis/rest/services/WMS/GIC_WMS/MapServer';
 
-        var floodScenarioMeta = {
-            '81': { label: '24 小時 200 mm' },
-            '80': { label: '24 小時 350 mm' },
-            '79': { label: '24 小時 500 mm' },
-            '78': { label: '24 小時 650 mm' },
-            '84': { label: '12 小時 200 mm' },
-            '83': { label: '12 小時 300 mm' },
-            '82': { label: '12 小時 400 mm' },
-            '87': { label: '6 小時 150 mm' },
-            '86': { label: '6 小時 250 mm' },
-            '85': { label: '6 小時 350 mm' }
-        };
-
-        var hydrologyLayerMeta = {
-            '92':  { label: '海堤區域' },
-            '76':  { label: '海岸緩衝區' },
-            '77':  { label: '海岸保護區' },
-            '91':  { label: '區域排水治理區' },
-            '100': { label: '水庫範圍' },
-            '106': { label: '水質水量保護區' },
-            '112': { label: '地下水鹽化區' },
-            '175': { label: '地層下陷監測站' }
-        };
-
-        var recommendedHydrologyIds = ['92', '76', '77', '91', '100', '106', '112', '175'];
-
-        var currentFloodLayer = null;
-        var currentFloodLayerId = null;
-        var hydrologyLayers = {};
-
-        map.createPane('hydrologyPane');
-        map.getPane('hydrologyPane').style.zIndex = 340;
-        map.getPane('hydrologyPane').style.pointerEvents = 'none';
-
-        map.createPane('floodPane');
-        map.getPane('floodPane').style.zIndex = 350;
-        map.getPane('floodPane').style.pointerEvents = 'none';
-
-        function createWraWmsLayer(layerId, paneName, opacityValue) {
-    return L.tileLayer.wms(wraWmsBaseUrl, {
-        layers: String(layerId),
-        styles: '',
-        format: 'image/png',
+function createWraWmsLayer(layerId, paneName, opacityValue) {
+    return L.esri.dynamicMapLayer({
+        url: wraMapServerUrl,
+        layers: [parseInt(layerId, 10)],
         transparent: true,
-        version: '1.1.1',
-        uppercase: true,
+        opacity: opacityValue,
         pane: paneName,
-        opacity: opacityValue
+        f: 'image'
     });
 }
 
@@ -1705,23 +1666,9 @@ var map = L.map('map', {
                 }
                 currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
                 currentFloodLayerId = selectedId;
-                currentFloodLayer.on('tileerror', function(err) {
-    console.warn('Flood WMS tile error:', err);
-
-    if (err.tile && err.tile.src) {
-        console.warn('Tile URL:', err.tile.src);
-
-        fetch(err.tile.src)
-            .then(function(res) {
-                console.warn('WMS status:', res.status, res.statusText);
-                return res.text();
-            })
-            .then(function(text) {
-                console.warn('WMS response:', text.slice(0, 1000));
-            })
-            .catch(function(fetchErr) {
-                console.warn('Cannot read WMS response:', fetchErr);
-            });
+                currentFloodLayer.on('requesterror', function(err) {
+    console.warn('Flood ArcGIS layer request error:', err);
+});
     }
 });
             }
@@ -1788,7 +1735,7 @@ var map = L.map('map', {
 
         function openFloodLegend() {
             var selectedId = getFloodSelectedId();
-            var legendUrl = wraWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
+            var legendUrl = wraMapServerUrl + '/' + encodeURIComponent(selectedId) + '/legend';
             window.open(legendUrl, '_blank');
         }
 
