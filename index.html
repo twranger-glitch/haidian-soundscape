@@ -1230,20 +1230,20 @@ body.player-embedded .leaflet-popup .btn-play-main {
                     <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
-                    <label><input type="checkbox" id="hydro_92" onchange="toggleHydrologyLayer('92', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
-                    <label><input type="checkbox" id="hydro_76" onchange="toggleHydrologyLayer('76', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
-                    <label><input type="checkbox" id="hydro_77" onchange="toggleHydrologyLayer('77', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+                    <label><input type="checkbox" id="hydro_SEAWALLZONE" onchange="toggleHydrologyLayer('SEAWALLZONE', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
+                    <label><input type="checkbox" id="hydro_CoastalBufferZone" onchange="toggleHydrologyLayer('CoastalBufferZone', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
+                    <label><input type="checkbox" id="hydro_CoastalProtectionZone" onchange="toggleHydrologyLayer('CoastalProtectionZone', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
-                    <label><input type="checkbox" id="hydro_91" onchange="toggleHydrologyLayer('91', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+                    <label><input type="checkbox" id="hydro_REGDAREA" onchange="toggleHydrologyLayer('REGDAREA', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
-                    <label><input type="checkbox" id="hydro_100" onchange="toggleHydrologyLayer('100', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
-                    <label><input type="checkbox" id="hydro_106" onchange="toggleHydrologyLayer('106', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+                    <label><input type="checkbox" id="hydro_reservoir" onchange="toggleHydrologyLayer('reservoir', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
+                    <label><input type="checkbox" id="hydro_TWQPROT" onchange="toggleHydrologyLayer('TWQPROT', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
-                    <label><input type="checkbox" id="hydro_112" onchange="toggleHydrologyLayer('112', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
-                    <label><input type="checkbox" id="hydro_175" onchange="toggleHydrologyLayer('175', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
+                    <label><input type="checkbox" id="hydro_Salinizationzone" onchange="toggleHydrologyLayer('Salinizationzone', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
+                    <label><input type="checkbox" id="hydro_LASUBSTA" onchange="toggleHydrologyLayer('LASUBSTA', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
                 </div>
 
                 <div style="border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;"></div>
@@ -1649,17 +1649,17 @@ var map = L.map('map', {
         };
 
         var hydrologyLayerMeta = {
-            '92':  { label: '海堤區域' },
-            '76':  { label: '海岸緩衝區' },
-            '77':  { label: '海岸保護區' },
-            '91':  { label: '區域排水治理區' },
-            '100': { label: '水庫範圍' },
-            '106': { label: '水質水量保護區' },
-            '112': { label: '地下水鹽化區' },
-            '175': { label: '地層下陷監測站' }
+            'SEAWALLZONE': { label: '海堤區域' },
+            'CoastalBufferZone': { label: '海岸緩衝區' },
+            'CoastalProtectionZone': { label: '海岸保護區' },
+            'REGDAREA': { label: '區域排水治理區' },
+            'reservoir': { label: '水庫範圍' },
+            'TWQPROT': { label: '水質水量保護區' },
+            'Salinizationzone': { label: '地下水鹽化區' },
+            'LASUBSTA': { label: '地層下陷監測站' }
         };
 
-        var recommendedHydrologyIds = ['92', '76', '77', '91', '100', '106', '112', '175'];
+        var recommendedHydrologyIds = ['SEAWALLZONE', 'CoastalBufferZone', 'CoastalProtectionZone', 'REGDAREA', 'reservoir', 'TWQPROT', 'Salinizationzone', 'LASUBSTA'];
 
         var currentFloodLayer = null;
         var currentFloodLayerId = null;
