@@ -1180,27 +1180,21 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <div id="floodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
                     <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">降雨情境</div>
                     <select id="floodScenario" onchange="changeFloodScenario(this.value)" style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;">
-                        <option value="81" selected>24 小時 200 mm</option>
-                        <option value="80">24 小時 350 mm</option>
-                        <option value="79">24 小時 500 mm</option>
-                        <option value="78">24 小時 650 mm</option>
-                        <option value="84">12 小時 200 mm</option>
-                        <option value="83">12 小時 300 mm</option>
-                        <option value="82">12 小時 400 mm</option>
-                        <option value="87">6 小時 150 mm</option>
-                        <option value="86">6 小時 250 mm</option>
-                        <option value="85">6 小時 350 mm</option>
-                    </select>
+                    <option value="flood_350mm_24hr" selected>24 小時 350 mm</option>
+                    <option value="flood_500mm_24hr">24 小時 500 mm</option>
+                    <option value="flood_650mm_24hr">24 小時 650 mm</option>
+                </select>
 
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
-                        <span>透明度</span>
-                        <span id="floodOpacityValue">55%</span>
-                    </div>
-                    <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
+                    <span>透明度</span>
+                    <span id="floodOpacityValue">55%</span>
+                </div>
+                <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
 
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
-                        <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 200 mm</span>
-                        <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+                    <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 350 mm</span>
+                    <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
+                </div>
                     </div>
                 </div>
 
@@ -1636,16 +1630,9 @@ var map = L.map('map', {
         var wraWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
 
         var floodScenarioMeta = {
-            '81': { label: '24 小時 200 mm' },
-            '80': { label: '24 小時 350 mm' },
-            '79': { label: '24 小時 500 mm' },
-            '78': { label: '24 小時 650 mm' },
-            '84': { label: '12 小時 200 mm' },
-            '83': { label: '12 小時 300 mm' },
-            '82': { label: '12 小時 400 mm' },
-            '87': { label: '6 小時 150 mm' },
-            '86': { label: '6 小時 250 mm' },
-            '85': { label: '6 小時 350 mm' }
+            'flood_350mm_24hr': { label: '24 小時 350 mm' },
+            'flood_500mm_24hr': { label: '24 小時 500 mm' },
+            'flood_650mm_24hr': { label: '24 小時 650 mm' }
         };
 
         var hydrologyLayerMeta = {
@@ -1688,7 +1675,7 @@ var map = L.map('map', {
 
         function getFloodSelectedId() {
             var scenarioEl = document.getElementById('floodScenario');
-            return scenarioEl ? scenarioEl.value : '81';
+            return scenarioEl ? scenarioEl.value : 'flood_350mm_24hr';
         }
 
         function getFloodOpacityValue() {
