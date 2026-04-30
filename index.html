@@ -2619,13 +2619,13 @@ fetch(API_URL, { cache: "no-store" })
                 var displayLon = parseFloat(item.lon) + jitter.lon;
 
                 marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
-                    autoPan: true,            // 恢復平移，我們已經修好 Cluster 拔除問題了
+                    autoPan: true,
                     keepInView: false,
-                    closeOnClick: false,      // 🌟 iOS 防護：防止點擊地圖誤關
-                    autoClose: false,         // 🌟 iOS 防護：防止被其他事件強制關閉
+                    closeOnClick: false,      // ✅ 保留：防護 iOS 手指誤觸地圖背景導致卡片消失
+                    autoClose: true,          // 🔧 修正這裡！改回 true，確保點擊新卡片時，舊卡片會自動收合
                     closeOnEscapeKey: false,
                     offset: [0, -28],
-                    autoPanPaddingTopLeft: [15, 60],     // 稍微縮小留白，避免小螢幕極限排版擠爆
+                    autoPanPaddingTopLeft: [15, 60],
                     autoPanPaddingBottomRight: [15, 80]
                 });
 
