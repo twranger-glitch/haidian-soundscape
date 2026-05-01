@@ -3414,7 +3414,14 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
         function logAction(uid, eventType) {
             const userKey = currentUser ? currentUser.uid : 'guest_' + Math.random().toString(36).substr(2, 9);
+            // 🛡️ 確保存入的 uid 也是乾淨的字串，避免查詢時出錯
+            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
             db.collection("traffic_log").add({
+                uid: safeUid,
+                eventType: eventType,
+                userKey: userKey,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(error => {
                 uid: uid,
                 eventType: eventType,
                 userKey: userKey,
@@ -3459,7 +3466,9 @@ function mountGlobalPlayerIntoPopup_(retry) {
             if (!uid) return;
 
             let isFav = userFavorites.has(uid);
-            let docId = currentUser.uid + "_" + uid; 
+            // 🛡️ 防爆機制：替換掉 Firebase 路徑不允許的特殊字元 (. # $ [ ])
+            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
+            let docId = currentUser.uid + "_" + safeUid; 
             let favRef = db.collection("user_favorites").doc(docId);
 
             if (isFav) {
@@ -3565,7 +3574,9 @@ function mountGlobalPlayerIntoPopup_(retry) {
                 return;
             }
 
-            let docId = currentUser.uid + "_" + uid; 
+            // 🛡️ 防爆機制：替換掉 Firebase 路徑不允許的特殊字元 (. # $ [ ])
+            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
+            let docId = currentUser.uid + "_" + safeUid; 
             let reactionRef = db.collection("user_reactions").doc(docId);
             
             let oldType = userReactions[uid];
