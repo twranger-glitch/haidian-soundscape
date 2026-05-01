@@ -1128,14 +1128,16 @@ body.player-embedded .leaflet-popup .btn-play-main {
                     嘉南大圳鹽水溪排水線
                 </button>
                 <button class="route-btn" style="border-left: 4px solid #e67e22;" onclick="toggleRoute('geofence_shanhai', this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 17c4-6 8-6 12 0s6 4 6 4"></path>
-        <path d="M3 7c4 4 8 4 12 0s6-2 6-2"></path>
-    </svg>
-    山海圳綠道 200m 走讀
-</button>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c4-6 8-6 12 0s6 4 6 4"></path><path d="M3 7c4 4 8 4 12 0s6-2 6-2"></path></svg>
+                    山海圳綠道 200m 走讀
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #16a085;" onclick="toggleRoute('geofence_taijiang', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#16a085" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    台江水日 烏山頭溯源 200m 走讀
+                </button>
+                <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
 
-<button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
+                <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
                     手繪自訂走讀範圍
                 </button>
@@ -2945,22 +2947,36 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
                 // 🌟 改由 Firebase 直接讀取靜態 JSON 陣列，大幅提升解析速度
                 var firebaseUrl = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/river_routes/shanhai.json"; 
                 
                 fetch(firebaseUrl)
                 .then(res => res.json())
                 .then(parsedPoints => {
-                    if (!parsedPoints || parsedPoints.length === 0) throw new Error("無效的座標資料");
+                    if (!parsedPoints || !Array.isArray(parsedPoints) || parsedPoints.length === 0) {
+                        throw new Error("無效的座標資料");
+                    }
+
+                    // 🛡️ 核心修復：嚴格過濾，確保丟給 turf.js 的只會是 [純數字, 純數字] 的合法陣列
+                    var validPoints = parsedPoints.filter(pt => 
+                        Array.isArray(pt) && 
+                        pt.length >= 2 && 
+                        typeof pt[0] === 'number' && !isNaN(pt[0]) &&
+                        typeof pt[1] === 'number' && !isNaN(pt[1])
+                    ).map(pt => [pt[0], pt[1]]); // 強制只取前兩個值，避免有第三個怪資料混入
+
+                    if (validPoints.length < 2) {
+                        throw new Error("合法的座標點不足以畫線");
+                    }
                     
-                    var riverLine = turf.lineString(parsedPoints);
+                    var riverLine = turf.lineString(validPoints);
                     var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                     currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
                     routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
                     
-                    var leafletPath = parsedPoints.map(coord => [coord[1], coord[0]]);
+                    // Leaflet 畫線需要的格式是 [lat, lon]，跟 GeoJSON 剛好相反
+                    var leafletPath = validPoints.map(coord => [coord[1], coord[0]]);
                     executeStandardRoute(type, leafletPath);
                 }).catch(err => {
                     alert("載入失敗，請檢查 Firebase 圖資節點是否正確！錯誤：" + err.message);
