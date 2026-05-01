@@ -2947,48 +2947,43 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
+                // 🌟 改由 Firebase 直接讀取靜態 JSON 陣列，大幅提升解析速度
                 var firebaseUrl = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/river_routes/shanhai.json"; 
                 
                 fetch(firebaseUrl)
                 .then(res => res.json())
-                .then(data => {
-                    // 確保資料是陣列
-                    let rawPoints = Array.isArray(data) ? data : (typeof data === 'string' ? JSON.parse(data) : Object.values(data));
-                    
-                    // 最強防爆：只保留確實有兩個數字的座標點
-                    let validCoords = [];
-                    for(let i=0; i<rawPoints.length; i++) {
-                        let pt = rawPoints[i];
-                        if(Array.isArray(pt) && pt.length >= 2) {
-                            let lng = parseFloat(pt[0]);
-                            let lat = parseFloat(pt[1]);
-                            if(!isNaN(lng) && !isNaN(lat)) {
-                                validCoords.push([lng, lat]);
-                            }
-                        }
+                .then(parsedPoints => {
+                    if (!parsedPoints || !Array.isArray(parsedPoints) || parsedPoints.length === 0) {
+                        throw new Error("無效的座標資料");
                     }
 
-                    if (validCoords.length < 2) throw new Error("有效的座標點不足！");
+                    // 🛡️ 核心修復：嚴格過濾，確保丟給 turf.js 的只會是 [純數字, 純數字] 的合法陣列
+                    var validPoints = parsedPoints.filter(pt => 
+                        Array.isArray(pt) && 
+                        pt.length >= 2 && 
+                        typeof pt[0] === 'number' && !isNaN(pt[0]) &&
+                        typeof pt[1] === 'number' && !isNaN(pt[1])
+                    ).map(pt => [pt[0], pt[1]]); // 強制只取前兩個值，避免有第三個怪資料混入
+
+                    if (validPoints.length < 2) {
+                        throw new Error("合法的座標點不足以畫線");
+                    }
                     
-                    // Turf.js 畫線
-                    var riverLine = turf.lineString(validCoords);
+                    var riverLine = turf.lineString(validPoints);
                     var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
                     currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
                     routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
                     
-                    // Leaflet 畫線 (Leaflet 是 [lat, lng])
-                    var leafletPath = validCoords.map(coord => [coord[1], coord[0]]);
+                    // Leaflet 畫線需要的格式是 [lat, lon]，跟 GeoJSON 剛好相反
+                    var leafletPath = validPoints.map(coord => [coord[1], coord[0]]);
                     executeStandardRoute(type, leafletPath);
-                })
-                .catch(err => {
-                    console.error("載入失敗:", err);
-                    alert("載入失敗，請確認 Firebase 資料庫中的 shanhai 節點格式是否為 JSON 陣列！");
+                }).catch(err => {
+                    alert("載入失敗，請檢查 Firebase 圖資節點是否正確！錯誤：" + err.message);
                     toggleRoute('clear', document.getElementById('clearRouteBtn'));
                 });
             }
-            else if (type.startsWith('geofence_')) {
+            else if (type.startsWith('geofence')) {
                 var p = { 
                     yanshui: [
                         [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
@@ -3026,36 +3021,18 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                         [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
                         [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
                         [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
-                    ],
-                    taijiang: [
-                        [120.200280, 23.028313], [120.214210, 23.031580], [120.235040, 23.058310], [120.267930, 23.091690],
-                        [120.275848, 23.100091], [120.283530, 23.100940], [120.302422, 23.108536], [120.323373, 23.131761],
-                        [120.326930, 23.135320], [120.338692, 23.154906], [120.338900, 23.166100], [120.339164, 23.177970],
-                        [120.339641, 23.181168], [120.336320, 23.188340], [120.362730, 23.207950], [120.365460, 23.213670]
-                    ]
+                    ] 
                 };
                 
                 var riverKey = type.split('_')[1];
-                if (p[riverKey]) {
-                    // 🌟 針對不同路線套用不同顏色，修復台江水日顏色錯誤
-                    var riverColor = '#3498db'; // 預設藍色(鹽水溪、嘉南大圳)
-                    if (riverKey === 'taijiang') riverColor = '#16a085'; // 台江綠色
+                var riverLine = turf.lineString(p[riverKey]);
+                var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
-                    var riverLine = turf.lineString(p[riverKey]);
-                    var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
-
-                    currentGeoFenceBufferLayer = L.geoJSON(buffer, { 
-                        style: { color: riverColor, weight: 2, opacity: 0.5, fillColor: riverColor, fillOpacity: 0.15 } 
-                    }).addTo(map);
-                    
-                    routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                    
-                    var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
-                    executeStandardRoute(type, leafletPath);
-                } else {
-                    alert("找不到對應的路線資料");
-                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
-                }
+                currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
+                routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                
+                var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
+                executeStandardRoute(type, leafletPath);
             }
         }
 
@@ -3414,14 +3391,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
         function logAction(uid, eventType) {
             const userKey = currentUser ? currentUser.uid : 'guest_' + Math.random().toString(36).substr(2, 9);
-            // 🛡️ 確保存入的 uid 也是乾淨的字串，避免查詢時出錯
-            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
             db.collection("traffic_log").add({
-                uid: safeUid,
-                eventType: eventType,
-                userKey: userKey,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(error => {
                 uid: uid,
                 eventType: eventType,
                 userKey: userKey,
@@ -3466,9 +3436,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
             if (!uid) return;
 
             let isFav = userFavorites.has(uid);
-            // 🛡️ 防爆機制：替換掉 Firebase 路徑不允許的特殊字元 (. # $ [ ])
-            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
-            let docId = currentUser.uid + "_" + safeUid; 
+            let docId = currentUser.uid + "_" + uid; 
             let favRef = db.collection("user_favorites").doc(docId);
 
             if (isFav) {
@@ -3574,9 +3542,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
                 return;
             }
 
-            // 🛡️ 防爆機制：替換掉 Firebase 路徑不允許的特殊字元 (. # $ [ ])
-            let safeUid = String(uid).replace(/[.#$\[\]]/g, "_");
-            let docId = currentUser.uid + "_" + safeUid; 
+            let docId = currentUser.uid + "_" + uid; 
             let reactionRef = db.collection("user_reactions").doc(docId);
             
             let oldType = userReactions[uid];
