@@ -957,6 +957,30 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
 /* ===== 關於我們標題不換行 END ===== */
 /* ===== 手機版按鈕不換行 END ===== */
+
+        /* 🌟 GPS 定位按鈕與藍色準星樣式 */
+        .locate-me-wrapper {
+            position: absolute; right: 20px; bottom: 30px;
+            z-index: 1000; pointer-events: auto;
+        }
+        .locate-me-btn {
+            width: 48px; height: 48px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: 16px; border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            color: #3b82f6; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .locate-me-btn:hover { background: #fff; transform: translateY(-2px) scale(1.05); }
+        .locate-me-btn:active { transform: scale(0.95); }
+        .locate-me-btn.locating { animation: locatePulse 1.5s infinite; color: #94a3b8; }
+        
+        @keyframes locatePulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            100% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+        }
+        @media (max-width: 600px) { .locate-me-wrapper { bottom: 40px; right: 12px; } }
     </style></head><body>
 
     <header class="glass-header">
@@ -974,7 +998,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 <span class="full-text">最新上架</span><span class="short-text">新作</span>
             </button>
-            <button class="btn-submit" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" title="我要投稿">
+            <button class="btn-submit" onclick="openModal('submitChoiceModal')" title="我要投稿">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 <span class="full-text">我要投稿</span><span class="short-text">投稿</span>
             </button>
@@ -1326,7 +1350,42 @@ body.player-embedded .leaflet-popup .btn-play-main {
         </div>
     </div>
 
+    <!-- 🌟 智慧投稿分流選單 -->
+    <div id="submitChoiceModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'submitChoiceModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 400px;">
+            <button class="modal-close-btn" onclick="closeModal('submitChoiceModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px; text-align: center;">
+                <h2 class="modal-title" style="justify-content:center; margin-bottom: 8px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    準備投稿！
+                </h2>
+                <p style="font-size:13px; color:#64748b; margin-top:0; margin-bottom:20px;">請選擇您目前的狀態，系統將協助您定位</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button onclick="locateAndSubmit()" class="btn-submit" style="width:100%; padding:14px; font-size:15px; border-radius:12px; display:flex; justify-content:center; align-items:center; gap:8px;">
+                        📍 我在現場 (自動抓取目前位置)
+                    </button>
+                    <button onclick="closeModal('submitChoiceModal'); alert('請直接在地圖上【長按 (約一秒) 您採集聲音的地點】，系統會自動為您標記並開啟投稿表單！');" style="width:100%; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:14px; font-size:15px; border-radius:12px; font-weight:800; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px;">
+                        🗺️ 不在現場 (返回地圖長按選點)
+                    </button>
+                    <button onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" style="width:100%; background:transparent; color:#e74c3c; border:1px dashed #fca5a5; padding:12px; font-size:14px; border-radius:12px; font-weight:700; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px; margin-top:5px;">
+                        📝 打開空白表單 (自行填寫座標)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="map"></div>
+
+    <!-- 🌟 Google 地圖風格：一鍵定位準星 -->
+    <div class="locate-me-wrapper">
+        <button id="locateMeBtn" class="locate-me-btn" onclick="flyToMyLocation()" title="定位我的位置">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+        </button>
+    </div>
+
 <div id="hazardInfoModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'hazardInfoModal')">
         <div class="modal-box" style="background: #f8fafc; max-width: 400px; transform: scale(0.95); transition: 0.3s;">
             <button class="modal-close-btn" onclick="closeModal('hazardInfoModal')">
@@ -3663,6 +3722,92 @@ function mountGlobalPlayerIntoPopup_(retry) {
             originalToggleReaction(uid, type);
             setTimeout(checkAchievements, 500); 
         };
+
+        // ==========================================
+        // 🚀 新投稿系統：預填表單、長按選點、GPS定位
+        // ==========================================
+        const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform";
+        const GPS_ENTRY_ID = "entry.255203319"; // 🌟 已經完美替換為您的真實代碼！
+
+        function showSubmitPopup(latlng) {
+            var lat = latlng.lat.toFixed(6);
+            var lon = latlng.lng.toFixed(6);
+            var gpsString = lat + ", " + lon;
+            var prefillUrl = FORM_BASE_URL + "?usp=pp_url&" + GPS_ENTRY_ID + "=" + encodeURIComponent(gpsString);
+
+            var popupContent = `
+                <div style="text-align:center; padding:5px; min-width: 150px;">
+                    <div style="font-weight:900; font-size:15px; color:#27ae60; margin-bottom:8px;">📍 標記這個位置？</div>
+                    <div style="font-size:11px; color:#7f8c8d; margin-bottom:12px; font-family:'Courier New', monospace;">${gpsString}</div>
+                    <button onclick="window.open('${prefillUrl}', '_blank')" style="background:#27ae60; color:#fff; border:none; padding:8px 15px; border-radius:8px; font-weight:800; cursor:pointer; width:100%; box-shadow:0 4px 10px rgba(39,174,96,0.3);">
+                        用此座標前往投稿
+                    </button>
+                </div>
+            `;
+            L.popup({ closeButton: true, autoClose: true, className: 'map-click-popup' })
+             .setLatLng(latlng).setContent(popupContent).openOn(map);
+        }
+
+        // 電腦版支援右鍵
+        map.on('contextmenu', function(e) { showSubmitPopup(e.latlng); });
+
+        // 手機版長按偵測 (0.7秒)
+        var longPressTimer;
+        map.on('mousedown touchstart', function(e) {
+            if (e.originalEvent && e.originalEvent.target.closest('.leaflet-control, .glass-header, .drawer-panel, .global-player, .locate-me-wrapper')) return;
+            longPressTimer = setTimeout(function() { showSubmitPopup(e.latlng); }, 700); 
+        });
+        map.on('mouseup mousemove touchend touchmove dragstart', function(e) { clearTimeout(longPressTimer); });
+
+        // 一鍵抓取手機 GPS 
+        window.locateAndSubmit = function() {
+            if (!navigator.geolocation) {
+                alert("您的裝置不支援自動定位，請使用「地圖長按選點」功能。"); return;
+            }
+            var btn = document.querySelector('#submitChoiceModal .btn-submit');
+            var originalText = btn.innerHTML;
+            btn.innerHTML = "📍 定位中...請稍候";
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    var gpsString = position.coords.latitude.toFixed(6) + ", " + position.coords.longitude.toFixed(6);
+                    var prefillUrl = FORM_BASE_URL + "?usp=pp_url&" + GPS_ENTRY_ID + "=" + encodeURIComponent(gpsString);
+                    btn.innerHTML = originalText;
+                    closeModal('submitChoiceModal');
+                    window.open(prefillUrl, '_blank');
+                },
+                function(error) {
+                    btn.innerHTML = originalText;
+                    alert("無法獲取您的位置！可能是 GPS 未開啟，請改用「返回地圖長按選點」。");
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        };
+
+        // 地圖上的「定位我」按鈕
+        var userLocationMarker = null, userLocationCircle = null;
+        window.flyToMyLocation = function() {
+            var btn = document.getElementById('locateMeBtn');
+            if(btn) btn.classList.add('locating');
+            map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+        };
+
+        map.on('locationfound', function(e) {
+            var btn = document.getElementById('locateMeBtn');
+            if(btn) btn.classList.remove('locating');
+            if (userLocationMarker) map.removeLayer(userLocationMarker);
+            if (userLocationCircle) map.removeLayer(userLocationCircle);
+
+            userLocationCircle = L.circle(e.latlng, { radius: e.accuracy / 2, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 1, interactive: false }).addTo(map);
+            userLocationMarker = L.circleMarker(e.latlng, { radius: 7, color: '#fff', weight: 2.5, fillColor: '#3b82f6', fillOpacity: 1, zIndexOffset: 4000 }).addTo(map);
+            userLocationMarker.bindPopup('<div style="text-align:center; font-weight:800; color:#3b82f6; font-size:13px; margin:4px 0;">您目前的粗略位置</div><div style="font-size:11px; color:#94a3b8;">請直接長按地圖精準標記想投稿的點！</div>').openPopup();
+        });
+
+        map.on('locationerror', function(e) {
+            var btn = document.getElementById('locateMeBtn');
+            if(btn) btn.classList.remove('locating');
+            alert("無法獲取您的位置！\n請確認您已允許瀏覽器存取「定位服務」。");
+        });
 
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
     </script>
