@@ -3070,13 +3070,11 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
     if (!isRoutePlaying) return;
 
     if (currentRouteIndex >= routePointsData.length) {
-        alert("路線探索完畢！");
-        isRoutePlaying = false;
-        document.getElementById('clearRouteBtn').style.display = 'none';
-        var floatingClearBtn = document.getElementById('floatingClearRouteBtn');
-        if (floatingClearBtn) floatingClearBtn.style.display = 'none';
-        return;
-    }
+        alert("路線探索完畢！");
+        // 🌟 自動觸發結束路線，清理紅色路徑、重置叢集地標、隱藏結束按鈕
+        toggleRoute('clear', document.getElementById('clearRouteBtn'));
+        return;
+    }
 
     var marker = routeMarkerObjects[currentRouteIndex];
     var point = routePointsData[currentRouteIndex];
