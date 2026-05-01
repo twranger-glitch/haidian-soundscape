@@ -2947,8 +2947,7 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
-                var firebaseUrl = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/river_routes/shanhai.json"; 
+                var firebaseUrl = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/river_routes/shanhai.json";
                 
                 fetch(firebaseUrl)
                 .then(res => res.json())
@@ -3057,7 +3056,6 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                     toggleRoute('clear', document.getElementById('clearRouteBtn'));
                 }
             }
-        }
 
         function playNextRoutePoint() {
     if (!isRoutePlaying) return;
