@@ -1391,13 +1391,16 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <p style="font-size:13px; color:#64748b; margin-top:0; margin-bottom:20px;">請選擇您目前的狀態，系統將協助您定位</p>
                 <div style="display:flex; flex-direction:column; gap:10px;">
                     <button onclick="locateAndSubmit()" class="btn-submit" style="width:100%; padding:14px; font-size:15px; border-radius:12px; display:flex; justify-content:center; align-items:center; gap:8px;">
-                        📍 我在現場 (自動抓取目前位置)
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        我在現場 (自動抓取目前位置)
                     </button>
                     <button onclick="closeModal('submitChoiceModal'); alert('請直接在地圖上【長按 (約一秒) 您採集聲音的地點】，系統會自動為您標記並開啟投稿表單！');" style="width:100%; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:14px; font-size:15px; border-radius:12px; font-weight:800; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px;">
-                        🗺️ 不在現場 (返回地圖長按選點)
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                        不在現場 (返回地圖長按選點)
                     </button>
                     <button onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" style="width:100%; background:transparent; color:#e74c3c; border:1px dashed #fca5a5; padding:12px; font-size:14px; border-radius:12px; font-weight:700; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px; margin-top:5px;">
-                        📝 打開空白表單 (自行填寫座標)
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        打開空白表單 (自行輸入或由系統判讀)
                     </button>
                 </div>
             </div>
@@ -2607,7 +2610,7 @@ fetch(API_URL, { cache: "no-store" })
             var timeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
             
             var hasGps = !isNaN(item.lat) && !isNaN(item.lon) && (item.lat !== 0 || item.lon !== 0);
-            var gpsHTML = hasGps ? `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>` : `<span class="meta-gps" style="color:#94a3b8; border-color:#e2e8f0;">📍 軌跡定位中...</span>`;
+            var gpsHTML = hasGps ? `<span class="meta-gps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)}</span>` : `<span class="meta-gps" style="color:#94a3b8; border-color:#e2e8f0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 軌跡定位中...</span>`;
             
             var audioHTML = "";
             if (item.isProcessing) {
@@ -3764,7 +3767,10 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
             var popupContent = `
                 <div style="text-align:center; padding:5px; min-width: 150px;">
-                    <div style="font-weight:900; font-size:15px; color:#27ae60; margin-bottom:8px;">📍 標記這個位置？</div>
+                    <div style="font-weight:900; font-size:15px; color:#27ae60; margin-bottom:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 
+                        標記這個位置？
+                    </div>
                     <div style="font-size:11px; color:#7f8c8d; margin-bottom:12px; font-family:'Courier New', monospace;">${gpsString}</div>
                     <button onclick="window.open('${prefillUrl}', '_blank')" style="background:#27ae60; color:#fff; border:none; padding:8px 15px; border-radius:8px; font-weight:800; cursor:pointer; width:100%; box-shadow:0 4px 10px rgba(39,174,96,0.3);">
                         用此座標前往投稿
@@ -3793,7 +3799,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
             }
             var btn = document.querySelector('#submitChoiceModal .btn-submit');
             var originalText = btn.innerHTML;
-            btn.innerHTML = "📍 定位中...請稍候";
+            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: badgeShine 2s linear infinite;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 定位中...請稍候`;
 
             navigator.geolocation.getCurrentPosition(
                 function(position) {
