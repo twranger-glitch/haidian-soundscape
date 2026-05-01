@@ -1128,15 +1128,11 @@ body.player-embedded .leaflet-popup .btn-play-main {
                     嘉南大圳鹽水溪排水線
                 </button>
                 <button class="route-btn" style="border-left: 4px solid #e67e22;" onclick="toggleRoute('geofence_shanhai', this)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c4-6 8-6 12 0s6 4 6 4"></path><path d="M3 7c4 4 8 4 12 0s6-2 6-2"></path></svg>
-                    山海圳綠道 200m 走讀
-                </button>
-                <button class="route-btn" style="border-left: 4px solid #16a085;" onclick="toggleRoute('geofence_taijiang', this)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#16a085" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    台江水日 烏山頭溯源 200m 走讀
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l4 8 5-5 5 15H2L8 3z"></path></svg>
+                    山海圳綠道 (直達玉山)
                 </button>
                 <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
-
+                
                 <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
                     手繪自訂走讀範圍
@@ -2947,47 +2943,71 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 executeStandardRoute(type, null);
             }
             else if (type === 'geofence_shanhai') {
-                var firebaseUrl = "https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app/river_routes/shanhai.json";
+                alert("準備從雲端載入山海圳綠道圖資，請稍候...");
+                var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRVuVP_KljACFPTdkVfrwadoOxmvz6omF30Qz46Hy3C7YOeMXx69QubqfBkeGEt8FNqsqzDk-v3jZN-/pub?gid=0&single=true&output=csv"; 
                 
-                fetch(firebaseUrl)
-                .then(res => res.json())
-                .then(data => {
-                    // 確保資料是陣列
-                    let rawPoints = Array.isArray(data) ? data : (typeof data === 'string' ? JSON.parse(data) : Object.values(data));
+                fetch(csvUrl)
+                .then(res => res.text())
+                .then(csv => {
+                    var lines = csv.split('\n');
+                    var parsedPoints = [];
                     
-                    // 最強防爆：只保留確實有兩個數字的座標點
-                    let validCoords = [];
-                    for(let i=0; i<rawPoints.length; i++) {
-                        let pt = rawPoints[i];
-                        if(Array.isArray(pt) && pt.length >= 2) {
-                            let lng = parseFloat(pt[0]);
-                            let lat = parseFloat(pt[1]);
-                            if(!isNaN(lng) && !isNaN(lat)) {
-                                validCoords.push([lng, lat]);
+                    for (var i = 1; i < lines.length; i++) {
+                        var cols = lines[i].split(',');
+                        if (cols.length >= 3) {
+                            var seq = parseInt(cols[0].trim());
+                            var lat = parseFloat(cols[1].trim());
+                            var lng = parseFloat(cols[2].trim());
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                parsedPoints.push({seq: isNaN(seq) ? i : seq, pt: [lng, lat]});
                             }
                         }
                     }
-
-                    if (validCoords.length < 2) throw new Error("有效的座標點不足！");
+                    parsedPoints.sort((a, b) => a.seq - b.seq);
                     
-                    // Turf.js 畫線
-                    var riverLine = turf.lineString(validCoords);
-                    var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
+                    var shanhaiSegments = [];
+                    var currentSeg = [];
+                    for(var j = 0; j < parsedPoints.length; j++) {
+                        var pt = parsedPoints[j].pt;
+                        if(currentSeg.length === 0) {
+                            currentSeg.push(pt);
+                        } else {
+                            var prev = currentSeg[currentSeg.length - 1];
+                            var dx = pt[0] - prev[0];
+                            var dy = pt[1] - prev[1];
+                            var distSq = dx*dx + dy*dy;
+                            
+                            if(distSq > 0.0004) {
+                                shanhaiSegments.push(currentSeg);
+                                currentSeg = [pt];
+                            } else {
+                                currentSeg.push(pt);
+                            }
+                        }
+                    }
+                    if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
 
-                    currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
-                    routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                    
-                    // Leaflet 畫線 (Leaflet 是 [lat, lng])
-                    var leafletPath = validCoords.map(coord => [coord[1], coord[0]]);
-                    executeStandardRoute(type, leafletPath);
-                })
-                .catch(err => {
-                    console.error("載入失敗:", err);
-                    alert("載入失敗，請確認 Firebase 資料庫中的 shanhai 節點格式是否為 JSON 陣列！");
+                    if (shanhaiSegments.length > 0) {
+                        var riverLine = turf.multiLineString(shanhaiSegments);
+                        var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
+                        var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
+
+                        currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#e67e22', weight: 3, opacity: 0.8, fillColor: '#e67e22', fillOpacity: 0.2 } }).addTo(map);
+                        routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                        
+                        var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]]));
+                        executeStandardRoute(type, leafletPath);
+                        
+                    } else {
+                        alert("解析 CSV 失敗：沒有找到有效的座標資料，請檢查 Google Sheet 格式。");
+                        toggleRoute('clear', document.getElementById('clearRouteBtn'));
+                    }
+                }).catch(err => {
+                    alert("載入失敗，請檢查 CSV 網址是否正確發佈到網路！錯誤訊息：" + err);
                     toggleRoute('clear', document.getElementById('clearRouteBtn'));
                 });
             }
-            else if (type.startsWith('geofence_')) {
+            else if (type.startsWith('geofence')) {
                 var p = { 
                     yanshui: [
                         [120.27808209977803, 23.055971160279995], [120.2774026433413, 23.057865704624007], [120.2766934436903, 23.058741894422184],
@@ -3025,46 +3045,28 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                         [120.173612, 23.023399], [120.171204, 23.021544], [120.166292, 23.016696], [120.159833, 23.016026],
                         [120.150635, 23.013497], [120.147697, 23.012859], [120.142696, 23.009468], [120.141528, 23.005439],
                         [120.140819, 22.999721], [120.139589, 22.996637], [120.136844, 22.994410]
-                    ],
-                    taijiang: [
-                        [120.200280, 23.028313], [120.214210, 23.031580], [120.235040, 23.058310], [120.267930, 23.091690],
-                        [120.275848, 23.100091], [120.283530, 23.100940], [120.302422, 23.108536], [120.323373, 23.131761],
-                        [120.326930, 23.135320], [120.338692, 23.154906], [120.338900, 23.166100], [120.339164, 23.177970],
-                        [120.339641, 23.181168], [120.336320, 23.188340], [120.362730, 23.207950], [120.365460, 23.213670]
-                    ]
+                    ] 
                 };
                 
                 var riverKey = type.split('_')[1];
-                if (p[riverKey]) {
-                    // 🌟 針對不同路線套用不同顏色，修復台江水日顏色錯誤
-                    var riverColor = '#3498db'; // 預設藍色(鹽水溪、嘉南大圳)
-                    if (riverKey === 'taijiang') riverColor = '#16a085'; // 台江綠色
+                var riverLine = turf.lineString(p[riverKey]);
+                var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
 
-                    var riverLine = turf.lineString(p[riverKey]);
-                    var buffer = turf.buffer(riverLine, 200, { units: 'meters' });
-
-                    currentGeoFenceBufferLayer = L.geoJSON(buffer, { 
-                        style: { color: riverColor, weight: 2, opacity: 0.5, fillColor: riverColor, fillOpacity: 0.15 } 
-                    }).addTo(map);
-                    
-                    routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                    
-                    var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
-                    executeStandardRoute(type, leafletPath);
-                } else {
-                    alert("找不到對應的路線資料");
-                    toggleRoute('clear', document.getElementById('clearRouteBtn'));
-                }
+                currentGeoFenceBufferLayer = L.geoJSON(buffer, { style: { color: '#3498db', weight: 2, opacity: 0.5, fillColor: '#3498db', fillOpacity: 0.15 } }).addTo(map);
+                routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                
+                var leafletPath = p[riverKey].map(coord => [coord[1], coord[0]]);
+                executeStandardRoute(type, leafletPath);
             }
+        }
 
         function playNextRoutePoint() {
-    if (!isRoutePlaying) return;
+    if (!isRoutePlaying) return;
 
-    if (currentRouteIndex >= routePointsData.length) {
+    if (currentRouteIndex >= routePointsData.length) {
         alert("路線探索完畢！");
-        // 🌟 核心修正：確實呼叫系統的 clear 邏輯，徹底清除路徑、圖層與按鈕狀態
-        var clearBtn = document.getElementById('clearRouteBtn');
-        if (clearBtn) toggleRoute('clear', clearBtn);
+        // 🌟 自動觸發結束路線，清理紅色路徑、重置叢集地標、隱藏結束按鈕
+        toggleRoute('clear', document.getElementById('clearRouteBtn'));
         return;
     }
 
