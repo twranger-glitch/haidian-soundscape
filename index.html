@@ -2980,8 +2980,39 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                         : geojsonData;
 
                     if (routeFeature) {
-                        // 4. 使用 Turf.js 一秒算出 200m 緩衝區！
-                        var buffer = turf.buffer(routeFeature, 200, { units: 'meters' });
+                        // === 核心修復：清理 GeoJSON 的異常直線連線 ===
+                        var rawCoords = routeFeature.geometry.coordinates;
+                        var shanhaiSegments = [];
+                        var currentSeg = [];
+                        
+                        // 重新計算斷點，避免直接連線到玉山
+                        for(var j = 0; j < rawCoords.length; j++) {
+                            var pt = rawCoords[j];
+                            if(currentSeg.length === 0) {
+                                currentSeg.push(pt);
+                            } else {
+                                var prev = currentSeg[currentSeg.length - 1];
+                                var dx = pt[0] - prev[0];
+                                var dy = pt[1] - prev[1];
+                                var distSq = dx*dx + dy*dy;
+                                
+                                // 如果距離大於閾值，視為斷點，另起一條新線段
+                                if(distSq > 0.0004) {
+                                    shanhaiSegments.push(currentSeg);
+                                    currentSeg = [pt];
+                                } else {
+                                    currentSeg.push(pt);
+                                }
+                            }
+                        }
+                        if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
+
+                        // 把清理好的線段包裝成 Turf.js 喜歡的 MultiLineString
+                        var riverLine = turf.multiLineString(shanhaiSegments);
+                        
+                        // 4. 使用 Turf.js 一秒算出 200m 緩衝區！(加入高畫質簡化避免當機)
+                        var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
+                        var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
 
                         currentGeoFenceBufferLayer = L.geoJSON(buffer, { 
                             style: { color: themeColor, weight: 3, opacity: 0.8, fillColor: themeColor, fillOpacity: 0.15, dashArray: '5, 5' } 
@@ -2991,8 +3022,7 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                         routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
                         
                         // 6. 萃取座標點來畫紅色的「導航虛線」
-                        var coords = routeFeature.geometry.coordinates;
-                        var leafletPath = coords.map(coord => [coord[1], coord[0]]); // Turf(Lon,Lat) 轉 Leaflet(Lat,Lon)
+                        var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]]));
                         
                         executeStandardRoute(type, leafletPath);
                         
