@@ -2946,6 +2946,7 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 routePointsData = allMarkersData.filter(i => i.category.includes('常民') || i.category.includes('歲月') || i.category.includes('產業')).slice(0, 5);
                 executeStandardRoute(type, null);
             }
+            
             // ▼▼▼ 貼上這段新程式碼 ▼▼▼
             else if (type === 'geofence_shanhai' || type === 'geofence_taijiang') {
                 // 1. 自動判斷要載入哪個檔案與使用哪個主題色
@@ -2953,10 +2954,7 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                 var fileName = isShanhai ? './shanhaizhun.geojson' : './taijiang_water_day.geojson';
                 var themeColor = isShanhai ? '#e67e22' : '#27ae60';
                 
-                // 提示使用者
                 var tipMsg = isShanhai ? "準備載入山海圳綠道圖資..." : "準備載入台江水日路線圖資...";
-                
-                // 動態產生一個友善的小提示，不阻擋畫面
                 var loadingToast = L.popup({ closeButton: false, autoClose: false, closeOnClick: false, className: 'glass-popup' })
                                     .setLatLng(map.getCenter())
                                     .setContent(`<div style="padding:10px; font-weight:800; color:${themeColor}; text-align:center;">
@@ -2965,77 +2963,82 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
                                     </div>`)
                                     .openOn(map);
 
-                // 2. 極速讀取同資料夾下的 GeoJSON 檔案
                 fetch(fileName)
                 .then(res => {
                     if (!res.ok) throw new Error("找不到檔案 " + fileName);
                     return res.json();
                 })
                 .then(geojsonData => {
-                    map.closePopup(loadingToast); // 載入成功，關閉提示
+                    map.closePopup(loadingToast); 
                     
-                    // 3. 從 FeatureCollection 中精準抓出那一條主線 (LineString)
-                    var routeFeature = geojsonData.features 
-                        ? geojsonData.features.find(f => f.geometry && f.geometry.type === 'LineString') 
-                        : geojsonData;
+                    // === 🛡️ 終極防爆機制：不管檔案格式長怎樣，直接無腦萃取所有座標！ ===
+                    var rawCoords = [];
+                    try {
+                        if (geojsonData.type) {
+                            rawCoords = turf.coordAll(geojsonData); // Turf.js 原生大絕招
+                        } else if (Array.isArray(geojsonData)) {
+                            rawCoords = geojsonData.map(pt => Array.isArray(pt) ? pt : (pt.pt || [pt.lon, pt.lat])).filter(Boolean);
+                        }
+                    } catch (e) {
+                        throw new Error("座標萃取失敗，檔案內容可能損毀！");
+                    }
 
-                    if (routeFeature) {
-                        // === 核心修復：清理 GeoJSON 的異常直線連線 ===
-                        var rawCoords = routeFeature.geometry.coordinates;
-                        var shanhaiSegments = [];
-                        var currentSeg = [];
-                        
-                        // 重新計算斷點，避免直接連線到玉山
-                        for(var j = 0; j < rawCoords.length; j++) {
-                            var pt = rawCoords[j];
-                            if(currentSeg.length === 0) {
-                                currentSeg.push(pt);
+                    if (!rawCoords || rawCoords.length < 2) {
+                        throw new Error("找不到足夠的座標點來畫路線！");
+                    }
+
+                    // === ✂️ 智慧剪線機制：切斷飛往玉山的「不合理直線」 ===
+                    var shanhaiSegments = [];
+                    var currentSeg = [];
+                    
+                    for(var j = 0; j < rawCoords.length; j++) {
+                        var pt = rawCoords[j]; // [lon, lat]
+                        if(currentSeg.length === 0) {
+                            currentSeg.push(pt);
+                        } else {
+                            var prev = currentSeg[currentSeg.length - 1];
+                            var dx = pt[0] - prev[0];
+                            var dy = pt[1] - prev[1];
+                            var distSq = dx*dx + dy*dy;
+                            
+                            // 如果距離大於閾值 (約 2公里)，視為斷點，直接剪斷！
+                            if(distSq > 0.0004) {
+                                shanhaiSegments.push(currentSeg);
+                                currentSeg = [pt];
                             } else {
-                                var prev = currentSeg[currentSeg.length - 1];
-                                var dx = pt[0] - prev[0];
-                                var dy = pt[1] - prev[1];
-                                var distSq = dx*dx + dy*dy;
-                                
-                                // 如果距離大於閾值，視為斷點，另起一條新線段
-                                if(distSq > 0.0004) {
-                                    shanhaiSegments.push(currentSeg);
-                                    currentSeg = [pt];
-                                } else {
-                                    currentSeg.push(pt);
-                                }
+                                currentSeg.push(pt);
                             }
                         }
-                        if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
-
-                        // 把清理好的線段包裝成 Turf.js 喜歡的 MultiLineString
-                        var riverLine = turf.multiLineString(shanhaiSegments);
-                        
-                        // 4. 使用 Turf.js 一秒算出 200m 緩衝區！(加入高畫質簡化避免當機)
-                        var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
-                        var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
-
-                        currentGeoFenceBufferLayer = L.geoJSON(buffer, { 
-                            style: { color: themeColor, weight: 3, opacity: 0.8, fillColor: themeColor, fillOpacity: 0.15, dashArray: '5, 5' } 
-                        }).addTo(map);
-
-                        // 5. 篩選落入這個緩衝區的 Firebase 聲音地標
-                        routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
-                        
-                        // 6. 萃取座標點來畫紅色的「導航虛線」
-                        var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]]));
-                        
-                        executeStandardRoute(type, leafletPath);
-                        
-                    } else {
-                        alert("解析 GeoJSON 失敗：找不到路線圖層結構！");
-                        toggleRoute('clear', document.getElementById('clearRouteBtn'));
                     }
+                    if(currentSeg.length > 0) shanhaiSegments.push(currentSeg);
+
+                    // 把剪乾淨的線段包裝好，並濾掉孤兒點
+                    shanhaiSegments = shanhaiSegments.filter(seg => seg.length > 1);
+                    var riverLine = turf.multiLineString(shanhaiSegments);
+                    
+                    // 4. 使用 Turf.js 一秒算出 200m 緩衝區！
+                    var optimizedLine = turf.simplify(riverLine, {tolerance: 0.0001, highQuality: true});
+                    var buffer = turf.buffer(optimizedLine, 200, { units: 'meters' });
+
+                    currentGeoFenceBufferLayer = L.geoJSON(buffer, { 
+                        style: { color: themeColor, weight: 3, opacity: 0.8, fillColor: themeColor, fillOpacity: 0.15, dashArray: '5, 5' } 
+                    }).addTo(map);
+
+                    // 5. 篩選落入這個緩衝區的 Firebase 聲音地標
+                    routePointsData = allMarkersData.filter(i => turf.booleanPointInPolygon(turf.point([i.lon, i.lat]), buffer));
+                    
+                    // 6. 萃取座標點來畫紅色的「導航虛線」
+                    var leafletPath = shanhaiSegments.map(seg => seg.map(coord => [coord[1], coord[0]])); // Turf 轉 Leaflet
+                    
+                    executeStandardRoute(type, leafletPath);
+
                 }).catch(err => {
                     map.closePopup(loadingToast);
-                    alert("載入失敗！請確認「" + fileName + "」檔案是否已經放在與 index.html 相同的資料夾下！\n錯誤訊息：" + err.message);
+                    alert("載入失敗！\n1. 請確認「" + fileName + "」是否存在。\n2. 錯誤細節：" + err.message);
                     toggleRoute('clear', document.getElementById('clearRouteBtn'));
                 });
             }
+// ▲▲▲ 貼上結束 ▲▲▲
 // ▲▲▲ 貼上結束 ▲▲▲
             else if (type.startsWith('geofence')) {
                 var p = { 
