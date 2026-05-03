@@ -44,8 +44,13 @@
                 
                 // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
                 document.addEventListener("DOMContentLoaded", function() {
+                    // 🌟 如果是在內建瀏覽器，強制把迎賓帷幕藏起來，免得它擋住警告！
+                    var splash = document.getElementById('splashScreen');
+                    if (splash) splash.style.display = 'none';
+
                     var overlay = document.createElement('div');
-                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
+                    // 🌟 將 z-index 提升到極限值 2147483647，確保無人能擋
+                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:2147483647; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
                     overlay.innerHTML = `
                         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                         <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
@@ -1036,40 +1041,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .hint-body { font-size: 12px; color: #64748b; line-height: 1.6; }
         .hint-body strong { color: #e74c3c; background: #fff1f2; padding: 2px 6px; border-radius: 6px; font-weight: 800;}
 
-        /* 🌟 迎賓帷幕 (Splash Screen) */
-        .splash-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(241, 245, 249, 0.65); /* 淺色微透明底 */
-            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-            z-index: 999999; display: flex; justify-content: center; align-items: center;
-            transition: opacity 0.8s ease, visibility 0.8s ease;
-        }
-        .splash-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-        
-        .splash-content {
-            background: rgba(255, 255, 255, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
-            border-radius: 24px; padding: 50px 40px;
-            text-align: center; max-width: 85%; width: 420px;
-            transform: translateY(0); transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .splash-screen.is-hidden .splash-content { transform: translateY(-20px) scale(0.95); }
-        
-        .splash-logo { margin-bottom: 20px; color: var(--accent-color); animation: badgeFloat 3s ease-in-out infinite; }
-        .splash-title { font-size: 28px; font-weight: 900; color: #1e293b; margin: 0 0 8px 0; letter-spacing: 1px; }
-        .splash-subtitle { font-size: 14px; font-weight: 800; color: #64748b; margin-bottom: 24px; letter-spacing: 2px; }
-        .splash-desc { font-size: 15px; color: #475569; line-height: 1.7; margin-bottom: 30px; text-align: justify; }
-        
-        .btn-enter-map {
-            background: var(--accent-color); color: white; border: none;
-            padding: 16px 32px; border-radius: 16px; font-size: 16px; font-weight: 800;
-            cursor: pointer; width: 100%; transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(39, 174, 96, 0.3);
-            display: flex; justify-content: center; align-items: center; gap: 10px; letter-spacing: 1px;
-        }
-        .btn-enter-map:hover { background: #219150; transform: translateY(-3px); box-shadow: 0 12px 25px rgba(39, 174, 96, 0.4); }
-        .btn-enter-map:active { transform: translateY(0); }
+        
     </style></head><body>
 
     <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
