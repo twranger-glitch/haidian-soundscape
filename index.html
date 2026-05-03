@@ -1126,15 +1126,51 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .btn-enter-map:hover { background: #047857; transform: translateY(-3px); box-shadow: 0 12px 25px rgba(5, 150, 105, 0.35); }
         .btn-enter-map:active { transform: translateY(0); }
 
-        /* 📱 手機版專屬排版優化：縮減留白，釋放閱讀空間 */
+        /* 📱 手機版專屬：入口帷幕極限壓縮排版 */
         @media (max-width: 600px) {
-            .splash-card { padding: 32px 25px; border-radius: 22px; max-width: 100%; }
-            .splash-title { font-size: 25px; }
-            .splash-subtitle { font-size: 12px; letter-spacing: 3px; margin-bottom: 20px; }
-            .splash-quote { padding: 16px 18px; margin-bottom: 20px; }
-            .splash-quote-text { font-size: 13.5px; line-height: 1.75; }
-            .splash-slogan { font-size: 11.5px; margin-bottom: 24px; }
-            .btn-enter-map { padding: 14px 22px; font-size: 15px; }
+            #splashScreen { padding: 10px; } /* 減少外邊距 */
+            
+            .splash-card { 
+                padding: 20px 20px 18px 20px !important; /* 大幅減少內距 */
+                border-radius: 20px; 
+                max-width: 100%; 
+            }
+
+            .splash-header { margin-bottom: 12px; }
+            .splash-logo { 
+                width: 44px; height: 44px; margin-bottom: 8px; 
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+            }
+            .splash-logo svg { width: 22px; height: 22px; }
+
+            .splash-title { font-size: 22px; }
+            .splash-subtitle { font-size: 11px; letter-spacing: 2px; margin-bottom: 15px; }
+
+            .splash-quote { 
+                padding: 12px 14px; 
+                margin-bottom: 15px; 
+                border-left-width: 3px;
+            }
+            .splash-quote-title { font-size: 13px; margin-bottom: 6px; }
+            .splash-quote-text { font-size: 13px; line-height: 1.6; }
+
+            .splash-slogan { font-size: 11px; margin-bottom: 15px; }
+            .splash-slogan span { font-size: 11px; margin-bottom: 2px; }
+
+            /* 🌟 今日推薦卡片也要跟著變矮 */
+            .featured-sound-card { 
+                padding: 10px 12px; 
+                margin-bottom: 15px; 
+                border-radius: 10px;
+            }
+            .featured-label { font-size: 10px; }
+            .featured-title { font-size: 12.5px; }
+
+            .btn-enter-map { 
+                padding: 12px 20px; 
+                font-size: 15px; 
+                border-radius: 12px;
+            }
         }
 
         /* 🌟 1. 帷幕背景紋理 (紙張與光影) */
@@ -1194,12 +1230,12 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 家鄉是認識世界的起點，聆聽是擁抱土地的方式。
             </div>
 
-            <!-- 🌟 插入：精選聲景推薦 -->
+            <!-- 🌟 插入：聲景隨機推薦 -->
             <div id="featuredSoundCard" class="featured-sound-card" style="display: none;">
                 <div class="featured-label">
-                    <!-- 🌟 換成 Sparkles 星芒圖示，象徵發掘到的寶藏 -->
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path><path d="M5 3v4"></path><path d="M19 17v4"></path><path d="M3 5h4"></path><path d="M17 19h4"></path></svg>
-                    精選聲景推薦
+                    <!-- 🌟 骰子圖示 -->
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M7 7h.01"></path><path d="M17 7h.01"></path><path d="M7 17h.01"></path><path d="M17 17h.01"></path><path d="M12 12h.01"></path></svg>
+                    聲景隨機推薦
                 </div>
                 <div id="featuredSoundTitle" class="featured-title">載入中...</div>
             </div>
