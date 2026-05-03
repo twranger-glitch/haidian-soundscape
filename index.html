@@ -1034,10 +1034,65 @@ body.player-embedded .leaflet-popup .btn-play-main {
             margin-right: 15px; /* 標題避開右上角 */
         }
         .hint-body { font-size: 12px; color: #64748b; line-height: 1.6; }
-        .hint-body strong { color: #e74c3c; background: #fff1f2; padding: 2px 6px; border-radius: 6px; font-weight: 800;}
-    </style></head><body>
+        .hint-body strong { color: #e74c3c; background: #fff1f2; padding: 2px 6px; border-radius: 6px; font-weight: 800;}
 
-    <header class="glass-header">
+        /* 🌟 迎賓帷幕 (Splash Screen) */
+        .splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(241, 245, 249, 0.65); /* 淺色微透明底 */
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            z-index: 999999; display: flex; justify-content: center; align-items: center;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+        .splash-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        
+        .splash-content {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
+            border-radius: 24px; padding: 50px 40px;
+            text-align: center; max-width: 85%; width: 420px;
+            transform: translateY(0); transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .splash-screen.is-hidden .splash-content { transform: translateY(-20px) scale(0.95); }
+        
+        .splash-logo { margin-bottom: 20px; color: var(--accent-color); animation: badgeFloat 3s ease-in-out infinite; }
+        .splash-title { font-size: 28px; font-weight: 900; color: #1e293b; margin: 0 0 8px 0; letter-spacing: 1px; }
+        .splash-subtitle { font-size: 14px; font-weight: 800; color: #64748b; margin-bottom: 24px; letter-spacing: 2px; }
+        .splash-desc { font-size: 15px; color: #475569; line-height: 1.7; margin-bottom: 30px; text-align: justify; }
+        
+        .btn-enter-map {
+            background: var(--accent-color); color: white; border: none;
+            padding: 16px 32px; border-radius: 16px; font-size: 16px; font-weight: 800;
+            cursor: pointer; width: 100%; transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(39, 174, 96, 0.3);
+            display: flex; justify-content: center; align-items: center; gap: 10px; letter-spacing: 1px;
+        }
+        .btn-enter-map:hover { background: #219150; transform: translateY(-3px); box-shadow: 0 12px 25px rgba(39, 174, 96, 0.4); }
+        .btn-enter-map:active { transform: translateY(0); }
+    </style></head><body>
+
+    <!-- 🌟 全螢幕毛玻璃迎賓帷幕 -->
+    <div id="splashScreen" class="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logo">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-3 4 6 2-3h4"></path><circle cx="12" cy="12" r="10"></circle></svg>
+            </div>
+            <h1 class="splash-title">海佃 <span style="color: #27ae60;">溪遊記</span></h1>
+            <div class="splash-subtitle">聲音地景計畫</div>
+            <div class="splash-desc" style="font-weight: 600;">
+                <span style="display:block; text-align:center; color:#27ae60; font-weight:800; margin-bottom:12px;">Hidden below, growing beyond.</span>
+                這是一張用耳朵閱讀的地圖，也是一場關於家鄉、環境與記憶的田野走讀。<br><br>
+                請戴上耳機，與我們一起聆聽土地的真實回音。
+            </div>
+            <button class="btn-enter-map" onclick="enterMap()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3v4z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-6H3v4z"></path></svg>
+                戴上耳機，進入地圖
+            </button>
+        </div>
+    </div>
+
+    <header class="glass-header">
         <h1 class="project-title" style="cursor: pointer;" onclick="window.location.href = window.location.pathname;" title="回到地圖首頁">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
         <nav class="nav-buttons">
             <button onclick="openModal('aboutModal')" title="關於我們">
@@ -3948,5 +4003,30 @@ function mountGlobalPlayerIntoPopup_(retry) {
         });
 
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
+
+        // 🌟 迎賓帷幕邏輯 (記憶功能)
+        document.addEventListener("DOMContentLoaded", function() {
+            var splash = document.getElementById('splashScreen');
+            // 檢查 localStorage 是否有來過的紀錄
+            var hasVisited = localStorage.getItem('haidian_visited');
+            
+            if (hasVisited) {
+                // 如果來過，直接藏起來
+                splash.style.display = 'none';
+            }
+        });
+
+        function enterMap() {
+            var splash = document.getElementById('splashScreen');
+            // 加上隱藏動畫 Class
+            splash.classList.add('is-hidden');
+            // 在瀏覽器打上印記，下次就不會再跳出來了
+            localStorage.setItem('haidian_visited', 'true');
+            
+            // 等動畫 0.8s 播完後，徹底從畫面移除，不佔用資源
+            setTimeout(() => {
+                splash.style.display = 'none';
+            }, 800); 
+        }
     </script>
 </body></html>
