@@ -2674,26 +2674,41 @@ fetch(API_URL, { cache: "no-store" })
     </details>
 `;
 
-            // 🌟 處理延伸閱讀邏輯 (自動判斷是否有填寫，並拆解 標題|網址)
+            // 🌟 處理延伸閱讀邏輯 (強化防呆版)
             var extLinkHTML = "";
             if (item.extLink && item.extLink.trim() !== "") {
-                var parts = item.extLink.split('|');
-                var linkTitle = parts.length > 1 ? parts[0].trim() : "推薦閱讀文章";
-                var linkUrl = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+                var rawExt = item.extLink.trim();
+                var linkTitle = "推薦閱讀文章";
+                var linkUrl = "";
 
-                extLinkHTML = `
-                    <a href="${escapeHTML(linkUrl)}" target="_blank" class="ext-link-card" title="另開新分頁閱讀">
-                        <div class="ext-link-icon">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                        </div>
-                        <div class="ext-link-text">
-                            <span class="ext-link-label">延伸閱讀</span>
-                            <span class="ext-link-title">${escapeHTML(linkTitle)}</span>
-                        </div>
-                    </a>
-                `;
+                if (rawExt.indexOf('|') > -1) {
+                    // 有直線 |，完美格式 (標題 | 網址)
+                    var parts = rawExt.split('|');
+                    linkTitle = parts[0].trim() || linkTitle;
+                    linkUrl = parts[1].trim();
+                } else if (rawExt.toLowerCase().startsWith('http')) {
+                    // 忘記打標題，只貼了網址
+                    linkUrl = rawExt;
+                } else {
+                    // 忘記貼網址，只打了純文字 (標題) -> 轉換為 Google 搜尋連結，避免 404
+                    linkTitle = rawExt;
+                    linkUrl = "https://www.google.com/search?q=" + encodeURIComponent(rawExt);
+                }
+
+                if (linkUrl) {
+                    extLinkHTML = `
+                        <a href="${escapeHTML(linkUrl)}" target="_blank" class="ext-link-card" title="另開新分頁閱讀">
+                            <div class="ext-link-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            </div>
+                            <div class="ext-link-text">
+                                <span class="ext-link-label">延伸閱讀</span>
+                                <span class="ext-link-title">${escapeHTML(linkTitle)}</span>
+                            </div>
+                        </a>
+                    `;
+                }
             }
-
             var cardHTML = `
                 <div class="sound-card">
                     <img src="${item.coverUrl}" class="sound-cover" onerror="this.src='https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop'">
