@@ -4004,28 +4004,38 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
         if (window.innerWidth <= 600) { ['sidePanel', 'routePanel'].forEach(id => document.getElementById(id).classList.add('collapsed')); }
 
-        // 🌟 迎賓帷幕邏輯 (記憶功能)
+        // 🌟 迎賓帷幕邏輯 (強制最上層版)
         document.addEventListener("DOMContentLoaded", function() {
             var splash = document.getElementById('splashScreen');
-            // 檢查 localStorage 是否有來過的紀錄
+            if (!splash) return;
+
+            // 1. 先強制設定行內樣式，打死所有 CSS 權重問題
+            splash.style.cssText = "position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important; display: flex !important; pointer-events: auto !important;";
+            
+            // 2. 檢查 localStorage
             var hasVisited = localStorage.getItem('haidian_visited');
             
             if (hasVisited) {
-                // 如果來過，直接藏起來
-                splash.style.display = 'none';
+                splash.style.display = 'none !important';
+            } else {
+                // 3. 如果沒來過，強制移除可能干擾的 hidden class (如果有的話)
+                splash.classList.remove('is-hidden');
             }
         });
 
         function enterMap() {
             var splash = document.getElementById('splashScreen');
-            // 加上隱藏動畫 Class
-            splash.classList.add('is-hidden');
-            // 在瀏覽器打上印記，下次就不會再跳出來了
+            if (!splash) return;
+            
+            // 讓它開始淡出
+            splash.style.opacity = '0';
+            splash.style.transition = 'opacity 0.8s ease';
+            splash.style.pointerEvents = 'none';
+            
             localStorage.setItem('haidian_visited', 'true');
             
-            // 等動畫 0.8s 播完後，徹底從畫面移除，不佔用資源
             setTimeout(() => {
-                splash.style.display = 'none';
+                splash.style.display = 'none !important';
             }, 800); 
         }
     </script>
