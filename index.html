@@ -1136,6 +1136,36 @@ body.player-embedded .leaflet-popup .btn-play-main {
             .splash-slogan { font-size: 11.5px; margin-bottom: 24px; }
             .btn-enter-map { padding: 14px 22px; font-size: 15px; }
         }
+
+        /* 🌟 1. 帷幕背景紋理 (紙張與光影) */
+        #splashScreen::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 20% 20%, rgba(16,185,129,0.15), transparent 28%), radial-gradient(circle at 80% 70%, rgba(14,165,233,0.1), transparent 30%); opacity: 0.9; z-index: -1;}
+        #splashScreen::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.05; background-image: linear-gradient(120deg, rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(30deg, rgba(255,255,255,0.5) 1px, transparent 1px); background-size: 40px 40px; mix-blend-mode: overlay; z-index: -1;}
+
+        /* 🌟 2. 今日聲景推薦卡片 */
+        .featured-sound-card { margin: 0 0 20px 0; padding: 12px 16px; border-radius: 12px; background: linear-gradient(135deg, #f8fafc, #ecfdf5); border: 1px solid #d1fae5; text-align: left; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .featured-sound-card:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(5, 150, 105, 0.1); border-color: #a7f3d0;}
+        .featured-label { font-size: 11px; font-weight: 900; color: #059669; letter-spacing: 1.5px; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;}
+        .featured-title { font-size: 13.5px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+
+        /* 🌟 3. 聲音光點 Marker */
+        .custom-sound-icon { background: transparent; border: none; }
+        .sound-dot-marker { width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); border: 2px solid #fff; box-shadow: 0 0 0 4px rgba(39,174,96,0.15), 0 4px 10px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .sound-dot-marker::after { content: ""; width: 12px; height: 12px; border-radius: 50%; background: #27ae60; box-shadow: 0 0 8px rgba(39,174,96,0.6); }
+        .sound-dot-marker.nature::after { background: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.6);}
+        .sound-dot-marker.culture::after { background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.6);}
+        .sound-dot-marker.industry::after { background: #ea580c; box-shadow: 0 0 8px rgba(234,88,12,0.6);}
+        .sound-dot-marker.space::after { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.6);}
+        .sound-dot-marker.history::after { background: #8b5cf6; box-shadow: 0 0 8px rgba(139,92,246,0.6);}
+        .sound-dot-marker.default::after { background: #64748b; }
+        .sound-dot-marker.pulse { animation: soundPulse 2.5s infinite ease-in-out; }
+        @keyframes soundPulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39,174,96,0.4); } 70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(39,174,96,0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39,174,96,0); } }
+
+        /* 🌟 4. 聆聽模式沉浸感 */
+        body.listening-mode .glass-header, body.listening-mode #sidePanel, body.listening-mode #routePanel, body.listening-mode .right-tools-wrapper, body.listening-mode .locate-me-wrapper, body.listening-mode .leaflet-control-container { opacity: 0 !important; pointer-events: none !important; transform: translateY(-10px); transition: all 0.5s ease; }
+        body.listening-mode #map { filter: saturate(0.8) contrast(1.1) brightness(0.85); transition: filter 0.6s ease; }
+        .listening-hint { position: fixed; left: 50%; top: 25px; transform: translateX(-50%) translateY(-20px); z-index: 3000; background: rgba(15, 23, 42, 0.85); color: #fff; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 800; letter-spacing: 1px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 32px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: 0.5s ease; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1);}
+        body.listening-mode .listening-hint { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; cursor: pointer; }
+        .listening-hint:hover { background: #e74c3c; border-color: #fca5a5; }
     </style>
 
     <div id="splashScreen">
@@ -1164,6 +1194,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 家鄉是認識世界的起點，聆聽是擁抱土地的方式。
             </div>
 
+            <!-- 🌟 插入：今日聲景推薦 -->
+            <div id="featuredSoundCard" class="featured-sound-card" style="display: none;">
+                <div class="featured-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    今日聲景
+                </div>
+                <div id="featuredSoundTitle" class="featured-title">載入中...</div>
+            </div>
+
             <button class="btn-enter-map" onclick="enterMap()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
                 開啟聲音地圖
@@ -1171,9 +1210,20 @@ body.player-embedded .leaflet-popup .btn-play-main {
         </div>
     </div>
 
+    <!-- 🌟 插入：聆聽模式退出提示 -->
+    <div class="listening-hint" onclick="toggleListeningMode()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        點擊退出聆聽模式
+    </div>
+
     <header class="glass-header">
         <h1 class="project-title" style="cursor: pointer;" onclick="window.location.href = window.location.pathname;" title="回到地圖首頁">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
         <nav class="nav-buttons">
+            <!-- 🌟 插入：聆聽模式切換按鈕 -->
+            <button onclick="toggleListeningMode()" title="沉浸聆聽模式">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3v4z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-6H3v4z"></path></svg>
+                <span class="full-text">聆聽模式</span><span class="short-text">聆聽</span>
+            </button>
             <button onclick="openModal('aboutModal')" title="關於我們">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                 <span class="full-text">關於我們</span><span class="short-text">關於</span>
@@ -2633,6 +2683,28 @@ fetch(API_URL, { cache: "no-store" })
                 renderMarkers(data);
                 renderLatestSubmissions(data);
 
+                // 🌟 設定今日推薦聲景
+                var box = document.getElementById('featuredSoundCard');
+                var titleEl = document.getElementById('featuredSoundTitle');
+                var finishedData = data.filter(item => !item.isProcessing && item.title && !isNaN(item.lat));
+                if (finishedData.length > 0 && box && titleEl) {
+                    var picked = finishedData[Math.floor(Math.random() * finishedData.length)];
+                    titleEl.innerText = picked.title + " ｜ " + (picked.author || "特派員");
+                    box.style.display = 'block';
+                    box.onclick = function() {
+                        enterMap();
+                        setTimeout(() => focusMarkerOnMap(picked.uid), 700);
+                    };
+                }
+
+                // 🌟 全域切換聆聽模式
+                window.toggleListeningMode = function() {
+                    document.body.classList.toggle('listening-mode');
+                    if (document.body.classList.contains('listening-mode')) {
+                        closeAllDrawers(); // 進入時自動收起所有側邊欄
+                    }
+                };
+
                 // 🚀 自動檢查網址是否帶有分享參數，有的話直接降落
                 const params = new URLSearchParams(window.location.search);
                 const workUid = params.get("work");
@@ -2917,7 +2989,16 @@ fetch(API_URL, { cache: "no-store" })
                 var displayLat = parseFloat(item.lat) + jitter.lat;
                 var displayLon = parseFloat(item.lon) + jitter.lon;
 
-                marker = L.marker([displayLat, displayLon]).bindPopup(cardHTML, {
+                // 🌟 產生專屬類別的聲音光點
+                var customIcon = L.divIcon({
+                    className: 'custom-sound-icon',
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13],
+                    popupAnchor: [0, -12],
+                    html: `<div class="sound-dot-marker ${catClass} pulse"></div>`
+                });
+
+                marker = L.marker([displayLat, displayLon], { icon: customIcon }).bindPopup(cardHTML, {
                     autoPan: true,
                     keepInView: false,
                     closeOnClick: false,      // ✅ 保留：防護 iOS 手指誤觸地圖背景導致卡片消失
