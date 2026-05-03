@@ -1128,6 +1128,8 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
         /* 📱 手機版專屬：入口帷幕極限壓縮排版 */
         @media (max-width: 600px) {
+            /* 🌟 修正彈出卡片被右側按鈕遮擋：整體往左偏移 35px */
+            .leaflet-popup { margin-left: -35px !important; }
             #splashScreen { padding: 10px; } /* 減少外邊距 */
             
             .splash-card { 
