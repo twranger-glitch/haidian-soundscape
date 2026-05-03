@@ -4,7 +4,7 @@
     <title>海佃溪遊記 | 聲音地景計畫</title>
     <meta property="og:type" content="website">
     <meta property="og:title" content="海佃溪遊記 | 聲音地景計畫">
-    <meta property="og:description" content="跟著海佃國小圖書室，沿著溪流與大圳，進行一場聽覺的田野調查。戴上耳機，一起聆聽台江的聲音！">
+    <meta property="og:description" content="海佃地下圖書室聲音地景計畫。這是一張用耳朵閱讀的地圖，邀您沿著水圳與聚落，一起把台江的聲音帶回來。">
     <meta property="og:image" content="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=1200&auto=format&fit=crop"> 
     <meta property="og:url" content="https://twranger-glitch.github.io/haidian-soundscape/">
     <meta property="og:site_name" content="海佃溪遊記">
@@ -1194,11 +1194,12 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 家鄉是認識世界的起點，聆聽是擁抱土地的方式。
             </div>
 
-            <!-- 🌟 插入：今日聲景推薦 -->
+            <!-- 🌟 插入：精選聲景推薦 -->
             <div id="featuredSoundCard" class="featured-sound-card" style="display: none;">
                 <div class="featured-label">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    今日聲景
+                    <!-- 🌟 換成 Sparkles 星芒圖示，象徵發掘到的寶藏 -->
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path><path d="M5 3v4"></path><path d="M19 17v4"></path><path d="M3 5h4"></path><path d="M17 19h4"></path></svg>
+                    精選聲景推薦
                 </div>
                 <div id="featuredSoundTitle" class="featured-title">載入中...</div>
             </div>
@@ -2690,6 +2691,8 @@ fetch(API_URL, { cache: "no-store" })
                 if (finishedData.length > 0 && box && titleEl) {
                     var picked = finishedData[Math.floor(Math.random() * finishedData.length)];
                     titleEl.innerText = picked.title + " ｜ " + (picked.author || "特派員");
+                    
+                    // 🌟 確保這行有確實對應到 HTML
                     box.style.display = 'block';
                     box.onclick = function() {
                         enterMap();
@@ -2732,7 +2735,7 @@ fetch(API_URL, { cache: "no-store" })
             if (!item) return alert("找不到這件作品");
 
             const shareUrl = item.shortUrl || (window.location.origin + window.location.pathname + "?work=" + uid);
-            const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，快戴上耳機來聽聽看！`; // 🚀 移除 Emoji
+            const shareText = `我在【海佃 溪遊記】聽到這個聲音地景：「${item.title}」，一起打開耳朵來聽聽看！`;
 
             // 1. 嘗試優先使用手機原生分享面板
             if (navigator.share) {
