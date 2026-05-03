@@ -1053,14 +1053,21 @@ body.player-embedded .leaflet-popup .btn-play-main {
             z-index: 2147483647; display: flex; justify-content: center; align-items: center;
             transition: opacity 0.6s ease;
             font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif;
+            padding: 16px; /* 確保卡片即使滿版，也不會緊貼螢幕邊緣 */
+            box-sizing: border-box;
         }
         .splash-card {
             background: #ffffff; border: 1px solid rgba(255, 255, 255, 0.9);
             box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.8);
             border-radius: 24px; padding: 45px 40px;
-            max-width: 88%; width: 440px;
+            max-width: 100%; width: 440px; /* 改用 100% 配合 border-box 避免破版 */
+            box-sizing: border-box; /* 🎯 終極防爆：把 padding 算進寬度內！ */
+            max-height: calc(100dvh - 32px); /* 防止在橫向螢幕被切斷 */
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             transform: translateY(0); transition: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative; overflow: hidden;
+            position: relative;
         }
         #splashScreen.is-hidden { opacity: 0; pointer-events: none; }
         #splashScreen.is-hidden .splash-card { transform: translateY(20px) scale(0.95); }
@@ -1118,6 +1125,17 @@ body.player-embedded .leaflet-popup .btn-play-main {
         }
         .btn-enter-map:hover { background: #047857; transform: translateY(-3px); box-shadow: 0 12px 25px rgba(5, 150, 105, 0.35); }
         .btn-enter-map:active { transform: translateY(0); }
+
+        /* 📱 手機版專屬排版優化：縮減留白，釋放閱讀空間 */
+        @media (max-width: 600px) {
+            .splash-card { padding: 32px 25px; border-radius: 22px; max-width: 100%; }
+            .splash-title { font-size: 25px; }
+            .splash-subtitle { font-size: 12px; letter-spacing: 3px; margin-bottom: 20px; }
+            .splash-quote { padding: 16px 18px; margin-bottom: 20px; }
+            .splash-quote-text { font-size: 13.5px; line-height: 1.75; }
+            .splash-slogan { font-size: 11.5px; margin-bottom: 24px; }
+            .btn-enter-map { padding: 14px 22px; font-size: 15px; }
+        }
     </style>
 
     <div id="splashScreen">
