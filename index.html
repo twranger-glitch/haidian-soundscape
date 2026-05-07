@@ -1042,7 +1042,112 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .hint-body strong { color: #e74c3c; background: #fff1f2; padding: 2px 6px; border-radius: 6px; font-weight: 800;}
 
         
-    </style></head><body>
+            /* 🌟 南山公墓專屬：狙擊游標、高對比 Popup 與左側分類選單 */
+        body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
+
+        .nanshan-category-menu {
+            position: absolute;
+            left: 20px;
+            bottom: 28px;
+            z-index: 1200;
+            width: min(300px, calc(100vw - 40px));
+            max-height: min(420px, calc(100vh - 180px));
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(221, 214, 254, 0.95);
+            border-radius: 18px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+            padding: 14px;
+            box-sizing: border-box;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        .nanshan-category-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .nanshan-category-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #6d28d9;
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+        }
+
+        .nanshan-category-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .nanshan-mini-btn {
+            border: 1px solid #ddd6fe;
+            background: #f5f3ff;
+            color: #6d28d9;
+            border-radius: 999px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .nanshan-mini-btn:hover { background: #ede9fe; transform: translateY(-1px); }
+
+        .nanshan-category-note {
+            font-size: 11.5px;
+            line-height: 1.5;
+            color: #64748b;
+            background: #faf5ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        .nanshan-category-list {
+            overflow-y: auto;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .nanshan-category-list::-webkit-scrollbar { width: 4px; }
+        .nanshan-category-list::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
+
+        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; }
+        .nanshan-popup-img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; border-bottom: 2px solid #e9d5ff; }
+        .nanshan-popup-body { padding: 15px; }
+        .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
+        .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
+        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 900; }
+        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
+        .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
+        .nanshan-popup-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        @media (max-width: 600px) {
+            .nanshan-category-menu {
+                left: 10px;
+                bottom: 18px;
+                width: min(292px, calc(100vw - 20px));
+                max-height: calc(100dvh - 230px);
+                padding: 12px;
+            }
+            .nanshan-category-title { font-size: 13px; }
+            .nanshan-category-note { font-size: 11px; }
+        }
+
+</style></head><body>
 
     <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
     <style>
@@ -1439,8 +1544,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <div id="placeSearchResultsContainer"></div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
-                <label>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
+                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
+                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer; flex-shrink:0;">
+                    南山公墓歷史名人墓塚
+                </label>
+
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>                <label>
                     <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
                     臺灣精細地圖
                 </label>
@@ -1659,6 +1771,23 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- 🌟 南山公墓：左側獨立分類目錄 -->
+    <div id="nanshanCategoryMenu" class="nanshan-category-menu" aria-label="南山公墓年代分類選單">
+        <div class="nanshan-category-head">
+            <div class="nanshan-category-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M6 21V8l6-5 6 5v13"></path><path d="M10 21v-6h4v6"></path></svg>
+                南山公墓分類
+            </div>
+            <div class="nanshan-category-actions">
+                <button type="button" class="nanshan-mini-btn" onclick="setAllNanshanCategories(true)">全選</button>
+                <button type="button" class="nanshan-mini-btn" onclick="setAllNanshanCategories(false)">清空</button>
+                <button type="button" class="nanshan-mini-btn" onclick="toggleNanshanLayer(false); var t=document.getElementById('nanshanToggle'); if(t) t.checked=false;">關閉</button>
+            </div>
+        </div>
+        <div class="nanshan-category-note">可依原始圖資的年代／圖層分類篩選墓塚。點擊紫色光點可開啟墳墓人物卡片。</div>
+        <div id="nanshanCategoryList" class="nanshan-category-list"></div>
     </div>
 
     <div id="map"></div>
@@ -2418,6 +2547,260 @@ var map = L.map('map', {
                 }
             });
         }
+
+        // ==========================================
+        // 🌟 南山公墓：圖資載入、墳墓卡片、分類選單
+        // ==========================================
+        var nanshanLayer = null;
+        var nanshanGeoJsonData = null;
+        var nanshanDidFitBounds = false;
+        var nanshanCanvasRenderer = L.canvas({ padding: 0.5 });
+
+        function getNanshanProp(props, keys, fallback) {
+            props = props || {};
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (props[key] !== undefined && props[key] !== null && String(props[key]).trim() !== '') {
+                    return props[key];
+                }
+            }
+            return fallback;
+        }
+
+        function stripNanshanHtmlToText(rawHtml) {
+            if (!rawHtml) return '';
+            var preHtml = String(rawHtml).replace(/<br\s*\/?\s*>/gi, '\n');
+            var doc = new DOMParser().parseFromString(preHtml, 'text/html');
+            doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(function(el) { el.remove(); });
+
+            var rows = Array.from(doc.querySelectorAll('tr'));
+            if (rows.length > 0) {
+                var collectedLines = [];
+                rows.forEach(function(row) {
+                    var cells = Array.from(row.querySelectorAll('td, th')).map(function(c) { return c.textContent.trim(); }).filter(Boolean);
+                    if (cells.length >= 2) {
+                        var label = cells[0];
+                        var value = cells.slice(1).join(' ').trim();
+                        if (!value) return;
+                        if (label.indexOf('說明') > -1 || label.indexOf('簡介') > -1 || label === '') {
+                            collectedLines.push(value);
+                        } else if (label !== '名稱' && label.toLowerCase() !== 'name') {
+                            collectedLines.push('【' + label + '】\n' + value);
+                        }
+                    } else if (cells.length === 1) {
+                        collectedLines.push(cells[0]);
+                    }
+                });
+                if (collectedLines.length > 0) return collectedLines.join('\n\n');
+            }
+
+            return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        function collectNanshanImages(props, rawHtml) {
+            var images = [];
+            function pushUrl(url) {
+                if (!url) return;
+                String(url).split(/[\n,]/).forEach(function(part) {
+                    var matches = String(part).match(/https?:\/\/[^\s"'<>]+/g);
+                    if (matches) {
+                        matches.forEach(function(src) {
+                            if (src && images.indexOf(src) === -1 && src.indexOf('gstatic.com/mapspro') === -1) images.push(src);
+                        });
+                    }
+                });
+            }
+
+            ['gx_media_links', 'image', 'Image', 'photo', 'Photo', '照片', '圖片'].forEach(function(key) {
+                var val = props && props[key];
+                if (val && typeof val === 'object' && val.value) val = val.value;
+                pushUrl(val);
+            });
+
+            if (rawHtml) {
+                var doc = new DOMParser().parseFromString(String(rawHtml), 'text/html');
+                doc.querySelectorAll('img').forEach(function(img) {
+                    pushUrl(img.getAttribute('src'));
+                });
+            }
+
+            return images;
+        }
+
+        function extractNanshanData(props) {
+            props = props || {};
+            var name = getNanshanProp(props, ['Name', 'name', '名稱', 'title', 'Title'], '未命名墓塚');
+            var layerName = getNanshanProp(props, ['layer', 'Layer', '圖層', '年代', 'category', 'Category'], '未分類年代');
+            var rawHtml = '';
+
+            if (typeof props.description === 'string') rawHtml = props.description;
+            else if (props.description && props.description.value) rawHtml = props.description.value;
+            else rawHtml = getNanshanProp(props, ['Description', '說明', '簡介', 'bio', 'Bio'], '');
+
+            var images = collectNanshanImages(props, rawHtml);
+            var bioContent = stripNanshanHtmlToText(rawHtml);
+            if (!bioContent) {
+                bioContent = getNanshanProp(props, ['說明', '簡介', 'bio', 'Bio', 'description'], '這筆圖資尚未提供完整說明。');
+                if (bioContent && typeof bioContent === 'object' && bioContent.value) bioContent = bioContent.value;
+                bioContent = stripNanshanHtmlToText(bioContent) || '這筆圖資尚未提供完整說明。';
+            }
+
+            return {
+                name: String(name).trim(),
+                layerName: String(layerName).trim() || '未分類年代',
+                images: images,
+                bioContent: String(bioContent).trim()
+            };
+        }
+
+        function formatNanshanBio(text) {
+            var safe = escapeHTML(text || '這筆圖資尚未提供完整說明。');
+            safe = safe.replace(/【([^】]+)】/g, '<strong>【$1】</strong>');
+            return safe;
+        }
+
+        function buildNanshanPopup(feature) {
+            var data = extractNanshanData(feature.properties || {});
+            var firstImage = data.images && data.images.length ? data.images[0] : '';
+            var imageHtml = firstImage ? '<img class="nanshan-popup-img" src="' + escapeHTML(firstImage) + '" alt="' + escapeHTML(data.name) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';">' : '';
+            return '' +
+                '<div class="nanshan-popup-content">' +
+                    imageHtml +
+                    '<div class="nanshan-popup-body">' +
+                        '<h3>' + escapeHTML(data.name) + '</h3>' +
+                        '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
+                        '<div class="source-tag">南山公墓圖資｜' + escapeHTML(data.layerName) + '</div>' +
+                    '</div>' +
+                '</div>';
+        }
+
+        window.updateNanshanMap = function() {
+            if (!nanshanGeoJsonData) return;
+            if (nanshanLayer) {
+                map.removeLayer(nanshanLayer);
+                nanshanLayer = null;
+            }
+
+            var checkboxes = document.querySelectorAll('.nanshan-cat-checkbox');
+            var activeCats = Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+
+            nanshanLayer = L.geoJSON(nanshanGeoJsonData, {
+                filter: function(feature) {
+                    var data = extractNanshanData(feature.properties || {});
+                    return activeCats.indexOf(data.layerName) > -1;
+                },
+                pointToLayer: function(feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        renderer: nanshanCanvasRenderer,
+                        radius: 3,
+                        color: 'rgba(255,255,255,0.65)',
+                        weight: 1,
+                        fillColor: '#8b5cf6',
+                        fillOpacity: 0.9
+                    });
+                },
+                style: function() {
+                    return {
+                        color: '#8b5cf6',
+                        weight: 2,
+                        opacity: 0.75,
+                        fillColor: '#8b5cf6',
+                        fillOpacity: 0.18
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup(function() { return buildNanshanPopup(feature); }, {
+                        maxWidth: 320,
+                        autoPan: true,
+                        className: 'nanshan-custom-popup',
+                        autoPanPaddingTopLeft: [15, 60]
+                    });
+                }
+            });
+
+            nanshanLayer.addTo(map);
+
+            var status = document.getElementById('nanshanLayerStatus');
+            if (status) status.textContent = activeCats.length + ' 類';
+
+            if (!nanshanDidFitBounds && nanshanLayer.getLayers().length > 0) {
+                try {
+                    map.fitBounds(nanshanLayer.getBounds(), { padding: [28, 28], maxZoom: 17 });
+                    nanshanDidFitBounds = true;
+                } catch (err) {}
+            }
+        };
+
+        function buildNanshanCategoryMenu() {
+            if (!nanshanGeoJsonData || !Array.isArray(nanshanGeoJsonData.features)) return;
+            var categories = new Set();
+            nanshanGeoJsonData.features.forEach(function(f) {
+                categories.add(extractNanshanData((f && f.properties) || {}).layerName);
+            });
+
+            var listContainer = document.getElementById('nanshanCategoryList');
+            if (!listContainer) return;
+
+            var html = '';
+            Array.from(categories).sort().forEach(function(cat) {
+                html += '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px; color:#475569; font-weight:700; margin-bottom:4px; transition:0.2s;">' +
+                    '<input type="checkbox" class="nanshan-cat-checkbox" value="' + escapeHTML(cat) + '" checked onchange="updateNanshanMap()" style="accent-color:#8b5cf6; width:16px; height:16px; cursor:pointer; flex-shrink:0;">' +
+                    '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHTML(cat) + '</span>' +
+                '</label>';
+            });
+            listContainer.innerHTML = html;
+        }
+
+        window.setAllNanshanCategories = function(checked) {
+            document.querySelectorAll('.nanshan-cat-checkbox').forEach(function(cb) { cb.checked = checked; });
+            updateNanshanMap();
+        };
+
+        window.toggleNanshanLayer = function(checked) {
+            var leftMenu = document.getElementById('nanshanCategoryMenu');
+            var toggle = document.getElementById('nanshanToggle');
+
+            if (!checked) {
+                if (nanshanLayer) {
+                    map.removeLayer(nanshanLayer);
+                    nanshanLayer = null;
+                }
+                document.body.classList.remove('nanshan-mode');
+                if (leftMenu) leftMenu.style.display = 'none';
+                if (toggle) toggle.checked = false;
+                return;
+            }
+
+            document.body.classList.add('nanshan-mode');
+            if (leftMenu) leftMenu.style.display = 'flex';
+
+            if (!nanshanGeoJsonData) {
+                if (toggle) toggle.disabled = true;
+                fetch('./nanshan_cemetery.geojson')
+                    .then(function(res) {
+                        if (!res.ok) throw new Error('找不到圖資檔案');
+                        return res.json();
+                    })
+                    .then(function(data) {
+                        nanshanGeoJsonData = data;
+                        buildNanshanCategoryMenu();
+                        updateNanshanMap();
+                        if (toggle) toggle.disabled = false;
+                    })
+                    .catch(function(err) {
+                        console.error('南山公墓圖層載入錯誤：', err);
+                        alert('南山公墓圖資載入失敗，請確認 nanshan_cemetery.geojson 是否與 index.html 放在同一層。');
+                        if (toggle) {
+                            toggle.checked = false;
+                            toggle.disabled = false;
+                        }
+                        document.body.classList.remove('nanshan-mode');
+                        if (leftMenu) leftMenu.style.display = 'none';
+                    });
+            } else {
+                updateNanshanMap();
+            }
+        };
 
         // 初始化
         taiwanLayer.addTo(map);
