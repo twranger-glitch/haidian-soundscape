@@ -443,15 +443,19 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .ext-link-label { font-size: 10.5px; font-weight: 800; color: #64748b; letter-spacing: 0.5px; margin-bottom: 2px;}
         .ext-link-title { font-size: 13.5px; font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;}
 
-        /* 🌟 南山公墓 Popup 專屬樣式 */
-        .nanshan-popup { max-width: 280px; max-height: 450px; overflow-y: auto; font-family: 'Noto Sans TC', sans-serif; }
-        .nanshan-popup::-webkit-scrollbar { width: 4px; }
-        .nanshan-popup::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .nanshan-popup h3 { margin: 0 0 8px 0; font-size: 17px; font-weight: 800; color: #1e293b; line-height: 1.3; }
-        .nanshan-popup .layer-tag { display: inline-block; padding: 4px 10px; border-radius: 8px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 10px; letter-spacing: 0.5px; }
-        .nanshan-popup img { width: 100%; height: auto; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .nanshan-popup .desc { font-size: 13.5px; color: #475569; line-height: 1.6; text-align: justify; margin-bottom: 12px; }
-        .nanshan-popup .source { padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 11px; color: #94a3b8; font-weight: 600; }
+        /* 🌟 南山公墓專屬：狙擊游標與高對比 Popup */
+        body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
+        
+        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', sans-serif; }
+        .nanshan-popup-img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; }
+        .nanshan-popup-body { padding: 15px; }
+        .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
+        .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
+        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 800; }
+        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
+        
+        .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
+        .nanshan-popup-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
         /* 🌟 防爆內部滾動條與文字排版設定 */
         .sound-desc {
@@ -1461,56 +1465,6 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <div id="placeSearchResultsContainer"></div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
-                <label>
-                    <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
-                    臺灣精細地圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
-                    全球通用地圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
-                    ESRI 衛星影像
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
-                    OSM 標準地圖
-                </label>
-                
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
-                
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
-                <label>
-                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
-                    1895 臺南府迅速測圖
-                </label>
-                <label>
-                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
-                    1904 臺灣堡圖
-                </label>
-                
-                <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
-                    <span style="color:#059669; font-weight:800;">目前載入：</span>
-                    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
-                </div>
-
-                <div id="opacityControl" style="display:none; margin-top:10px; padding:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
-                        <span>透明度</span>
-                        <span id="opacityValue">80%</span>
-                    </div>
-                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
-                </div>
-
-                <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                    更多歷史圖層
-                </button>
-
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
-
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
                 <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
                     <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer;"> 
@@ -1521,15 +1475,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方災害圖資</div>
                 <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:16px; height:16px;"> 
-                    南山公墓歷史名人墓塚
+                    <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; margin-right:6px; width:17px; height:17px; cursor:pointer;">
+                    啟用官方災害圖資
                 </label>
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署)</div>
-                <label>
-                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
+                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
+                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; margin-right:6px; width:17px; height:17px; cursor:pointer;">
                     顯示淹水潛勢圖
                 </label>
 
@@ -2458,7 +2412,7 @@ var map = L.map('map', {
         }
 
         // ==========================================
-        // 🌟 南山公墓 (深度圖文萃取方案 - 解決破圖與文字黏貼問題)
+        // 🌟 南山公墓 (神級圖文解析 + 高效能點位)
         // ==========================================
         let nanshanLayer = null;
         const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
@@ -2468,38 +2422,45 @@ var map = L.map('map', {
             let images = [];
             let bioContent = "";
 
-            // 1. 照片採集：從 Google 的多媒體欄位抓取
+            // 1. 照片採集：從多媒體欄位抓取
             if (props.gx_media_links) {
-                images = props.gx_media_links.split(/\s+/).filter(u => u.startsWith('http'));
+                let links = (typeof props.gx_media_links === 'string') ? props.gx_media_links : (props.gx_media_links.value || '');
+                images = images.concat(links.split(/\s+/).filter(u => u.startsWith('http')));
             }
 
-            // 2. 生平解析：處理 Google My Maps 繁瑣的表格 HTML
+            // 2. 生平解析：處理 Google My Maps 的複雜 HTML
             let rawHtml = "";
             if (typeof props.description === 'string') rawHtml = props.description;
             else if (props.description && props.description.value) rawHtml = props.description.value;
 
             if (rawHtml) {
-                const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
+                // 將 <br> 預先轉為 \n 保留斷行
+                let preHtml = rawHtml.replace(/<br\s*[\/]?>/gi, '\n');
+                const doc = new DOMParser().parseFromString(preHtml, 'text/html');
                 
-                // 若 HTML 裡有 img 標籤但上面沒抓到，補抓之
+                // 抓取內嵌 img (並排除 Google 預設圖示)
                 doc.querySelectorAll('img').forEach(img => {
                     let src = img.getAttribute('src');
-                    if (src && !images.includes(src)) images.push(src);
+                    if (src && !src.includes('gstatic.com/mapspro') && !images.includes(src)) {
+                        images.push(src);
+                    }
                 });
 
-                // 核心修復：解析 <tr> 表格結構，將標籤與內容分離
+                // 移除不需要的標籤
+                doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(el => el.remove());
+
+                // 深度萃取表格內容
                 const rows = Array.from(doc.querySelectorAll('tr'));
                 if (rows.length > 0) {
                     let collectedLines = [];
                     rows.forEach(row => {
                         const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());
                         if (cells.length >= 2) {
-                            // 排除掉「名稱」這類標題，只抓「內容」
                             let label = cells[0];
                             let value = cells[1];
                             if (label.includes("說明") || label.includes("簡介") || label === "") {
                                 collectedLines.push(value);
-                            } else if (label !== "名稱") {
+                            } else if (label !== "名稱" && label !== "name") {
                                 collectedLines.push(`【${label}】\n${value}`);
                             }
                         } else if (cells.length === 1 && cells[0] !== name) {
@@ -2512,16 +2473,16 @@ var map = L.map('map', {
                 }
             }
 
-            // 最終修整：移除過多換行
+            // 清理多餘換行
             bioContent = bioContent.replace(/\n{3,}/g, '\n\n');
 
-            return { name, bio: bioContent, images: [...new Set(images)].slice(0, 1) };
+            return { name, bio: bioContent, images: [...new Set(images)] };
         }
 
         function buildNanshanPopup(feature) {
             const { name, bio, images } = extractNanshanData(feature.properties);
             
-            // 頂部大圖，若載入失敗則不佔空間
+            // 頂部大圖，若載入失敗則不顯示
             let imgHtml = images.length > 0 
                 ? `<img src="${escapeHTML(images[0])}" class="nanshan-popup-img" onerror="this.style.display='none'" loading="lazy">`
                 : "";
@@ -2531,7 +2492,7 @@ var map = L.map('map', {
                     ${imgHtml}
                     <div class="nanshan-popup-body">
                         <h3>${escapeHTML(name)}</h3>
-                        <div class="bio-text">${bio ? escapeHTML(bio) : "目前尚無詳細生平記載"}</div>
+                        <div class="bio-text">${bio ? escapeHTML(bio).replace(/\n/g, '<br>') : "目前尚無詳細生平記載"}</div>
                         <div class="source-tag">資料來源：南山公墓歷史名人墓塚位置圖</div>
                     </div>
                 </div>
@@ -2557,7 +2518,7 @@ var map = L.map('map', {
                             pointToLayer: function (feature, latlng) {
                                 return L.circleMarker(latlng, {
                                     renderer: customCanvasRenderer,
-                                    radius: 1.5,             // 🌟 點位瘦身，像星塵一樣細緻
+                                    radius: 1.5,             // 🌟 點位極致瘦身
                                     color: 'rgba(255,255,255,0.5)',
                                     weight: 0.5,             
                                     fillColor: '#8b5cf6',    
@@ -2578,6 +2539,7 @@ var map = L.map('map', {
                     })
                     .catch(err => {
                         console.error('南山公墓載入錯誤：', err);
+                        alert("圖資載入失敗，請確認檔案是否存在。");
                         document.getElementById('nanshanToggle').checked = false;
                         document.getElementById('nanshanToggle').disabled = false;
                         document.body.classList.remove('nanshan-mode');
