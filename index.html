@@ -2665,7 +2665,94 @@ var map = L.map('map', {
             return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
         }
 
-                function collectNanshanImages(props, rawHtml) {
+                        var NANSHAN_ERA_ORDER = {
+            '明鄭／明代': 1,
+            '清朝／清領': 2,
+            '日治時期': 3,
+            '1945 之後／戰後': 4,
+            '年代待考': 5,
+            '其他／非墓塚或未判定': 6
+        };
+
+        function normalizeNanshanColor(rawColor) {
+            return String(rawColor || '').trim().toLowerCase();
+        }
+
+        function getNanshanFeatureColor(props) {
+            props = props || {};
+
+            var color = normalizeNanshanColor(props['icon-color'] || props.iconColor || props.color);
+            if (color) return color;
+
+            var styleUrl = String(props.styleUrl || props.styleurl || '').toLowerCase();
+            var match = styleUrl.match(/-([0-9a-f]{6})(?:-|$)/i);
+            if (match && match[1]) return '#' + match[1].toLowerCase();
+
+            return '';
+        }
+
+        function getNanshanEraLabel(props) {
+            var color = getNanshanFeatureColor(props);
+
+            switch (color) {
+                case '#f57c00':
+                    return '明鄭／明代';
+
+                case '#01579b':
+                    return '清朝／清領';
+
+                case '#9c27b0':
+                case '#673ab7':
+                    return '日治時期';
+
+                case '#7cb342':
+                    return '1945 之後／戰後';
+
+                case '#0288d1':
+                case '#000000':
+                    return '年代待考';
+
+                default:
+                    return '其他／非墓塚或未判定';
+            }
+        }
+
+        function getNanshanEraColor(props) {
+            var color = getNanshanFeatureColor(props);
+
+            if (color === '#000000') return '#64748b';
+            if (color) return color;
+
+            return '#8b5cf6';
+        }
+
+        function getNanshanCategoryColor(categoryName) {
+            switch (categoryName) {
+                case '明鄭／明代':
+                    return '#f57c00';
+                case '清朝／清領':
+                    return '#01579b';
+                case '日治時期':
+                    return '#9c27b0';
+                case '1945 之後／戰後':
+                    return '#7cb342';
+                case '年代待考':
+                    return '#0288d1';
+                default:
+                    return '#64748b';
+            }
+        }
+
+        function compareNanshanEra(a, b) {
+            var orderA = NANSHAN_ERA_ORDER[a] || 99;
+            var orderB = NANSHAN_ERA_ORDER[b] || 99;
+
+            if (orderA !== orderB) return orderA - orderB;
+
+            return String(a).localeCompare(String(b), 'zh-Hant');
+        }
+
+        function collectNanshanImages(props, rawHtml) {
             var images = [];
 
             function cleanImageUrl(url) {
@@ -2915,10 +3002,9 @@ var map = L.map('map', {
                         updateNanshanMap();
                         if (toggle) toggle.disabled = false;
                     })
-                    .catch(function(err) {
+                                        .catch(function(err) {
                         console.error('南山公墓圖層載入錯誤：', err);
-                        alert('南山公墓圖資載入失敗，請確認 nanshan_cemetery.geojson 是否與 index.html 放在同一層。');
-                        if (toggle) {
+                        alert('南山公墓圖層啟用失敗：\n\n' + err.message + '\n\n請打開 Console 看完整錯誤。');
                             toggle.checked = false;
                             toggle.disabled = false;
                         }
