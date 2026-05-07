@@ -443,22 +443,10 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .ext-link-label { font-size: 10.5px; font-weight: 800; color: #64748b; letter-spacing: 0.5px; margin-bottom: 2px;}
         .ext-link-title { font-size: 13.5px; font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;}
 
-        /* 🌟 南山公墓專屬：狙擊游標與高對比 Popup */
-        body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
-        
-        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', sans-serif; }
-        .nanshan-popup-img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; }
-        .nanshan-popup-body { padding: 15px; }
-        .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
-        .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
-        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 800; }
-        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
-        
-        .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
-        .nanshan-popup-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        /* 🌟 防爆內部滾動條與文字排版設定 */
 
         /* 🌟 防爆內部滾動條與文字排版設定 */
-        .sound-desc {
+        .sound-desc { 
             font-size: 13.5px; color: #475569; line-height: 1.6; 
             margin: 0 0 12px 0; text-align: justify;
             max-height: 90px; overflow-y: auto; padding-right: 6px;
@@ -1216,21 +1204,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .listening-hint { position: fixed; left: 50%; top: 25px; transform: translateX(-50%) translateY(-20px); z-index: 3000; background: rgba(15, 23, 42, 0.85); color: #fff; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 800; letter-spacing: 1px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 32px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: 0.5s ease; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1);}
         body.listening-mode .listening-hint { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; cursor: pointer; }
         .listening-hint:hover { background: #e74c3c; border-color: #fca5a5; }
-
-        /* 🌟 南山公墓專屬：狙擊游標、高對比 Popup 與左側選單 */
-        body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
-        
-        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', sans-serif; }
-        .nanshan-popup-img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; border-bottom: 2px solid #e9d5ff; }
-        .nanshan-popup-body { padding: 15px; }
-        .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
-        .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
-        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 900; }
-        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
-        
-        .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
-        .nanshan-popup-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    </style></head><body>
+    </style>
 
     <div id="splashScreen">
         <div class="splash-card">
@@ -1465,25 +1439,59 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <div id="placeSearchResultsContainer"></div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
-                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer;"> 
-                    南山公墓歷史名人墓塚
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>
+                <label>
+                    <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
+                    臺灣精細地圖
                 </label>
-
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
-
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方災害圖資</div>
-                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; margin-right:6px; width:17px; height:17px; cursor:pointer;">
-                    啟用官方災害圖資
+                <label>
+                    <input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 
+                    全球通用地圖
                 </label>
+                <label>
+                    <input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> 
+                    ESRI 衛星影像
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> 
+                    OSM 標準地圖
+                </label>
+                
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
+                
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
+                <label>
+                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
+                    1895 臺南府迅速測圖
+                </label>
+                <label>
+                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
+                    1904 臺灣堡圖
+                </label>
+                
+                <div id="activeExtendedLayerLabel" style="display:none; font-size:12px; background:#e8f8f5; padding:8px 10px; border-radius:8px; border:1px solid #a7f3d0; margin-top:10px;">
+                    <span style="color:#059669; font-weight:800;">目前載入：</span>
+                    <span id="extendedLayerNameText" style="color:var(--accent-color); font-weight:800;"></span>
+                </div>
+
+                <div id="opacityControl" style="display:none; margin-top:10px; padding:10px; border-top:1px dashed rgba(148, 163, 184, 0.3);">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:5px; font-weight:700;">
+                        <span>透明度</span>
+                        <span id="opacityValue">80%</span>
+                    </div>
+                    <input type="range" id="historyOpacity" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateOpacity(this.value)">
+                </div>
+
+                <button class="btn-more-layers" onclick="openModal('moreLayersModal')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    更多歷史圖層
+                </button>
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署)</div>
-                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; margin-right:6px; width:17px; height:17px; cursor:pointer;">
+                <label>
+                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
                     顯示淹水潛勢圖
                 </label>
 
@@ -1653,17 +1661,9 @@ body.player-embedded .leaflet-popup .btn-play-main {
         </div>
     </div>
 
-    <div id="nanshanCategoryMenu" class="nanshan-filter-menu">
-        <div style="font-weight: 900; color: #7c3aed; margin-bottom: 15px; font-size: 15px; border-bottom: 2px dashed #ddd6fe; padding-bottom: 10px; display:flex; align-items:center; gap:6px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
-            墓塚年代分類
-        </div>
-        <div id="nanshanCategoryList" style="display:flex; flex-direction:column; gap:12px;">
-            </div>
-    </div>
-
     <div id="map"></div>
 
+    <!-- 🌟 Google 地圖風格：一鍵定位準星 -->
     <div class="locate-me-wrapper">
         <button id="locateMeBtn" class="locate-me-btn" onclick="flyToMyLocation()" title="定位我的位置">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1861,8 +1861,8 @@ var map = L.map('map', {
 }).setView([23.0278, 120.2004], 15);
 /* ===== [FIX END] ===== */
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 22, zIndex: 1 });
-        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 20, zIndex: 1 });
+        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 19, zIndex: 1 });
+        var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 19, zIndex: 1 });
         
         // 🌟 新增 ESRI 衛星與 OSM 標準圖資
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, zIndex: 1 });
@@ -2419,196 +2419,6 @@ var map = L.map('map', {
             });
         }
 
-        // ==========================================
-        // 🌟 南山公墓 (神級圖文解析 + 左側獨立分類目錄 + 破圖防護)
-        // ==========================================
-        let nanshanLayer = null;
-        let nanshanGeoJsonData = null; // 儲存原始資料供篩選使用
-        const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
-
-        function extractNanshanData(props) {
-            let name = props.Name || props.name || "未命名墓塚";
-            let layerName = props.layer || '未分類年代';
-            let images = [];
-            let bioContent = "";
-
-            // 1. 照片採集：破解 Google 的多媒體連結
-            if (props.gx_media_links) {
-                let linksStr = typeof props.gx_media_links === 'string' ? props.gx_media_links : (props.gx_media_links.value || '');
-                let matches = linksStr.match(/https?:\/\/[^\s"]+/g);
-                if (matches) images.push(...matches);
-            }
-
-            // 2. 生平解析：剝離 Google My Maps 噁心的 <table>
-            let rawHtml = "";
-            if (typeof props.description === 'string') rawHtml = props.description;
-            else if (props.description && props.description.value) rawHtml = props.description.value;
-
-            if (rawHtml) {
-                // 將 <br> 預先替換為換行符號
-                let preHtml = rawHtml.replace(/<br\s*[\/]?>/gi, '\n');
-                const doc = new DOMParser().parseFromString(preHtml, 'text/html');
-                
-                // 從 HTML 裡補抓照片
-                doc.querySelectorAll('img').forEach(img => {
-                    let src = img.getAttribute('src');
-                    // 排除掉 Google MyMaps 預設小圖示
-                    if (src && !src.includes('gstatic.com/mapspro') && !images.includes(src)) {
-                        images.push(src);
-                    }
-                });
-
-                // 移除不需要的雜亂標籤
-                doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(el => el.remove());
-
-                // 深度萃取文字內容
-                const rows = Array.from(doc.querySelectorAll('tr'));
-                if (rows.length > 0) {
-                    let collectedLines = [];
-                    rows.forEach(row => {
-                        const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());
-                        if (cells.length >= 2) {
-                            let label = cells[0];
-                            let value = cells[1];
-                            // 若是純描述就直接顯示，若是屬性則加上括號排版
-                            if (label.includes("說明") || label.includes("簡介") || label === "") {
-                                collectedLines.push(value);
-                            } else if (label !== "名稱" && label !== "name") {
-                                collectedLines.push(`【${label}】\n${value}`);
-                            }
-                        } else if (cells.length === 1 && cells[0] !== name) {
-                            collectedLines.push(cells[0]);
-                        }
-                    });
-                    bioContent = collectedLines.join("\n\n");
-                } else {
-                    bioContent = doc.body.textContent.trim();
-                }
-            }
-
-            // 清理連續過多的換行符號
-            bioContent = bioContent.replace(/\n{3,}/g, '\n\n');
-
-            return { name, layerName, bio: bioContent, images: [...new Set(images)] };
-        }
-
-        function buildNanshanPopup(feature) {
-            const { name, bio, images } = extractNanshanData(feature.properties);
-            
-            // 🌟 核心破圖修復：加入 referrerpolicy="no-referrer" 破解 Google 防護，若失效則隱藏
-            let imgHtml = images.length > 0 
-                ? `<img src="${escapeHTML(images[0])}" class="nanshan-popup-img" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'" loading="lazy">`
-                : `<div class="nanshan-no-img">無現場照片紀錄</div>`;
-            
-            return `
-                <div class="nanshan-popup-content">
-                    <div class="nanshan-img-wrapper">${imgHtml}</div>
-                    <div class="nanshan-popup-body">
-                        <h3>${escapeHTML(name)}</h3>
-                        <div class="bio-text">${bio ? escapeHTML(bio).replace(/\n/g, '<br>') : "目前尚無詳細生平記載"}</div>
-                        <div class="source-tag">資料來源：南山公墓歷史名人墓塚</div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // 🌟 根據左側選單重新繪製點位
-        window.updateNanshanMap = function() {
-            if (nanshanLayer) map.removeLayer(nanshanLayer);
-            
-            // 抓出所有打勾的年代分類
-            const checkboxes = document.querySelectorAll('.nanshan-cat-checkbox');
-            const activeCats = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
-
-            nanshanLayer = L.geoJSON(nanshanGeoJsonData, {
-                filter: function(feature) {
-                    const { layerName } = extractNanshanData(feature.properties);
-                    return activeCats.includes(layerName);
-                },
-                pointToLayer: function (feature, latlng) {
-                    return L.circleMarker(latlng, {
-                        renderer: customCanvasRenderer,
-                        radius: 2.5,             // 🌟 微調半徑，星塵風格又好點擊
-                        color: 'rgba(255,255,255,0.4)',
-                        weight: 1,               
-                        fillColor: '#8b5cf6',    
-                        fillOpacity: 0.85              
-                    });
-                },
-                onEachFeature: function (feature, layer) {
-                    layer.bindPopup(() => buildNanshanPopup(feature), {
-                        maxWidth: 320,
-                        autoPan: true,
-                        className: 'nanshan-custom-popup',
-                        autoPanPaddingTopLeft: [15, 60]
-                    });
-                }
-            });
-            map.addLayer(nanshanLayer);
-        };
-
-        // 🌟 自動生成左側目錄
-        function buildNanshanCategoryMenu() {
-            const categories = new Set();
-            nanshanGeoJsonData.features.forEach(f => {
-                categories.add(extractNanshanData(f.properties).layerName);
-            });
-
-            const listContainer = document.getElementById('nanshanCategoryList');
-            let html = '';
-            categories.forEach(cat => {
-                html += `
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px; color:#475569; font-weight:700; margin-bottom:4px; transition:0.2s;">
-                        <input type="checkbox" class="nanshan-cat-checkbox" value="${escapeHTML(cat)}" checked onchange="updateNanshanMap()" style="accent-color:#8b5cf6; width:16px; height:16px; cursor:pointer; flex-shrink:0;">
-                        ${escapeHTML(cat)}
-                    </label>
-                `;
-            });
-            listContainer.innerHTML = html;
-        }
-
-        window.toggleNanshanLayer = function(checked) {
-            const leftMenu = document.getElementById('nanshanCategoryMenu');
-
-            if (!checked) {
-                if (nanshanLayer) map.removeLayer(nanshanLayer);
-                document.body.classList.remove('nanshan-mode');
-                leftMenu.style.display = 'none';
-                return;
-            }
-
-            document.body.classList.add('nanshan-mode');
-            
-            // 🌟 核心防呆：不再呼叫 closeAllDrawers()，不會自動關閉右邊選單！
-            leftMenu.style.display = 'flex';
-
-            if (!nanshanGeoJsonData) {
-                document.getElementById('nanshanToggle').disabled = true;
-                
-                fetch('./nanshan_cemetery.geojson')
-                    .then(res => {
-                        if (!res.ok) throw new Error("找不到圖資檔案");
-                        return res.json();
-                    })
-                    .then(data => {
-                        nanshanGeoJsonData = data; 
-                        buildNanshanCategoryMenu();
-                        updateNanshanMap();
-                        document.getElementById('nanshanToggle').disabled = false;
-                    })
-                    .catch(err => {
-                        console.error('南山公墓圖層載入錯誤：', err);
-                        alert("圖資載入失敗，請確認檔案是否存在。");
-                        document.getElementById('nanshanToggle').checked = false;
-                        document.getElementById('nanshanToggle').disabled = false;
-                        document.body.classList.remove('nanshan-mode');
-                        leftMenu.style.display = 'none';
-                    });
-            } else {
-                updateNanshanMap();
-            }
-        }
-
         // 初始化
         taiwanLayer.addTo(map);
         updateFloodLabels();
@@ -2780,7 +2590,6 @@ var map = L.map('map', {
         function closeAllDrawers() {
             document.getElementById('sidePanel').classList.add('collapsed');
             document.getElementById('routePanel').classList.add('collapsed');
-            if(document.getElementById('nanshanSidePanel')) document.getElementById('nanshanSidePanel').classList.add('collapsed');
             document.getElementById('rightToolsWrapper').classList.remove('open');
             document.getElementById('globalPlayer').classList.remove('force-hide');
         }
