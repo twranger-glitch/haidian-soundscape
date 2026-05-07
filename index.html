@@ -1217,15 +1217,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
         body.listening-mode .listening-hint { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; cursor: pointer; }
         .listening-hint:hover { background: #e74c3c; border-color: #fca5a5; }
 
-        /* 🌟 南山公墓專屬：狙擊游標與高對比 Popup */
+        /* 🌟 南山公墓專屬：狙擊游標、高對比 Popup 與左側選單 */
         body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
         
-        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; }
-        .nanshan-popup-img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; }
+        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', sans-serif; }
+        .nanshan-popup-img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; border-bottom: 2px solid #e9d5ff; }
         .nanshan-popup-body { padding: 15px; }
         .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
         .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
-        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 800; }
+        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 900; }
         .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
         
         .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
@@ -1653,9 +1653,17 @@ body.player-embedded .leaflet-popup .btn-play-main {
         </div>
     </div>
 
+    <div id="nanshanCategoryMenu" class="nanshan-filter-menu">
+        <div style="font-weight: 900; color: #7c3aed; margin-bottom: 15px; font-size: 15px; border-bottom: 2px dashed #ddd6fe; padding-bottom: 10px; display:flex; align-items:center; gap:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            墓塚年代分類
+        </div>
+        <div id="nanshanCategoryList" style="display:flex; flex-direction:column; gap:12px;">
+            </div>
+    </div>
+
     <div id="map"></div>
 
-    <!-- 🌟 Google 地圖風格：一鍵定位準星 -->
     <div class="locate-me-wrapper">
         <button id="locateMeBtn" class="locate-me-btn" onclick="flyToMyLocation()" title="定位我的位置">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
@@ -2412,44 +2420,48 @@ var map = L.map('map', {
         }
 
         // ==========================================
-        // 🌟 南山公墓 (神級圖文解析 + 高效能點位)
+        // 🌟 南山公墓 (神級圖文解析 + 左側獨立分類目錄 + 破圖防護)
         // ==========================================
         let nanshanLayer = null;
+        let nanshanGeoJsonData = null; // 儲存原始資料供篩選使用
         const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
 
         function extractNanshanData(props) {
             let name = props.Name || props.name || "未命名墓塚";
+            let layerName = props.layer || '未分類年代';
             let images = [];
             let bioContent = "";
 
-            // 1. 照片採集：從多媒體欄位抓取
+            // 1. 照片採集：破解 Google 的多媒體連結
             if (props.gx_media_links) {
-                let links = (typeof props.gx_media_links === 'string') ? props.gx_media_links : (props.gx_media_links.value || '');
-                images = images.concat(links.split(/\s+/).filter(u => u.startsWith('http')));
+                let linksStr = typeof props.gx_media_links === 'string' ? props.gx_media_links : (props.gx_media_links.value || '');
+                let matches = linksStr.match(/https?:\/\/[^\s"]+/g);
+                if (matches) images.push(...matches);
             }
 
-            // 2. 生平解析：處理 Google My Maps 的複雜 HTML
+            // 2. 生平解析：剝離 Google My Maps 噁心的 <table>
             let rawHtml = "";
             if (typeof props.description === 'string') rawHtml = props.description;
             else if (props.description && props.description.value) rawHtml = props.description.value;
 
             if (rawHtml) {
-                // 將 <br> 預先轉為 \n 保留斷行
+                // 將 <br> 預先替換為換行符號
                 let preHtml = rawHtml.replace(/<br\s*[\/]?>/gi, '\n');
                 const doc = new DOMParser().parseFromString(preHtml, 'text/html');
                 
-                // 抓取內嵌 img (並排除 Google 預設圖示)
+                // 從 HTML 裡補抓照片
                 doc.querySelectorAll('img').forEach(img => {
                     let src = img.getAttribute('src');
+                    // 排除掉 Google MyMaps 預設小圖示
                     if (src && !src.includes('gstatic.com/mapspro') && !images.includes(src)) {
                         images.push(src);
                     }
                 });
 
-                // 移除不需要的標籤
+                // 移除不需要的雜亂標籤
                 doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(el => el.remove());
 
-                // 深度萃取表格內容
+                // 深度萃取文字內容
                 const rows = Array.from(doc.querySelectorAll('tr'));
                 if (rows.length > 0) {
                     let collectedLines = [];
@@ -2458,6 +2470,7 @@ var map = L.map('map', {
                         if (cells.length >= 2) {
                             let label = cells[0];
                             let value = cells[1];
+                            // 若是純描述就直接顯示，若是屬性則加上括號排版
                             if (label.includes("說明") || label.includes("簡介") || label === "") {
                                 collectedLines.push(value);
                             } else if (label !== "名稱" && label !== "name") {
@@ -2473,79 +2486,126 @@ var map = L.map('map', {
                 }
             }
 
-            // 清理多餘換行
+            // 清理連續過多的換行符號
             bioContent = bioContent.replace(/\n{3,}/g, '\n\n');
 
-            return { name, bio: bioContent, images: [...new Set(images)] };
+            return { name, layerName, bio: bioContent, images: [...new Set(images)] };
         }
 
         function buildNanshanPopup(feature) {
             const { name, bio, images } = extractNanshanData(feature.properties);
             
-            // 頂部大圖，若載入失敗則不顯示
+            // 🌟 核心破圖修復：加入 referrerpolicy="no-referrer" 破解 Google 防護，若失效則隱藏
             let imgHtml = images.length > 0 
-                ? `<img src="${escapeHTML(images[0])}" class="nanshan-popup-img" onerror="this.style.display='none'" loading="lazy">`
-                : "";
+                ? `<img src="${escapeHTML(images[0])}" class="nanshan-popup-img" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'" loading="lazy">`
+                : `<div class="nanshan-no-img">無現場照片紀錄</div>`;
             
             return `
                 <div class="nanshan-popup-content">
-                    ${imgHtml}
+                    <div class="nanshan-img-wrapper">${imgHtml}</div>
                     <div class="nanshan-popup-body">
                         <h3>${escapeHTML(name)}</h3>
                         <div class="bio-text">${bio ? escapeHTML(bio).replace(/\n/g, '<br>') : "目前尚無詳細生平記載"}</div>
-                        <div class="source-tag">資料來源：南山公墓歷史名人墓塚位置圖</div>
+                        <div class="source-tag">資料來源：南山公墓歷史名人墓塚</div>
                     </div>
                 </div>
             `;
         }
 
+        // 🌟 根據左側選單重新繪製點位
+        window.updateNanshanMap = function() {
+            if (nanshanLayer) map.removeLayer(nanshanLayer);
+            
+            // 抓出所有打勾的年代分類
+            const checkboxes = document.querySelectorAll('.nanshan-cat-checkbox');
+            const activeCats = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+            nanshanLayer = L.geoJSON(nanshanGeoJsonData, {
+                filter: function(feature) {
+                    const { layerName } = extractNanshanData(feature.properties);
+                    return activeCats.includes(layerName);
+                },
+                pointToLayer: function (feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        renderer: customCanvasRenderer,
+                        radius: 2.5,             // 🌟 微調半徑，星塵風格又好點擊
+                        color: 'rgba(255,255,255,0.4)',
+                        weight: 1,               
+                        fillColor: '#8b5cf6',    
+                        fillOpacity: 0.85              
+                    });
+                },
+                onEachFeature: function (feature, layer) {
+                    layer.bindPopup(() => buildNanshanPopup(feature), {
+                        maxWidth: 320,
+                        autoPan: true,
+                        className: 'nanshan-custom-popup',
+                        autoPanPaddingTopLeft: [15, 60]
+                    });
+                }
+            });
+            map.addLayer(nanshanLayer);
+        };
+
+        // 🌟 自動生成左側目錄
+        function buildNanshanCategoryMenu() {
+            const categories = new Set();
+            nanshanGeoJsonData.features.forEach(f => {
+                categories.add(extractNanshanData(f.properties).layerName);
+            });
+
+            const listContainer = document.getElementById('nanshanCategoryList');
+            let html = '';
+            categories.forEach(cat => {
+                html += `
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px; color:#475569; font-weight:700; margin-bottom:4px; transition:0.2s;">
+                        <input type="checkbox" class="nanshan-cat-checkbox" value="${escapeHTML(cat)}" checked onchange="updateNanshanMap()" style="accent-color:#8b5cf6; width:16px; height:16px; cursor:pointer; flex-shrink:0;">
+                        ${escapeHTML(cat)}
+                    </label>
+                `;
+            });
+            listContainer.innerHTML = html;
+        }
+
         window.toggleNanshanLayer = function(checked) {
+            const leftMenu = document.getElementById('nanshanCategoryMenu');
+
             if (!checked) {
-                if (nanshanLayer && map.hasLayer(nanshanLayer)) map.removeLayer(nanshanLayer);
+                if (nanshanLayer) map.removeLayer(nanshanLayer);
                 document.body.classList.remove('nanshan-mode');
+                leftMenu.style.display = 'none';
                 return;
             }
 
             document.body.classList.add('nanshan-mode');
-            if (typeof closeAllDrawers === "function") closeAllDrawers();
+            
+            // 🌟 核心防呆：不再呼叫 closeAllDrawers()，不會自動關閉右邊選單！
+            leftMenu.style.display = 'flex';
 
-            if (!nanshanLayer) {
+            if (!nanshanGeoJsonData) {
                 document.getElementById('nanshanToggle').disabled = true;
+                
                 fetch('./nanshan_cemetery.geojson')
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error("找不到圖資檔案");
+                        return res.json();
+                    })
                     .then(data => {
-                        nanshanLayer = L.geoJSON(data, {
-                            pointToLayer: function (feature, latlng) {
-                                return L.circleMarker(latlng, {
-                                    renderer: customCanvasRenderer,
-                                    radius: 1.5,             // 🌟 點位極致瘦身
-                                    color: 'rgba(255,255,255,0.5)',
-                                    weight: 0.5,             
-                                    fillColor: '#8b5cf6',    
-                                    fillOpacity: 0.8              
-                                });
-                            },
-                            onEachFeature: function (feature, layer) {
-                                layer.bindPopup(() => buildNanshanPopup(feature), {
-                                    maxWidth: 300,
-                                    autoPan: true,
-                                    className: 'nanshan-custom-popup',
-                                    autoPanPaddingTopLeft: [15, 60]
-                                });
-                            }
-                        });
-                        map.addLayer(nanshanLayer);
+                        nanshanGeoJsonData = data; 
+                        buildNanshanCategoryMenu();
+                        updateNanshanMap();
                         document.getElementById('nanshanToggle').disabled = false;
                     })
                     .catch(err => {
-                        console.error('南山公墓載入錯誤：', err);
+                        console.error('南山公墓圖層載入錯誤：', err);
                         alert("圖資載入失敗，請確認檔案是否存在。");
                         document.getElementById('nanshanToggle').checked = false;
                         document.getElementById('nanshanToggle').disabled = false;
                         document.body.classList.remove('nanshan-mode');
+                        leftMenu.style.display = 'none';
                     });
             } else {
-                map.addLayer(nanshanLayer);
+                updateNanshanMap();
             }
         }
 
