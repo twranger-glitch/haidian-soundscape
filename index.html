@@ -2436,44 +2436,73 @@ var map = L.map('map', {
         }
 
         // ==========================================
-        // 🌟 南山公墓 (3000+ 點位高效能 Canvas 渲染)
+        // 🌟 南山公墓 (3000+ 點位高效能 Canvas 渲染 & 智慧圖文解析)
         // ==========================================
         let nanshanLayer = null;
-        // 強制使用 Canvas 畫點，避免 3000 個 SVG 節點塞爆 DOM
         const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
 
-        function cleanKmlDescription(html) {
-            if (!html) return '';
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(el => el.remove());
-            doc.body.querySelectorAll('*').forEach(el => {
-                [...el.attributes].forEach(attr => {
-                    if (attr.name.toLowerCase().startsWith('on')) el.removeAttribute(attr.name);
+        function parseNanshanData(feature) {
+            const props = feature.properties || {};
+            let name = props.Name || props.name || '未命名墓塚';
+            let layerName = props.layer || '';
+            let rawDesc = props.description || '';
+            let images = [];
+
+            // 1. 從 gx_media_links 提取
+            if (props.gx_media_links) {
+                images = images.concat(props.gx_media_links.split(/\s+/).filter(u => u.startsWith('http')));
+            }
+
+            // 2. 智慧解析 HTML description
+            let cleanText = "";
+            if (rawDesc) {
+                const doc = new DOMParser().parseFromString(rawDesc, 'text/html');
+                
+                // 優先抽出圖片
+                doc.querySelectorAll('img').forEach(img => {
+                    if (img.src && img.src.startsWith('http')) images.push(img.src);
+                    img.remove();
                 });
-            });
-            return doc.body.innerHTML.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>').trim();
+
+                // 拔除危險標籤
+                doc.querySelectorAll('script, style, iframe, object, embed').forEach(el => el.remove());
+                
+                // 🌟 修復文字黏在一起的問題：為 Google 預設表格的欄位之間加入空白與換行
+                doc.querySelectorAll('td, th').forEach(td => td.innerHTML += ' ');
+                doc.querySelectorAll('tr, p, br, div').forEach(el => el.innerHTML += '\n');
+
+                // 萃取純文字並清理過多的換行
+                cleanText = doc.body.textContent.trim().replace(/\n\s*\n/g, '\n').trim();
+                cleanText = escapeHTML(cleanText).replace(/\n/g, '<br>');
+                
+                // 🛑 核心防護：如果 Google 只是重複把「標題+圖層名」塞進內文，我們就判定為無內文，保持版面乾淨
+                let textNoSpace = cleanText.replace(/<br>|\s/g, '');
+                let titleLayerNoSpace = (name + layerName).replace(/\s/g, '');
+                if (textNoSpace === titleLayerNoSpace || textNoSpace === '') {
+                    cleanText = "";
+                }
+            }
+
+            // 濾除重複圖片並限制數量 (最多 3 張)
+            images = [...new Set(images)].slice(0, 3);
+
+            return { name, layerName, cleanText, images };
         }
 
         function buildNanshanPopup(feature) {
-            const props = feature.properties || {};
-            const name = props.Name || props.name || '未命名墓塚';
-            const layerName = props.layer || '';
-            const desc = cleanKmlDescription(props.description || '');
-            
-            // 抓取照片連結
-            const rawLinks = props.gx_media_links || '';
-            const imagesHtml = rawLinks.split(/\s+/)
-                .filter(url => url.startsWith('http'))
-                .slice(0, 3) // 限制最多顯示 3 張，保護手機記憶體
-                .map(url => `<img src="${escapeHTML(url)}" loading="lazy" referrerpolicy="no-referrer" alt="${escapeHTML(name)}">`)
-                .join('');
+            const { name, layerName, cleanText, images } = parseNanshanData(feature);
+
+            // 🌟 防破圖機制：載入失敗時直接隱藏 (onerror)
+            const imagesHtml = images.map(url => 
+                `<img src="${escapeHTML(url)}" loading="lazy" referrerpolicy="no-referrer" alt="${escapeHTML(name)}" onerror="this.style.display='none'">`
+            ).join('');
 
             return `
                 <div class="nanshan-popup">
                     <h3>${escapeHTML(name)}</h3>
                     ${layerName ? `<div class="layer-tag">${escapeHTML(layerName)}</div>` : ''}
                     ${imagesHtml}
-                    ${desc ? `<div class="desc">${desc}</div>` : ''}
+                    ${cleanText ? `<div class="desc">${cleanText}</div>` : ''}
                     <div class="source">資料來源：南山公墓歷史名人墓塚位置圖</div>
                 </div>
             `;
@@ -2485,11 +2514,9 @@ var map = L.map('map', {
                 return;
             }
 
-            // 若尚未載入過資料，則進行 Fetch
             if (!nanshanLayer) {
-                document.getElementById('nanshanToggle').disabled = true; // 載入中先鎖住按鈕
+                document.getElementById('nanshanToggle').disabled = true;
                 
-                // 讀取 GeoJSON 檔案 (請確認 nanshan_cemetery.geojson 已放於網站根目錄)
                 fetch('./nanshan_cemetery.geojson')
                     .then(res => {
                         if (!res.ok) throw new Error("找不到圖資檔案");
@@ -2499,12 +2526,12 @@ var map = L.map('map', {
                         nanshanLayer = L.geoJSON(data, {
                             pointToLayer: function (feature, latlng) {
                                 return L.circleMarker(latlng, {
-                                    renderer: customCanvasRenderer, // 🌟 效能關鍵
-                                    radius: 5,
+                                    renderer: customCanvasRenderer,
+                                    radius: 3,             // 🌟 半徑縮小，解決太肥的問題
                                     color: '#ffffff',
-                                    weight: 1.5,
-                                    fillColor: '#8b5cf6', // 配合你的紫色調
-                                    fillOpacity: 0.85
+                                    weight: 0.5,           // 🌟 極細白色邊框增加質感
+                                    fillColor: '#3b82f6',  // 🌟 換成沈穩的科技藍
+                                    fillOpacity: 0.6       // 🌟 降低透明度，創造重疊時的熱區效果
                                 });
                             },
                             onEachFeature: function (feature, layer) {
