@@ -2867,13 +2867,11 @@ var map = L.map('map', {
 
         function buildNanshanPopup(feature) {
             var data = extractNanshanData(feature.properties || {});
-            var photoLinksHtml = buildNanshanPhotoLinks(data.images, data.name);
 
             return '' +
                 '<div class="nanshan-popup-content">' +
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
-                        photoLinksHtml +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
                         '<div class="source-tag">南山公墓圖資｜' + escapeHTML(data.layerName) + '</div>' +
                     '</div>' +
