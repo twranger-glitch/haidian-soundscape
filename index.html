@@ -1216,12 +1216,18 @@ body.player-embedded .leaflet-popup .btn-play-main {
         /* 🌟 南山公墓專屬：狙擊游標與高對比 Popup */
         body.nanshan-mode .leaflet-container { cursor: crosshair !important; }
         
-        .nanshan-popup-content { max-width: 280px; max-height: 400px; overflow-y: auto; padding: 5px; }
-        .nanshan-popup-content h3 { margin: 0 0 8px 0; font-size: 18px; font-weight: 900; color: #7c3aed; line-height: 1.3; border-bottom: 2px solid #f3e8ff; padding-bottom: 8px;}
-        .nanshan-popup-content .bio-text { font-size: 13.5px; color: #475569; line-height: 1.7; text-align: justify; white-space: pre-wrap; margin-bottom: 12px; }
-        .nanshan-popup-content img { width: 100%; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: block; background: #f1f5f9;}
-        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 8px; font-weight: 600; text-align: center;}
-    </style></head><body>
+        .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; }
+        .nanshan-popup-img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; }
+        .nanshan-popup-body { padding: 15px; }
+        .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
+        .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
+        /* 針對生平中強化的重點文字 */
+        .nanshan-popup-content .bio-text strong { color: #1e293b; font-weight: 800; }
+        .nanshan-popup-content .source-tag { font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 10px; font-weight: 600; text-align: center; }
+        
+        /* 捲軸美化 */
+        .nanshan-popup-content::-webkit-scrollbar { width: 4px; }
+        .nanshan-popup-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }</head><body>
 
     <div id="splashScreen">
         <div class="splash-card">
@@ -1508,7 +1514,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
                 <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:16px; height:16px;"> 
+                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer;"> 
                     南山公墓歷史名人墓塚
                 </label>
 
@@ -2453,23 +2459,22 @@ var map = L.map('map', {
         }
 
         // ==========================================
-        // 🌟 南山公墓 (資訊彈窗 Popup + 深度生平萃取 + 高效能渲染)
+        // 🌟 南山公墓 (深度圖文萃取方案 - 解決破圖與文字黏貼問題)
         // ==========================================
         let nanshanLayer = null;
         const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
 
-        // 🛡️ 深度提取 Google 混亂 HTML 標籤中的生平故事
-        function extractNanshanBio(props) {
-            let name = props.Name || props.name || "未命名地點";
+        function extractNanshanData(props) {
+            let name = props.Name || props.name || "未命名墓塚";
             let images = [];
-            let bio = "";
+            let bioContent = "";
 
-            // 1. 抓取照片 (優先從多媒體欄位抓取)
+            // 1. 照片採集：從 Google 的多媒體欄位抓取
             if (props.gx_media_links) {
                 images = props.gx_media_links.split(/\s+/).filter(u => u.startsWith('http'));
             }
 
-            // 2. 解析 description 物件或字串 (處理 Google 表格斷行問題)
+            // 2. 生平解析：處理 Google My Maps 繁瑣的表格 HTML
             let rawHtml = "";
             if (typeof props.description === 'string') rawHtml = props.description;
             else if (props.description && props.description.value) rawHtml = props.description.value;
@@ -2477,42 +2482,59 @@ var map = L.map('map', {
             if (rawHtml) {
                 const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
                 
-                // 若圖片尚未抓到，從 HTML 內補抓
+                // 若 HTML 裡有 img 標籤但上面沒抓到，補抓之
                 doc.querySelectorAll('img').forEach(img => {
                     let src = img.getAttribute('src');
                     if (src && !images.includes(src)) images.push(src);
                 });
 
-                // 🌟 關鍵：將 <tr> 表格標籤轉換為「可讀段落」，避免文字全部黏成一串
+                // 核心修復：解析 <tr> 表格結構，將標籤與內容分離
                 const rows = Array.from(doc.querySelectorAll('tr'));
                 if (rows.length > 0) {
-                    bio = rows.map(tr => {
-                        const cells = tr.querySelectorAll('td, th');
-                        return Array.from(cells).map(c => c.textContent.trim()).join(" ");
-                    })
-                    // 濾除重複標題與空白列，並保留換行感
-                    .filter(text => text && !text.includes("名稱") && !text.includes("說明") && text.trim() !== name)
-                    .join("\n");
+                    let collectedLines = [];
+                    rows.forEach(row => {
+                        const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());
+                        if (cells.length >= 2) {
+                            // 排除掉「名稱」這類標題，只抓「內容」
+                            let label = cells[0];
+                            let value = cells[1];
+                            if (label.includes("說明") || label.includes("簡介") || label === "") {
+                                collectedLines.push(value);
+                            } else if (label !== "名稱") {
+                                collectedLines.push(`【${label}】\n${value}`);
+                            }
+                        } else if (cells.length === 1 && cells[0] !== name) {
+                            collectedLines.push(cells[0]);
+                        }
+                    });
+                    bioContent = collectedLines.join("\n\n");
                 } else {
-                    bio = doc.body.textContent.trim();
+                    bioContent = doc.body.textContent.trim();
                 }
             }
 
-            return { name, bio, images: [...new Set(images)].slice(0, 3) };
+            // 最終修整：移除過多換行
+            bioContent = bioContent.replace(/\n{3,}/g, '\n\n');
+
+            return { name, bio: bioContent, images: [...new Set(images)].slice(0, 1) };
         }
 
         function buildNanshanPopup(feature) {
-            const { name, bio, images } = extractNanshanBio(feature.properties);
+            const { name, bio, images } = extractNanshanData(feature.properties);
             
-            // 加上防破圖 onerror 處理
-            let imgHtml = images.map(url => `<img src="${escapeHTML(url)}" onerror="this.style.display='none'" loading="lazy">`).join("");
+            // 頂部大圖，若載入失敗則不佔空間
+            let imgHtml = images.length > 0 
+                ? `<img src="${escapeHTML(images[0])}" class="nanshan-popup-img" onerror="this.style.display='none'" loading="lazy">`
+                : "";
             
             return `
                 <div class="nanshan-popup-content">
-                    <h3>${escapeHTML(name)}</h3>
                     ${imgHtml}
-                    <div class="bio-text">${bio ? escapeHTML(bio) : "目前尚無詳細生平記載"}</div>
-                    <div class="source-tag">資料來源：南山公墓歷史名人墓塚位置圖</div>
+                    <div class="nanshan-popup-body">
+                        <h3>${escapeHTML(name)}</h3>
+                        <div class="bio-text">${bio ? escapeHTML(bio) : "目前尚無詳細生平記載"}</div>
+                        <div class="source-tag">資料來源：南山公墓歷史名人墓塚位置圖</div>
+                    </div>
                 </div>
             `;
         }
@@ -2520,36 +2542,34 @@ var map = L.map('map', {
         window.toggleNanshanLayer = function(checked) {
             if (!checked) {
                 if (nanshanLayer && map.hasLayer(nanshanLayer)) map.removeLayer(nanshanLayer);
-                document.body.classList.remove('nanshan-mode'); // 關閉十字準星
+                document.body.classList.remove('nanshan-mode');
                 return;
             }
 
-            document.body.classList.add('nanshan-mode'); // 啟用十字準星
+            document.body.classList.add('nanshan-mode');
             if (typeof closeAllDrawers === "function") closeAllDrawers();
 
             if (!nanshanLayer) {
                 document.getElementById('nanshanToggle').disabled = true;
                 fetch('./nanshan_cemetery.geojson')
-                    .then(res => {
-                        if (!res.ok) throw new Error("找不到圖資檔案");
-                        return res.json();
-                    })
+                    .then(res => res.json())
                     .then(data => {
                         nanshanLayer = L.geoJSON(data, {
                             pointToLayer: function (feature, latlng) {
                                 return L.circleMarker(latlng, {
-                                    renderer: customCanvasRenderer, // 🌟 3000點流暢滑動的關鍵
-                                    radius: 1.5,                  // 🌟 極細點位，解決重疊太肥的問題
-                                    color: '#ffffff',
-                                    weight: 0,                    // 🌟 拔除邊框，解決糊成一團的問題
-                                    fillColor: '#8b5cf6',         // 紫色主題
-                                    fillOpacity: 0.7              
+                                    renderer: customCanvasRenderer,
+                                    radius: 1.5,             // 🌟 點位瘦身，像星塵一樣細緻
+                                    color: 'rgba(255,255,255,0.5)',
+                                    weight: 0.5,             
+                                    fillColor: '#8b5cf6',    
+                                    fillOpacity: 0.8              
                                 });
                             },
                             onEachFeature: function (feature, layer) {
                                 layer.bindPopup(() => buildNanshanPopup(feature), {
                                     maxWidth: 300,
                                     autoPan: true,
+                                    className: 'nanshan-custom-popup',
                                     autoPanPaddingTopLeft: [15, 60]
                                 });
                             }
@@ -2559,7 +2579,6 @@ var map = L.map('map', {
                     })
                     .catch(err => {
                         console.error('南山公墓載入錯誤：', err);
-                        alert("圖資載入失敗，請確認檔案是否存在。");
                         document.getElementById('nanshanToggle').checked = false;
                         document.getElementById('nanshanToggle').disabled = false;
                         document.body.classList.remove('nanshan-mode');
