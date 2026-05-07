@@ -1114,6 +1114,66 @@ body.player-embedded .leaflet-popup .btn-play-main {
             padding: 8px 10px;
         }
 
+        .nanshan-search-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #ffffff;
+            border: 1px solid #ddd6fe;
+            border-radius: 12px;
+            padding: 8px 10px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        }
+
+        .nanshan-search-box svg {
+            color: #8b5cf6;
+            flex-shrink: 0;
+        }
+
+        .nanshan-search-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 13px;
+            color: #334155;
+            min-width: 0;
+            font-weight: 700;
+        }
+
+        .nanshan-search-input::placeholder {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .nanshan-search-clear {
+            border: none;
+            background: #f5f3ff;
+            color: #7c3aed;
+            border-radius: 999px;
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nanshan-search-clear:hover {
+            background: #ede9fe;
+        }
+
+        .nanshan-search-status {
+            font-size: 11px;
+            color: #7c3aed;
+            font-weight: 800;
+            min-height: 14px;
+            padding: 0 2px;
+        }
+
         .nanshan-category-list {
             overflow-y: auto;
             padding-right: 4px;
@@ -1841,7 +1901,16 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <button type="button" class="nanshan-mini-btn" onclick="toggleNanshanLayer(false); var t=document.getElementById('nanshanToggle'); if(t) t.checked=false;">關閉</button>
             </div>
         </div>
-        <div class="nanshan-category-note">依 My Maps 原始色碼判讀年代：明鄭／明代、清朝／清領、日治時期、1945 之後／戰後、年代待考。點擊墓塚光點可開啟人物卡片。</div>
+        <div class="nanshan-category-note">依 My Maps 原始色碼判讀年代：明鄭／明代、清朝／清領、日治時期、1945 之後／戰後、年代待考。可輸入姓名、關鍵字或年代搜尋墓塚。</div>
+
+        <div class="nanshan-search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="nanshanSearchInput" class="nanshan-search-input" type="search" placeholder="搜尋姓名、簡介、年代…" oninput="handleNanshanSearchInput(this.value)">
+            <button id="nanshanSearchClearBtn" class="nanshan-search-clear" type="button" onclick="clearNanshanSearch()" title="清除搜尋">×</button>
+        </div>
+
+        <div id="nanshanSearchStatus" class="nanshan-search-status"></div>
+
         <div id="nanshanCategoryList" class="nanshan-category-list"></div>
     </div>
 
@@ -2610,6 +2679,68 @@ var map = L.map('map', {
         var nanshanGeoJsonData = null;
         var nanshanDidFitBounds = false;
         var nanshanCanvasRenderer = L.canvas({ padding: 0.5 });
+        var nanshanSearchKeyword = '';
+        var nanshanSearchTimer = null;
+
+        function normalizeNanshanSearchText(text) {
+            return String(text || '')
+                .toLowerCase()
+                .replace(/\s+/g, '')
+                .replace(/[，。、「」『』（）()【】\[\]：:；;,.!?！？\-—_/\\]/g, '');
+        }
+
+        function getNanshanSearchText(feature) {
+            if (!feature) return '';
+
+            if (feature.__nanshanSearchText) {
+                return feature.__nanshanSearchText;
+            }
+
+            var props = feature.properties || {};
+            var data = extractNanshanData(props);
+
+            var rawValues = Object.keys(props).map(function(key) {
+                var val = props[key];
+                if (val && typeof val === 'object' && val.value) return val.value;
+                if (typeof val === 'string' || typeof val === 'number') return val;
+                return '';
+            }).join(' ');
+
+            feature.__nanshanSearchText = normalizeNanshanSearchText([
+                data.name,
+                data.layerName,
+                data.bioContent,
+                rawValues
+            ].join(' '));
+
+            return feature.__nanshanSearchText;
+        }
+
+        window.handleNanshanSearchInput = function(value) {
+            nanshanSearchKeyword = value || '';
+
+            var clearBtn = document.getElementById('nanshanSearchClearBtn');
+            if (clearBtn) {
+                clearBtn.style.display = nanshanSearchKeyword.trim() ? 'inline-flex' : 'none';
+            }
+
+            clearTimeout(nanshanSearchTimer);
+            nanshanSearchTimer = setTimeout(function() {
+                updateNanshanMap();
+            }, 180);
+        };
+
+        window.clearNanshanSearch = function() {
+            nanshanSearchKeyword = '';
+
+            var input = document.getElementById('nanshanSearchInput');
+            if (input) input.value = '';
+
+            var clearBtn = document.getElementById('nanshanSearchClearBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
+
+            updateNanshanMap();
+        };
 
         function getNanshanProp(props, keys, fallback) {
             props = props || {};
@@ -2887,11 +3018,15 @@ var map = L.map('map', {
 
             var checkboxes = document.querySelectorAll('.nanshan-cat-checkbox');
             var activeCats = Array.from(checkboxes).filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+            var keyword = normalizeNanshanSearchText(nanshanSearchKeyword);
 
             nanshanLayer = L.geoJSON(nanshanGeoJsonData, {
                 filter: function(feature) {
                     var data = extractNanshanData(feature.properties || {});
-                    return activeCats.indexOf(data.layerName) > -1;
+                    var matchCategory = activeCats.indexOf(data.layerName) > -1;
+                    var matchKeyword = !keyword || getNanshanSearchText(feature).indexOf(keyword) > -1;
+
+                    return matchCategory && matchKeyword;
                 },
                 pointToLayer: function(feature, latlng) {
                     var eraColor = getNanshanEraColor((feature && feature.properties) || {});
@@ -2957,6 +3092,18 @@ var map = L.map('map', {
 
             var status = document.getElementById('nanshanLayerStatus');
             if (status) status.textContent = activeCats.length + ' 類';
+
+            var searchStatus = document.getElementById('nanshanSearchStatus');
+            if (searchStatus) {
+                var resultCount = nanshanLayer ? nanshanLayer.getLayers().length : 0;
+                var totalCount = nanshanGeoJsonData && nanshanGeoJsonData.features ? nanshanGeoJsonData.features.length : 0;
+
+                if (nanshanSearchKeyword.trim()) {
+                    searchStatus.textContent = '搜尋「' + nanshanSearchKeyword.trim() + '」：' + resultCount + ' / ' + totalCount + ' 筆';
+                } else {
+                    searchStatus.textContent = '目前顯示：' + resultCount + ' / ' + totalCount + ' 筆';
+                }
+            }
 
             if (!nanshanDidFitBounds && nanshanLayer.getLayers().length > 0) {
                 try {
