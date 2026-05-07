@@ -1164,12 +1164,21 @@ body.player-embedded .leaflet-popup .btn-play-main {
     font-weight: 800;
     text-decoration: none;
     transition: 0.2s;
+    font-family: inherit;
+    cursor: pointer;
 }
 
 .nanshan-photo-link:hover {
     background: #ede9fe;
     border-color: #8b5cf6;
     transform: translateY(-1px);
+}
+
+.nanshan-photo-copy-hint {
+    margin-top: 7px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: #94a3b8;
 }
         .nanshan-popup-body { padding: 15px; }
         .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
@@ -2778,18 +2787,38 @@ var map = L.map('map', {
             return images;
         }
 
-                function buildNanshanPhotoLinks(images, name) {
+        window.copyNanshanPhotoUrl = function(url) {
+            if (!url) return;
+
+            function fallbackCopy() {
+                window.prompt('照片網址如下，請手動複製：', url);
+            }
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url)
+                    .then(function() {
+                        alert('已複製照片網址。可貼到新分頁或另存備查。');
+                    })
+                    .catch(function() {
+                        fallbackCopy();
+                    });
+            } else {
+                fallbackCopy();
+            }
+        };
+
+        function buildNanshanPhotoLinks(images, name) {
             if (!images || !images.length) return '';
 
             var visibleImages = images.slice(0, 12);
-            var linksHtml = '';
+            var buttonsHtml = '';
 
             visibleImages.forEach(function(src, index) {
-                linksHtml +=
-                    '<a class="nanshan-photo-link" href="' + escapeHTML(src) + '" target="_blank" rel="noopener noreferrer" title="在新分頁開啟外連照片">' +
+                buttonsHtml +=
+                    '<button type="button" class="nanshan-photo-link" data-url="' + escapeHTML(src) + '" onclick="copyNanshanPhotoUrl(this.dataset.url)" title="複製原始照片網址">' +
                         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
                         '照片 ' + (index + 1) +
-                    '</a>';
+                    '</button>';
             });
 
             return '' +
@@ -2798,7 +2827,8 @@ var map = L.map('map', {
                         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
                         '外連照片｜共 ' + images.length + ' 張' +
                     '</div>' +
-                    '<div class="nanshan-photo-link-list">' + linksHtml + '</div>' +
+                    '<div class="nanshan-photo-link-list">' + buttonsHtml + '</div>' +
+                    '<div class="nanshan-photo-copy-hint">外連照片由 Google My Maps 提供，部分網址無法直接嵌入或開啟，改以複製網址保留來源。</div>' +
                 '</div>';
         }
 
