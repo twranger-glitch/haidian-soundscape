@@ -1187,58 +1187,71 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
         .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; }
 
-.nanshan-photo-links {
-    margin: 0 0 12px 0;
-    padding: 10px;
+.nanshan-photo-gallery {
+    width: 100%;
+    background: #f8fafc;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 2px solid #e9d5ff;
+    overflow: hidden;
+}
+
+.nanshan-main-photo {
+    display: block;
+    width: 100%;
+    height: 190px;
+    object-fit: contain;
+    background: #f1f5f9;
+}
+
+.nanshan-photo-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 7px;
     background: #faf5ff;
-    border: 1px solid #e9d5ff;
-    border-radius: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #c4b5fd transparent;
 }
 
-.nanshan-photo-links-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 900;
-    color: #6d28d9;
-    margin-bottom: 8px;
-}
+.nanshan-photo-strip::-webkit-scrollbar { height: 4px; }
+.nanshan-photo-strip::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
 
-.nanshan-photo-link-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-.nanshan-photo-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 8px;
-    border-radius: 999px;
-    background: #fff;
-    border: 1px solid #ddd6fe;
-    color: #7c3aed;
-    font-size: 11.5px;
-    font-weight: 800;
-    text-decoration: none;
-    transition: 0.2s;
-    font-family: inherit;
+.nanshan-photo-thumb {
+    width: 54px;
+    height: 42px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,0.95);
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+    flex-shrink: 0;
+    background: #f1f5f9;
     cursor: pointer;
+    transition: 0.2s;
 }
 
-.nanshan-photo-link:hover {
-    background: #ede9fe;
+.nanshan-photo-thumb:hover {
+    transform: translateY(-1px) scale(1.04);
     border-color: #8b5cf6;
-    transform: translateY(-1px);
 }
 
-.nanshan-photo-copy-hint {
-    margin-top: 7px;
-    font-size: 10.5px;
-    line-height: 1.5;
-    color: #94a3b8;
+.nanshan-photo-count {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 7px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.nanshan-main-photo-wrap {
+    position: relative;
+    display: block;
+    text-decoration: none;
 }
         .nanshan-popup-body { padding: 15px; }
         .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
@@ -2870,6 +2883,172 @@ var map = L.map('map', {
             return String(a).localeCompare(String(b), 'zh-Hant');
         }
 
+        var NANSHAN_IMAGE_PROXY_BASE = 'https://nanshan-image-proxy.yhzkiki.workers.dev/?url=';
+        var nanshanExifCache = {};
+
+        function getNanshanProxyImageUrl(src) {
+            if (!src) return '';
+            return NANSHAN_IMAGE_PROXY_BASE + encodeURIComponent(src);
+        }
+
+        function getNanshanExifOrientation(buffer) {
+            var view = new DataView(buffer);
+
+            if (view.getUint16(0, false) !== 0xFFD8) return 1;
+
+            var offset = 2;
+            var length = view.byteLength;
+
+            while (offset < length) {
+                if (view.getUint8(offset) !== 0xFF) break;
+
+                var marker = view.getUint8(offset + 1);
+                var size = view.getUint16(offset + 2, false);
+
+                if (marker === 0xE1) {
+                    var app1Start = offset + 4;
+
+                    function getString(start, len) {
+                        var str = '';
+                        for (var i = 0; i < len; i++) {
+                            str += String.fromCharCode(view.getUint8(start + i));
+                        }
+                        return str;
+                    }
+
+                    if (getString(app1Start, 6) !== 'Exif\u0000\u0000') return 1;
+
+                    var tiffStart = app1Start + 6;
+                    var little = view.getUint16(tiffStart, false) === 0x4949;
+
+                    if (view.getUint16(tiffStart + 2, little) !== 0x002A) return 1;
+
+                    var firstIFDOffset = view.getUint32(tiffStart + 4, little);
+                    var ifdStart = tiffStart + firstIFDOffset;
+                    var entries = view.getUint16(ifdStart, little);
+
+                    for (var j = 0; j < entries; j++) {
+                        var entryOffset = ifdStart + 2 + j * 12;
+                        var tag = view.getUint16(entryOffset, little);
+
+                        if (tag === 0x0112) {
+                            return view.getUint16(entryOffset + 8, little) || 1;
+                        }
+                    }
+                }
+
+                offset += 2 + size;
+            }
+
+            return 1;
+        }
+
+        function drawNanshanOrientedImage(buffer, orientation) {
+            return new Promise(function(resolve, reject) {
+                var blob = new Blob([buffer]);
+                var objectUrl = URL.createObjectURL(blob);
+                var img = new Image();
+
+                img.onload = function() {
+                    try {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('2d');
+                        var width = img.naturalWidth;
+                        var height = img.naturalHeight;
+                        var swap = [5, 6, 7, 8].indexOf(orientation) > -1;
+
+                        canvas.width = swap ? height : width;
+                        canvas.height = swap ? width : height;
+
+                        switch (orientation) {
+                            case 2:
+                                ctx.translate(canvas.width, 0);
+                                ctx.scale(-1, 1);
+                                break;
+                            case 3:
+                                ctx.translate(canvas.width, canvas.height);
+                                ctx.rotate(Math.PI);
+                                break;
+                            case 4:
+                                ctx.translate(0, canvas.height);
+                                ctx.scale(1, -1);
+                                break;
+                            case 5:
+                                ctx.rotate(0.5 * Math.PI);
+                                ctx.scale(1, -1);
+                                break;
+                            case 6:
+                                ctx.translate(canvas.width, 0);
+                                ctx.rotate(0.5 * Math.PI);
+                                break;
+                            case 7:
+                                ctx.translate(canvas.width, canvas.height);
+                                ctx.rotate(0.5 * Math.PI);
+                                ctx.scale(-1, 1);
+                                break;
+                            case 8:
+                                ctx.translate(0, canvas.height);
+                                ctx.rotate(-0.5 * Math.PI);
+                                break;
+                            default:
+                                break;
+                        }
+
+                        ctx.drawImage(img, 0, 0);
+                        URL.revokeObjectURL(objectUrl);
+
+                        resolve(canvas.toDataURL('image/jpeg', 0.9));
+                    } catch (err) {
+                        URL.revokeObjectURL(objectUrl);
+                        reject(err);
+                    }
+                };
+
+                img.onerror = function() {
+                    URL.revokeObjectURL(objectUrl);
+                    reject(new Error('圖片解碼失敗'));
+                };
+
+                img.src = objectUrl;
+            });
+        }
+
+        window.applyNanshanExifOrientation = function(imgEl) {
+            if (!imgEl || imgEl.dataset.exifApplied === '1') return;
+
+            var src = imgEl.dataset.exifSrc || imgEl.src;
+            if (!src || src.indexOf('data:image/') === 0) return;
+
+            imgEl.dataset.exifApplied = '1';
+
+            if (!nanshanExifCache[src]) {
+                nanshanExifCache[src] = fetch(src, { cache: 'force-cache' })
+                    .then(function(res) {
+                        if (!res.ok) throw new Error('圖片讀取失敗：' + res.status);
+                        return res.arrayBuffer();
+                    })
+                    .then(function(buffer) {
+                        var orientation = getNanshanExifOrientation(buffer);
+
+                        if (!orientation || orientation === 1) {
+                            return null;
+                        }
+
+                        return drawNanshanOrientedImage(buffer, orientation);
+                    })
+                    .catch(function(err) {
+                        console.warn('EXIF 方向判讀失敗，維持原圖：', err);
+                        return null;
+                    });
+            }
+
+            nanshanExifCache[src].then(function(orientedDataUrl) {
+                if (orientedDataUrl) {
+                    imgEl.src = orientedDataUrl;
+                }
+            });
+        };
+
         function collectNanshanImages(props, rawHtml) {
             var images = [];
 
@@ -2938,28 +3117,37 @@ var map = L.map('map', {
             }
         };
 
-        function buildNanshanPhotoLinks(images, name) {
+        function buildNanshanImageGallery(images, name) {
             if (!images || !images.length) return '';
 
-            var visibleImages = images.slice(0, 12);
-            var buttonsHtml = '';
+            var visibleImages = images.slice(0, 8);
+            var firstImage = visibleImages[0];
+            var firstProxy = getNanshanProxyImageUrl(firstImage);
 
-            visibleImages.forEach(function(src, index) {
-                buttonsHtml +=
-                    '<button type="button" class="nanshan-photo-link" data-url="' + escapeHTML(src) + '" onclick="copyNanshanPhotoUrl(this.dataset.url)" title="複製原始照片網址">' +
-                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
-                        '照片 ' + (index + 1) +
-                    '</button>';
-            });
+            var thumbsHtml = '';
+
+            if (visibleImages.length > 1) {
+                thumbsHtml = '<div class="nanshan-photo-strip">';
+
+                visibleImages.forEach(function(src, index) {
+                    var proxySrc = getNanshanProxyImageUrl(src);
+
+                    thumbsHtml +=
+                        '<a href="' + escapeHTML(proxySrc) + '" target="_blank" rel="noopener noreferrer" title="開啟第 ' + (index + 1) + ' 張照片">' +
+                            '<img class="nanshan-photo-thumb" src="' + escapeHTML(proxySrc) + '" data-exif-src="' + escapeHTML(proxySrc) + '" alt="' + escapeHTML(name) + ' 照片 ' + (index + 1) + '" loading="lazy" onload="applyNanshanExifOrientation(this)" onerror="this.closest(\'a\').style.display=\'none\';">' +
+                        '</a>';
+                });
+
+                thumbsHtml += '</div>';
+            }
 
             return '' +
-                '<div class="nanshan-photo-links">' +
-                    '<div class="nanshan-photo-links-title">' +
-                        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
-                        '外連照片｜共 ' + images.length + ' 張' +
-                    '</div>' +
-                    '<div class="nanshan-photo-link-list">' + buttonsHtml + '</div>' +
-                    '<div class="nanshan-photo-copy-hint">外連照片由 Google My Maps 提供，部分網址無法直接嵌入或開啟，改以複製網址保留來源。</div>' +
+                '<div class="nanshan-photo-gallery">' +
+                    '<a class="nanshan-main-photo-wrap" href="' + escapeHTML(firstProxy) + '" target="_blank" rel="noopener noreferrer" title="開啟照片">' +
+                        '<img class="nanshan-main-photo" src="' + escapeHTML(firstProxy) + '" data-exif-src="' + escapeHTML(firstProxy) + '" alt="' + escapeHTML(name) + '" loading="lazy" onload="applyNanshanExifOrientation(this)" onerror="this.closest(\'.nanshan-photo-gallery\').style.display=\'none\';">' +
+                        '<span class="nanshan-photo-count">' + images.length + ' 張</span>' +
+                    '</a>' +
+                    thumbsHtml +
                 '</div>';
         }
 
@@ -2998,9 +3186,11 @@ var map = L.map('map', {
 
         function buildNanshanPopup(feature) {
             var data = extractNanshanData(feature.properties || {});
+            var galleryHtml = buildNanshanImageGallery(data.images, data.name);
 
             return '' +
                 '<div class="nanshan-popup-content">' +
+                    galleryHtml +
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
