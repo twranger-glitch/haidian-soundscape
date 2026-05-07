@@ -2864,11 +2864,9 @@ var map = L.map('map', {
 
                 function buildNanshanPopup(feature) {
             var data = extractNanshanData(feature.properties || {});
-            var galleryHtml = buildNanshanImageGallery(data.images, data.name);
 
             return '' +
                 '<div class="nanshan-popup-content">' +
-                    galleryHtml +
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
@@ -4562,6 +4560,14 @@ function mountGlobalPlayerIntoPopup_(retry) {
             setTimeout(updateFavoriteUI, 50);
             
             let popupContent = e.popup.getContent();
+
+            // 南山公墓 popup 使用 function 動態產生內容；聲景作品 popup 才是字串。
+            // 避免南山卡片觸發聲景卡片的收藏／情緒 UI 判斷時爆掉。
+            if (typeof popupContent !== 'string') {
+                const popupEl = e.popup.getElement();
+                popupContent = popupEl ? popupEl.innerHTML : '';
+            }
+
             let uidMatch = popupContent.match(/card-fav-([a-zA-Z0-9_-]+)/);
             if (uidMatch && uidMatch[1]) {
                 setTimeout(() => updateReactionUI(uidMatch[1]), 50);
