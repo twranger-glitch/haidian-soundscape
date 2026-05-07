@@ -1126,7 +1126,73 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .nanshan-category-list::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
 
         .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; }
-        .nanshan-popup-img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; background: #f1f5f9; display: block; border-bottom: 2px solid #e9d5ff; }
+
+.nanshan-photo-gallery {
+    width: 100%;
+    background: #f8fafc;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 2px solid #e9d5ff;
+    overflow: hidden;
+}
+
+.nanshan-main-photo {
+    display: block;
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    background: #f1f5f9;
+}
+
+.nanshan-photo-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 7px;
+    background: #faf5ff;
+    scrollbar-width: thin;
+    scrollbar-color: #c4b5fd transparent;
+}
+
+.nanshan-photo-strip::-webkit-scrollbar { height: 4px; }
+.nanshan-photo-strip::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
+
+.nanshan-photo-thumb {
+    width: 54px;
+    height: 42px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,0.95);
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+    flex-shrink: 0;
+    background: #f1f5f9;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.nanshan-photo-thumb:hover {
+    transform: translateY(-1px) scale(1.04);
+    border-color: #8b5cf6;
+}
+
+.nanshan-photo-count {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 7px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.nanshan-main-photo-wrap {
+    position: relative;
+    display: block;
+    text-decoration: none;
+}
         .nanshan-popup-body { padding: 15px; }
         .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
         .nanshan-popup-content .bio-text { font-size: 14px; color: #475569; line-height: 1.8; text-align: justify; white-space: pre-wrap; margin-bottom: 15px; }
@@ -2599,17 +2665,32 @@ var map = L.map('map', {
             return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
         }
 
-        function collectNanshanImages(props, rawHtml) {
+                function collectNanshanImages(props, rawHtml) {
             var images = [];
+
+            function cleanImageUrl(url) {
+                if (!url) return '';
+                url = String(url).trim();
+
+                // 移除 HTML 屬性或標點殘留
+                url = url.replace(/&amp;/g, '&');
+                url = url.replace(/[)"'<>]+$/g, '');
+
+                // 排除 My Maps 圖釘 icon
+                if (url.indexOf('gstatic.com/mapspro') > -1) return '';
+
+                return url;
+            }
+
             function pushUrl(url) {
                 if (!url) return;
-                String(url).split(/[\n,]/).forEach(function(part) {
-                    var matches = String(part).match(/https?:\/\/[^\s"'<>]+/g);
-                    if (matches) {
-                        matches.forEach(function(src) {
-                            if (src && images.indexOf(src) === -1 && src.indexOf('gstatic.com/mapspro') === -1) images.push(src);
-                        });
-                    }
+
+                var matches = String(url).match(/https?:\/\/[^\s"'<>]+/g);
+                if (!matches) return;
+
+                matches.forEach(function(src) {
+                    src = cleanImageUrl(src);
+                    if (src && images.indexOf(src) === -1) images.push(src);
                 });
             }
 
@@ -2621,97 +2702,44 @@ var map = L.map('map', {
 
             if (rawHtml) {
                 var doc = new DOMParser().parseFromString(String(rawHtml), 'text/html');
+
                 doc.querySelectorAll('img').forEach(function(img) {
                     pushUrl(img.getAttribute('src'));
                 });
+
+                pushUrl(rawHtml);
             }
 
             return images;
         }
 
-                var NANSHAN_ERA_ORDER = {
-            '明鄭／明代': 1,
-            '清朝／清領': 2,
-            '日治時期': 3,
-            '1945 之後／戰後': 4,
-            '年代待考': 5,
-            '其他／非墓塚或未判定': 6
-        };
+        function buildNanshanImageGallery(images, name) {
+            if (!images || !images.length) return '';
 
-        function normalizeNanshanColor(rawColor) {
-            return String(rawColor || '').trim().toLowerCase();
-        }
+            // 太多張會讓 popup 變重，先顯示前 12 張；原圖仍可點開外連
+            var visibleImages = images.slice(0, 12);
+            var firstImage = visibleImages[0];
 
-        function getNanshanFeatureColor(props) {
-            props = props || {};
-
-            var color = normalizeNanshanColor(props['icon-color'] || props.iconColor || props.color);
-            if (color) return color;
-
-            var styleUrl = String(props.styleUrl || props.styleurl || '').toLowerCase();
-            var match = styleUrl.match(/-([0-9a-f]{6})(?:-|$)/i);
-            if (match && match[1]) return '#' + match[1].toLowerCase();
-
-            return '';
-        }
-
-        function getNanshanEraLabel(props) {
-            var color = getNanshanFeatureColor(props);
-
-            switch (color) {
-                case '#f57c00':
-                    return '明鄭／明代';
-
-                case '#01579b':
-                    return '清朝／清領';
-
-                case '#9c27b0':
-                case '#673ab7':
-                    return '日治時期';
-
-                case '#7cb342':
-                    return '1945 之後／戰後';
-
-                case '#0288d1':
-                case '#000000':
-                    return '年代待考';
-
-                default:
-                    return '其他／非墓塚或未判定';
+            var thumbsHtml = '';
+            if (visibleImages.length > 1) {
+                thumbsHtml = '<div class="nanshan-photo-strip">';
+                visibleImages.forEach(function(src, index) {
+                    thumbsHtml +=
+                        '<a href="' + escapeHTML(src) + '" target="_blank" rel="noopener noreferrer" title="開啟第 ' + (index + 1) + ' 張外連照片">' +
+                            '<img class="nanshan-photo-thumb" src="' + escapeHTML(src) + '" alt="' + escapeHTML(name) + ' 外連照片 ' + (index + 1) + '" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest(\'a\').style.display=\'none\';">' +
+                        '</a>';
+                });
+                thumbsHtml += '</div>';
             }
-        }
 
-        function getNanshanEraColor(props) {
-            var color = getNanshanFeatureColor(props);
-
-            if (color === '#000000') return '#64748b';
-            if (color) return color;
-
-            return '#8b5cf6';
-        }
-
-        function getNanshanCategoryColor(categoryName) {
-            switch (categoryName) {
-                case '明鄭／明代':
-                    return '#f57c00';
-                case '清朝／清領':
-                    return '#01579b';
-                case '日治時期':
-                    return '#9c27b0';
-                case '1945 之後／戰後':
-                    return '#7cb342';
-                case '年代待考':
-                    return '#0288d1';
-                default:
-                    return '#64748b';
-            }
-        }
-
-        function compareNanshanEra(a, b) {
-            var orderA = NANSHAN_ERA_ORDER[a] || 99;
-            var orderB = NANSHAN_ERA_ORDER[b] || 99;
-            if (orderA !== orderB) return orderA - orderB;
-            return String(a).localeCompare(String(b), 'zh-Hant');
+            return '' +
+                '<div class="nanshan-photo-gallery">' +
+                    '<a class="nanshan-main-photo-wrap" href="' + escapeHTML(firstImage) + '" target="_blank" rel="noopener noreferrer" title="開啟外連照片">' +
+                        '<img class="nanshan-main-photo" src="' + escapeHTML(firstImage) + '" alt="' + escapeHTML(name) + '" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest(\'.nanshan-photo-gallery\').style.display=\'none\';">' +
+                        '<span class="nanshan-photo-count">' + images.length + ' 張</span>' +
+                    '</a>' +
+                    thumbsHtml +
+                '</div>';
         }
 
         function extractNanshanData(props) {
@@ -2747,13 +2775,13 @@ var map = L.map('map', {
             return safe;
         }
 
-        function buildNanshanPopup(feature) {
+                function buildNanshanPopup(feature) {
             var data = extractNanshanData(feature.properties || {});
-            var firstImage = data.images && data.images.length ? data.images[0] : '';
-            var imageHtml = firstImage ? '<img class="nanshan-popup-img" src="' + escapeHTML(firstImage) + '" alt="' + escapeHTML(data.name) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';">' : '';
+            var galleryHtml = buildNanshanImageGallery(data.images, data.name);
+
             return '' +
                 '<div class="nanshan-popup-content">' +
-                    imageHtml +
+                    galleryHtml +
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
