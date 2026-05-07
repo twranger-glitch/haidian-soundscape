@@ -3002,12 +3002,15 @@ var map = L.map('map', {
                         updateNanshanMap();
                         if (toggle) toggle.disabled = false;
                     })
-                                        .catch(function(err) {
+                                         .catch(function(err) {
                         console.error('南山公墓圖層載入錯誤：', err);
                         alert('南山公墓圖層啟用失敗：\n\n' + err.message + '\n\n請打開 Console 看完整錯誤。');
+
+                        if (toggle) {
                             toggle.checked = false;
                             toggle.disabled = false;
                         }
+
                         document.body.classList.remove('nanshan-mode');
                         if (leftMenu) leftMenu.style.display = 'none';
                     });
