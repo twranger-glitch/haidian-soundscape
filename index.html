@@ -1127,71 +1127,49 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
         .nanshan-popup-content { width: 280px; max-height: 450px; overflow-y: auto; padding: 0; font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif; }
 
-.nanshan-photo-gallery {
-    width: 100%;
-    background: #f8fafc;
-    border-radius: 12px 12px 0 0;
-    border-bottom: 2px solid #e9d5ff;
-    overflow: hidden;
-}
-
-.nanshan-main-photo {
-    display: block;
-    width: 100%;
-    height: 180px;
-    object-fit: cover;
-    background: #f1f5f9;
-}
-
-.nanshan-photo-strip {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 7px;
+.nanshan-photo-links {
+    margin: 0 0 12px 0;
+    padding: 10px;
     background: #faf5ff;
-    scrollbar-width: thin;
-    scrollbar-color: #c4b5fd transparent;
+    border: 1px solid #e9d5ff;
+    border-radius: 12px;
 }
 
-.nanshan-photo-strip::-webkit-scrollbar { height: 4px; }
-.nanshan-photo-strip::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
+.nanshan-photo-links-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 900;
+    color: #6d28d9;
+    margin-bottom: 8px;
+}
 
-.nanshan-photo-thumb {
-    width: 54px;
-    height: 42px;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 2px solid rgba(255,255,255,0.95);
-    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
-    flex-shrink: 0;
-    background: #f1f5f9;
-    cursor: pointer;
+.nanshan-photo-link-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.nanshan-photo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #ddd6fe;
+    color: #7c3aed;
+    font-size: 11.5px;
+    font-weight: 800;
+    text-decoration: none;
     transition: 0.2s;
 }
 
-.nanshan-photo-thumb:hover {
-    transform: translateY(-1px) scale(1.04);
+.nanshan-photo-link:hover {
+    background: #ede9fe;
     border-color: #8b5cf6;
-}
-
-.nanshan-photo-count {
-    position: absolute;
-    right: 8px;
-    top: 8px;
-    background: rgba(15, 23, 42, 0.72);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 800;
-    padding: 3px 7px;
-    border-radius: 999px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-}
-
-.nanshan-main-photo-wrap {
-    position: relative;
-    display: block;
-    text-decoration: none;
+    transform: translateY(-1px);
 }
         .nanshan-popup-body { padding: 15px; }
         .nanshan-popup-content h3 { margin: 0 0 10px 0; font-size: 19px; font-weight: 900; color: #7c3aed; line-height: 1.4; }
@@ -2800,32 +2778,27 @@ var map = L.map('map', {
             return images;
         }
 
-        function buildNanshanImageGallery(images, name) {
+                function buildNanshanPhotoLinks(images, name) {
             if (!images || !images.length) return '';
 
-            // 太多張會讓 popup 變重，先顯示前 12 張；原圖仍可點開外連
             var visibleImages = images.slice(0, 12);
-            var firstImage = visibleImages[0];
+            var linksHtml = '';
 
-            var thumbsHtml = '';
-            if (visibleImages.length > 1) {
-                thumbsHtml = '<div class="nanshan-photo-strip">';
-                visibleImages.forEach(function(src, index) {
-                    thumbsHtml +=
-                        '<a href="' + escapeHTML(src) + '" target="_blank" rel="noopener noreferrer" title="開啟第 ' + (index + 1) + ' 張外連照片">' +
-                            '<img class="nanshan-photo-thumb" src="' + escapeHTML(src) + '" alt="' + escapeHTML(name) + ' 外連照片 ' + (index + 1) + '" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest(\'a\').style.display=\'none\';">' +
-                        '</a>';
-                });
-                thumbsHtml += '</div>';
-            }
+            visibleImages.forEach(function(src, index) {
+                linksHtml +=
+                    '<a class="nanshan-photo-link" href="' + escapeHTML(src) + '" target="_blank" rel="noopener noreferrer" title="在新分頁開啟外連照片">' +
+                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
+                        '照片 ' + (index + 1) +
+                    '</a>';
+            });
 
             return '' +
-                '<div class="nanshan-photo-gallery">' +
-                    '<a class="nanshan-main-photo-wrap" href="' + escapeHTML(firstImage) + '" target="_blank" rel="noopener noreferrer" title="開啟外連照片">' +
-                        '<img class="nanshan-main-photo" src="' + escapeHTML(firstImage) + '" alt="' + escapeHTML(name) + '" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest(\'.nanshan-photo-gallery\').style.display=\'none\';">' +
-                        '<span class="nanshan-photo-count">' + images.length + ' 張</span>' +
-                    '</a>' +
-                    thumbsHtml +
+                '<div class="nanshan-photo-links">' +
+                    '<div class="nanshan-photo-links-title">' +
+                        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>' +
+                        '外連照片｜共 ' + images.length + ' 張' +
+                    '</div>' +
+                    '<div class="nanshan-photo-link-list">' + linksHtml + '</div>' +
                 '</div>';
         }
 
@@ -2862,13 +2835,15 @@ var map = L.map('map', {
             return safe;
         }
 
-                function buildNanshanPopup(feature) {
+        function buildNanshanPopup(feature) {
             var data = extractNanshanData(feature.properties || {});
+            var photoLinksHtml = buildNanshanPhotoLinks(data.images, data.name);
 
             return '' +
                 '<div class="nanshan-popup-content">' +
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
+                        photoLinksHtml +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
                         '<div class="source-tag">南山公墓圖資｜' + escapeHTML(data.layerName) + '</div>' +
                     '</div>' +
@@ -2890,17 +2865,44 @@ var map = L.map('map', {
                     var data = extractNanshanData(feature.properties || {});
                     return activeCats.indexOf(data.layerName) > -1;
                 },
-                                pointToLayer: function(feature, latlng) {
+                pointToLayer: function(feature, latlng) {
                     var eraColor = getNanshanEraColor((feature && feature.properties) || {});
 
-                    return L.circleMarker(latlng, {
+                    var marker = L.circleMarker(latlng, {
                         renderer: nanshanCanvasRenderer,
-                        radius: 3,
-                        color: 'rgba(255,255,255,0.7)',
-                        weight: 1,
+
+                        // 原本 radius: 3 太難點；改成 8，點擊熱區會大很多
+                        radius: 8,
+
+                        color: eraColor,
+                        weight: 2,
+                        opacity: 0.85,
                         fillColor: eraColor,
-                        fillOpacity: 0.9
+                        fillOpacity: 0.28,
+
+                        interactive: true,
+                        bubblingMouseEvents: false
                     });
+
+                    marker.on('mouseover', function() {
+                        map.getContainer().style.cursor = 'pointer';
+                        marker.setRadius(11);
+                        marker.setStyle({
+                            weight: 3,
+                            fillOpacity: 0.55
+                        });
+                    });
+
+                    marker.on('mouseout', function() {
+                        map.getContainer().style.cursor = document.body.classList.contains('nanshan-mode') ? 'crosshair' : '';
+                        marker.setRadius(8);
+                        marker.setStyle({
+                            weight: 2,
+                            fillOpacity: 0.28
+                        });
+                    });
+
+                    return marker;
                 },
                 style: function(feature) {
                     var eraColor = getNanshanEraColor((feature && feature.properties) || {});
