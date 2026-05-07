@@ -443,10 +443,18 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .ext-link-label { font-size: 10.5px; font-weight: 800; color: #64748b; letter-spacing: 0.5px; margin-bottom: 2px;}
         .ext-link-title { font-size: 13.5px; font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;}
 
-        /* 🌟 防爆內部滾動條與文字排版設定 */
+        /* 🌟 南山公墓 Popup 專屬樣式 */
+        .nanshan-popup { max-width: 280px; max-height: 450px; overflow-y: auto; font-family: 'Noto Sans TC', sans-serif; }
+        .nanshan-popup::-webkit-scrollbar { width: 4px; }
+        .nanshan-popup::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .nanshan-popup h3 { margin: 0 0 8px 0; font-size: 17px; font-weight: 800; color: #1e293b; line-height: 1.3; }
+        .nanshan-popup .layer-tag { display: inline-block; padding: 4px 10px; border-radius: 8px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 10px; letter-spacing: 0.5px; }
+        .nanshan-popup img { width: 100%; height: auto; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .nanshan-popup .desc { font-size: 13.5px; color: #475569; line-height: 1.6; text-align: justify; margin-bottom: 12px; }
+        .nanshan-popup .source { padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 11px; color: #94a3b8; font-weight: 600; }
 
         /* 🌟 防爆內部滾動條與文字排版設定 */
-        .sound-desc { 
+        .sound-desc {
             font-size: 13.5px; color: #475569; line-height: 1.6; 
             margin: 0 0 12px 0; text-align: justify;
             max-height: 90px; overflow-y: auto; padding-right: 6px;
@@ -1489,6 +1497,14 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
+                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
+                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:16px; height:16px;"> 
+                    南山公墓歷史名人墓塚
+                </label>
+
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署)</div>
                 <label>
                     <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
@@ -2417,6 +2433,103 @@ var map = L.map('map', {
                     toggleOfficialHazardLayer(layerId, checked);
                 }
             });
+        }
+
+        // ==========================================
+        // 🌟 南山公墓 (3000+ 點位高效能 Canvas 渲染)
+        // ==========================================
+        let nanshanLayer = null;
+        // 強制使用 Canvas 畫點，避免 3000 個 SVG 節點塞爆 DOM
+        const customCanvasRenderer = L.canvas({ padding: 0.5 }); 
+
+        function cleanKmlDescription(html) {
+            if (!html) return '';
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.querySelectorAll('script, style, iframe, object, embed, img').forEach(el => el.remove());
+            doc.body.querySelectorAll('*').forEach(el => {
+                [...el.attributes].forEach(attr => {
+                    if (attr.name.toLowerCase().startsWith('on')) el.removeAttribute(attr.name);
+                });
+            });
+            return doc.body.innerHTML.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>').trim();
+        }
+
+        function buildNanshanPopup(feature) {
+            const props = feature.properties || {};
+            const name = props.Name || props.name || '未命名墓塚';
+            const layerName = props.layer || '';
+            const desc = cleanKmlDescription(props.description || '');
+            
+            // 抓取照片連結
+            const rawLinks = props.gx_media_links || '';
+            const imagesHtml = rawLinks.split(/\s+/)
+                .filter(url => url.startsWith('http'))
+                .slice(0, 3) // 限制最多顯示 3 張，保護手機記憶體
+                .map(url => `<img src="${escapeHTML(url)}" loading="lazy" referrerpolicy="no-referrer" alt="${escapeHTML(name)}">`)
+                .join('');
+
+            return `
+                <div class="nanshan-popup">
+                    <h3>${escapeHTML(name)}</h3>
+                    ${layerName ? `<div class="layer-tag">${escapeHTML(layerName)}</div>` : ''}
+                    ${imagesHtml}
+                    ${desc ? `<div class="desc">${desc}</div>` : ''}
+                    <div class="source">資料來源：南山公墓歷史名人墓塚位置圖</div>
+                </div>
+            `;
+        }
+
+        function toggleNanshanLayer(checked) {
+            if (!checked) {
+                if (nanshanLayer && map.hasLayer(nanshanLayer)) map.removeLayer(nanshanLayer);
+                return;
+            }
+
+            // 若尚未載入過資料，則進行 Fetch
+            if (!nanshanLayer) {
+                document.getElementById('nanshanToggle').disabled = true; // 載入中先鎖住按鈕
+                
+                // 讀取 GeoJSON 檔案 (請確認 nanshan_cemetery.geojson 已放於網站根目錄)
+                fetch('./nanshan_cemetery.geojson')
+                    .then(res => {
+                        if (!res.ok) throw new Error("找不到圖資檔案");
+                        return res.json();
+                    })
+                    .then(data => {
+                        nanshanLayer = L.geoJSON(data, {
+                            pointToLayer: function (feature, latlng) {
+                                return L.circleMarker(latlng, {
+                                    renderer: customCanvasRenderer, // 🌟 效能關鍵
+                                    radius: 5,
+                                    color: '#ffffff',
+                                    weight: 1.5,
+                                    fillColor: '#8b5cf6', // 配合你的紫色調
+                                    fillOpacity: 0.85
+                                });
+                            },
+                            onEachFeature: function (feature, layer) {
+                                layer.bindPopup(() => buildNanshanPopup(feature), {
+                                    maxWidth: 320,
+                                    autoPan: true,
+                                    closeOnClick: false,
+                                    autoClose: true,
+                                    autoPanPaddingTopLeft: [15, 60],
+                                    autoPanPaddingBottomRight: [15, 80]
+                                });
+                            }
+                        });
+                        map.addLayer(nanshanLayer);
+                        document.getElementById('nanshanToggle').disabled = false;
+                    })
+                    .catch(err => {
+                        console.error('南山公墓圖層載入錯誤：', err);
+                        alert("圖資載入失敗，請確認檔案是否存在。");
+                        document.getElementById('nanshanToggle').checked = false;
+                        document.getElementById('nanshanToggle').disabled = false;
+                    });
+            } else {
+                map.addLayer(nanshanLayer);
+            }
         }
 
         // 初始化
