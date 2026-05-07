@@ -1901,7 +1901,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <button type="button" class="nanshan-mini-btn" onclick="toggleNanshanLayer(false); var t=document.getElementById('nanshanToggle'); if(t) t.checked=false;">關閉</button>
             </div>
         </div>
-        <div class="nanshan-category-note">依 My Maps 原始色碼判讀年代：明鄭／明代、清朝／清領、日治時期、1945 之後／戰後、年代待考。可輸入姓名、關鍵字或年代搜尋墓塚。</div>
+        <div class="nanshan-category-note">以顏色區分年代，可輸入姓名、關鍵字或年代搜尋墓塚。資料來源：張鎧臣及蔡韋漢等，2020，南山公墓歷史名人墓塚地圖（0900更新）。</div>
 
         <div class="nanshan-search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -3004,7 +3004,7 @@ var map = L.map('map', {
                     '<div class="nanshan-popup-body">' +
                         '<h3>' + escapeHTML(data.name) + '</h3>' +
                         '<div class="bio-text">' + formatNanshanBio(data.bioContent) + '</div>' +
-                        '<div class="source-tag">南山公墓圖資｜' + escapeHTML(data.layerName) + '</div>' +
+                        '<div class="source-tag">年代分類｜' + escapeHTML(data.layerName) + '<br>資料來源：張鎧臣及蔡韋漢等，2020，南山公墓歷史名人墓塚地圖（0900更新）。</div>' +
                     '</div>' +
                 '</div>';
         }
