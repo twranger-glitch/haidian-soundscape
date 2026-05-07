@@ -1544,13 +1544,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <div id="placeSearchResultsContainer"></div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
-                <label style="display:flex; align-items:center; margin-bottom:12px; cursor:pointer; width:100%;">
-                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer; flex-shrink:0;">
-                    南山公墓歷史名人墓塚
-                </label>
-
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+                
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>                <label>
                     <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
@@ -1738,7 +1732,15 @@ body.player-embedded .leaflet-popup .btn-play-main {
                         <label style="display:flex; align-items:center; margin:0; cursor:pointer; width:100%;"><input type="checkbox" id="officialHazard_soil_liquefaction_2" onchange="toggleOfficialHazardLayer('soil_liquefaction_2', this.checked)" style="accent-color:#7c3aed; margin-right:6px;"> 土壤液化潛勢圖(中級)</label>
                         <div onclick="showHazardInfo('soil_liquefaction', event)" style="cursor:pointer; padding:2px 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
                     </div>
-                </div>
+                                </div>
+
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">文史調查圖資</div>
+                <label style="display:flex; align-items:center; margin-bottom:0; cursor:pointer; width:100%;">
+                    <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin-right:6px; width:17px; height:17px; cursor:pointer; flex-shrink:0;">
+                    南山公墓歷史名人墓塚
+                </label>
             </div>
         </div>
     </div>
@@ -1786,7 +1788,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 <button type="button" class="nanshan-mini-btn" onclick="toggleNanshanLayer(false); var t=document.getElementById('nanshanToggle'); if(t) t.checked=false;">關閉</button>
             </div>
         </div>
-        <div class="nanshan-category-note">可依原始圖資的年代／圖層分類篩選墓塚。點擊紫色光點可開啟墳墓人物卡片。</div>
+        <div class="nanshan-category-note">依 My Maps 原始色碼判讀年代：明鄭／明代、清朝／清領、日治時期、1945 之後／戰後、年代待考。點擊墓塚光點可開啟人物卡片。</div>
         <div id="nanshanCategoryList" class="nanshan-category-list"></div>
     </div>
 
@@ -2627,18 +2629,104 @@ var map = L.map('map', {
             return images;
         }
 
+                var NANSHAN_ERA_ORDER = {
+            '明鄭／明代': 1,
+            '清朝／清領': 2,
+            '日治時期': 3,
+            '1945 之後／戰後': 4,
+            '年代待考': 5,
+            '其他／非墓塚或未判定': 6
+        };
+
+        function normalizeNanshanColor(rawColor) {
+            return String(rawColor || '').trim().toLowerCase();
+        }
+
+        function getNanshanFeatureColor(props) {
+            props = props || {};
+
+            var color = normalizeNanshanColor(props['icon-color'] || props.iconColor || props.color);
+            if (color) return color;
+
+            var styleUrl = String(props.styleUrl || props.styleurl || '').toLowerCase();
+            var match = styleUrl.match(/-([0-9a-f]{6})(?:-|$)/i);
+            if (match && match[1]) return '#' + match[1].toLowerCase();
+
+            return '';
+        }
+
+        function getNanshanEraLabel(props) {
+            var color = getNanshanFeatureColor(props);
+
+            switch (color) {
+                case '#f57c00':
+                    return '明鄭／明代';
+
+                case '#01579b':
+                    return '清朝／清領';
+
+                case '#9c27b0':
+                case '#673ab7':
+                    return '日治時期';
+
+                case '#7cb342':
+                    return '1945 之後／戰後';
+
+                case '#0288d1':
+                case '#000000':
+                    return '年代待考';
+
+                default:
+                    return '其他／非墓塚或未判定';
+            }
+        }
+
+        function getNanshanEraColor(props) {
+            var color = getNanshanFeatureColor(props);
+
+            if (color === '#000000') return '#64748b';
+            if (color) return color;
+
+            return '#8b5cf6';
+        }
+
+        function getNanshanCategoryColor(categoryName) {
+            switch (categoryName) {
+                case '明鄭／明代':
+                    return '#f57c00';
+                case '清朝／清領':
+                    return '#01579b';
+                case '日治時期':
+                    return '#9c27b0';
+                case '1945 之後／戰後':
+                    return '#7cb342';
+                case '年代待考':
+                    return '#0288d1';
+                default:
+                    return '#64748b';
+            }
+        }
+
+        function compareNanshanEra(a, b) {
+            var orderA = NANSHAN_ERA_ORDER[a] || 99;
+            var orderB = NANSHAN_ERA_ORDER[b] || 99;
+            if (orderA !== orderB) return orderA - orderB;
+            return String(a).localeCompare(String(b), 'zh-Hant');
+        }
+
         function extractNanshanData(props) {
             props = props || {};
             var name = getNanshanProp(props, ['Name', 'name', '名稱', 'title', 'Title'], '未命名墓塚');
-            var layerName = getNanshanProp(props, ['layer', 'Layer', '圖層', '年代', 'category', 'Category'], '未分類年代');
-            var rawHtml = '';
 
+            var rawHtml = '';
             if (typeof props.description === 'string') rawHtml = props.description;
             else if (props.description && props.description.value) rawHtml = props.description.value;
             else rawHtml = getNanshanProp(props, ['Description', '說明', '簡介', 'bio', 'Bio'], '');
 
+            var layerName = getNanshanEraLabel(props);
             var images = collectNanshanImages(props, rawHtml);
             var bioContent = stripNanshanHtmlToText(rawHtml);
+
             if (!bioContent) {
                 bioContent = getNanshanProp(props, ['說明', '簡介', 'bio', 'Bio', 'description'], '這筆圖資尚未提供完整說明。');
                 if (bioContent && typeof bioContent === 'object' && bioContent.value) bioContent = bioContent.value;
@@ -2647,7 +2735,7 @@ var map = L.map('map', {
 
             return {
                 name: String(name).trim(),
-                layerName: String(layerName).trim() || '未分類年代',
+                layerName: String(layerName).trim(),
                 images: images,
                 bioContent: String(bioContent).trim()
             };
@@ -2689,22 +2777,26 @@ var map = L.map('map', {
                     var data = extractNanshanData(feature.properties || {});
                     return activeCats.indexOf(data.layerName) > -1;
                 },
-                pointToLayer: function(feature, latlng) {
+                                pointToLayer: function(feature, latlng) {
+                    var eraColor = getNanshanEraColor((feature && feature.properties) || {});
+
                     return L.circleMarker(latlng, {
                         renderer: nanshanCanvasRenderer,
                         radius: 3,
-                        color: 'rgba(255,255,255,0.65)',
+                        color: 'rgba(255,255,255,0.7)',
                         weight: 1,
-                        fillColor: '#8b5cf6',
+                        fillColor: eraColor,
                         fillOpacity: 0.9
                     });
                 },
-                style: function() {
+                style: function(feature) {
+                    var eraColor = getNanshanEraColor((feature && feature.properties) || {});
+
                     return {
-                        color: '#8b5cf6',
+                        color: eraColor,
                         weight: 2,
                         opacity: 0.75,
-                        fillColor: '#8b5cf6',
+                        fillColor: eraColor,
                         fillOpacity: 0.18
                     };
                 },
@@ -2731,23 +2823,31 @@ var map = L.map('map', {
             }
         };
 
-        function buildNanshanCategoryMenu() {
+                function buildNanshanCategoryMenu() {
             if (!nanshanGeoJsonData || !Array.isArray(nanshanGeoJsonData.features)) return;
-            var categories = new Set();
+
+            var categoryCounts = {};
+
             nanshanGeoJsonData.features.forEach(function(f) {
-                categories.add(extractNanshanData((f && f.properties) || {}).layerName);
+                var categoryName = extractNanshanData((f && f.properties) || {}).layerName;
+                categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
             });
 
             var listContainer = document.getElementById('nanshanCategoryList');
             if (!listContainer) return;
 
             var html = '';
-            Array.from(categories).sort().forEach(function(cat) {
+            Object.keys(categoryCounts).sort(compareNanshanEra).forEach(function(cat) {
+                var color = getNanshanCategoryColor(cat);
+
                 html += '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px; color:#475569; font-weight:700; margin-bottom:4px; transition:0.2s;">' +
                     '<input type="checkbox" class="nanshan-cat-checkbox" value="' + escapeHTML(cat) + '" checked onchange="updateNanshanMap()" style="accent-color:#8b5cf6; width:16px; height:16px; cursor:pointer; flex-shrink:0;">' +
-                    '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHTML(cat) + '</span>' +
+                    '<span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:' + color + '; box-shadow:0 0 0 2px rgba(255,255,255,0.9); flex-shrink:0;"></span>' +
+                    '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">' + escapeHTML(cat) + '</span>' +
+                    '<span style="font-size:11px; color:#94a3b8; font-family:Courier New, monospace;">' + categoryCounts[cat] + '</span>' +
                 '</label>';
             });
+
             listContainer.innerHTML = html;
         }
 
