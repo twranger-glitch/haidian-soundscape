@@ -1,0 +1,83 @@
+name: Build Flood PMTiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      flood_file:
+        description: "選擇要轉成 PMTiles 的淹水 GeoJSON"
+        required: true
+        type: choice
+        options:
+          - Flood_150mm_6HR.json
+          - Flood_200mm_12HR.json
+          - Flood_200mm_24HR.json
+          - Flood_250mm_6HR.json
+          - Flood_300mm_12HR.json
+          - Flood_350mm_24HR.json
+          - Flood_350mm_6HR.json
+          - Flood_400mm_12HR.json
+          - Flood_500mm_24HR.json
+          - Flood_650mm_24HR.json
+
+env:
+  HF_BASE_URL: https://huggingface.co/datasets/yhzkiki/haidian-soundscape-gis/resolve/main/data/gis/flood
+  MIN_ZOOM: "7"
+  MAX_ZOOM: "17"
+
+jobs:
+  build-pmtiles:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Prepare file names
+        id: names
+        shell: bash
+        run: |
+          FILE="${{ inputs.flood_file }}"
+          BASENAME="${FILE%.json}"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "basename=$BASENAME" >> "$GITHUB_OUTPUT"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git libsqlite3-dev zlib1g-dev wget
+
+      - name: Build and install Tippecanoe
+        run: |
+          git clone https://github.com/mapbox/tippecanoe.git
+          cd tippecanoe
+          make -j"$(nproc)"
+          sudo make install
+          tippecanoe --version
+
+      - name: Download GeoJSON from Hugging Face
+        run: |
+          mkdir -p input output
+          wget -O "input/${{ steps.names.outputs.file }}" "${HF_BASE_URL}/${{ steps.names.outputs.file }}"
+          ls -lh input/
+
+      - name: Convert GeoJSON to PMTiles
+        run: |
+          tippecanoe \
+            -o "output/${{ steps.names.outputs.basename }}.pmtiles" \
+            -l flood \
+            -Z "${MIN_ZOOM}" \
+            -z "${MAX_ZOOM}" \
+            --projection=EPSG:4326 \
+            --force \
+            --no-feature-limit \
+            --no-tile-size-limit \
+            --full-detail=14 \
+            --low-detail=12 \
+            --minimum-detail=12 \
+            "input/${{ steps.names.outputs.file }}"
+
+          ls -lh output/
+
+      - name: Upload PMTiles artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.names.outputs.basename }}-pmtiles
+          path: output/${{ steps.names.outputs.basename }}.pmtiles
+          retention-days: 7
