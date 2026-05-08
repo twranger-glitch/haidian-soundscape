@@ -2289,6 +2289,10 @@ var map = L.map('map', {
         map.getPane('floodPane').style.zIndex = 350;
         map.getPane('floodPane').style.pointerEvents = 'none';
 
+        // 🛡️ 建立全域防護變數，避免學生畫面狂跳警告
+        var wraWmsErrorCount = 0;
+        var wraWmsErrorShown = false;
+
         function createWraWmsLayer(layerId, paneName, opacityValue) {
             return L.tileLayer.wms(wraWmsBaseUrl, {
                 layers: String(layerId),
@@ -2298,7 +2302,43 @@ var map = L.map('map', {
                 crs: L.CRS.EPSG4326,
                 uppercase: true,
                 pane: paneName,
-                opacity: opacityValue
+                opacity: opacityValue,
+                
+                // 🚀 大幅降低全班同時上課時的圖磚請求量！
+                tileSize: 512,              // 將圖塊變大，請求數量直接砍成 1/4
+                updateWhenIdle: true,       // 學生滑動地圖「停下來」後才開始抓圖
+                updateWhenZooming: false,   // 縮放動畫期間不要浪費資源抓圖
+                keepBuffer: 0               // 不要預先抓畫面以外的隱藏圖層
+            });
+        }
+
+        // 🛡️ 防護罩函式：錯誤過多自動關閉圖層
+        function attachWraErrorGuard(layer, label, toggleId, panelId) {
+            layer.on('tileerror', function(err) {
+                wraWmsErrorCount++;
+                console.warn(label + ' WMS tile error:', err);
+
+                // 連續失敗超過 5 次，觸發防護
+                if (wraWmsErrorCount >= 5 && !wraWmsErrorShown) {
+                    wraWmsErrorShown = true;
+                    
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+
+                    var toggle = document.getElementById(toggleId);
+                    if (toggle) toggle.checked = false;
+                    var panel = document.getElementById(panelId);
+                    if (panel) panel.style.display = 'none';
+
+                    alert('⚠️ 報告特派員：\n\n官方圖資伺服器目前連線量過大 (塞車中)！\n系統已自動為您暫時關閉此圖層，請先進行其他聲音地景的探索任務，稍後再試！');
+                    
+                    // 60秒內不再重複彈出警告
+                    setTimeout(function() { 
+                        wraWmsErrorShown = false; 
+                        wraWmsErrorCount = 0; 
+                    }, 60000);
+                }
             });
         }
 
@@ -2321,14 +2361,13 @@ var map = L.map('map', {
                 }
                 currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
                 currentFloodLayerId = selectedId;
-                currentFloodLayer.on('tileerror', function(err) {
-                    console.warn('Flood WMS tile error:', err);
-                });
+                
+                // 🌟 套用防護罩
+                attachWraErrorGuard(currentFloodLayer, 'Flood', 'floodToggle', 'floodControlPanel');
             }
 
             return currentFloodLayer;
         }
-
         function updateFloodLabels() {
             var selectedId = getFloodSelectedId();
             var meta = floodScenarioMeta[selectedId];
@@ -2400,9 +2439,9 @@ var map = L.map('map', {
         function ensureHydrologyLayer(layerId) {
             if (!hydrologyLayers[layerId]) {
                 hydrologyLayers[layerId] = createWraWmsLayer(layerId, 'hydrologyPane', getHydrologyOpacityValue());
-                hydrologyLayers[layerId].on('tileerror', function(err) {
-                    console.warn('Hydrology WMS tile error:', layerId, err);
-                });
+                
+                // 🌟 套用防護罩
+                attachWraErrorGuard(hydrologyLayers[layerId], 'Hydrology ' + layerId, 'hydrologyMasterToggle', 'hydrologyControlPanel');
             }
             return hydrologyLayers[layerId];
         }
