@@ -23,6 +23,7 @@ env:
   HF_BASE_URL: https://huggingface.co/datasets/yhzkiki/haidian-soundscape-gis/resolve/main/data/gis/flood
   MIN_ZOOM: "7"
   MAX_ZOOM: "17"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-pmtiles:
@@ -35,13 +36,24 @@ jobs:
         run: |
           FILE="${{ inputs.flood_file }}"
           BASENAME="${FILE%.json}"
+
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
           echo "basename=$BASENAME" >> "$GITHUB_OUTPUT"
+
+          echo "Selected file: $FILE"
+          echo "Base name: $BASENAME"
 
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git libsqlite3-dev zlib1g-dev wget
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            libsqlite3-dev \
+            zlib1g-dev \
+            wget \
+            golang-go \
+            python3
 
       - name: Build and install Tippecanoe
         run: |
@@ -54,13 +66,35 @@ jobs:
       - name: Download GeoJSON from Hugging Face
         run: |
           mkdir -p input output
-          wget -O "input/${{ steps.names.outputs.file }}" "${HF_BASE_URL}/${{ steps.names.outputs.file }}"
+
+          wget \
+            -O "input/${{ steps.names.outputs.file }}" \
+            "${HF_BASE_URL}/${{ steps.names.outputs.file }}"
+
+          echo "Downloaded source:"
           ls -lh input/
 
-      - name: Convert GeoJSON to PMTiles
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path("input/${{ steps.names.outputs.file }}")
+          print("Source size:", p.stat().st_size, "bytes")
+
+          with p.open("r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          print("GeoJSON type:", data.get("type"))
+          print("Feature count:", len(data.get("features", [])))
+
+          if data.get("type") != "FeatureCollection":
+              raise SystemExit("Source is not a GeoJSON FeatureCollection")
+          PY
+
+      - name: Convert GeoJSON to MBTiles
         run: |
           tippecanoe \
-            -o "output/${{ steps.names.outputs.basename }}.pmtiles" \
+            -o "output/${{ steps.names.outputs.basename }}.mbtiles" \
             -l flood \
             -Z "${MIN_ZOOM}" \
             -z "${MAX_ZOOM}" \
@@ -73,7 +107,51 @@ jobs:
             --minimum-detail=12 \
             "input/${{ steps.names.outputs.file }}"
 
+          echo "After MBTiles build:"
           ls -lh output/
+
+      - name: Check MBTiles magic bytes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("output/${{ steps.names.outputs.basename }}.mbtiles")
+          data = p.read_bytes()[:16]
+
+          print("MBTiles first bytes:", data)
+          print("MBTiles first text:", data.decode("utf-8", errors="replace"))
+
+          if not data.startswith(b"SQLite format 3"):
+              raise SystemExit("Tippecanoe output is not a valid MBTiles / SQLite file")
+          PY
+
+      - name: Convert MBTiles to real PMTiles
+        run: |
+          go run github.com/protomaps/go-pmtiles@latest convert \
+            "output/${{ steps.names.outputs.basename }}.mbtiles" \
+            "output/${{ steps.names.outputs.basename }}.pmtiles"
+
+          echo "PMTiles info:"
+          go run github.com/protomaps/go-pmtiles@latest show \
+            "output/${{ steps.names.outputs.basename }}.pmtiles"
+
+          echo "After PMTiles conversion:"
+          ls -lh output/
+
+      - name: Check PMTiles magic bytes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("output/${{ steps.names.outputs.basename }}.pmtiles")
+          data = p.read_bytes()[:16]
+
+          print("PMTiles first bytes:", data)
+          print("PMTiles first text:", data.decode("utf-8", errors="replace"))
+
+          if not data.startswith(b"PMTiles"):
+              raise SystemExit("Not a valid PMTiles file. It is probably still MBTiles.")
+          PY
 
       - name: Upload PMTiles artifact
         uses: actions/upload-artifact@v4
