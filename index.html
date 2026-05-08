@@ -1721,7 +1721,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">官方淹水潛勢 (水利署)</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">淹水潛勢圖 (快取圖資)</div>
                 <label>
                     <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
                     顯示淹水潛勢圖
@@ -1756,7 +1756,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (獨立疊圖管理)</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (快取圖資)</div>
                 <label>
                     <input type="checkbox" id="hydrologyMasterToggle" onchange="toggleHydrologyPanel(this.checked)" style="accent-color:#0f766e; width:17px; height:17px; margin:0; flex-shrink:0;">
                     啟用水文專區
@@ -2249,33 +2249,107 @@ var map = L.map('map', {
             if(window.innerWidth <= 600) closeAllDrawers();
         }
 
-        var wraWmsBaseUrl = 'https://maps.wra.gov.tw/arcgis/services/WMS/GIC_WMS/MapServer/WMSServer?';
+                // ==========================================
+        // 🌊 水利署圖資：改用 Cloudflare Worker 快取 Hugging Face GeoJSON
+        // ==========================================
+
+        var gisWorkerBaseUrl = 'https://haidian-gis-cache.yhzkiki.workers.dev/data/gis/';
+        var gisHfBaseUrl = 'https://huggingface.co/datasets/yhzkiki/haidian-soundscape-gis/resolve/main/data/gis/';
+
+        var geoJsonDataCache = {};
+        var geoJsonRenderer = L.canvas({ padding: 0.5 });
 
         var floodScenarioMeta = {
-            'flood_200mm_24hr': { label: '24 小時 200 mm' },
-            'flood_350mm_24hr': { label: '24 小時 350 mm' },
-            'flood_500mm_24hr': { label: '24 小時 500 mm' },
-            'flood_650mm_24hr': { label: '24 小時 650 mm' },
-            'flood_200mm_12hr': { label: '12 小時 200 mm' },
-            'flood_300mm_12hr': { label: '12 小時 300 mm' },
-            'flood_400mm_12hr': { label: '12 小時 400 mm' },
-            'flood_150mm_6hr': { label: '6 小時 150 mm' },
-            'flood_250mm_6hr': { label: '6 小時 250 mm' },
-            'flood_350mm_6hr': { label: '6 小時 350 mm' }
+            'flood_200mm_24hr': { label: '24 小時 200 mm', path: 'flood/flood_200mm_24hr.json' },
+            'flood_350mm_24hr': { label: '24 小時 350 mm', path: 'flood/flood_350mm_24hr.json' },
+            'flood_500mm_24hr': { label: '24 小時 500 mm', path: 'flood/flood_500mm_24hr.json' },
+            'flood_650mm_24hr': { label: '24 小時 650 mm', path: 'flood/flood_650mm_24hr.json' },
+            'flood_200mm_12hr': { label: '12 小時 200 mm', path: 'flood/flood_200mm_12hr.json' },
+            'flood_300mm_12hr': { label: '12 小時 300 mm', path: 'flood/flood_300mm_12hr.json' },
+            'flood_400mm_12hr': { label: '12 小時 400 mm', path: 'flood/flood_400mm_12hr.json' },
+            'flood_150mm_6hr': { label: '6 小時 150 mm', path: 'flood/flood_150mm_6hr.json' },
+            'flood_250mm_6hr': { label: '6 小時 250 mm', path: 'flood/flood_250mm_6hr.json' },
+            'flood_350mm_6hr': { label: '6 小時 350 mm', path: 'flood/flood_350mm_6hr.json' }
         };
 
         var hydrologyLayerMeta = {
-            'SEAWALLZONE': { label: '海堤區域' },
-            'CoastalBufferZone': { label: '海岸緩衝區' },
-            'CoastalProtectionZone': { label: '海岸保護區' },
-            'REGDAREA': { label: '區域排水治理區' },
-            'reservoir': { label: '水庫範圍' },
-            'TWQPROT': { label: '水質水量保護區' },
-            'Salinizationzone': { label: '地下水鹽化區' },
-            'LASUBSTA': { label: '地層下陷監測站' }
+            'SEAWALLZONE': {
+                label: '海堤區域',
+                path: 'hydrology/SEAWALLZONE.json',
+                color: '#0f766e',
+                fillColor: '#99f6e4',
+                weight: 1.5,
+                fillOpacityRatio: 0.35
+            },
+            'CoastalBufferZone': {
+                label: '海岸緩衝區',
+                path: 'hydrology/CoastalBufferZone.json',
+                color: '#0891b2',
+                fillColor: '#a5f3fc',
+                weight: 1,
+                fillOpacityRatio: 0.35
+            },
+            'CoastalProtectionZone': {
+                label: '海岸保護區',
+                path: 'hydrology/CoastalProtectionZone.json',
+                color: '#16a34a',
+                fillColor: '#bbf7d0',
+                weight: 1,
+                fillOpacityRatio: 0.35
+            },
+            'REGDAREA': {
+                label: '區域排水治理區',
+                path: 'hydrology/REGDAREA.json',
+                color: '#7c3aed',
+                fillColor: '#ddd6fe',
+                weight: 1,
+                fillOpacityRatio: 0.35
+            },
+            'reservoir': {
+                label: '水庫範圍',
+                path: 'hydrology/ressub.json',
+                color: '#2563eb',
+                fillColor: '#bfdbfe',
+                weight: 1,
+                fillOpacityRatio: 0.45
+            },
+            'TWQPROT': {
+                label: '水質水量保護區',
+                path: 'hydrology/TWQPROT.json',
+                color: '#15803d',
+                fillColor: '#bbf7d0',
+                weight: 1,
+                fillOpacityRatio: 0.3
+            },
+            'Salinizationzone': {
+                label: '地下水鹽化區',
+                path: 'hydrology/Salinizationzone.json',
+                color: '#d97706',
+                fillColor: '#fed7aa',
+                weight: 1,
+                fillOpacityRatio: 0.38
+            },
+            'LASUBSTA': {
+                label: '地層下陷監測站',
+                path: 'hydrology/LASUBSTA.json',
+                color: '#dc2626',
+                fillColor: '#ef4444',
+                weight: 1,
+                fillOpacityRatio: 0.85,
+                pointRadius: 5
+            }
         };
 
-        var recommendedHydrologyIds = ['SEAWALLZONE', 'CoastalBufferZone', 'CoastalProtectionZone', 'REGDAREA', 'reservoir', 'TWQPROT', 'Salinizationzone', 'LASUBSTA'];
+        var recommendedHydrologyIds = [
+            'SEAWALLZONE',
+            'CoastalBufferZone',
+            'CoastalProtectionZone',
+            'REGDAREA',
+            'reservoir',
+            'TWQPROT',
+            'Salinizationzone',
+            'LASUBSTA'
+        ];
 
         var currentFloodLayer = null;
         var currentFloodLayerId = null;
@@ -2289,57 +2363,224 @@ var map = L.map('map', {
         map.getPane('floodPane').style.zIndex = 350;
         map.getPane('floodPane').style.pointerEvents = 'none';
 
-        // 🛡️ 建立全域防護變數，避免學生畫面狂跳警告
-        var wraWmsErrorCount = 0;
-        var wraWmsErrorShown = false;
-
-        function createWraWmsLayer(layerId, paneName, opacityValue) {
-            return L.tileLayer.wms(wraWmsBaseUrl, {
-                layers: String(layerId),
-                format: 'image/png',
-                transparent: true,
-                version: '1.3.0',
-                crs: L.CRS.EPSG4326,
-                uppercase: true,
-                pane: paneName,
-                opacity: opacityValue,
-                
-                // 🚀 大幅降低全班同時上課時的圖磚請求量！
-                tileSize: 512,              // 將圖塊變大，請求數量直接砍成 1/4
-                updateWhenIdle: true,       // 學生滑動地圖「停下來」後才開始抓圖
-                updateWhenZooming: false,   // 縮放動畫期間不要浪費資源抓圖
-                keepBuffer: 0               // 不要預先抓畫面以外的隱藏圖層
-            });
+        function getGeoJsonUrls(path) {
+            return [
+                gisWorkerBaseUrl + path,
+                gisHfBaseUrl + path
+            ];
         }
 
-        // 🛡️ 防護罩函式：錯誤過多自動關閉圖層
-        function attachWraErrorGuard(layer, label, toggleId, panelId) {
-            layer.on('tileerror', function(err) {
-                wraWmsErrorCount++;
-                console.warn(label + ' WMS tile error:', err);
+        async function fetchGeoJsonWithFallback(path) {
+            if (geoJsonDataCache[path]) {
+                return geoJsonDataCache[path];
+            }
 
-                // 連續失敗超過 5 次，觸發防護
-                if (wraWmsErrorCount >= 5 && !wraWmsErrorShown) {
-                    wraWmsErrorShown = true;
-                    
-                    if (map.hasLayer(layer)) {
-                        map.removeLayer(layer);
+            var urls = getGeoJsonUrls(path);
+            var lastError = null;
+
+            for (var i = 0; i < urls.length; i++) {
+                var url = urls[i];
+
+                try {
+                    var res = await fetch(url, {
+                        method: 'GET',
+                        cache: 'force-cache'
+                    });
+
+                    if (!res.ok) {
+                        throw new Error('HTTP ' + res.status + '：' + url);
                     }
 
-                    var toggle = document.getElementById(toggleId);
-                    if (toggle) toggle.checked = false;
-                    var panel = document.getElementById(panelId);
-                    if (panel) panel.style.display = 'none';
+                    var text = await res.text();
+                    var trimmed = text.trim();
 
-                    alert('⚠️ 報告特派員：\n\n官方圖資伺服器目前連線量過大 (塞車中)！\n系統已自動為您暫時關閉此圖層，請先進行其他聲音地景的探索任務，稍後再試！');
-                    
-                    // 60秒內不再重複彈出警告
-                    setTimeout(function() { 
-                        wraWmsErrorShown = false; 
-                        wraWmsErrorCount = 0; 
-                    }, 60000);
+                    if (!trimmed.startsWith('{')) {
+                        throw new Error('不是 JSON / GeoJSON：' + url);
+                    }
+
+                    var data = JSON.parse(trimmed);
+
+                    if (!data || data.type !== 'FeatureCollection') {
+                        throw new Error('不是 FeatureCollection：' + url);
+                    }
+
+                    geoJsonDataCache[path] = data;
+                    return data;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('GeoJSON 來源失敗，準備改用下一個來源：', err);
+                }
+            }
+
+            throw lastError || new Error('GeoJSON 載入失敗：' + path);
+        }
+
+        function createManagedGeoJsonLayer(options) {
+            var currentOpacity = options.opacity || 0.55;
+
+            var layer = L.geoJSON(null, {
+                pane: options.pane,
+                renderer: geoJsonRenderer,
+
+                style: function(feature) {
+                    if (options.kind === 'flood') {
+                        return getFloodFeatureStyle(feature, currentOpacity);
+                    }
+
+                    return getHydrologyFeatureStyle(options.meta, currentOpacity);
+                },
+
+                pointToLayer: function(feature, latlng) {
+                    var meta = options.meta || {};
+                    return L.circleMarker(latlng, {
+                        pane: options.pane,
+                        renderer: geoJsonRenderer,
+                        radius: meta.pointRadius || 5,
+                        color: meta.color || '#dc2626',
+                        weight: meta.weight || 1,
+                        opacity: currentOpacity,
+                        fillColor: meta.fillColor || meta.color || '#dc2626',
+                        fillOpacity: currentOpacity * (meta.fillOpacityRatio || 0.8)
+                    });
+                },
+
+                onEachFeature: function(feature, featureLayer) {
+                    if (!feature || !feature.properties) return;
+
+                    var props = feature.properties;
+                    var title =
+                        props.NAME ||
+                        props.Name ||
+                        props.name ||
+                        props.COUNTYNAME ||
+                        props.TOWNNAME ||
+                        options.label ||
+                        '圖資屬性';
+
+                    var html = '<div style="font-size:12px; line-height:1.6; max-width:260px;">';
+                    html += '<div style="font-weight:900; color:#0f172a; margin-bottom:6px;">' + escapeGISHtml(title) + '</div>';
+
+                    Object.keys(props).slice(0, 10).forEach(function(key) {
+                        var value = props[key];
+                        if (value === null || value === undefined || value === '') return;
+                        html += '<div><b>' + escapeGISHtml(key) + '</b>：' + escapeGISHtml(value) + '</div>';
+                    });
+
+                    html += '</div>';
+
+                    featureLayer.bindPopup(html);
                 }
             });
+
+            layer.__loaded = false;
+            layer.__loading = false;
+            layer.__loadError = null;
+
+            layer.setOpacity = function(opacityValue) {
+                currentOpacity = parseFloat(opacityValue);
+
+                layer.eachLayer(function(child) {
+                    if (child.setStyle) {
+                        if (options.kind === 'flood') {
+                            child.setStyle(getFloodFeatureStyle(child.feature, currentOpacity));
+                        } else {
+                            child.setStyle(getHydrologyFeatureStyle(options.meta, currentOpacity));
+                        }
+                    }
+                });
+            };
+
+            layer.loadData = async function() {
+                if (layer.__loaded || layer.__loading) return layer;
+
+                layer.__loading = true;
+
+                try {
+                    var data = await fetchGeoJsonWithFallback(options.path);
+                    layer.addData(data);
+                    layer.setOpacity(currentOpacity);
+                    layer.__loaded = true;
+                    layer.__loadError = null;
+                } catch (err) {
+                    layer.__loadError = err;
+                    console.error('圖資載入失敗：', options.label, err);
+                    alert('⚠️ 圖資載入失敗：' + options.label + '\n\n請稍後再試，或檢查 Hugging Face / Worker 檔案路徑。');
+                } finally {
+                    layer.__loading = false;
+                }
+
+                return layer;
+            };
+
+            return layer;
+        }
+
+        function escapeGISHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getHydrologyFeatureStyle(meta, opacityValue) {
+            meta = meta || {};
+            return {
+                color: meta.color || '#0f766e',
+                weight: meta.weight || 1,
+                opacity: opacityValue,
+                fillColor: meta.fillColor || meta.color || '#99f6e4',
+                fillOpacity: opacityValue * (meta.fillOpacityRatio || 0.35)
+            };
+        }
+
+        function getFloodDepthValue(feature) {
+            var props = feature && feature.properties ? feature.properties : {};
+
+            var keys = [
+                'DEPTH',
+                'Depth',
+                'depth',
+                '淹水深度',
+                '水深',
+                'gridcode',
+                'GRIDCODE',
+                'VALUE',
+                'Value',
+                'value',
+                'DN'
+            ];
+
+            for (var i = 0; i < keys.length; i++) {
+                var raw = props[keys[i]];
+                if (raw === null || raw === undefined || raw === '') continue;
+
+                var num = parseFloat(String(raw).replace(/[^\d.\-]/g, ''));
+                if (!isNaN(num)) return num;
+            }
+
+            return 0;
+        }
+
+        function getFloodColor(depth) {
+            if (depth >= 3) return '#1e3a8a';
+            if (depth >= 2) return '#1d4ed8';
+            if (depth >= 1) return '#2563eb';
+            if (depth >= 0.5) return '#60a5fa';
+            return '#bfdbfe';
+        }
+
+        function getFloodFeatureStyle(feature, opacityValue) {
+            var depth = getFloodDepthValue(feature);
+
+            return {
+                color: '#1d4ed8',
+                weight: 0.35,
+                opacity: Math.min(opacityValue + 0.1, 1),
+                fillColor: getFloodColor(depth),
+                fillOpacity: opacityValue * 0.65
+            };
         }
 
         function getFloodSelectedId() {
@@ -2354,20 +2595,27 @@ var map = L.map('map', {
 
         function ensureFloodLayer() {
             var selectedId = getFloodSelectedId();
+            var meta = floodScenarioMeta[selectedId] || floodScenarioMeta['flood_200mm_24hr'];
 
             if (!currentFloodLayer || currentFloodLayerId !== selectedId) {
                 if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
                     map.removeLayer(currentFloodLayer);
                 }
-                currentFloodLayer = createWraWmsLayer(selectedId, 'floodPane', getFloodOpacityValue());
+
+                currentFloodLayer = createManagedGeoJsonLayer({
+                    kind: 'flood',
+                    label: meta.label,
+                    path: meta.path,
+                    pane: 'floodPane',
+                    opacity: getFloodOpacityValue()
+                });
+
                 currentFloodLayerId = selectedId;
-                
-                // 🌟 套用防護罩
-                attachWraErrorGuard(currentFloodLayer, 'Flood', 'floodToggle', 'floodControlPanel');
             }
 
             return currentFloodLayer;
         }
+
         function updateFloodLabels() {
             var selectedId = getFloodSelectedId();
             var meta = floodScenarioMeta[selectedId];
@@ -2394,6 +2642,8 @@ var map = L.map('map', {
             if (!map.hasLayer(layer)) {
                 map.addLayer(layer);
             }
+
+            layer.loadData();
         }
 
         function changeFloodScenario(val) {
@@ -2412,6 +2662,7 @@ var map = L.map('map', {
                 var layer = ensureFloodLayer();
                 layer.setOpacity(getFloodOpacityValue());
                 map.addLayer(layer);
+                layer.loadData();
             }
         }
 
@@ -2420,6 +2671,7 @@ var map = L.map('map', {
             if (opacityValueEl) {
                 opacityValueEl.innerText = Math.round(parseFloat(val) * 100) + '%';
             }
+
             if (currentFloodLayer) {
                 currentFloodLayer.setOpacity(parseFloat(val));
             }
@@ -2427,8 +2679,29 @@ var map = L.map('map', {
 
         function openFloodLegend() {
             var selectedId = getFloodSelectedId();
-            var legendUrl = wraWmsBaseUrl + 'request=GetLegendGraphic&version=1.3.0&format=image/png&layer=' + encodeURIComponent(selectedId);
-            window.open(legendUrl, '_blank');
+            var meta = floodScenarioMeta[selectedId] || {};
+            var title = meta.label || '淹水潛勢圖';
+
+            var html = `
+                <div style="font-size:12px; line-height:1.6; min-width:180px;">
+                    <div style="font-weight:900; color:#1e3a8a; margin-bottom:6px;">${escapeGISHtml(title)} 圖例</div>
+                    <div><span style="display:inline-block;width:18px;height:10px;background:#bfdbfe;margin-right:6px;"></span>較低潛勢 / 低水深</div>
+                    <div><span style="display:inline-block;width:18px;height:10px;background:#60a5fa;margin-right:6px;"></span>約 0.5 m 以上</div>
+                    <div><span style="display:inline-block;width:18px;height:10px;background:#2563eb;margin-right:6px;"></span>約 1 m 以上</div>
+                    <div><span style="display:inline-block;width:18px;height:10px;background:#1d4ed8;margin-right:6px;"></span>約 2 m 以上</div>
+                    <div><span style="display:inline-block;width:18px;height:10px;background:#1e3a8a;margin-right:6px;"></span>約 3 m 以上</div>
+                    <div style="margin-top:6px; color:#64748b;">實際分級會依原始 GeoJSON 欄位而定。</div>
+                </div>
+            `;
+
+            L.popup({
+                closeButton: true,
+                autoClose: true,
+                className: 'glass-popup'
+            })
+            .setLatLng(map.getCenter())
+            .setContent(html)
+            .openOn(map);
         }
 
         function getHydrologyOpacityValue() {
@@ -2437,12 +2710,20 @@ var map = L.map('map', {
         }
 
         function ensureHydrologyLayer(layerId) {
+            var meta = hydrologyLayerMeta[layerId];
+            if (!meta) return null;
+
             if (!hydrologyLayers[layerId]) {
-                hydrologyLayers[layerId] = createWraWmsLayer(layerId, 'hydrologyPane', getHydrologyOpacityValue());
-                
-                // 🌟 套用防護罩
-                attachWraErrorGuard(hydrologyLayers[layerId], 'Hydrology ' + layerId, 'hydrologyMasterToggle', 'hydrologyControlPanel');
+                hydrologyLayers[layerId] = createManagedGeoJsonLayer({
+                    kind: 'hydrology',
+                    label: meta.label,
+                    path: meta.path,
+                    pane: 'hydrologyPane',
+                    opacity: getHydrologyOpacityValue(),
+                    meta: meta
+                });
             }
+
             return hydrologyLayers[layerId];
         }
 
@@ -2459,12 +2740,20 @@ var map = L.map('map', {
 
         function toggleHydrologyLayer(layerId, checked) {
             var layer = ensureHydrologyLayer(layerId);
+            if (!layer) return;
 
             if (checked) {
                 layer.setOpacity(getHydrologyOpacityValue());
-                if (!map.hasLayer(layer)) map.addLayer(layer);
+
+                if (!map.hasLayer(layer)) {
+                    map.addLayer(layer);
+                }
+
+                layer.loadData();
             } else {
-                if (map.hasLayer(layer)) map.removeLayer(layer);
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
             }
 
             syncHydrologyStatus();
@@ -2477,7 +2766,9 @@ var map = L.map('map', {
             }
 
             Object.keys(hydrologyLayers).forEach(function(layerId) {
-                hydrologyLayers[layerId].setOpacity(parseFloat(val));
+                if (hydrologyLayers[layerId] && hydrologyLayers[layerId].setOpacity) {
+                    hydrologyLayers[layerId].setOpacity(parseFloat(val));
+                }
             });
         }
 
@@ -2498,7 +2789,10 @@ var map = L.map('map', {
 
             var masterToggle = document.getElementById('hydrologyMasterToggle');
             if (masterToggle) {
-                masterToggle.checked = activeCount > 0 || (document.getElementById('hydrologyControlPanel') && document.getElementById('hydrologyControlPanel').style.display === 'block');
+                masterToggle.checked = activeCount > 0 || (
+                    document.getElementById('hydrologyControlPanel') &&
+                    document.getElementById('hydrologyControlPanel').style.display === 'block'
+                );
             }
         }
 
