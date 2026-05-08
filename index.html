@@ -621,6 +621,20 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .cat-space { background: #ebf5fb; color: #0369a1; }   
         .cat-history { background: #f4ecf8; color: #7e22ce; }  
         .cat-default { background: #f1f5f9; color: #475569; }  
+        .flood-depth-tooltip {
+    background: rgba(255, 251, 235, 0.96);
+    border: 1px solid rgba(245, 158, 11, 0.8);
+    color: #7c2d12;
+    font-size: 11px;
+    font-weight: 900;
+    padding: 2px 6px;
+    border-radius: 6px;
+    box-shadow: 0 4px 10px rgba(120, 53, 15, 0.18);
+}
+
+.flood-depth-tooltip::before {
+    display: none;
+}
         
         .btn-play-main { background: var(--accent-color); color: #fff; border: none; padding: 12px 15px; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(39,174,96,0.25); letter-spacing: 0.5px;}
         .btn-play-main:hover { background: #219150; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(39,174,96,0.35); }
@@ -2363,7 +2377,7 @@ var map = L.map('map', {
 
         map.createPane('floodPane');
         map.getPane('floodPane').style.zIndex = 350;
-        map.getPane('floodPane').style.pointerEvents = 'none';
+        map.getPane('floodPane').style.pointerEvents = 'auto';
 
         function getGeoJsonUrls(path) {
             return [
@@ -2446,10 +2460,35 @@ var map = L.map('map', {
                     });
                 },
 
-                onEachFeature: function(feature, featureLayer) {
+                                onEachFeature: function(feature, featureLayer) {
                     if (!feature || !feature.properties) return;
 
                     var props = feature.properties;
+
+                    if (options.kind === 'flood') {
+                        var depthInfo = getFloodDepthInfo(feature);
+                        var floodTitle = options.label || '淹水潛勢圖';
+
+                        var floodHtml = `
+                            <div style="font-size:12px; line-height:1.6; max-width:260px;">
+                                <div style="font-weight:900; color:#92400e; margin-bottom:6px;">${escapeGISHtml(floodTitle)}</div>
+                                <div style="font-size:14px; font-weight:900; color:#7c2d12;">
+                                    淹水深度：${escapeGISHtml(depthInfo.label)}
+                                </div>
+                            </div>
+                        `;
+
+                        featureLayer.bindPopup(floodHtml);
+
+                        featureLayer.bindTooltip(depthInfo.label, {
+                            sticky: true,
+                            direction: 'top',
+                            className: 'flood-depth-tooltip'
+                        });
+
+                        return;
+                    }
+
                     var title =
                         props.NAME ||
                         props.Name ||
@@ -2537,15 +2576,22 @@ var map = L.map('map', {
             };
         }
 
-        function getFloodDepthValue(feature) {
+                function getFloodDepthInfo(feature) {
             var props = feature && feature.properties ? feature.properties : {};
 
-            var keys = [
+            var explicitKeys = [
                 'DEPTH',
                 'Depth',
                 'depth',
+                'DEPTH_M',
+                'DEPTHM',
+                'FLOODDEPTH',
+                'FLOOD_DEPTH',
+                'FLD_DEPTH',
                 '淹水深度',
                 '水深',
+                '深度',
+                '淹水深',
                 'gridcode',
                 'GRIDCODE',
                 'VALUE',
@@ -2554,34 +2600,139 @@ var map = L.map('map', {
                 'DN'
             ];
 
-            for (var i = 0; i < keys.length; i++) {
-                var raw = props[keys[i]];
-                if (raw === null || raw === undefined || raw === '') continue;
-
-                var num = parseFloat(String(raw).replace(/[^\d.\-]/g, ''));
-                if (!isNaN(num)) return num;
+            // 1. 先找常見欄位
+            for (var i = 0; i < explicitKeys.length; i++) {
+                var key = explicitKeys[i];
+                if (props[key] !== null && props[key] !== undefined && props[key] !== '') {
+                    var info = parseFloodDepthValue(props[key]);
+                    if (info) return info;
+                }
             }
 
-            return 0;
+            // 2. 如果欄位名稱不明，就掃描所有屬性值，找像「0.5-1.0公尺」的字串
+            var propKeys = Object.keys(props);
+            for (var j = 0; j < propKeys.length; j++) {
+                var value = props[propKeys[j]];
+                var text = String(value || '');
+
+                if (
+                    text.indexOf('公尺') !== -1 ||
+                    text.indexOf('m') !== -1 ||
+                    /^\s*\d+(\.\d+)?\s*[-~－–]\s*\d+(\.\d+)?/.test(text) ||
+                    /^\s*\d+(\.\d+)?\s*以上/.test(text) ||
+                    /^\s*小於\s*\d+(\.\d+)?/.test(text)
+                ) {
+                    var scannedInfo = parseFloodDepthValue(text);
+                    if (scannedInfo) return scannedInfo;
+                }
+            }
+
+            return {
+                min: 0,
+                max: 0,
+                avg: 0,
+                label: '淹水潛勢區'
+            };
         }
 
-        function getFloodColor(depth) {
-            if (depth >= 3) return '#1e3a8a';
-            if (depth >= 2) return '#1d4ed8';
-            if (depth >= 1) return '#2563eb';
-            if (depth >= 0.5) return '#60a5fa';
-            return '#bfdbfe';
+        function parseFloodDepthValue(rawValue) {
+            if (rawValue === null || rawValue === undefined || rawValue === '') return null;
+
+            var text = String(rawValue).trim()
+                .replace(/ｍ/g, 'm')
+                .replace(/公尺/g, 'm')
+                .replace(/米/g, 'm')
+                .replace(/－/g, '-')
+                .replace(/–/g, '-')
+                .replace(/~/g, '-')
+                .replace(/～/g, '-');
+
+            // 例如：0.5-1.0m
+            var rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
+            if (rangeMatch) {
+                var min = parseFloat(rangeMatch[1]);
+                var max = parseFloat(rangeMatch[2]);
+                return {
+                    min: min,
+                    max: max,
+                    avg: (min + max) / 2,
+                    label: min + '-' + max + ' 公尺'
+                };
+            }
+
+            // 例如：3.0m以上、3以上
+            var aboveMatch = text.match(/(\d+(?:\.\d+)?)\s*m?\s*以上/);
+            if (aboveMatch) {
+                var above = parseFloat(aboveMatch[1]);
+                return {
+                    min: above,
+                    max: null,
+                    avg: above,
+                    label: above + ' 公尺以上'
+                };
+            }
+
+            // 例如：小於0.3m
+            var belowMatch = text.match(/小於\s*(\d+(?:\.\d+)?)/);
+            if (belowMatch) {
+                var below = parseFloat(belowMatch[1]);
+                return {
+                    min: 0,
+                    max: below,
+                    avg: below / 2,
+                    label: '小於 ' + below + ' 公尺'
+                };
+            }
+
+            // 純數字：可能是水深，也可能是分級代碼
+            var numeric = parseFloat(text.replace(/[^\d.\-]/g, ''));
+            if (!isNaN(numeric)) {
+                // 常見淹水潛勢分級代碼，保守轉成深度區間
+                if (/^\s*[1-5]\s*$/.test(text)) {
+                    var codeMap = {
+                        1: { min: 0, max: 0.3, avg: 0.15, label: '0-0.3 公尺' },
+                        2: { min: 0.3, max: 0.5, avg: 0.4, label: '0.3-0.5 公尺' },
+                        3: { min: 0.5, max: 1.0, avg: 0.75, label: '0.5-1.0 公尺' },
+                        4: { min: 1.0, max: 2.0, avg: 1.5, label: '1.0-2.0 公尺' },
+                        5: { min: 2.0, max: null, avg: 2.5, label: '2.0 公尺以上' }
+                    };
+                    return codeMap[numeric];
+                }
+
+                return {
+                    min: numeric,
+                    max: numeric,
+                    avg: numeric,
+                    label: numeric + ' 公尺'
+                };
+            }
+
+            return null;
+        }
+
+        function getFloodColorByDepth(depthInfo) {
+            var d = depthInfo && typeof depthInfo.avg === 'number' ? depthInfo.avg : 0;
+
+            // 盡量接近原本水利署潛勢圖：淺黃 → 黃 → 橘 → 紅
+            if (d >= 3.0) return '#991b1b';
+            if (d >= 2.0) return '#dc2626';
+            if (d >= 1.0) return '#f97316';
+            if (d >= 0.5) return '#f59e0b';
+            if (d >= 0.3) return '#facc15';
+            return '#fef08a';
         }
 
         function getFloodFeatureStyle(feature, opacityValue) {
-            var depth = getFloodDepthValue(feature);
+            var depthInfo = getFloodDepthInfo(feature);
 
             return {
-                color: '#1d4ed8',
-                weight: 0.35,
-                opacity: Math.min(opacityValue + 0.1, 1),
-                fillColor: getFloodColor(depth),
-                fillOpacity: opacityValue * 0.65
+                fill: true,
+                stroke: true,
+                color: getFloodColorByDepth(depthInfo),
+                weight: 0.15,
+                opacity: 0.35,
+                fillColor: getFloodColorByDepth(depthInfo),
+                fillOpacity: Math.max(parseFloat(opacityValue || 0.55), 0.45)
             };
         }
 
