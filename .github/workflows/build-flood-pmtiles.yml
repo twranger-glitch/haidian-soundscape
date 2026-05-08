@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       flood_file:
-        description: "選擇要轉成 PMTiles 的淹水 GeoJSON"
+        description: "選擇要轉成 PMTiles 的淹水 GeoJSON，或選 ALL 一次轉全部"
         required: true
         type: choice
         options:
+          - ALL
           - Flood_150mm_6HR.json
           - Flood_200mm_12HR.json
           - Flood_200mm_24HR.json
@@ -28,20 +29,34 @@ env:
 jobs:
   build-pmtiles:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
-      - name: Prepare file names
+      - name: Prepare file list
         id: names
         shell: bash
         run: |
-          FILE="${{ inputs.flood_file }}"
-          BASENAME="${FILE%.json}"
+          SELECTED="${{ inputs.flood_file }}"
 
-          echo "file=$FILE" >> "$GITHUB_OUTPUT"
-          echo "basename=$BASENAME" >> "$GITHUB_OUTPUT"
+          if [ "$SELECTED" = "ALL" ]; then
+            cat > files.txt <<'EOF'
+          Flood_150mm_6HR.json
+          Flood_200mm_12HR.json
+          Flood_200mm_24HR.json
+          Flood_250mm_6HR.json
+          Flood_300mm_12HR.json
+          Flood_350mm_24HR.json
+          Flood_350mm_6HR.json
+          Flood_400mm_12HR.json
+          Flood_500mm_24HR.json
+          Flood_650mm_24HR.json
+          EOF
+          else
+            echo "$SELECTED" > files.txt
+          fi
 
-          echo "Selected file: $FILE"
-          echo "Base name: $BASENAME"
+          echo "Files to process:"
+          cat files.txt
 
       - name: Install build tools
         run: |
@@ -63,22 +78,35 @@ jobs:
           sudo make install
           tippecanoe --version
 
-      - name: Download GeoJSON from Hugging Face
+      - name: Convert selected GeoJSON files to PMTiles
+        shell: bash
         run: |
           mkdir -p input output
 
-          wget \
-            -O "input/${{ steps.names.outputs.file }}" \
-            "${HF_BASE_URL}/${{ steps.names.outputs.file }}"
+          while read -r FILE; do
+            [ -z "$FILE" ] && continue
 
-          echo "Downloaded source:"
-          ls -lh input/
+            BASENAME="${FILE%.json}"
+            MBTILES="output/${BASENAME}.mbtiles"
+            PMTILES="output/${BASENAME}_v2.pmtiles"
 
-          python3 - <<'PY'
+            echo "===================================================="
+            echo "Processing: $FILE"
+            echo "Output: ${BASENAME}_v2.pmtiles"
+            echo "===================================================="
+
+            wget \
+              -O "input/$FILE" \
+              "${HF_BASE_URL}/${FILE}"
+
+            echo "Downloaded:"
+            ls -lh "input/$FILE"
+
+            python3 - <<PY
           import json
           from pathlib import Path
 
-          p = Path("input/${{ steps.names.outputs.file }}")
+          p = Path("input/$FILE")
           print("Source size:", p.stat().st_size, "bytes")
 
           with p.open("r", encoding="utf-8") as f:
@@ -91,71 +119,67 @@ jobs:
               raise SystemExit("Source is not a GeoJSON FeatureCollection")
           PY
 
-      - name: Convert GeoJSON to MBTiles
-        run: |
-          tippecanoe \
-            -o "output/${{ steps.names.outputs.basename }}.mbtiles" \
-            -l flood \
-            -Z "${MIN_ZOOM}" \
-            -z "${MAX_ZOOM}" \
-            --projection=EPSG:4326 \
-            --force \
-            --no-feature-limit \
-            --no-tile-size-limit \
-            --full-detail=14 \
-            --low-detail=12 \
-            --minimum-detail=12 \
-            "input/${{ steps.names.outputs.file }}"
+            tippecanoe \
+              -o "$MBTILES" \
+              -l flood \
+              -Z "${MIN_ZOOM}" \
+              -z "${MAX_ZOOM}" \
+              --projection=EPSG:4326 \
+              --force \
+              --no-feature-limit \
+              --no-tile-size-limit \
+              --full-detail=14 \
+              --low-detail=12 \
+              --minimum-detail=12 \
+              "input/$FILE"
 
-          echo "After MBTiles build:"
-          ls -lh output/
-
-      - name: Check MBTiles magic bytes
-        run: |
-          python3 - <<'PY'
+            python3 - <<PY
           from pathlib import Path
 
-          p = Path("output/${{ steps.names.outputs.basename }}.mbtiles")
+          p = Path("$MBTILES")
           data = p.read_bytes()[:16]
-
-          print("MBTiles first bytes:", data)
           print("MBTiles first text:", data.decode("utf-8", errors="replace"))
 
           if not data.startswith(b"SQLite format 3"):
-              raise SystemExit("Tippecanoe output is not a valid MBTiles / SQLite file")
+              raise SystemExit("Tippecanoe output is not MBTiles / SQLite")
           PY
 
-      - name: Convert MBTiles to real PMTiles
-        run: |
-          go run github.com/protomaps/go-pmtiles@latest convert \
-            "output/${{ steps.names.outputs.basename }}.mbtiles" \
-            "output/${{ steps.names.outputs.basename }}.pmtiles"
+            go run github.com/protomaps/go-pmtiles@latest convert \
+              "$MBTILES" \
+              "$PMTILES"
 
-          echo "PMTiles info:"
-          go run github.com/protomaps/go-pmtiles@latest show \
-            "output/${{ steps.names.outputs.basename }}.pmtiles"
+            go run github.com/protomaps/go-pmtiles@latest show \
+              "$PMTILES"
 
-          echo "After PMTiles conversion:"
-          ls -lh output/
-
-      - name: Check PMTiles magic bytes
-        run: |
-          python3 - <<'PY'
+            python3 - <<PY
           from pathlib import Path
 
-          p = Path("output/${{ steps.names.outputs.basename }}.pmtiles")
+          p = Path("$PMTILES")
           data = p.read_bytes()[:16]
 
           print("PMTiles first bytes:", data)
           print("PMTiles first text:", data.decode("utf-8", errors="replace"))
 
           if not data.startswith(b"PMTiles"):
-              raise SystemExit("Not a valid PMTiles file. It is probably still MBTiles.")
+              raise SystemExit("Not a valid PMTiles file")
           PY
 
-      - name: Upload PMTiles artifact
+            echo "Created:"
+            ls -lh "$PMTILES"
+
+            # 清掉中間檔，避免硬碟爆掉
+            rm -f "input/$FILE" "$MBTILES"
+
+          done < files.txt
+
+          echo "===================================================="
+          echo "All PMTiles outputs:"
+          ls -lh output/
+          echo "===================================================="
+
+      - name: Upload PMTiles artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.names.outputs.basename }}-pmtiles
-          path: output/${{ steps.names.outputs.basename }}.pmtiles
+          name: flood-pmtiles-v2
+          path: output/*.pmtiles
           retention-days: 7
