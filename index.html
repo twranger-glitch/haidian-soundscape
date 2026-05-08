@@ -14,6 +14,7 @@
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
@@ -2274,18 +2275,57 @@ var map = L.map('map', {
         var geoJsonRenderer = L.canvas({ padding: 0.5 });
 
         var floodScenarioMeta = {
-    'flood_200mm_24hr': { label: '24 小時 200 mm', path: 'flood/Flood_200mm_24HR.json' },
-    'flood_350mm_24hr': { label: '24 小時 350 mm', path: 'flood/Flood_350mm_24HR.json' },
-    'flood_500mm_24hr': { label: '24 小時 500 mm', path: 'flood/Flood_500mm_24HR.json' },
-    'flood_650mm_24hr': { label: '24 小時 650 mm', path: 'flood/Flood_650mm_24HR.json' },
+    'flood_200mm_24hr': {
+        label: '24 小時 200 mm',
+        path: 'flood/Flood_200mm_24HR.json',
+        pmtilesPath: 'flood-pmtiles/Flood_200mm_24HR.pmtiles',
+        pmtilesDataLayer: 'flood'
+    },
 
-    'flood_200mm_12hr': { label: '12 小時 200 mm', path: 'flood/Flood_200mm_12HR.json' },
-    'flood_300mm_12hr': { label: '12 小時 300 mm', path: 'flood/Flood_300mm_12HR.json' },
-    'flood_400mm_12hr': { label: '12 小時 400 mm', path: 'flood/Flood_400mm_12HR.json' },
+    'flood_350mm_24hr': {
+        label: '24 小時 350 mm',
+        path: 'flood/Flood_350mm_24HR.json'
+    },
 
-    'flood_150mm_6hr': { label: '6 小時 150 mm', path: 'flood/Flood_150mm_6HR.json' },
-    'flood_250mm_6hr': { label: '6 小時 250 mm', path: 'flood/Flood_250mm_6HR.json' },
-    'flood_350mm_6hr': { label: '6 小時 350 mm', path: 'flood/Flood_350mm_6HR.json' }
+    'flood_500mm_24hr': {
+        label: '24 小時 500 mm',
+        path: 'flood/Flood_500mm_24HR.json'
+    },
+
+    'flood_650mm_24hr': {
+        label: '24 小時 650 mm',
+        path: 'flood/Flood_650mm_24HR.json'
+    },
+
+    'flood_200mm_12hr': {
+        label: '12 小時 200 mm',
+        path: 'flood/Flood_200mm_12HR.json'
+    },
+
+    'flood_300mm_12hr': {
+        label: '12 小時 300 mm',
+        path: 'flood/Flood_300mm_12HR.json'
+    },
+
+    'flood_400mm_12hr': {
+        label: '12 小時 400 mm',
+        path: 'flood/Flood_400mm_12HR.json'
+    },
+
+    'flood_150mm_6hr': {
+        label: '6 小時 150 mm',
+        path: 'flood/Flood_150mm_6HR.json'
+    },
+
+    'flood_250mm_6hr': {
+        label: '6 小時 250 mm',
+        path: 'flood/Flood_250mm_6HR.json'
+    },
+
+    'flood_350mm_6hr': {
+        label: '6 小時 350 mm',
+        path: 'flood/Flood_350mm_6HR.json'
+    }
 };
 
         var hydrologyLayerMeta = {
@@ -2580,6 +2620,13 @@ var map = L.map('map', {
             var props = feature && feature.properties ? feature.properties : {};
 
             var explicitKeys = [
+                'flood_dept',
+                'FLOOD_DEPT',
+                'flood_depth',
+                'FLOOD_DEPTH',
+                'FloodDepth',
+                'Class',
+                'class',
                 'DEPTH',
                 'Depth',
                 'depth',
@@ -2735,6 +2782,144 @@ var map = L.map('map', {
                 fillOpacity: Math.max(parseFloat(opacityValue || 0.55), 0.45)
             };
         }
+        function createFloodPmtilesLayer(meta) {
+    if (!window.protomapsL) {
+        alert('PMTiles 圖層套件尚未載入，請檢查 protomaps-leaflet script。');
+        return null;
+    }
+
+    var pmtilesUrl = gisWorkerBaseUrl + meta.pmtilesPath;
+    var dataLayer = meta.pmtilesDataLayer || 'flood';
+
+    return protomapsL.leafletLayer({
+        url: pmtilesUrl,
+        pane: 'floodPane',
+        maxDataZoom: 17,
+        paintRules: [
+            {
+                dataLayer: dataLayer,
+                symbolizer: new FloodPmtilesPolygonSymbolizer()
+            }
+        ],
+        labelRules: [
+            {
+                dataLayer: dataLayer,
+                minzoom: 14,
+                symbolizer: new FloodPmtilesDepthLabelSymbolizer()
+            }
+        ]
+    });
+}
+
+class FloodPmtilesPolygonSymbolizer {
+    draw(context, geom, z, feature) {
+        var props = feature && feature.props ? feature.props : {};
+        var depthInfo = getFloodDepthInfo({ properties: props });
+        var fill = getFloodColorByDepth(depthInfo);
+
+        context.save();
+        context.fillStyle = fill;
+        context.strokeStyle = fill;
+        context.globalAlpha = 0.9;
+        context.lineWidth = 0.35;
+
+        context.beginPath();
+
+        for (var poly of geom) {
+            for (var p = 0; p < poly.length; p++) {
+                var pt = poly[p];
+                if (p === 0) {
+                    context.moveTo(pt.x, pt.y);
+                } else {
+                    context.lineTo(pt.x, pt.y);
+                }
+            }
+        }
+
+        context.fill('evenodd');
+
+        context.globalAlpha = 0.35;
+        context.stroke();
+
+        context.restore();
+    }
+}
+
+class FloodPmtilesDepthLabelSymbolizer {
+    place(layout, geom, feature) {
+        var props = feature && feature.props ? feature.props : {};
+        var depthInfo = getFloodDepthInfo({ properties: props });
+        var label = depthInfo.label;
+
+        if (!label || label === '淹水潛勢區') return [];
+
+        var center = getPmtilesGeomCenter(geom);
+        if (!center) return [];
+
+        var font = '700 11px Arial, "Microsoft JhengHei", sans-serif';
+
+        layout.scratch.font = font;
+        var metrics = layout.scratch.measureText(label);
+        var width = metrics.width + 8;
+        var height = 16;
+
+        var bbox = {
+            minX: center.x - width / 2,
+            minY: center.y - height / 2,
+            maxX: center.x + width / 2,
+            maxY: center.y + height / 2
+        };
+
+        var draw = function(ctx) {
+            ctx.font = font;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.strokeText(label, 0, 0);
+
+            ctx.fillStyle = 'rgba(100, 80, 40, 0.85)';
+            ctx.fillText(label, 0, 0);
+        };
+
+        return [
+            {
+                anchor: center,
+                bboxes: [bbox],
+                draw: draw
+            }
+        ];
+    }
+}
+
+function getPmtilesGeomCenter(geom) {
+    var minX = Infinity;
+    var minY = Infinity;
+    var maxX = -Infinity;
+    var maxY = -Infinity;
+    var found = false;
+
+    for (var poly of geom) {
+        for (var pt of poly) {
+            if (!pt) continue;
+
+            if (pt.x < minX) minX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y > maxY) maxY = pt.y;
+
+            found = true;
+        }
+    }
+
+    if (!found) return null;
+
+    return {
+        x: (minX + maxX) / 2,
+        y: (minY + maxY) / 2
+    };
+}
 
         function getFloodSelectedId() {
             var scenarioEl = document.getElementById('floodScenario');
@@ -2747,27 +2932,34 @@ var map = L.map('map', {
         }
 
         function ensureFloodLayer() {
-            var selectedId = getFloodSelectedId();
-            var meta = floodScenarioMeta[selectedId] || floodScenarioMeta['flood_200mm_24hr'];
+    var selectedId = getFloodSelectedId();
+    var meta = floodScenarioMeta[selectedId] || floodScenarioMeta['flood_200mm_24hr'];
 
-            if (!currentFloodLayer || currentFloodLayerId !== selectedId) {
-                if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
-                    map.removeLayer(currentFloodLayer);
-                }
-
-                currentFloodLayer = createManagedGeoJsonLayer({
-                    kind: 'flood',
-                    label: meta.label,
-                    path: meta.path,
-                    pane: 'floodPane',
-                    opacity: getFloodOpacityValue()
-                });
-
-                currentFloodLayerId = selectedId;
-            }
-
-            return currentFloodLayer;
+    if (!currentFloodLayer || currentFloodLayerId !== selectedId) {
+        if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+            map.removeLayer(currentFloodLayer);
         }
+
+        if (meta.pmtilesPath) {
+            currentFloodLayer = createFloodPmtilesLayer(meta);
+            if (currentFloodLayer) {
+                currentFloodLayer.__isPmtiles = true;
+            }
+        } else {
+            currentFloodLayer = createManagedGeoJsonLayer({
+                kind: 'flood',
+                label: meta.label,
+                path: meta.path,
+                pane: 'floodPane',
+                opacity: getFloodOpacityValue()
+            });
+        }
+
+        currentFloodLayerId = selectedId;
+    }
+
+    return currentFloodLayer;
+}
 
         function updateFloodLabels() {
             var selectedId = getFloodSelectedId();
@@ -2777,58 +2969,81 @@ var map = L.map('map', {
         }
 
         function toggleFloodLayer(checked) {
-            var panel = document.getElementById('floodControlPanel');
-            if (panel) panel.style.display = checked ? 'block' : 'none';
+    var panel = document.getElementById('floodControlPanel');
+    if (panel) panel.style.display = checked ? 'block' : 'none';
 
-            updateFloodLabels();
+    updateFloodLabels();
+    updateFloodOpacity(getFloodOpacityValue());
 
-            if (!checked) {
-                if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
-                    map.removeLayer(currentFloodLayer);
-                }
-                return;
-            }
-
-            var layer = ensureFloodLayer();
-            layer.setOpacity(getFloodOpacityValue());
-
-            if (!map.hasLayer(layer)) {
-                map.addLayer(layer);
-            }
-
-            layer.loadData();
+    if (!checked) {
+        if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+            map.removeLayer(currentFloodLayer);
         }
+        return;
+    }
+
+    var layer = ensureFloodLayer();
+    if (!layer) return;
+
+    if (layer.setOpacity) {
+        layer.setOpacity(getFloodOpacityValue());
+    }
+
+    if (!map.hasLayer(layer)) {
+        map.addLayer(layer);
+    }
+
+    if (layer.loadData) {
+        layer.loadData();
+    }
+}
 
         function changeFloodScenario(val) {
-            var toggleEl = document.getElementById('floodToggle');
-            var wasEnabled = toggleEl && toggleEl.checked;
+    var toggleEl = document.getElementById('floodToggle');
+    var wasEnabled = toggleEl && toggleEl.checked;
 
-            if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
-                map.removeLayer(currentFloodLayer);
-            }
+    if (currentFloodLayer && map.hasLayer(currentFloodLayer)) {
+        map.removeLayer(currentFloodLayer);
+    }
 
-            currentFloodLayer = null;
-            currentFloodLayerId = null;
-            updateFloodLabels();
+    currentFloodLayer = null;
+    currentFloodLayerId = null;
+    updateFloodLabels();
+    updateFloodOpacity(getFloodOpacityValue());
 
-            if (wasEnabled) {
-                var layer = ensureFloodLayer();
-                layer.setOpacity(getFloodOpacityValue());
-                map.addLayer(layer);
-                layer.loadData();
-            }
+    if (wasEnabled) {
+        var layer = ensureFloodLayer();
+        if (!layer) return;
+
+        if (layer.setOpacity) {
+            layer.setOpacity(getFloodOpacityValue());
         }
+
+        map.addLayer(layer);
+
+        if (layer.loadData) {
+            layer.loadData();
+        }
+    }
+}
 
         function updateFloodOpacity(val) {
-            var opacityValueEl = document.getElementById('floodOpacityValue');
-            if (opacityValueEl) {
-                opacityValueEl.innerText = Math.round(parseFloat(val) * 100) + '%';
-            }
+    var opacity = parseFloat(val);
 
-            if (currentFloodLayer) {
-                currentFloodLayer.setOpacity(parseFloat(val));
-            }
-        }
+    var opacityValueEl = document.getElementById('floodOpacityValue');
+    if (opacityValueEl) {
+        opacityValueEl.innerText = Math.round(opacity * 100) + '%';
+    }
+
+    var floodPane = map.getPane('floodPane');
+    if (floodPane) {
+        floodPane.style.opacity = opacity;
+    }
+
+    if (currentFloodLayer && currentFloodLayer.setOpacity) {
+        currentFloodLayer.setOpacity(opacity);
+    }
+}
 
         function openFloodLegend() {
             var selectedId = getFloodSelectedId();
