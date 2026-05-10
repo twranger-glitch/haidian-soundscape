@@ -2801,33 +2801,36 @@ var map = L.map('map', {
             };
         }
         function createFloodPmtilesLayer(meta) {
-    if (!window.protomapsL) {
-        alert('PMTiles 圖層套件尚未載入，請檢查 protomaps-leaflet script。');
-        return null;
-    }
-
-    var pmtilesUrl = gisWorkerBaseUrl + meta.pmtilesPath;
-    var dataLayer = meta.pmtilesDataLayer || 'flood';
-
-    return protomapsL.leafletLayer({
-        url: pmtilesUrl,
-        pane: 'floodPane',
-        maxDataZoom: 17,
-        paintRules: [
-            {
-                dataLayer: dataLayer,
-                symbolizer: new FloodPmtilesPolygonSymbolizer()
+            if (!window.protomapsL) {
+                alert('PMTiles 圖層套件尚未載入，請檢查 protomaps-leaflet script。');
+                return null;
             }
-        ],
-        labelRules: [
-            {
-                dataLayer: dataLayer,
-                minzoom: 14,
-                symbolizer: new FloodPmtilesDepthLabelSymbolizer()
-            }
-        ]
-    });
-}
+
+            // 🌟 終極神級優化：PMTiles 直接向 Hugging Face (AWS 全球 CDN) 請求，不經過 Cloudflare 代購員！
+            // 這樣可以避免代購員因為發送太多 Range Request 而被 Hugging Face 判定為攻擊 (403 Forbidden)
+            // 加上 ?v=3 強制破除瀏覽器之前記住的錯誤快取
+            var pmtilesUrl = gisHfBaseUrl + meta.pmtilesPath + "?v=3";
+            var dataLayer = meta.pmtilesDataLayer || 'flood';
+
+            return protomapsL.leafletLayer({
+                url: pmtilesUrl,
+                pane: 'floodPane',
+                maxDataZoom: 17,
+                paintRules: [
+                    {
+                        dataLayer: dataLayer,
+                        symbolizer: new FloodPmtilesPolygonSymbolizer()
+                    }
+                ],
+                labelRules: [
+                    {
+                        dataLayer: dataLayer,
+                        minzoom: 14,
+                        symbolizer: new FloodPmtilesDepthLabelSymbolizer()
+                    }
+                ]
+            });
+        }
 
 class FloodPmtilesPolygonSymbolizer {
     draw(context, geom, z, feature) {
