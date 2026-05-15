@@ -760,8 +760,12 @@ body.player-embedded .leaflet-popup .btn-play-main {
         }
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
-        .tools-menu-container { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; margin-top: 10px; max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain;}
-        .tools-menu-container::-webkit-scrollbar { display: none; }
+        .tools-menu-container { 
+            pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; 
+            opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.95); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; 
+            margin-top: 10px; 
+        }
         .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
         .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
 
@@ -772,7 +776,16 @@ body.player-embedded .leaflet-popup .btn-play-main {
             border-radius: 16px; padding: 15px; 
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
             width: 220px;
+            /* 🌟 讓毛玻璃面板本身可捲動，並限制最大高度 */
+            max-height: calc(100vh - 160px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
         }
+        /* 🌟 優雅的極細捲軸設定 */
+        .custom-layer-control::-webkit-scrollbar { width: 5px; }
+        .custom-layer-control::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 5px; }
         .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: #34495e; font-weight: 700; font-size: 13px;}
         .custom-layer-control label svg { color: var(--text-muted); }
         .custom-layer-control label:last-child { margin-bottom: 0; }
