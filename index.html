@@ -761,67 +761,101 @@ body.player-embedded .leaflet-popup .btn-play-main {
         .tools-toggle-btn:hover { color: var(--accent-color); transform: translateY(-2px) scale(1.02); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
 
 .tools-menu-container {
-            pointer-events: auto;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(-10px) scale(0.95);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform-origin: top right;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px) scale(0.95);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: top right;
 
-            margin-top: 10px;
+    margin-top: 10px;
 
-            /* ✅ 捲軸放外層，整組右側選單一起捲 */
-            max-height: calc(100dvh - 170px);
-            overflow-y: auto;
-            overflow-x: visible;
-            overscroll-behavior: contain;
-            -webkit-overflow-scrolling: touch;
+    /* ✅ 捲軸放外層，整組右側選單一起捲 */
+    max-height: calc(100dvh - 170px);
+    overflow-y: auto;
+    overflow-x: visible;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 
-            /* ✅ 讓最底部的南山公墓不會貼底被吃掉 */
-            padding-bottom: 36px;
-            padding-left: 8px;
+    /* ✅ 讓最底部的南山公墓不會貼底被吃掉 */
+    padding-bottom: 36px;
+    padding-left: 8px;
 
-            scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 transparent;
-        }
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
 
-        .right-tools-wrapper.open .tools-menu-container { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
-        .right-tools-wrapper:not(.open) .tools-menu-container * { visibility: hidden !important; pointer-events: none !important; }
+.right-tools-wrapper.open .tools-menu-container {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
 
-        .leaflet-top.leaflet-right { display: none !important; } 
+.right-tools-wrapper:not(.open) .tools-menu-container * {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 
-        .tools-menu-container::-webkit-scrollbar {
-            width: 5px;
-        }
+.leaflet-top.leaflet-right {
+    display: none !important;
+}
 
-        .tools-menu-container::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 999px;
-        }
+.tools-menu-container::-webkit-scrollbar {
+    width: 5px;
+}
 
-        .custom-layer-control {
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: 16px;
-            padding: 15px;
-            box-shadow: var(--glass-shadow);
-            border: 1px solid var(--glass-border);
-            width: 220px;
-            box-sizing: border-box;
+.tools-menu-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
 
-            /* ✅ 內層不要捲，避免雙層捲動或高度算錯 */
-            max-height: none;
-            overflow: visible;
-        }
-        .custom-layer-control label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: #34495e; font-weight: 700; font-size: 13px;}
-        .custom-layer-control label svg { color: var(--text-muted); }
-        .custom-layer-control label:last-child { margin-bottom: 0; }
-        .custom-layer-control input[type="radio"] { accent-color: var(--accent-color); width: 17px; height: 17px; margin: 0; flex-shrink:0; cursor: pointer;}
+.custom-layer-control {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 16px;
+    padding: 15px;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--glass-border);
+    width: 220px;
+    box-sizing: border-box;
+
+    /* ✅ 內層不要捲，避免雙層捲動或高度算錯 */
+    max-height: none;
+    overflow: visible;
+}
+
+.custom-layer-control label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    color: #34495e;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.custom-layer-control label svg {
+    color: var(--text-muted);
+}
+
+.custom-layer-control label:last-child {
+    margin-bottom: 0;
+}
+
+.custom-layer-control input[type="radio"] {
+    accent-color: var(--accent-color);
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+}
         
         .btn-more-layers {
             width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #cbd5e1;
@@ -911,26 +945,26 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
             /* ✅ 手機版：圖層按鈕往下移，避免和「登入探險」重疊 */
             .right-tools-wrapper {
-                top: 170px;
-                right: 12px;
-            }
+    top: 170px;
+    right: 12px;
+}
 
-            .tools-menu-container {
-                max-height: calc(100dvh - 235px);
-                overflow-y: auto;
-                overflow-x: visible;
-                -webkit-overflow-scrolling: touch;
-                overscroll-behavior: contain;
-                padding-bottom: 40px;
-            }
+.tools-menu-container {
+    max-height: calc(100dvh - 235px);
+    overflow-y: auto;
+    overflow-x: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-bottom: 40px;
+}
 
-            .custom-layer-control {
-                width: min(260px, calc(100vw - 32px));
-                box-sizing: border-box;
+.custom-layer-control {
+    width: min(260px, calc(100vw - 32px));
+    box-sizing: border-box;
 
-                max-height: none;
-                overflow: visible;
-            }
+    max-height: none;
+    overflow: visible;
+}
 
             .draw-mode-hud { left: 10px; }
 
