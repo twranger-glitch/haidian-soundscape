@@ -777,7 +777,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
             box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); 
             width: 220px;
             /* 🌟 讓毛玻璃面板本身可捲動，並限制最大高度 */
-            max-height: calc(100vh - 160px);
+            max-height: calc(100vh - 250px);
             overflow-y: auto;
             overscroll-behavior: contain;
             scrollbar-width: thin;
@@ -892,8 +892,9 @@ body.player-embedded .leaflet-popup .btn-play-main {
             .custom-layer-control {
                 width: min(260px, calc(100vw - 32px));
                 box-sizing: border-box;
-                max-height: calc(100dvh - 245px); /* 🌟 手機版極限高度，超出自動產生捲軸 */
+                max-height: calc(100dvh - 320px); /* 🌟 手機版極限高度，超出自動產生捲軸 */
                 -webkit-overflow-scrolling: touch;
+                overflow-y: auto;
             }
 
             .draw-mode-hud { left: 10px; }
