@@ -2219,9 +2219,14 @@ async function searchPlaceName() {
             // 🚀 引擎 A：Photon 搜尋引擎 (主力先發)
             // ==========================================
             try {
+                var controllerA = new AbortController();
+                var timeoutA = setTimeout(() => controllerA.abort(), 5000);
+
                 var photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(keyword)}&lat=23.02&lon=120.20&limit=15`;
-                var res = await fetch(photonUrl);
+                var res = await fetch(photonUrl, { signal: controllerA.signal });
                 
+                clearTimeout(timeoutA);
+
                 if (!res.ok) throw new Error("Photon 伺服器異常");
                 
                 var data = await res.json();
@@ -2246,6 +2251,7 @@ async function searchPlaceName() {
                     }
                 });
 
+                // 只要 Photon 伺服器正常回覆，無論找不找得到，都視為成功 (避免小朋友亂打字引爆 Overpass)
                 searchSuccess = true; 
 
             } catch (err) {
@@ -2253,7 +2259,7 @@ async function searchPlaceName() {
             }
 
             // ==========================================
-            // 🛡️ 引擎 B：Overpass API (五路備援)
+            // 🛡️ 引擎 B：Overpass API (五路極速切換備援)
             // ==========================================
             if (!searchSuccess) {
                 try {
@@ -2272,18 +2278,29 @@ async function searchPlaceName() {
 
                     var overpassData = null;
                     for (var i = 0; i < overpassEndpoints.length; i++) {
+                        // 🌟 每台備援機只等 5 秒，超時就當作失敗換下一台
+                        var controllerB = new AbortController();
+                        var timeoutB = setTimeout(() => controllerB.abort(), 5000);
+
                         try {
                             var opRes = await fetch(overpassEndpoints[i], { 
                                 method: 'POST', 
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, 
-                                body: 'data=' + encodeURIComponent(query) 
+                                body: 'data=' + encodeURIComponent(query),
+                                signal: controllerB.signal
                             });
+                            
+                            clearTimeout(timeoutB);
+
                             if (opRes.ok) {
                                 overpassData = await opRes.json();
                                 console.log("🛡️ 成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
                                 break;
                             }
-                        } catch (e) { /* 靜默失敗，繼續嘗試下一台 */ }
+                        } catch (e) { 
+                            clearTimeout(timeoutB);
+                            console.warn("節點失效或超時，切換下一台：" + overpassEndpoints[i]);
+                        }
                     }
 
                     if (!overpassData) throw new Error("所有備援節點皆忙碌中");
