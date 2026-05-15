@@ -2216,14 +2216,16 @@ var map = L.map('map', {
             var query = `[out:json][timeout:25];(node["name"~"${safeKeyword}"](${tainanBbox});way["name"~"${safeKeyword}"](${tainanBbox});relation["name"~"${safeKeyword}"](${tainanBbox}););out center tags 120;`;
 
             try {
-                // 🌟 狡兔三窟：準備 3 個確定存活的全球公益伺服器節點
+                // 🌟 狡兔五窟：剃除拒絕連線的節點，保留全球最穩定的公益伺服器
                 var overpassEndpoints = [
-                    'https://overpass-api.de/api/interpreter',       // 德國主站
-                    'https://lz4.overpass-api.de/api/interpreter',   // 德國副站
-                    'https://overpass.kumi.systems/api/interpreter'  // 台灣節點 (Kumi)
+                    'https://overpass.kumi.systems/api/interpreter',       // 台灣節點 (距離最近)
+                    'https://overpass-api.de/api/interpreter',             // 德國主站 (算力最強)
+                    'https://lz4.overpass-api.de/api/interpreter',         // 德國副站 1
+                    'https://z.overpass-api.de/api/interpreter',           // 德國副站 2
+                    'https://overpass.osm.ch/api/interpreter'              // 瑞士節點 (高穩定備援)
                 ];
 
-                // 隨機打亂陣列順序，讓全班 30 人的第一次請求均勻分散到不同伺服器 (負載平衡)
+                // 隨機打亂陣列順序，均勻分散 30 人的瞬間請求
                 overpassEndpoints.sort(() => Math.random() - 0.5);
 
                 var data = null;
