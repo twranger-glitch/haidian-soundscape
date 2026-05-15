@@ -883,19 +883,17 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 right: 12px;
             }
 
-            /* ✅ 手機版：圖層選單限制高度，超出時可滑動 */
+            /* ✅ 手機版：取消外部容器的捲動，改由內部的毛玻璃面板捲動 */
             .tools-menu-container {
-                max-height: calc(100dvh - 245px);
-                overflow-y: auto;
-                -webkit-overflow-scrolling: touch;
-                overscroll-behavior: contain;
                 padding-bottom: 12px;
             }
 
-            /* ✅ 手機版：避免選單太寬擠出畫面 */
+            /* ✅ 手機版：圖層選單限制高度並避免太寬擠出畫面 */
             .custom-layer-control {
                 width: min(260px, calc(100vw - 32px));
                 box-sizing: border-box;
+                max-height: calc(100dvh - 245px); /* 🌟 手機版極限高度，超出自動產生捲軸 */
+                -webkit-overflow-scrolling: touch;
             }
 
             .draw-mode-hud { left: 10px; }
