@@ -2192,7 +2192,7 @@ var map = L.map('map', {
         function escapePlaceRegex(text) { return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
         function escapePlaceHtml(text) { return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
-        async function searchPlaceName() {
+async function searchPlaceName() {
             var input = document.getElementById('placeSearchInput');
             if (!input) return;
 
@@ -2211,71 +2211,119 @@ var map = L.map('map', {
                 </div>
             `;
 
-            var tainanBbox = '22.85,119.95,23.45,120.75';
-            var safeKeyword = escapePlaceRegex(keyword);
-            var query = `[out:json][timeout:25];(node["name"~"${safeKeyword}"](${tainanBbox});way["name"~"${safeKeyword}"](${tainanBbox});relation["name"~"${safeKeyword}"](${tainanBbox}););out center tags 120;`;
+            var places = [];
+            var seen = {};
+            var searchSuccess = false;
 
+            // ==========================================
+            // 🚀 引擎 A：Photon 搜尋引擎 (主力先發)
+            // ==========================================
             try {
-                // 🌟 狡兔五窟：剃除拒絕連線的節點，保留全球最穩定的公益伺服器
-                var overpassEndpoints = [
-                    'https://overpass.kumi.systems/api/interpreter',       // 台灣節點 (距離最近)
-                    'https://overpass-api.de/api/interpreter',             // 德國主站 (算力最強)
-                    'https://lz4.overpass-api.de/api/interpreter',         // 德國副站 1
-                    'https://z.overpass-api.de/api/interpreter',           // 德國副站 2
-                    'https://overpass.osm.ch/api/interpreter'              // 瑞士節點 (高穩定備援)
-                ];
+                var photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(keyword)}&lat=23.02&lon=120.20&limit=15`;
+                var res = await fetch(photonUrl);
+                
+                if (!res.ok) throw new Error("Photon 伺服器異常");
+                
+                var data = await res.json();
+                
+                (data.features || []).forEach(function(feature) {
+                    var props = feature.properties || {};
+                    var name = props.name || '';
+                    if (!name) return;
 
-                // 隨機打亂陣列順序，均勻分散 30 人的瞬間請求
-                overpassEndpoints.sort(() => Math.random() - 0.5);
+                    var coords = feature.geometry.coordinates;
+                    var lon = coords[0];
+                    var lat = coords[1];
+                    var typeText = props.osm_value || props.osm_key || '地點';
 
-                var data = null;
-                var lastError = null;
-
-                // 🌟 自動備援機制：如果第一台失敗，就無縫切換下一台
-                for (var i = 0; i < overpassEndpoints.length; i++) {
-                    try {
-                        var res = await fetch(overpassEndpoints[i], { 
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, 
-                            body: 'data=' + encodeURIComponent(query) 
+                    var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+                    if (!seen[key]) {
+                        seen[key] = true;
+                        places.push({ 
+                            name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText,
+                            context: props.district || props.city || props.state || '' 
                         });
-                        
-                        if (res.ok) {
-                            data = await res.json();
-                            break; // 成功拿到資料，跳出迴圈！
-                        } else {
-                            console.warn("Overpass 節點忙碌中，切換下一台: " + overpassEndpoints[i]);
-                        }
-                    } catch (err) {
-                        console.warn("Overpass 節點連線失敗: " + overpassEndpoints[i]);
-                        lastError = err;
                     }
-                }
-
-                if (!data) {
-                    throw lastError || new Error("所有搜尋伺服器皆忙碌中");
-                }
-
-                var places = [], seen = {};
-
-                (data.elements || []).forEach(function(el) {
-                    var name = (el.tags || {}).name || '';
-                    if (!name || name.indexOf(keyword) === -1) return;
-                    var lat = el.lat || (el.center && el.center.lat), lon = el.lon || (el.center && el.center.lon);
-                    if (lat == null || lon == null) return;
-
-                    var typeText = (el.tags || {}).amenity || (el.tags || {}).tourism || (el.tags || {}).place || (el.tags || {}).natural || (el.tags || {}).waterway || (el.tags || {}).landuse || el.type || '地點';
-                    var key = name + '|' + Math.round(lat * 10000) + '|' + Math.round(lon * 10000);
-                    if (!seen[key]) { seen[key] = true; places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText }); }
                 });
 
-                places.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
-                renderPlaceSearchResults(places, keyword);
+                searchSuccess = true; 
 
-                if (places.length === 1) focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
             } catch (err) {
-                console.error(err);
-                resultBox.innerHTML = `<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">服務忙碌中，請稍後重試。</div>`;
+                console.warn("⚠️ 主力搜尋引擎 (Photon) 暫時失效，自動啟動備援機制...", err);
+            }
+
+            // ==========================================
+            // 🛡️ 引擎 B：Overpass API (五路備援)
+            // ==========================================
+            if (!searchSuccess) {
+                try {
+                    var tainanBbox = '22.85,119.95,23.45,120.75';
+                    var safeKeyword = escapePlaceRegex(keyword);
+                    var query = `[out:json][timeout:15];(node["name"~"${safeKeyword}"](${tainanBbox});way["name"~"${safeKeyword}"](${tainanBbox});relation["name"~"${safeKeyword}"](${tainanBbox}););out center tags 20;`;
+
+                    var overpassEndpoints = [
+                        'https://overpass.kumi.systems/api/interpreter',
+                        'https://overpass-api.de/api/interpreter',
+                        'https://lz4.overpass-api.de/api/interpreter',
+                        'https://z.overpass-api.de/api/interpreter',
+                        'https://overpass.osm.ch/api/interpreter'
+                    ];
+                    overpassEndpoints.sort(() => Math.random() - 0.5);
+
+                    var overpassData = null;
+                    for (var i = 0; i < overpassEndpoints.length; i++) {
+                        try {
+                            var opRes = await fetch(overpassEndpoints[i], { 
+                                method: 'POST', 
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, 
+                                body: 'data=' + encodeURIComponent(query) 
+                            });
+                            if (opRes.ok) {
+                                overpassData = await opRes.json();
+                                console.log("🛡️ 成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
+                                break;
+                            }
+                        } catch (e) { /* 靜默失敗，繼續嘗試下一台 */ }
+                    }
+
+                    if (!overpassData) throw new Error("所有備援節點皆忙碌中");
+
+                    (overpassData.elements || []).forEach(function(el) {
+                        var name = (el.tags || {}).name || '';
+                        if (!name || name.indexOf(keyword) === -1) return;
+                        var lat = el.lat || (el.center && el.center.lat);
+                        var lon = el.lon || (el.center && el.center.lon);
+                        if (lat == null || lon == null) return;
+
+                        var typeText = (el.tags || {}).amenity || (el.tags || {}).tourism || (el.tags || {}).place || (el.tags || {}).natural || '地點';
+                        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+                        if (!seen[key]) {
+                            seen[key] = true;
+                            places.push({ 
+                                name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText,
+                                context: '備援搜尋' 
+                            });
+                        }
+                    });
+
+                    places.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+                    searchSuccess = true;
+
+                } catch (fallbackErr) {
+                    console.error("備援系統也失敗：", fallbackErr);
+                }
+            }
+
+            // ==========================================
+            // 🎨 渲染結果
+            // ==========================================
+            if (searchSuccess) {
+                renderPlaceSearchResults(places, keyword);
+                if (places.length === 1) {
+                    focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
+                }
+            } else {
+                resultBox.innerHTML = `<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">全球搜尋伺服器皆忙碌中，請稍後重試。</div>`;
             }
         }
 
