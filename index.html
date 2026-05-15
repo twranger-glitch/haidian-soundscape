@@ -2218,15 +2218,13 @@ async function searchPlaceName() {
             // ==========================================
             // 🚀 引擎 A：Photon 搜尋引擎 (主力先發)
             // ==========================================
-            try {
-                var controllerA = new AbortController();
-                var timeoutA = setTimeout(() => controllerA.abort(), 5000);
+            var controllerA = new AbortController();
+            var timeoutA = setTimeout(() => controllerA.abort(), 5000);
 
+            try {
                 var photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(keyword)}&lat=23.02&lon=120.20&limit=15`;
                 var res = await fetch(photonUrl, { signal: controllerA.signal });
                 
-                clearTimeout(timeoutA);
-
                 if (!res.ok) throw new Error("Photon 伺服器異常");
                 
                 var data = await res.json();
@@ -2251,11 +2249,13 @@ async function searchPlaceName() {
                     }
                 });
 
-                // 只要 Photon 伺服器正常回覆，無論找不找得到，都視為成功 (避免小朋友亂打字引爆 Overpass)
                 searchSuccess = true; 
 
             } catch (err) {
-                console.warn("⚠️ 主力搜尋引擎 (Photon) 暫時失效，自動啟動備援機制...", err);
+                console.warn("主力搜尋引擎 (Photon) 暫時失效，自動啟動備援機制...", err);
+            } finally {
+                // 🌟 無論成功、失敗或網路斷線，保證清掉計時器，釋放記憶體
+                clearTimeout(timeoutA);
             }
 
             // ==========================================
@@ -2278,7 +2278,6 @@ async function searchPlaceName() {
 
                     var overpassData = null;
                     for (var i = 0; i < overpassEndpoints.length; i++) {
-                        // 🌟 每台備援機只等 5 秒，超時就當作失敗換下一台
                         var controllerB = new AbortController();
                         var timeoutB = setTimeout(() => controllerB.abort(), 5000);
 
@@ -2290,16 +2289,16 @@ async function searchPlaceName() {
                                 signal: controllerB.signal
                             });
                             
-                            clearTimeout(timeoutB);
-
                             if (opRes.ok) {
                                 overpassData = await opRes.json();
-                                console.log("🛡️ 成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
-                                break;
+                                console.log("成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
+                                break; // 成功拿到資料，跳出迴圈
                             }
                         } catch (e) { 
-                            clearTimeout(timeoutB);
                             console.warn("節點失效或超時，切換下一台：" + overpassEndpoints[i]);
+                        } finally {
+                            // 🌟 即使觸發 break 或 catch，這行也絕對會執行，乾淨俐落！
+                            clearTimeout(timeoutB);
                         }
                     }
 
