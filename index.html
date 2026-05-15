@@ -1687,7 +1687,8 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
                 
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資</div>                <label>
+<div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資 (自選底圖)</div>
+                <label>
                     <input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 
                     臺灣精細地圖
                 </label>
@@ -1706,13 +1707,17 @@ body.player-embedded .leaflet-popup .btn-play-main {
                 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (臺灣地圖打底)</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (預設臺灣精細地圖打底)</div>
                 <label>
-                    <input type="radio" name="basemap" value="history_tainan" onchange="switchBasemap(this.value)"> 
+                    <input type="radio" name="historymap" value="none" checked onchange="switchHistoryMap(this.value)"> 
+                    無 / 關閉歷史套疊
+                </label>
+                <label>
+                    <input type="radio" name="historymap" value="history_tainan" onchange="switchHistoryMap(this.value)"> 
                     1895 臺南府迅速測圖
                 </label>
                 <label>
-                    <input type="radio" name="basemap" value="history_1904" onchange="switchBasemap(this.value)"> 
+                    <input type="radio" name="historymap" value="history_1904" onchange="switchHistoryMap(this.value)"> 
                     1904 臺灣堡圖
                 </label>
                 
@@ -1977,37 +1982,37 @@ body.player-embedded .leaflet-popup .btn-play-main {
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
                     更多歷史圖層
                 </h2>
-                <div class="more-layers-grid">
+<div class="more-layers-grid">
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1875" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="historymap_modal" value="history_1875" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1874 府城街道圖</strong>
                             <span>Tainan_1875</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1900" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="historymap_modal" value="history_1900" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
                             <span>Tainan_1900</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1920" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="historymap_modal" value="history_1920" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
                             <span>Tainan_1920</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1921" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="historymap_modal" value="history_1921" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
                             <span>JM20K_1921</span>
                         </div>
                     </label>
                     <label class="layer-card">
-                        <input type="radio" name="basemap_modal" value="history_1944" onchange="switchBasemap(this.value); closeModal('moreLayersModal');"> 
+                        <input type="radio" name="historymap_modal" value="history_1944" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
                         <div class="layer-card-content">
                             <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
                             <span>AM25K_1944B</span>
@@ -4217,14 +4222,29 @@ function getPmtilesGeomCenter(geom) {
         updateOfficialHazardOpacity(getOfficialHazardOpacityValue());
         syncOfficialHazardStatus();
 
+// 🚀 負責切換「現代圖資底圖」
         function switchBasemap(val) {
             allModernLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
-            allHistoryLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
 
             document.querySelectorAll('input[name="basemap"]').forEach(function(el) {
                 el.checked = (el.value === val);
             });
-            document.querySelectorAll('input[name="basemap_modal"]').forEach(function(el) {
+
+            if (val === 'global') map.addLayer(globalLayer);
+            else if (val === 'esri_sat') map.addLayer(esriSatLayer);
+            else if (val === 'osm') map.addLayer(osmLayer);
+            else map.addLayer(taiwanLayer);
+        }
+
+        // 🚀 負責切換「歷史套疊圖層」
+        function switchHistoryMap(val) {
+            allHistoryLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
+
+            // 同步側邊欄與 Modal 的單選框狀態
+            document.querySelectorAll('input[name="historymap"]').forEach(function(el) {
+                el.checked = (el.value === val);
+            });
+            document.querySelectorAll('input[name="historymap_modal"]').forEach(function(el) {
                 el.checked = (el.value === val);
             });
 
@@ -4242,7 +4262,7 @@ function getPmtilesGeomCenter(geom) {
                 'history_1944': '1944 美軍航照圖'
             };
 
-            if (val.startsWith('history')) {
+            if (val !== 'none' && histNames[val]) {
                 extLabel.style.display = 'block'; 
                 extText.innerText = histNames[val];
                 opacityCtrl.style.display = 'block';
@@ -4251,9 +4271,7 @@ function getPmtilesGeomCenter(geom) {
                     extLabel.style.display = 'none';
                 }
                 
-                var base = (val === 'history_1944') ? esriSatLayer : taiwanLayer;
-                map.addLayer(base);
-                
+                // 這裡移除舊有的「自動幫忙加底圖」邏輯，全權交給使用者在「現代圖資」自選
                 if (val === 'history_1875') map.addLayer(history1875Layer);
                 else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
                 else if (val === 'history_1900') map.addLayer(history1900Layer);
@@ -4265,11 +4283,6 @@ function getPmtilesGeomCenter(geom) {
             } else {
                 extLabel.style.display = 'none'; 
                 opacityCtrl.style.display = 'none';
-                
-                if (val === 'global') map.addLayer(globalLayer);
-                else if (val === 'esri_sat') map.addLayer(esriSatLayer);
-                else if (val === 'osm') map.addLayer(osmLayer);
-                else map.addLayer(taiwanLayer);
             }
         }
 
@@ -4301,22 +4314,21 @@ function getPmtilesGeomCenter(geom) {
             if (pmToolbars.length > 0 && container) { pmToolbars.forEach(tb => container.appendChild(tb)); }
         }, 100);
 
-        map.on('moveend', function() {
+map.on('moveend', function() {
             var center = map.getCenter();
             var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
             
-            var checkedBasemap = document.querySelector('input[name="basemap"]:checked') || document.querySelector('input[name="basemap_modal"]:checked');
+            var checkedBasemap = document.querySelector('input[name="basemap"]:checked');
             if (!checkedBasemap) return;
             var selectedBasemap = checkedBasemap.value;
             
-            if (selectedBasemap === 'taiwan' || selectedBasemap.startsWith('history')) { 
+            // 只有「臺灣精細地圖」在離開台灣範圍時需要自動切換為全球圖
+            if (selectedBasemap === 'taiwan') { 
                 if (!inTaiwan) {
                     if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
                     if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
-                    if (map.hasLayer(esriSatLayer)) map.removeLayer(esriSatLayer);
                 } else {
-                    var underlying = (selectedBasemap === 'history_1944') ? esriSatLayer : taiwanLayer;
-                    if (!map.hasLayer(underlying)) map.addLayer(underlying);
+                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
                     if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
                 }
             }
