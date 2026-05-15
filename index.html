@@ -743,7 +743,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
             padding: 11px 15px;
         }
 
-        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
+        .right-tools-wrapper { position: absolute; right: 20px; top: 90px; z-index: 2500; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         
         .tools-toggle-btn { 
             pointer-events: auto;
@@ -774,15 +774,13 @@ body.player-embedded .leaflet-popup .btn-play-main {
 
     margin-top: 10px;
 
-    /* ✅ 捲軸放外層，整組右側選單一起捲 */
     max-height: calc(100dvh - 170px);
     overflow-y: auto;
     overflow-x: visible;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
 
-    /* ✅ 讓最底部的南山公墓不會貼底被吃掉 */
-    padding-bottom: 36px;
+    /* 移除無效的 padding-bottom，只保留左側縮進 */
     padding-left: 8px;
 
     scrollbar-width: thin;
@@ -824,9 +822,11 @@ body.player-embedded .leaflet-popup .btn-play-main {
     width: 220px;
     box-sizing: border-box;
 
-    /* ✅ 內層不要捲，避免雙層捲動或高度算錯 */
     max-height: none;
     overflow: visible;
+    
+    /* 🌟 終極殺招：改用強制外距！確保南山公墓下方永遠有 80px 的絕對安全距離 */
+    margin-bottom: 80px;
 }
 
 .custom-layer-control label {
@@ -955,9 +955,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
     overflow-x: visible;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    padding-bottom: 40px;
 }
-
 .custom-layer-control {
     width: min(260px, calc(100vw - 32px));
     box-sizing: border-box;
