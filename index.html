@@ -2452,14 +2452,18 @@ async function searchPlaceName() {
                 'out center tags 80;';
 
             var overpassEndpoints = [
-                'https://overpass.kumi.systems/api/interpreter',
-                'https://overpass-api.de/api/interpreter',
-                'https://lz4.overpass-api.de/api/interpreter',
-                'https://z.overpass-api.de/api/interpreter',
-                'https://overpass.osm.ch/api/interpreter'
-            ];
+    // 目前壓測中，對台灣大範圍模糊查詢最穩
+    'https://overpass.osm.ch/api/interpreter',
 
-            overpassEndpoints.sort(function() { return Math.random() - 0.5; });
+    // 備援節點：狀態會浮動，保留即可
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass-api.de/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://z.overpass-api.de/api/interpreter'
+];
+
+            // 固定順序：先用目前測試最穩的 overpass.osm.ch
+// 不隨機洗牌，避免每次都先打到較慢節點
 
             var overpassData = null;
 
