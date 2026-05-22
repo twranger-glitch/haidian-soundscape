@@ -2277,200 +2277,268 @@ var map = L.map('map', {
         function escapePlaceHtml(text) { return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
 async function searchPlaceName() {
-            var input = document.getElementById('placeSearchInput');
-            if (!input) return;
+    var input = document.getElementById('placeSearchInput');
+    if (!input) return;
 
-            var keyword = input.value.trim();
-            var resultBox = getPlaceSearchResultsBox();
+    var keyword = input.value.trim();
+    var resultBox = getPlaceSearchResultsBox();
 
-            if (!keyword) {
-                alert('請先輸入地點關鍵字，例如：海佃、四草、台江。');
-                return;
-            }
+    if (!keyword) {
+        alert('請先輸入地點關鍵字，例如：海佃、四草、台江。');
+        return;
+    }
 
-            resultBox.innerHTML = `
-                <div style="padding:10px 12px; border-radius:8px; background:#f8fafc; color:#64748b; font-size:12px; font-weight:700; text-align:center;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: badgeShine 2s linear infinite; vertical-align:middle;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                    啟動跨引擎聯合搜尋中...
-                </div>
-            `;
+    resultBox.innerHTML = `
+        <div style="padding:10px 12px; border-radius:8px; background:#f8fafc; color:#64748b; font-size:12px; font-weight:700; text-align:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: badgeShine 2s linear infinite; vertical-align:middle;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+            啟動台灣地名搜尋中...
+        </div>
+    `;
 
-            var places = [];
-            var seen = {};
-            var searchSuccess = false;
+    var places = [];
+    var seen = {};
+    var searchSuccess = false;
 
-            // ==========================================
-            // 🚀 引擎 A：Photon 搜尋引擎 (快速但不熟中文)
-            // ==========================================
-            var controllerA = new AbortController();
-            var timeoutA = setTimeout(function() { controllerA.abort(); }, 5000);
+    // 全台灣搜尋範圍：含台灣本島、澎湖、金門、馬祖的大致範圍
+    var taiwanSearchExtent = '118.0,21.5,122.5,26.5';
 
-            try {
-                var photonUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) + '&lat=23.02&lon=120.20&limit=15';
-                var res = await fetch(photonUrl, { signal: controllerA.signal });
-                
-                if (!res.ok) throw new Error("Photon 伺服器異常");
-                
-                var data = await res.json();
-                
-                if (data.features && data.features.length > 0) {
-                    data.features.forEach(function(feature) {
-                        var props = feature.properties || {};
-                        var name = props.name || '';
-                        if (!name) return;
+    // Overpass 使用南西北東 bbox 格式
+    var taiwanBbox = '21.5,118.0,26.5,122.5';
 
-                        var coords = feature.geometry.coordinates;
-                        var lon = coords[0];
-                        var lat = coords[1];
-                        var typeText = props.osm_value || props.osm_key || '地點';
+    // 單字搜尋通常代表「探索所有相關地名」，例如：鹿、港、溪、庄
+    // 這種情境不能只靠 ArcGIS 前 5 筆，所以會跑完 ArcGIS + Photon + Overpass。
+    var isExplorationSearch = keyword.length <= 1;
 
-                        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
-                        if (!seen[key]) {
-                            seen[key] = true;
-                            places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: props.district || '' });
-                        }
-                    });
-                }
-                
-                // 🌟 如果找出來是 0 筆，直接拋出錯誤，強迫進入備援！
-                if (places.length > 0) {
-                    searchSuccess = true;
-                } else {
-                    throw new Error("Photon 找不到符合的結果");
-                }
+    function addPlace(name, lat, lon, typeText, contextText) {
+        if (!name || lat == null || lon == null) return;
 
-            } catch (err) {
-                console.warn("引擎 A 失效，自動切換引擎 B...", err);
-            } finally {
-                clearTimeout(timeoutA);
-            }
+        lat = parseFloat(lat);
+        lon = parseFloat(lon);
 
-            // ==========================================
-            // 🚀 引擎 B：ArcGIS 全球地名服務 (最懂台灣中文、超耐打)
-            // ==========================================
-            if (!searchSuccess) {
-                var controllerArc = new AbortController();
-                var timeoutArc = setTimeout(function() { controllerArc.abort(); }, 5000);
-                
-                try {
-                    // 限定在台灣南部的經緯度範圍內搜尋，提升精準度
-                    var arcUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=' + encodeURIComponent(keyword) + '&outFields=Match_addr,Addr_type&maxLocations=5&searchExtent=119.9,22.8,120.8,23.5';
-                    var resArc = await fetch(arcUrl, { signal: controllerArc.signal });
-                    if (!resArc.ok) throw new Error("ArcGIS 異常");
-                    
-                    var dataArc = await resArc.json();
-                    if (dataArc.candidates && dataArc.candidates.length > 0) {
-                        dataArc.candidates.forEach(function(cand) {
-                            var name = cand.address || keyword;
-                            var lat = cand.location.y;
-                            var lon = cand.location.x;
-                            var typeText = cand.attributes.Addr_type || '地標';
-                            
-                            // ArcGIS 偶爾會回傳過長的地址，我們稍作清理
-                            name = name.split(',')[0].replace('台灣', '').trim();
-                            
-                            var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
-                            if (!seen[key]) {
-                                seen[key] = true;
-                                places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: 'ArcGIS' });
-                            }
-                        });
-                    }
-                    
-                    if (places.length > 0) {
-                        searchSuccess = true;
-                        console.log("成功透過引擎 B (ArcGIS) 找到地點");
-                    } else {
-                        throw new Error("ArcGIS 也找不到符合的結果");
-                    }
-                    
-                } catch (err) {
-                    console.warn("引擎 B 失效，啟動最終備援...", err);
-                } finally {
-                    clearTimeout(timeoutArc);
-                }
-            }
+        if (isNaN(lat) || isNaN(lon)) return;
 
-            // ==========================================
-            // 🛡️ 引擎 C：Overpass API (五路極速切換，最暴力的資料庫挖掘)
-            // ==========================================
-            if (!searchSuccess) {
-                try {
-                    var tainanBbox = '22.85,119.95,23.45,120.75';
-                    var safeKeyword = escapePlaceRegex(keyword);
-                    var query = `[out:json][timeout:15];(node["name"~"${safeKeyword}"](${tainanBbox});way["name"~"${safeKeyword}"](${tainanBbox});relation["name"~"${safeKeyword}"](${tainanBbox}););out center tags 20;`;
+        // 限制結果一定要在台灣大範圍內，避免跑到國外同名地點
+        if (lat < 21.5 || lat > 26.5 || lon < 118.0 || lon > 122.5) return;
 
-                    var overpassEndpoints = [
-                        'https://overpass.kumi.systems/api/interpreter',
-                        'https://overpass-api.de/api/interpreter',
-                        'https://lz4.overpass-api.de/api/interpreter',
-                        'https://z.overpass-api.de/api/interpreter',
-                        'https://overpass.osm.ch/api/interpreter'
-                    ];
-                    overpassEndpoints.sort(function() { return Math.random() - 0.5; });
-
-                    var overpassData = null;
-                    for (var i = 0; i < overpassEndpoints.length; i++) {
-                        var controllerB = new AbortController();
-                        var timeoutB = setTimeout(function() { controllerB.abort(); }, 5000);
-
-                        try {
-                            var opRes = await fetch(overpassEndpoints[i], { 
-                                method: 'POST', 
-                                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, 
-                                body: 'data=' + encodeURIComponent(query),
-                                signal: controllerB.signal
-                            });
-                            
-                            if (opRes.ok) {
-                                overpassData = await opRes.json();
-                                console.log("成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
-                                break; 
-                            }
-                        } catch (e) { 
-                            console.warn("節點失效或超時，切換下一台：" + overpassEndpoints[i]);
-                        } finally {
-                            clearTimeout(timeoutB);
-                        }
-                    }
-
-                    if (overpassData && overpassData.elements && overpassData.elements.length > 0) {
-                        overpassData.elements.forEach(function(el) {
-                            var name = (el.tags || {}).name || '';
-                            if (!name || name.indexOf(keyword) === -1) return;
-                            var lat = el.lat || (el.center && el.center.lat);
-                            var lon = el.lon || (el.center && el.center.lon);
-                            if (lat == null || lon == null) return;
-
-                            var typeText = (el.tags || {}).amenity || (el.tags || {}).tourism || (el.tags || {}).place || (el.tags || {}).natural || '地點';
-                            var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
-                            if (!seen[key]) {
-                                seen[key] = true;
-                                places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: '備援搜尋' });
-                            }
-                        });
-                        
-                        if (places.length > 0) searchSuccess = true;
-                    }
-
-                } catch (fallbackErr) {
-                    console.error("備援系統也失敗：", fallbackErr);
-                }
-            }
-
-            // ==========================================
-            // 🎨 渲染結果
-            // ==========================================
-            if (searchSuccess) {
-                places.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
-                renderPlaceSearchResults(places, keyword);
-                if (places.length === 1) {
-                    focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
-                }
-            } else {
-                resultBox.innerHTML = '<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">找不到「' + escapePlaceHtml(keyword) + '」，請嘗試其他關鍵字。</div>';
-            }
+        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+        if (!seen[key]) {
+            seen[key] = true;
+            places.push({
+                name: name,
+                lat: lat,
+                lon: lon,
+                type: typeText || '地點',
+                context: contextText || ''
+            });
         }
+    }
+
+    // ==========================================
+    // 🚀 引擎 A：ArcGIS 台灣中文地名主力
+    // ==========================================
+    var controllerArc = new AbortController();
+    var timeoutArc = setTimeout(function() { controllerArc.abort(); }, 5000);
+
+    try {
+        var arcUrl =
+            'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?' +
+            'f=json' +
+            '&singleLine=' + encodeURIComponent(keyword) +
+            '&outFields=Match_addr,PlaceName,Addr_type' +
+            '&maxLocations=10' +
+            '&countryCode=TWN' +
+            '&searchExtent=' + encodeURIComponent(taiwanSearchExtent);
+
+        var resArc = await fetch(arcUrl, { signal: controllerArc.signal });
+        if (!resArc.ok) throw new Error("ArcGIS 異常");
+
+        var dataArc = await resArc.json();
+
+        if (dataArc.candidates && dataArc.candidates.length > 0) {
+            dataArc.candidates.forEach(function(cand) {
+                var name = cand.address || keyword;
+                var lat = cand.location && cand.location.y;
+                var lon = cand.location && cand.location.x;
+                var typeText = cand.attributes && cand.attributes.Addr_type ? cand.attributes.Addr_type : '地標';
+
+                // ArcGIS 偶爾會回傳過長地址，先做簡單清理
+                name = String(name).split(',')[0].replace('台灣', '').trim();
+
+                addPlace(name, lat, lon, typeText, 'ArcGIS');
+            });
+        }
+
+        if (places.length > 0) {
+            searchSuccess = true;
+            console.log("成功透過引擎 A (ArcGIS) 找到地點");
+        } else {
+            throw new Error("ArcGIS 找不到符合的結果");
+        }
+
+    } catch (err) {
+        console.warn("引擎 A ArcGIS 失效或無結果，準備切換備援...", err);
+    } finally {
+        clearTimeout(timeoutArc);
+    }
+
+    // ==========================================
+    // 🚀 引擎 B：Photon 搜尋引擎
+    // 一般搜尋：ArcGIS 找不到才跑
+    // 單字探索：一定會跑，用來補更多可能地名
+    // ==========================================
+    if (!searchSuccess || isExplorationSearch) {
+        var controllerPhoton = new AbortController();
+        var timeoutPhoton = setTimeout(function() { controllerPhoton.abort(); }, 5000);
+
+        try {
+            var photonUrl =
+                'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) +
+                '&lat=23.7' +
+                '&lon=120.9' +
+                '&limit=30';
+
+            var resPhoton = await fetch(photonUrl, { signal: controllerPhoton.signal });
+
+            if (!resPhoton.ok) throw new Error("Photon 伺服器異常");
+
+            var dataPhoton = await resPhoton.json();
+
+            if (dataPhoton.features && dataPhoton.features.length > 0) {
+                dataPhoton.features.forEach(function(feature) {
+                    var props = feature.properties || {};
+                    var name = props.name || '';
+                    if (!name) return;
+
+                    var coords = feature.geometry && feature.geometry.coordinates;
+                    if (!coords) return;
+
+                    var lon = coords[0];
+                    var lat = coords[1];
+                    var typeText = props.osm_value || props.osm_key || '地點';
+                    var contextText = props.city || props.county || props.district || 'Photon';
+
+                    // 探索型搜尋時，必須真的含有關鍵字
+                    if (isExplorationSearch && name.indexOf(keyword) === -1) return;
+
+                    addPlace(name, lat, lon, typeText, contextText);
+                });
+            }
+
+            if (places.length > 0) searchSuccess = true;
+
+        } catch (err) {
+            console.warn("引擎 B Photon 失效，準備切換 Overpass...", err);
+        } finally {
+            clearTimeout(timeoutPhoton);
+        }
+    }
+
+    // ==========================================
+    // 🛡️ 引擎 C：Overpass API
+    // 一般搜尋：前兩個都找不到才跑
+    // 單字探索：一定會跑，最適合撈「所有名字含鹿的 OSM 地名」
+    // ==========================================
+    if (!searchSuccess || isExplorationSearch) {
+        try {
+            var safeKeyword = escapePlaceRegex(keyword);
+
+            var query =
+                '[out:json][timeout:20];' +
+                '(' +
+                    'node["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+                    'way["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+                    'relation["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+                ');' +
+                'out center tags 80;';
+
+            var overpassEndpoints = [
+                'https://overpass.kumi.systems/api/interpreter',
+                'https://overpass-api.de/api/interpreter',
+                'https://lz4.overpass-api.de/api/interpreter',
+                'https://z.overpass-api.de/api/interpreter',
+                'https://overpass.osm.ch/api/interpreter'
+            ];
+
+            overpassEndpoints.sort(function() { return Math.random() - 0.5; });
+
+            var overpassData = null;
+
+            for (var i = 0; i < overpassEndpoints.length; i++) {
+                var controllerOverpass = new AbortController();
+                var timeoutOverpass = setTimeout(function() { controllerOverpass.abort(); }, 7000);
+
+                try {
+                    var opRes = await fetch(overpassEndpoints[i], {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body: 'data=' + encodeURIComponent(query),
+                        signal: controllerOverpass.signal
+                    });
+
+                    if (opRes.ok) {
+                        overpassData = await opRes.json();
+                        console.log("成功使用 Overpass 備援節點完成搜尋：" + overpassEndpoints[i]);
+                        break;
+                    }
+                } catch (e) {
+                    console.warn("Overpass 節點失效或超時，切換下一台：" + overpassEndpoints[i]);
+                } finally {
+                    clearTimeout(timeoutOverpass);
+                }
+            }
+
+            if (overpassData && overpassData.elements && overpassData.elements.length > 0) {
+                overpassData.elements.forEach(function(el) {
+                    var tags = el.tags || {};
+                    var name = tags.name || '';
+                    if (!name || name.indexOf(keyword) === -1) return;
+
+                    var lat = el.lat || (el.center && el.center.lat);
+                    var lon = el.lon || (el.center && el.center.lon);
+                    if (lat == null || lon == null) return;
+
+                    var typeText =
+                        tags.amenity ||
+                        tags.tourism ||
+                        tags.place ||
+                        tags.natural ||
+                        tags.waterway ||
+                        tags.highway ||
+                        tags.landuse ||
+                        '地點';
+
+                    addPlace(name, lat, lon, typeText, 'OSM / Overpass');
+                });
+
+                if (places.length > 0) searchSuccess = true;
+            }
+
+        } catch (fallbackErr) {
+            console.error("Overpass 備援系統也失敗：", fallbackErr);
+        }
+    }
+
+    // ==========================================
+    // 🎨 渲染結果
+    // ==========================================
+    if (searchSuccess && places.length > 0) {
+        places.sort(function(a, b) {
+            return a.name.localeCompare(b.name, 'zh-Hant');
+        });
+
+        renderPlaceSearchResults(places, keyword);
+
+        // 探索型搜尋不自動飛到第一筆，避免搜尋「鹿」時直接跳走
+        if (!isExplorationSearch && places.length === 1) {
+            focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
+        }
+    } else {
+        resultBox.innerHTML =
+            '<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">找不到「' +
+            escapePlaceHtml(keyword) +
+            '」，請嘗試其他關鍵字。</div>';
+    }
+}
 
 
         function focusPlaceFromList(lat, lon, name, typeText) {
