@@ -2291,7 +2291,7 @@ async function searchPlaceName() {
             resultBox.innerHTML = `
                 <div style="padding:10px 12px; border-radius:8px; background:#f8fafc; color:#64748b; font-size:12px; font-weight:700; text-align:center;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: badgeShine 2s linear infinite; vertical-align:middle;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                    正在雲端搜尋中...
+                    啟動跨引擎聯合搜尋中...
                 </div>
             `;
 
@@ -2300,50 +2300,99 @@ async function searchPlaceName() {
             var searchSuccess = false;
 
             // ==========================================
-            // 🚀 引擎 A：Photon 搜尋引擎 (主力先發)
+            // 🚀 引擎 A：Photon 搜尋引擎 (快速但不熟中文)
             // ==========================================
             var controllerA = new AbortController();
-            var timeoutA = setTimeout(() => controllerA.abort(), 5000);
+            var timeoutA = setTimeout(function() { controllerA.abort(); }, 5000);
 
             try {
-                var photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(keyword)}&lat=23.02&lon=120.20&limit=15`;
+                var photonUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) + '&lat=23.02&lon=120.20&limit=15';
                 var res = await fetch(photonUrl, { signal: controllerA.signal });
                 
                 if (!res.ok) throw new Error("Photon 伺服器異常");
                 
                 var data = await res.json();
                 
-                (data.features || []).forEach(function(feature) {
-                    var props = feature.properties || {};
-                    var name = props.name || '';
-                    if (!name) return;
+                if (data.features && data.features.length > 0) {
+                    data.features.forEach(function(feature) {
+                        var props = feature.properties || {};
+                        var name = props.name || '';
+                        if (!name) return;
 
-                    var coords = feature.geometry.coordinates;
-                    var lon = coords[0];
-                    var lat = coords[1];
-                    var typeText = props.osm_value || props.osm_key || '地點';
+                        var coords = feature.geometry.coordinates;
+                        var lon = coords[0];
+                        var lat = coords[1];
+                        var typeText = props.osm_value || props.osm_key || '地點';
 
-                    var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
-                    if (!seen[key]) {
-                        seen[key] = true;
-                        places.push({ 
-                            name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText,
-                            context: props.district || props.city || props.state || '' 
-                        });
-                    }
-                });
-
-                searchSuccess = true; 
+                        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+                        if (!seen[key]) {
+                            seen[key] = true;
+                            places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: props.district || '' });
+                        }
+                    });
+                }
+                
+                // 🌟 如果找出來是 0 筆，直接拋出錯誤，強迫進入備援！
+                if (places.length > 0) {
+                    searchSuccess = true;
+                } else {
+                    throw new Error("Photon 找不到符合的結果");
+                }
 
             } catch (err) {
-                console.warn("主力搜尋引擎 (Photon) 暫時失效，自動啟動備援機制...", err);
+                console.warn("引擎 A 失效，自動切換引擎 B...", err);
             } finally {
-                // 🌟 無論成功、失敗或網路斷線，保證清掉計時器，釋放記憶體
                 clearTimeout(timeoutA);
             }
 
             // ==========================================
-            // 🛡️ 引擎 B：Overpass API (五路極速切換備援)
+            // 🚀 引擎 B：ArcGIS 全球地名服務 (最懂台灣中文、超耐打)
+            // ==========================================
+            if (!searchSuccess) {
+                var controllerArc = new AbortController();
+                var timeoutArc = setTimeout(function() { controllerArc.abort(); }, 5000);
+                
+                try {
+                    // 限定在台灣南部的經緯度範圍內搜尋，提升精準度
+                    var arcUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=' + encodeURIComponent(keyword) + '&outFields=Match_addr,Addr_type&maxLocations=5&searchExtent=119.9,22.8,120.8,23.5';
+                    var resArc = await fetch(arcUrl, { signal: controllerArc.signal });
+                    if (!resArc.ok) throw new Error("ArcGIS 異常");
+                    
+                    var dataArc = await resArc.json();
+                    if (dataArc.candidates && dataArc.candidates.length > 0) {
+                        dataArc.candidates.forEach(function(cand) {
+                            var name = cand.address || keyword;
+                            var lat = cand.location.y;
+                            var lon = cand.location.x;
+                            var typeText = cand.attributes.Addr_type || '地標';
+                            
+                            // ArcGIS 偶爾會回傳過長的地址，我們稍作清理
+                            name = name.split(',')[0].replace('台灣', '').trim();
+                            
+                            var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+                            if (!seen[key]) {
+                                seen[key] = true;
+                                places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: 'ArcGIS' });
+                            }
+                        });
+                    }
+                    
+                    if (places.length > 0) {
+                        searchSuccess = true;
+                        console.log("成功透過引擎 B (ArcGIS) 找到地點");
+                    } else {
+                        throw new Error("ArcGIS 也找不到符合的結果");
+                    }
+                    
+                } catch (err) {
+                    console.warn("引擎 B 失效，啟動最終備援...", err);
+                } finally {
+                    clearTimeout(timeoutArc);
+                }
+            }
+
+            // ==========================================
+            // 🛡️ 引擎 C：Overpass API (五路極速切換，最暴力的資料庫挖掘)
             // ==========================================
             if (!searchSuccess) {
                 try {
@@ -2358,12 +2407,12 @@ async function searchPlaceName() {
                         'https://z.overpass-api.de/api/interpreter',
                         'https://overpass.osm.ch/api/interpreter'
                     ];
-                    overpassEndpoints.sort(() => Math.random() - 0.5);
+                    overpassEndpoints.sort(function() { return Math.random() - 0.5; });
 
                     var overpassData = null;
                     for (var i = 0; i < overpassEndpoints.length; i++) {
                         var controllerB = new AbortController();
-                        var timeoutB = setTimeout(() => controllerB.abort(), 5000);
+                        var timeoutB = setTimeout(function() { controllerB.abort(); }, 5000);
 
                         try {
                             var opRes = await fetch(overpassEndpoints[i], { 
@@ -2376,38 +2425,33 @@ async function searchPlaceName() {
                             if (opRes.ok) {
                                 overpassData = await opRes.json();
                                 console.log("成功使用備援節點完成搜尋：" + overpassEndpoints[i]);
-                                break; // 成功拿到資料，跳出迴圈
+                                break; 
                             }
                         } catch (e) { 
                             console.warn("節點失效或超時，切換下一台：" + overpassEndpoints[i]);
                         } finally {
-                            // 🌟 即使觸發 break 或 catch，這行也絕對會執行，乾淨俐落！
                             clearTimeout(timeoutB);
                         }
                     }
 
-                    if (!overpassData) throw new Error("所有備援節點皆忙碌中");
+                    if (overpassData && overpassData.elements && overpassData.elements.length > 0) {
+                        overpassData.elements.forEach(function(el) {
+                            var name = (el.tags || {}).name || '';
+                            if (!name || name.indexOf(keyword) === -1) return;
+                            var lat = el.lat || (el.center && el.center.lat);
+                            var lon = el.lon || (el.center && el.center.lon);
+                            if (lat == null || lon == null) return;
 
-                    (overpassData.elements || []).forEach(function(el) {
-                        var name = (el.tags || {}).name || '';
-                        if (!name || name.indexOf(keyword) === -1) return;
-                        var lat = el.lat || (el.center && el.center.lat);
-                        var lon = el.lon || (el.center && el.center.lon);
-                        if (lat == null || lon == null) return;
-
-                        var typeText = (el.tags || {}).amenity || (el.tags || {}).tourism || (el.tags || {}).place || (el.tags || {}).natural || '地點';
-                        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
-                        if (!seen[key]) {
-                            seen[key] = true;
-                            places.push({ 
-                                name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText,
-                                context: '備援搜尋' 
-                            });
-                        }
-                    });
-
-                    places.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
-                    searchSuccess = true;
+                            var typeText = (el.tags || {}).amenity || (el.tags || {}).tourism || (el.tags || {}).place || (el.tags || {}).natural || '地點';
+                            var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+                            if (!seen[key]) {
+                                seen[key] = true;
+                                places.push({ name: name, lat: parseFloat(lat), lon: parseFloat(lon), type: typeText, context: '備援搜尋' });
+                            }
+                        });
+                        
+                        if (places.length > 0) searchSuccess = true;
+                    }
 
                 } catch (fallbackErr) {
                     console.error("備援系統也失敗：", fallbackErr);
@@ -2418,12 +2462,13 @@ async function searchPlaceName() {
             // 🎨 渲染結果
             // ==========================================
             if (searchSuccess) {
+                places.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
                 renderPlaceSearchResults(places, keyword);
                 if (places.length === 1) {
                     focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
                 }
             } else {
-                resultBox.innerHTML = `<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">全球搜尋伺服器皆忙碌中，請稍後重試。</div>`;
+                resultBox.innerHTML = '<div style="padding:8px 12px; border-radius:8px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:800; border:1px solid #fecdd3; text-align:center;">找不到「' + escapePlaceHtml(keyword) + '」，請嘗試其他關鍵字。</div>';
             }
         }
 
