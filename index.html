@@ -1723,6 +1723,35 @@ body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-cont
 }
 /* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_END ===== */
 
+/* ===== HAIDIAN_V4_CROSS_MODE_DRAWER_FIX_START =====
+   右下主線切到任一模式後，左側「聆聽 / 走讀」小耳朵仍可跨模式展開。
+   這段放在 V4 CSS 最底部，用來覆蓋三模式路由中對非當前面板的強制隱藏。
+*/
+body.haidian-v4 #sidePanel:not(.collapsed),
+body.haidian-v4 #routePanel:not(.collapsed) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateX(0) !important;
+}
+
+body.haidian-v4 #sidePanel:not(.collapsed) .drawer-content,
+body.haidian-v4 #routePanel:not(.collapsed) .drawer-content {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed,
+body.haidian-v4 #routePanel.collapsed {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed .drawer-content,
+body.haidian-v4 #routePanel.collapsed .drawer-content {
+  pointer-events: none !important;
+}
+/* ===== HAIDIAN_V4_CROSS_MODE_DRAWER_FIX_END ===== */
+
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
@@ -5139,6 +5168,15 @@ map.on('moveend', function() {
             var target = document.getElementById(id);
             if (!target) return false;
             var isClosed = target.classList.contains('collapsed');
+
+            // HAIDIAN V4：左側小耳朵要能跨模式叫出對應面板。
+            // 例如右下在「聆聽」時點走讀小耳朵，直接切到走讀並展開 routePanel；
+            // 右下在「圖資」時點聆聽/走讀小耳朵，也要先關閉圖資再打開對應面板。
+            if (isClosed && document.body && document.body.classList.contains('haidian-v4') && typeof window.haidianSwitchMode === 'function') {
+                if (id === 'sidePanel') return window.haidianSwitchMode('listen', false);
+                if (id === 'routePanel') return window.haidianSwitchMode('walk', false);
+            }
+
             closeAllDrawers();
 
             if (isClosed) {
