@@ -9,7 +9,7 @@
     <meta property="og:url" content="https://twranger-glitch.github.io/haidian-soundscape/">
     <meta property="og:site_name" content="海佃溪遊記">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="robots" content="noindex, nofollow" />
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="icon" type="image/png" href="favicon.png">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1367,7 +1367,395 @@ body.player-embedded .leaflet-popup .btn-play-main {
             .nanshan-category-note { font-size: 11px; }
         }
 
-</style></head><body>
+</style>
+
+<!-- HAIDIAN_9PLUS_STABLE_V4_CSS_START -->
+<style id="haidian-9plus-stable-v4-css">
+/*
+  HAIDIAN_9PLUS_STABLE_V4
+  單一 index.html 穩定版。
+  修正：入口卡片對比、三模式真實切換、圖資面板可點擊、定位按鈕保留。
+*/
+:root {
+  --haidian-v4-ink: #0f172a;
+  --haidian-v4-muted: #475569;
+  --haidian-v4-soft: #f8fafc;
+  --haidian-v4-paper: #fffdf7;
+  --haidian-v4-green: #0f8f6f;
+  --haidian-v4-green-deep: #047857;
+  --haidian-v4-river: #1f8a93;
+  --haidian-v4-gold: #f7c96f;
+  --haidian-v4-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
+}
+
+/* 白底入口卡片：文字一律使用高對比色 */
+#splashScreen .splash-card {
+  background: #ffffff !important;
+  color: var(--haidian-v4-ink) !important;
+  text-shadow: none !important;
+}
+#splashScreen .splash-card *,
+#splashScreen .splash-title,
+#splashScreen .featured-title {
+  text-shadow: none !important;
+}
+#splashScreen .splash-title,
+#splashScreen .featured-title {
+  color: var(--haidian-v4-ink) !important;
+  opacity: 1 !important;
+}
+#splashScreen .splash-subtitle,
+#splashScreen .splash-quote-text,
+#splashScreen .splash-slogan,
+#splashScreen .splash-card p {
+  color: var(--haidian-v4-muted) !important;
+  opacity: 1 !important;
+}
+#splashScreen .splash-quote-title,
+#splashScreen .featured-label,
+#splashScreen .splash-slogan span,
+#splashScreen .splash-quote-text strong {
+  color: var(--haidian-v4-green-deep) !important;
+  opacity: 1 !important;
+}
+#splashScreen .splash-quote-text strong {
+  background: #d1fae5 !important;
+}
+#splashScreen .btn-enter-map {
+  background: linear-gradient(135deg, #f8c96d, #ffe4a8) !important;
+  color: #17332d !important;
+  box-shadow: 0 16px 34px rgba(120, 74, 20, 0.22) !important;
+}
+
+/* 模式面板抬頭 */
+.haidian-v4-panel-head {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 14px 0;
+  padding: 15px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(31,138,147,0.11), rgba(247,201,111,0.15)), rgba(255,255,255,0.72);
+  border: 1px solid rgba(31,138,147,0.18);
+}
+.haidian-v4-panel-head .eyebrow {
+  color: var(--haidian-v4-green-deep);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.haidian-v4-panel-head .title {
+  color: var(--haidian-v4-ink);
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+.haidian-v4-panel-head .copy {
+  color: var(--haidian-v4-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.haidian-v4-mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 7px;
+  padding: 8px;
+  margin: 0 0 15px 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(31,138,147,0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.92);
+}
+.haidian-v4-mode-btn {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #52636f;
+  font-weight: 900;
+  font-size: 13px;
+  padding: 10px 8px;
+  cursor: pointer;
+  transition: transform .2s ease, background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.haidian-v4-mode-btn:hover { transform: translateY(-1px); color: var(--haidian-v4-green-deep); }
+body.haidian-v4-mode-listen .haidian-v4-mode-btn[data-haidian-v4-mode="listen"],
+body.haidian-v4-mode-walk .haidian-v4-mode-btn[data-haidian-v4-mode="walk"],
+body.haidian-v4-mode-data .haidian-v4-mode-btn[data-haidian-v4-mode="data"] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--haidian-v4-green), var(--haidian-v4-river));
+  box-shadow: 0 10px 20px rgba(15, 143, 111, 0.24);
+}
+
+/* 右下探索主線：z-index 低於圖資面板，避免蓋住圖資選項 */
+.haidian-v4-dock {
+  position: fixed;
+  right: 94px;
+  bottom: 18px;
+  width: min(430px, calc(100vw - 140px));
+  z-index: 1400;
+  pointer-events: auto;
+  background: rgba(255, 253, 247, 0.95);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.88);
+  border-radius: 22px;
+  box-shadow: var(--haidian-v4-shadow);
+  padding: 14px;
+}
+.haidian-v4-dock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.haidian-v4-dock-title strong {
+  display: block;
+  color: var(--haidian-v4-ink);
+  font-size: 14px;
+  font-weight: 950;
+}
+.haidian-v4-dock-title span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+.haidian-v4-dock-toggle {
+  border: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(31,138,147,0.08);
+  color: var(--haidian-v4-green-deep);
+  font-weight: 900;
+  cursor: pointer;
+}
+.haidian-v4-dock-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+}
+.haidian-v4-card {
+  border: 1px solid rgba(31,138,147,0.13);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.78);
+  padding: 11px 10px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 66px;
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+}
+.haidian-v4-card b {
+  display: block;
+  color: var(--haidian-v4-ink);
+  font-size: 13px;
+  font-weight: 950;
+  margin-bottom: 4px;
+}
+.haidian-v4-card small {
+  display: block;
+  color: #52636f;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.haidian-v4-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(15,23,42,.12); }
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
+  background: linear-gradient(135deg, rgba(15,143,111,0.95), rgba(31,138,147,0.95));
+  border-color: transparent;
+  box-shadow: 0 12px 26px rgba(15,143,111,.26);
+}
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] b,
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] small,
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] b,
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] small,
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] b,
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] small {
+  color: #fff;
+}
+.haidian-v4-dock.is-minimized { width: auto; padding: 10px 12px; }
+.haidian-v4-dock.is-minimized .haidian-v4-dock-title span,
+.haidian-v4-dock.is-minimized .haidian-v4-dock-body { display: none; }
+
+/* 三模式真實路由 */
+body.haidian-v4-mode-listen #sidePanel:not(.collapsed),
+body.haidian-v4-mode-walk #routePanel:not(.collapsed) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateX(0) !important;
+}
+body.haidian-v4-mode-listen #routePanel,
+body.haidian-v4-mode-walk #sidePanel,
+body.haidian-v4-mode-data #sidePanel,
+body.haidian-v4-mode-data #routePanel {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+}
+body.haidian-v4-mode-data #rightToolsWrapper {
+  z-index: 4500 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none !important;
+}
+body.haidian-v4-mode-data #rightToolsWrapper .tools-toggle-btn,
+body.haidian-v4-mode-data #rightToolsWrapper .tools-menu-container,
+body.haidian-v4-mode-data #rightToolsWrapper .custom-layer-control {
+  pointer-events: auto !important;
+}
+body.haidian-v4-mode-data #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) .tools-menu-container {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) scale(1) !important;
+}
+body.haidian-v4-mode-data #rightToolsWrapper label,
+body.haidian-v4-mode-data #rightToolsWrapper input,
+body.haidian-v4-mode-data #rightToolsWrapper select,
+body.haidian-v4-mode-data #rightToolsWrapper button,
+body.haidian-v4-mode-data #rightToolsWrapper a {
+  pointer-events: auto !important;
+}
+.haidian-v4-data-note {
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  color: #115e59;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 750;
+  margin-bottom: 10px;
+}
+
+/* 我的定位按鈕：保留在右下角，圖資面板開啟時不被蓋掉 */
+.locate-me-wrapper {
+  z-index: 3600 !important;
+  right: 20px !important;
+  bottom: 22px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+.locate-me-btn {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,0.98) !important;
+  color: var(--haidian-v4-green) !important;
+  box-shadow: 0 14px 34px rgba(15,23,42,.20) !important;
+}
+.leaflet-control-attribution { margin-right: 92px !important; }
+
+@media (max-width: 760px) {
+  .haidian-v4-dock {
+    left: 10px;
+    right: 10px;
+    bottom: 12px;
+    width: auto;
+    padding: 12px;
+    border-radius: 20px;
+  }
+  .haidian-v4-dock-body { gap: 6px; }
+  .haidian-v4-card { padding: 9px 8px; min-height: 58px; }
+  .haidian-v4-card b { font-size: 12px; }
+  .haidian-v4-card small { font-size: 10px; }
+  .locate-me-wrapper {
+    right: 12px !important;
+    bottom: 145px !important;
+  }
+  body.haidian-v4-mode-data .haidian-v4-dock {
+    bottom: 8px;
+  }
+  .leaflet-control-attribution { margin-right: 0 !important; margin-bottom: 118px !important; }
+}
+
+
+/* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_START =====
+   修正項目：
+   1) 左側/走讀面板在 V4 模式下，點擊小耳朵可以真正收合。
+   2) 圖資模式下，右側圖資工具可由圖層按鈕再次隱藏。
+   3) 右下「探索主線」的收合按鈕避免被其他圖資層干擾。
+*/
+body.haidian-v4 #sidePanel.collapsed,
+body.haidian-v4 #routePanel.collapsed {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed .drawer-content,
+body.haidian-v4 #routePanel.collapsed .drawer-content {
+  pointer-events: none !important;
+}
+
+body.haidian-v4 #sidePanel .toggle-btn,
+body.haidian-v4 #routePanel .toggle-btn {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-10px) scale(0.95) !important;
+  pointer-events: none !important;
+}
+
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .custom-layer-control,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container label,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container input,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container select,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container button,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container a {
+  pointer-events: none !important;
+}
+
+.haidian-v4-dock-toggle {
+  position: relative;
+  z-index: 2;
+}
+
+.haidian-v4-dock.is-minimized {
+  min-width: 0;
+}
+/* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_END ===== */
+
+/* ===== HAIDIAN_V4_CROSS_MODE_DRAWER_FIX_START =====
+   右下主線切到任一模式後，左側「聆聽 / 走讀」小耳朵仍可跨模式展開。
+   這段放在 V4 CSS 最底部，用來覆蓋三模式路由中對非當前面板的強制隱藏。
+*/
+body.haidian-v4 #sidePanel:not(.collapsed),
+body.haidian-v4 #routePanel:not(.collapsed) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateX(0) !important;
+}
+
+body.haidian-v4 #sidePanel:not(.collapsed) .drawer-content,
+body.haidian-v4 #routePanel:not(.collapsed) .drawer-content {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed,
+body.haidian-v4 #routePanel.collapsed {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed .drawer-content,
+body.haidian-v4 #routePanel.collapsed .drawer-content {
+  pointer-events: none !important;
+}
+/* ===== HAIDIAN_V4_CROSS_MODE_DRAWER_FIX_END ===== */
+
+</style>
+<!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
+
+</head><body>
 
     <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
     <style>
@@ -1747,7 +2135,7 @@ body.player-embedded .leaflet-popup .btn-play-main {
         <div class="tools-toggle-btn" onclick="toggleListeningMode()" title="沉浸聆聽模式" style="margin-bottom: 12px; color: #10b981;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-8h3z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-8H3z"></path></svg>
         </div>
-        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
+        <div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
         </div>
         <div class="tools-menu-container">
@@ -4756,21 +5144,49 @@ map.on('moveend', function() {
         }, 500);
 
         function closeAllDrawers() {
-            document.getElementById('sidePanel').classList.add('collapsed');
-            document.getElementById('routePanel').classList.add('collapsed');
-            document.getElementById('rightToolsWrapper').classList.remove('open');
-            document.getElementById('globalPlayer').classList.remove('force-hide');
+            var side = document.getElementById('sidePanel');
+            var route = document.getElementById('routePanel');
+            var tools = document.getElementById('rightToolsWrapper');
+            var player = document.getElementById('globalPlayer');
+
+            if (side) side.classList.add('collapsed');
+            if (route) route.classList.add('collapsed');
+            if (tools) {
+                tools.classList.remove('open');
+                tools.classList.remove('haidian-v4-data-open');
+                tools.classList.add('haidian-v4-tools-user-hidden');
+                tools.setAttribute('aria-hidden', 'true');
+            }
+            if (player) player.classList.remove('force-hide');
         }
 
         function togglePanel(id, event) {
-            if (event) event.stopPropagation();
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
             var target = document.getElementById(id);
+            if (!target) return false;
             var isClosed = target.classList.contains('collapsed');
+
+            // HAIDIAN V4：左側小耳朵要能跨模式叫出對應面板。
+            // 例如右下在「聆聽」時點走讀小耳朵，直接切到走讀並展開 routePanel；
+            // 右下在「圖資」時點聆聽/走讀小耳朵，也要先關閉圖資再打開對應面板。
+            if (isClosed && document.body && document.body.classList.contains('haidian-v4') && typeof window.haidianSwitchMode === 'function') {
+                if (id === 'sidePanel') return window.haidianSwitchMode('listen', false);
+                if (id === 'routePanel') return window.haidianSwitchMode('walk', false);
+            }
+
             closeAllDrawers();
 
             if (isClosed) {
                 target.classList.remove('collapsed');
+                target.setAttribute('aria-hidden', 'false');
+            } else {
+                target.classList.add('collapsed');
+                target.setAttribute('aria-hidden', 'true');
             }
+            return false;
         }
 
         function openCustomDrawHelp() {
@@ -6406,4 +6822,337 @@ function mountGlobalPlayerIntoPopup_(retry) {
             }
         };
     </script>
+
+
+<!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
+<script id="haidian-9plus-stable-v4-js">
+(function () {
+  'use strict';
+
+  const MODE_COPY = {
+    listen: {
+      title: '聆聽：先找到一段現場聲音',
+      copy: '搜尋聲景、依類別與時間篩選，收藏你想再次回來聽的土地回音。',
+      toast: '聆聽模式：已開啟聲景搜尋、類別篩選、時間軸與收藏。'
+    },
+    walk: {
+      title: '走讀：把聲音串成一條路',
+      copy: '選擇主題路線、地理圍籬或手繪範圍，讓地圖帶你完成一段田野任務。',
+      toast: '走讀模式：已開啟主題路線、任務與手繪走讀。'
+    },
+    data: {
+      title: '圖資：進入研究型地圖',
+      copy: '打開底圖、歷史套疊、淹水潛勢、水文與災害圖資，適合課程研究與田野比對。',
+      toast: '圖資模式：已開啟右側底圖、歷史、水文、淹水與災害圖層。'
+    }
+  };
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  function $(selector, root) { return (root || document).querySelector(selector); }
+  function $all(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
+
+  function setBodyMode(mode) {
+    document.body.classList.add('haidian-v4');
+    document.body.classList.remove('haidian-v4-mode-listen', 'haidian-v4-mode-walk', 'haidian-v4-mode-data');
+    document.body.classList.add('haidian-v4-mode-' + mode);
+    document.body.dataset.haidianMode = mode;
+  }
+
+  function setDrawer(panel, open) {
+    if (!panel) return;
+    const content = panel.querySelector('.drawer-content');
+    panel.classList.toggle('collapsed', !open);
+    panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    panel.style.opacity = open ? '1' : '';
+    panel.style.visibility = open ? 'visible' : '';
+    panel.style.pointerEvents = open ? 'auto' : '';
+    panel.style.transform = open ? 'translateX(0)' : '';
+    if (content) content.style.pointerEvents = open ? 'auto' : '';
+  }
+
+  function openRightTools(open) {
+    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+    if (!wrapper) return;
+    const menu = $('.tools-menu-container', wrapper);
+    const control = $('.custom-layer-control', wrapper);
+
+    wrapper.classList.toggle('open', !!open);
+    wrapper.classList.toggle('haidian-v4-data-open', !!open);
+    wrapper.classList.remove('haidian-v4-tools-user-hidden');
+    wrapper.setAttribute('aria-hidden', open ? 'false' : 'true');
+
+    /* 保持原本設計：外層不吃點擊，真正可點的是按鈕與選單。 */
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.opacity = open ? '1' : '';
+    wrapper.style.visibility = open ? 'visible' : '';
+    wrapper.style.zIndex = open ? '4500' : '';
+
+    $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
+      btn.style.pointerEvents = 'auto';
+    });
+
+    if (menu) {
+      menu.style.pointerEvents = open ? 'auto' : '';
+      menu.style.opacity = open ? '1' : '';
+      menu.style.visibility = open ? 'visible' : '';
+      menu.style.transform = open ? 'translateY(0) scale(1)' : '';
+      menu.style.zIndex = open ? '4501' : '';
+    }
+    if (control) {
+      control.style.pointerEvents = open ? 'auto' : '';
+      control.style.position = 'relative';
+      control.style.zIndex = '4502';
+    }
+  }
+
+  window.toggleRightToolsPanel = function (event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+    if (!wrapper) return false;
+    const menu = $('.tools-menu-container', wrapper);
+    const control = $('.custom-layer-control', wrapper);
+    const shouldClose = wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden');
+
+    if (shouldClose) {
+      wrapper.classList.remove('open');
+      wrapper.classList.remove('haidian-v4-data-open');
+      wrapper.classList.add('haidian-v4-tools-user-hidden');
+      wrapper.setAttribute('aria-hidden', 'true');
+      wrapper.style.pointerEvents = 'none';
+      if (menu) {
+        menu.style.pointerEvents = 'none';
+        menu.style.opacity = '';
+        menu.style.visibility = '';
+        menu.style.transform = '';
+        menu.style.zIndex = '';
+      }
+      if (control) control.style.pointerEvents = 'none';
+    } else {
+      wrapper.classList.add('open');
+      wrapper.classList.add('haidian-v4-data-open');
+      wrapper.classList.remove('haidian-v4-tools-user-hidden');
+      wrapper.setAttribute('aria-hidden', 'false');
+      wrapper.style.pointerEvents = 'none';
+      wrapper.style.opacity = '1';
+      wrapper.style.visibility = 'visible';
+      wrapper.style.zIndex = '4500';
+      if (menu) {
+        menu.style.pointerEvents = 'auto';
+        menu.style.opacity = '1';
+        menu.style.visibility = 'visible';
+        menu.style.transform = 'translateY(0) scale(1)';
+        menu.style.zIndex = '4501';
+      }
+      if (control) {
+        control.style.pointerEvents = 'auto';
+        control.style.position = 'relative';
+        control.style.zIndex = '4502';
+      }
+    }
+
+    $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
+      btn.style.pointerEvents = 'auto';
+    });
+    return false;
+  };
+
+  function updateModeControls(mode) {
+    $all('[data-haidian-v4-mode]').forEach(function (btn) {
+      const btnMode = btn.getAttribute('data-haidian-v4-mode');
+      const active = btnMode === mode;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function showToast(message) {
+    let toast = $('.haidian-mode-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'haidian-mode-toast';
+      toast.style.cssText = 'position:fixed;left:50%;top:92px;transform:translateX(-50%);z-index:5000;background:rgba(15,49,47,.92);color:#fff;padding:12px 18px;border-radius:999px;box-shadow:0 16px 34px rgba(0,0,0,.24);font-size:14px;font-weight:850;letter-spacing:.03em;opacity:0;pointer-events:none;transition:opacity .22s ease, transform .22s ease;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(function () {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-8px)';
+    }, 1500);
+  }
+
+  function patchSplashReadability() {
+    const card = $('#splashScreen .splash-card');
+    if (!card) return;
+    card.style.color = '#0f172a';
+    $all('.splash-quote-text, .splash-slogan, .splash-card p', card).forEach(function (el) {
+      el.style.setProperty('color', '#475569', 'important');
+      el.style.setProperty('opacity', '1', 'important');
+    });
+    $all('.splash-quote-title, .featured-label, .splash-slogan span', card).forEach(function (el) {
+      el.style.setProperty('color', '#047857', 'important');
+      el.style.setProperty('opacity', '1', 'important');
+    });
+    $all('.featured-title, .splash-title', card).forEach(function (el) {
+      el.style.setProperty('color', '#0f172a', 'important');
+      el.style.setProperty('opacity', '1', 'important');
+    });
+  }
+
+  function addPanelHead(panel, mode, eyebrow) {
+    const content = panel && $('.drawer-content', panel);
+    if (!content || content.querySelector('.haidian-v4-panel-head')) return;
+    const head = document.createElement('div');
+    head.className = 'haidian-v4-panel-head';
+    head.innerHTML = '<div class="eyebrow">' + eyebrow + '</div><div class="title">' + MODE_COPY[mode].title + '</div><div class="copy">' + MODE_COPY[mode].copy + '</div>';
+    const switcher = document.createElement('div');
+    switcher.className = 'haidian-v4-mode-switcher';
+    switcher.setAttribute('role', 'tablist');
+    switcher.setAttribute('aria-label', '探索模式切換');
+    switcher.innerHTML = '<button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="listen">聆聽</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="walk">走讀</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="data">圖資</button>';
+    content.insertBefore(switcher, content.firstChild);
+    content.insertBefore(head, switcher);
+  }
+
+  function addDataNote() {
+    const control = $('#rightToolsWrapper .custom-layer-control');
+    if (!control || control.querySelector('.haidian-v4-data-note')) return;
+    const note = document.createElement('div');
+    note.className = 'haidian-v4-data-note';
+    note.textContent = '圖資模式｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層。可直接點選下方單選或勾選項目切換。';
+    control.insertBefore(note, control.firstChild);
+  }
+
+  function addDock() {
+    if ($('.haidian-v4-dock')) return;
+    const dock = document.createElement('aside');
+    dock.className = 'haidian-v4-dock';
+    dock.setAttribute('aria-label', '探索主線');
+    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下，會打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
+    document.body.appendChild(dock);
+  }
+
+  function ensureLocateButtonVisible() {
+    const wrapper = $('.locate-me-wrapper');
+    if (!wrapper) return;
+    wrapper.style.zIndex = '3600';
+    wrapper.style.opacity = '1';
+    wrapper.style.visibility = 'visible';
+    wrapper.style.pointerEvents = 'auto';
+  }
+
+  function repairRightToolClickability() {
+    const wrapper = $('#rightToolsWrapper');
+    if (!wrapper || wrapper.dataset.haidianV4Clickable === 'true') return;
+    wrapper.dataset.haidianV4Clickable = 'true';
+
+    /* 讓地圖不要吃掉圖資面板上的操作，但不阻止 input / label 自己的 onchange。 */
+    try {
+      if (window.L && L.DomEvent) {
+        L.DomEvent.disableClickPropagation(wrapper);
+        L.DomEvent.disableScrollPropagation(wrapper);
+      }
+    } catch (_) {}
+
+    wrapper.addEventListener('click', function (event) {
+      const label = event.target.closest && event.target.closest('label');
+      if (!label || !wrapper.contains(label)) return;
+      if (event.target.matches && event.target.matches('input, select, button, a, textarea')) return;
+      const input = label.querySelector('input');
+      if (!input || input.disabled) return;
+      event.preventDefault();
+      input.click();
+    }, false);
+  }
+
+  window.haidianSwitchMode = function (mode, silent) {
+    if (!MODE_COPY[mode]) mode = 'listen';
+    setBodyMode(mode);
+
+    const sidePanel = $('#sidePanel');
+    const routePanel = $('#routePanel');
+
+    if (mode === 'listen') {
+      setDrawer(sidePanel, true);
+      setDrawer(routePanel, false);
+      openRightTools(false);
+    } else if (mode === 'walk') {
+      setDrawer(sidePanel, false);
+      setDrawer(routePanel, true);
+      openRightTools(false);
+    } else if (mode === 'data') {
+      setDrawer(sidePanel, false);
+      setDrawer(routePanel, false);
+      openRightTools(true);
+      repairRightToolClickability();
+    }
+
+    updateModeControls(mode);
+    ensureLocateButtonVisible();
+    try { localStorage.setItem('haidianPreferredMode', mode); } catch (_) {}
+    if (!silent) showToast(MODE_COPY[mode].toast);
+    return false;
+  };
+
+  function bindModeClicks() {
+    document.addEventListener('click', function (event) {
+      const btn = event.target.closest && event.target.closest('[data-haidian-v4-mode]');
+      if (!btn) return;
+      const mode = btn.getAttribute('data-haidian-v4-mode');
+      if (!MODE_COPY[mode]) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.haidianSwitchMode(mode, false);
+    }, true);
+
+    document.addEventListener('click', function (event) {
+      const toggle = event.target.closest && event.target.closest('.haidian-v4-dock-toggle');
+      if (!toggle) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const dock = $('.haidian-v4-dock');
+      if (!dock) return;
+      dock.classList.toggle('is-minimized');
+      const minimized = dock.classList.contains('is-minimized');
+      toggle.textContent = minimized ? '⌃' : '⌄';
+      toggle.setAttribute('aria-label', minimized ? '展開探索主線' : '收合探索主線');
+    }, true);
+  }
+
+  ready(function () {
+    patchSplashReadability();
+    addPanelHead($('#sidePanel'), 'listen', 'Listen Mode');
+    addPanelHead($('#routePanel'), 'walk', 'Walk Mode');
+    addDataNote();
+    addDock();
+    bindModeClicks();
+    repairRightToolClickability();
+    ensureLocateButtonVisible();
+
+    let saved = 'listen';
+    try { saved = localStorage.getItem('haidianPreferredMode') || 'listen'; } catch (_) {}
+    if (!MODE_COPY[saved]) saved = 'listen';
+    setTimeout(function () { window.haidianSwitchMode(saved, true); }, 100);
+    setTimeout(patchSplashReadability, 180);
+  });
+
+  window.addEventListener('resize', function () {
+    const mode = document.body.dataset.haidianMode || 'listen';
+    window.haidianSwitchMode(mode, true);
+  });
+})();
+</script>
+<!-- HAIDIAN_9PLUS_STABLE_V4_JS_END -->
+
 </body></html>
