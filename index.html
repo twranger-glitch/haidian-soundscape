@@ -5149,13 +5149,25 @@ map.on('moveend', function() {
             var tools = document.getElementById('rightToolsWrapper');
             var player = document.getElementById('globalPlayer');
 
-            if (side) side.classList.add('collapsed');
-            if (route) route.classList.add('collapsed');
+            if (side) {
+                side.classList.add('collapsed');
+                side.setAttribute('aria-hidden', 'true');
+                var sideToggle = side.querySelector('.toggle-btn');
+                if (sideToggle) sideToggle.setAttribute('aria-expanded', 'false');
+            }
+            if (route) {
+                route.classList.add('collapsed');
+                route.setAttribute('aria-hidden', 'true');
+                var routeToggle = route.querySelector('.toggle-btn');
+                if (routeToggle) routeToggle.setAttribute('aria-expanded', 'false');
+            }
             if (tools) {
                 tools.classList.remove('open');
                 tools.classList.remove('haidian-v4-data-open');
                 tools.classList.add('haidian-v4-tools-user-hidden');
                 tools.setAttribute('aria-hidden', 'true');
+                var toolsToggle = tools.querySelector('.tools-toggle-btn');
+                if (toolsToggle) toolsToggle.setAttribute('aria-expanded', 'false');
             }
             if (player) player.classList.remove('force-hide');
         }
@@ -5179,12 +5191,15 @@ map.on('moveend', function() {
 
             closeAllDrawers();
 
+            var targetToggle = target.querySelector('.toggle-btn');
             if (isClosed) {
                 target.classList.remove('collapsed');
                 target.setAttribute('aria-hidden', 'false');
+                if (targetToggle) targetToggle.setAttribute('aria-expanded', 'true');
             } else {
                 target.classList.add('collapsed');
                 target.setAttribute('aria-hidden', 'true');
+                if (targetToggle) targetToggle.setAttribute('aria-expanded', 'false');
             }
             return false;
         }
@@ -6847,6 +6862,19 @@ function mountGlobalPlayerIntoPopup_(retry) {
     }
   };
 
+  /* HAIDIAN V4 單一 UI 狀態：只新增狀態同步，不移除既有功能。 */
+  const UI_STATE = window.haidianV4State = window.haidianV4State || {
+    mode: 'listen',
+    panels: { sidePanel: false, routePanel: false },
+    rightToolsOpen: false,
+    rightToolsUserHidden: false
+  };
+
+  function setExpanded(el, expanded) {
+    if (!el) return;
+    el.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
     else fn();
@@ -6860,13 +6888,24 @@ function mountGlobalPlayerIntoPopup_(retry) {
     document.body.classList.remove('haidian-v4-mode-listen', 'haidian-v4-mode-walk', 'haidian-v4-mode-data');
     document.body.classList.add('haidian-v4-mode-' + mode);
     document.body.dataset.haidianMode = mode;
+    UI_STATE.mode = mode;
   }
 
   function setDrawer(panel, open) {
     if (!panel) return;
     const content = panel.querySelector('.drawer-content');
+    const panelId = panel.id || '';
     panel.classList.toggle('collapsed', !open);
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    panel.dataset.haidianPanelOpen = open ? 'true' : 'false';
+    if (panelId) UI_STATE.panels[panelId] = !!open;
+
+    const toggle = panel.querySelector('.toggle-btn');
+    if (toggle) {
+      setExpanded(toggle, !!open);
+      if (panelId) toggle.setAttribute('aria-controls', panelId);
+    }
+
     panel.style.opacity = open ? '1' : '';
     panel.style.visibility = open ? 'visible' : '';
     panel.style.pointerEvents = open ? 'auto' : '';
@@ -6874,39 +6913,49 @@ function mountGlobalPlayerIntoPopup_(retry) {
     if (content) content.style.pointerEvents = open ? 'auto' : '';
   }
 
-  function openRightTools(open) {
-    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+  function applyRightToolsState(wrapper, open, userHidden) {
     if (!wrapper) return;
     const menu = $('.tools-menu-container', wrapper);
     const control = $('.custom-layer-control', wrapper);
+    const visible = !!open && !userHidden;
 
-    wrapper.classList.toggle('open', !!open);
-    wrapper.classList.toggle('haidian-v4-data-open', !!open);
-    wrapper.classList.remove('haidian-v4-tools-user-hidden');
-    wrapper.setAttribute('aria-hidden', open ? 'false' : 'true');
+    wrapper.classList.toggle('open', visible);
+    wrapper.classList.toggle('haidian-v4-data-open', visible);
+    wrapper.classList.toggle('haidian-v4-tools-user-hidden', !!userHidden || !open);
+    wrapper.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    wrapper.dataset.haidianToolsOpen = visible ? 'true' : 'false';
+    UI_STATE.rightToolsOpen = visible;
+    UI_STATE.rightToolsUserHidden = !!userHidden || !open;
 
     /* 保持原本設計：外層不吃點擊，真正可點的是按鈕與選單。 */
     wrapper.style.pointerEvents = 'none';
-    wrapper.style.opacity = open ? '1' : '';
-    wrapper.style.visibility = open ? 'visible' : '';
-    wrapper.style.zIndex = open ? '4500' : '';
+    wrapper.style.opacity = visible ? '1' : '';
+    wrapper.style.visibility = visible ? 'visible' : '';
+    wrapper.style.zIndex = visible ? '4500' : '';
 
     $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
       btn.style.pointerEvents = 'auto';
+      setExpanded(btn, visible);
+      btn.setAttribute('aria-controls', 'rightToolsWrapper');
     });
 
     if (menu) {
-      menu.style.pointerEvents = open ? 'auto' : '';
-      menu.style.opacity = open ? '1' : '';
-      menu.style.visibility = open ? 'visible' : '';
-      menu.style.transform = open ? 'translateY(0) scale(1)' : '';
-      menu.style.zIndex = open ? '4501' : '';
+      menu.style.pointerEvents = visible ? 'auto' : 'none';
+      menu.style.opacity = visible ? '1' : '';
+      menu.style.visibility = visible ? 'visible' : '';
+      menu.style.transform = visible ? 'translateY(0) scale(1)' : '';
+      menu.style.zIndex = visible ? '4501' : '';
     }
     if (control) {
-      control.style.pointerEvents = open ? 'auto' : '';
+      control.style.pointerEvents = visible ? 'auto' : 'none';
       control.style.position = 'relative';
-      control.style.zIndex = '4502';
+      control.style.zIndex = visible ? '4502' : '';
     }
+  }
+
+  function openRightTools(open) {
+    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+    applyRightToolsState(wrapper, !!open, !open);
   }
 
   window.toggleRightToolsPanel = function (event) {
@@ -6917,50 +6966,8 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
     const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
     if (!wrapper) return false;
-    const menu = $('.tools-menu-container', wrapper);
-    const control = $('.custom-layer-control', wrapper);
     const shouldClose = wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden');
-
-    if (shouldClose) {
-      wrapper.classList.remove('open');
-      wrapper.classList.remove('haidian-v4-data-open');
-      wrapper.classList.add('haidian-v4-tools-user-hidden');
-      wrapper.setAttribute('aria-hidden', 'true');
-      wrapper.style.pointerEvents = 'none';
-      if (menu) {
-        menu.style.pointerEvents = 'none';
-        menu.style.opacity = '';
-        menu.style.visibility = '';
-        menu.style.transform = '';
-        menu.style.zIndex = '';
-      }
-      if (control) control.style.pointerEvents = 'none';
-    } else {
-      wrapper.classList.add('open');
-      wrapper.classList.add('haidian-v4-data-open');
-      wrapper.classList.remove('haidian-v4-tools-user-hidden');
-      wrapper.setAttribute('aria-hidden', 'false');
-      wrapper.style.pointerEvents = 'none';
-      wrapper.style.opacity = '1';
-      wrapper.style.visibility = 'visible';
-      wrapper.style.zIndex = '4500';
-      if (menu) {
-        menu.style.pointerEvents = 'auto';
-        menu.style.opacity = '1';
-        menu.style.visibility = 'visible';
-        menu.style.transform = 'translateY(0) scale(1)';
-        menu.style.zIndex = '4501';
-      }
-      if (control) {
-        control.style.pointerEvents = 'auto';
-        control.style.position = 'relative';
-        control.style.zIndex = '4502';
-      }
-    }
-
-    $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
-      btn.style.pointerEvents = 'auto';
-    });
+    applyRightToolsState(wrapper, !shouldClose, shouldClose);
     return false;
   };
 
@@ -7129,6 +7136,46 @@ function mountGlobalPlayerIntoPopup_(retry) {
       toggle.setAttribute('aria-label', minimized ? '展開探索主線' : '收合探索主線');
     }, true);
   }
+
+  window.haidianV4SmokeTest = function () {
+    const failures = [];
+    const eventStub = { preventDefault: function () {}, stopPropagation: function () {} };
+    const originalMode = document.body.dataset.haidianMode || UI_STATE.mode || 'listen';
+    const side = $('#sidePanel');
+    const route = $('#routePanel');
+    const tools = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+
+    function expect(condition, message) {
+      if (!condition) failures.push(message);
+    }
+
+    try {
+      window.haidianSwitchMode('listen', true);
+      expect(side && !side.classList.contains('collapsed'), '聆聽模式沒有展開聆聽面板');
+      expect(route && route.classList.contains('collapsed'), '聆聽模式沒有收合走讀面板');
+
+      if (typeof window.togglePanel === 'function') window.togglePanel('routePanel', eventStub);
+      expect(document.body.dataset.haidianMode === 'walk', '聆聽模式下點走讀小耳朵沒有切到走讀');
+      expect(route && !route.classList.contains('collapsed'), '走讀小耳朵沒有展開走讀面板');
+
+      if (typeof window.togglePanel === 'function') window.togglePanel('sidePanel', eventStub);
+      expect(document.body.dataset.haidianMode === 'listen', '走讀模式下點聆聽小耳朵沒有切到聆聽');
+      expect(side && !side.classList.contains('collapsed'), '聆聽小耳朵沒有展開聆聽面板');
+
+      window.haidianSwitchMode('data', true);
+      expect(tools && tools.classList.contains('open'), '圖資模式沒有展開右側圖資工具');
+      window.toggleRightToolsPanel(eventStub);
+      expect(tools && tools.classList.contains('haidian-v4-tools-user-hidden'), '圖資工具收合按鈕沒有隱藏選單');
+      window.toggleRightToolsPanel(eventStub);
+      expect(tools && tools.classList.contains('open') && !tools.classList.contains('haidian-v4-tools-user-hidden'), '圖資工具無法重新展開');
+    } catch (err) {
+      failures.push('測試執行錯誤：' + (err && err.message ? err.message : String(err)));
+    } finally {
+      window.haidianSwitchMode(MODE_COPY[originalMode] ? originalMode : 'listen', true);
+    }
+
+    return { ok: failures.length === 0, failures: failures, state: Object.assign({}, UI_STATE) };
+  };
 
   ready(function () {
     patchSplashReadability();
