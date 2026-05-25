@@ -1752,6 +1752,62 @@ body.haidian-v4 #routePanel.collapsed .drawer-content {
 }
 /* ===== HAIDIAN_V4_CROSS_MODE_DRAWER_FIX_END ===== */
 
+
+/* ===== HAIDIAN_96_ENGINEERING_STABLE_UI_STATE_START =====
+   9.6 工程穩定版：
+   - 預設 idle：聆聽 / 走讀 / 圖資三模態都不自動開啟。
+   - 所有面板顯示只跟 collapsed / open 狀態同步，避免模式 CSS 強迫 pop 出。
+   - 仍保留左右小耳朵與右側圖層工具按鈕可點擊。
+*/
+body.haidian-v4-mode-idle #sidePanel,
+body.haidian-v4-mode-idle #routePanel {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  pointer-events: auto !important;
+}
+
+body.haidian-v4-mode-idle #sidePanel .drawer-content,
+body.haidian-v4-mode-idle #routePanel .drawer-content {
+  pointer-events: none !important;
+}
+
+body.haidian-v4-mode-idle #sidePanel .toggle-btn,
+body.haidian-v4-mode-idle #routePanel .toggle-btn {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4-mode-idle #rightToolsWrapper {
+  pointer-events: none !important;
+}
+
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-toggle-btn {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-10px) scale(0.95) !important;
+  pointer-events: none !important;
+}
+
+body.haidian-v4-mode-idle #rightToolsWrapper .custom-layer-control,
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container label,
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container input,
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container select,
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container button,
+body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container a {
+  pointer-events: none !important;
+}
+
+body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
+  outline: none;
+}
+
+body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
+  content: "｜預設不自動開啟";
+}
+/* ===== HAIDIAN_96_ENGINEERING_STABLE_UI_STATE_END ===== */
+
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
@@ -6862,18 +6918,23 @@ function mountGlobalPlayerIntoPopup_(retry) {
     }
   };
 
-  /* HAIDIAN V4 單一 UI 狀態：只新增狀態同步，不移除既有功能。 */
-  const UI_STATE = window.haidianV4State = window.haidianV4State || {
-    mode: 'listen',
-    panels: { sidePanel: false, routePanel: false },
-    rightToolsOpen: false,
-    rightToolsUserHidden: false
+  const IDLE_COPY = {
+    toast: '已收合所有工具面板。'
   };
 
-  function setExpanded(el, expanded) {
-    if (!el) return;
-    el.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  }
+  const VALID_MODES = ['idle', 'listen', 'walk', 'data'];
+  const BODY_MODE_CLASSES = VALID_MODES.map(function (mode) { return 'haidian-v4-mode-' + mode; });
+  const previousState = window.haidianV4State || {};
+  const UI_STATE = window.haidianV4State = {
+    mode: VALID_MODES.indexOf(previousState.mode) >= 0 ? previousState.mode : 'idle',
+    panels: Object.assign({ sidePanel: false, routePanel: false }, previousState.panels || {}),
+    rightToolsOpen: !!previousState.rightToolsOpen,
+    rightToolsUserHidden: previousState.rightToolsUserHidden !== false,
+    lastOpenedMode: previousState.lastOpenedMode || null
+  };
+
+  let legacyTogglePanel = null;
+  let resizeTimer = 0;
 
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -6882,10 +6943,33 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
   function $(selector, root) { return (root || document).querySelector(selector); }
   function $all(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
+  function byId(id) { return document.getElementById(id); }
+
+  function isValidMode(mode) {
+    return VALID_MODES.indexOf(mode) >= 0;
+  }
+
+  function normalizeMode(mode) {
+    return isValidMode(mode) ? mode : 'idle';
+  }
+
+  function getSidePanel() { return byId('sidePanel'); }
+  function getRoutePanel() { return byId('routePanel'); }
+  function getRightTools() { return byId('rightToolsWrapper') || $('.right-tools-wrapper'); }
+
+  function setExpanded(el, expanded) {
+    if (!el) return;
+    el.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+
+  function isDrawerOpen(panel) {
+    return !!panel && !panel.classList.contains('collapsed');
+  }
 
   function setBodyMode(mode) {
+    mode = normalizeMode(mode);
     document.body.classList.add('haidian-v4');
-    document.body.classList.remove('haidian-v4-mode-listen', 'haidian-v4-mode-walk', 'haidian-v4-mode-data');
+    BODY_MODE_CLASSES.forEach(function (cls) { document.body.classList.remove(cls); });
     document.body.classList.add('haidian-v4-mode-' + mode);
     document.body.dataset.haidianMode = mode;
     UI_STATE.mode = mode;
@@ -6893,17 +6977,19 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
   function setDrawer(panel, open) {
     if (!panel) return;
-    const content = panel.querySelector('.drawer-content');
     const panelId = panel.id || '';
+    const content = panel.querySelector('.drawer-content');
+    const toggle = panel.querySelector('.toggle-btn');
+
     panel.classList.toggle('collapsed', !open);
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
     panel.dataset.haidianPanelOpen = open ? 'true' : 'false';
     if (panelId) UI_STATE.panels[panelId] = !!open;
 
-    const toggle = panel.querySelector('.toggle-btn');
     if (toggle) {
       setExpanded(toggle, !!open);
       if (panelId) toggle.setAttribute('aria-controls', panelId);
+      toggle.setAttribute('type', 'button');
     }
 
     panel.style.opacity = open ? '1' : '';
@@ -6911,6 +6997,15 @@ function mountGlobalPlayerIntoPopup_(retry) {
     panel.style.pointerEvents = open ? 'auto' : '';
     panel.style.transform = open ? 'translateX(0)' : '';
     if (content) content.style.pointerEvents = open ? 'auto' : '';
+  }
+
+  function getLayerToolButtons(wrapper) {
+    if (!wrapper) return [];
+    return $all('.tools-toggle-btn', wrapper).filter(function (btn) {
+      const onclick = btn.getAttribute('onclick') || '';
+      const title = btn.getAttribute('title') || '';
+      return onclick.indexOf('toggleRightToolsPanel') >= 0 || title.indexOf('圖層') >= 0 || title.indexOf('圖資') >= 0;
+    });
   }
 
   function applyRightToolsState(wrapper, open, userHidden) {
@@ -6921,29 +7016,35 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
     wrapper.classList.toggle('open', visible);
     wrapper.classList.toggle('haidian-v4-data-open', visible);
-    wrapper.classList.toggle('haidian-v4-tools-user-hidden', !!userHidden || !open);
-    wrapper.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    wrapper.classList.toggle('haidian-v4-tools-user-hidden', !visible);
+    wrapper.setAttribute('aria-hidden', 'false');
     wrapper.dataset.haidianToolsOpen = visible ? 'true' : 'false';
     UI_STATE.rightToolsOpen = visible;
-    UI_STATE.rightToolsUserHidden = !!userHidden || !open;
+    UI_STATE.rightToolsUserHidden = !visible;
 
-    /* 保持原本設計：外層不吃點擊，真正可點的是按鈕與選單。 */
+    /* 外層不吃地圖事件，工具按鈕與選單才吃點擊。 */
     wrapper.style.pointerEvents = 'none';
-    wrapper.style.opacity = visible ? '1' : '';
-    wrapper.style.visibility = visible ? 'visible' : '';
+    wrapper.style.opacity = '1';
+    wrapper.style.visibility = 'visible';
     wrapper.style.zIndex = visible ? '4500' : '';
 
     $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
       btn.style.pointerEvents = 'auto';
+      btn.setAttribute('type', 'button');
+    });
+
+    getLayerToolButtons(wrapper).forEach(function (btn) {
       setExpanded(btn, visible);
       btn.setAttribute('aria-controls', 'rightToolsWrapper');
+      btn.setAttribute('aria-label', visible ? '隱藏圖資圖層工具' : '開啟圖資圖層工具');
     });
 
     if (menu) {
+      menu.setAttribute('aria-hidden', visible ? 'false' : 'true');
       menu.style.pointerEvents = visible ? 'auto' : 'none';
-      menu.style.opacity = visible ? '1' : '';
-      menu.style.visibility = visible ? 'visible' : '';
-      menu.style.transform = visible ? 'translateY(0) scale(1)' : '';
+      menu.style.opacity = visible ? '1' : '0';
+      menu.style.visibility = visible ? 'visible' : 'hidden';
+      menu.style.transform = visible ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)';
       menu.style.zIndex = visible ? '4501' : '';
     }
     if (control) {
@@ -6954,34 +7055,29 @@ function mountGlobalPlayerIntoPopup_(retry) {
   }
 
   function openRightTools(open) {
-    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
-    applyRightToolsState(wrapper, !!open, !open);
+    applyRightToolsState(getRightTools(), !!open, !open);
   }
 
-  window.toggleRightToolsPanel = function (event) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
-    if (!wrapper) return false;
-    const shouldClose = wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden');
-    applyRightToolsState(wrapper, !shouldClose, shouldClose);
-    return false;
-  };
+  function anyToolPanelOpen() {
+    return isDrawerOpen(getSidePanel()) || isDrawerOpen(getRoutePanel()) || !!UI_STATE.rightToolsOpen;
+  }
 
   function updateModeControls(mode) {
+    mode = normalizeMode(mode);
     $all('[data-haidian-v4-mode]').forEach(function (btn) {
       const btnMode = btn.getAttribute('data-haidian-v4-mode');
-      const active = btnMode === mode;
+      const active = mode !== 'idle' && btnMode === mode;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (btn.closest && btn.closest('.haidian-v4-mode-switcher')) {
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      }
     });
   }
 
   function showToast(message) {
+    if (!message) return;
     let toast = $('.haidian-mode-toast');
     if (!toast) {
       toast = document.createElement('div');
@@ -7046,7 +7142,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     const dock = document.createElement('aside');
     dock.className = 'haidian-v4-dock';
     dock.setAttribute('aria-label', '探索主線');
-    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下，會打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
+    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下才打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
     document.body.appendChild(dock);
   }
 
@@ -7060,11 +7156,10 @@ function mountGlobalPlayerIntoPopup_(retry) {
   }
 
   function repairRightToolClickability() {
-    const wrapper = $('#rightToolsWrapper');
+    const wrapper = getRightTools();
     if (!wrapper || wrapper.dataset.haidianV4Clickable === 'true') return;
     wrapper.dataset.haidianV4Clickable = 'true';
 
-    /* 讓地圖不要吃掉圖資面板上的操作，但不阻止 input / label 自己的 onchange。 */
     try {
       if (window.L && L.DomEvent) {
         L.DomEvent.disableClickPropagation(wrapper);
@@ -7083,36 +7178,145 @@ function mountGlobalPlayerIntoPopup_(retry) {
     }, false);
   }
 
-  window.haidianSwitchMode = function (mode, silent) {
-    if (!MODE_COPY[mode]) mode = 'listen';
+  function renderStateFromMemory() {
+    setBodyMode(UI_STATE.mode || 'idle');
+    setDrawer(getSidePanel(), !!UI_STATE.panels.sidePanel);
+    setDrawer(getRoutePanel(), !!UI_STATE.panels.routePanel);
+    applyRightToolsState(getRightTools(), !!UI_STATE.rightToolsOpen, !!UI_STATE.rightToolsUserHidden);
+    updateModeControls(UI_STATE.mode || 'idle');
+    ensureLocateButtonVisible();
+  }
+
+  function switchMode(mode, options) {
+    options = options || {};
+    mode = normalizeMode(mode);
     setBodyMode(mode);
 
-    const sidePanel = $('#sidePanel');
-    const routePanel = $('#routePanel');
+    const sidePanel = getSidePanel();
+    const routePanel = getRoutePanel();
 
-    if (mode === 'listen') {
+    if (mode === 'idle') {
+      setDrawer(sidePanel, false);
+      setDrawer(routePanel, false);
+      applyRightToolsState(getRightTools(), false, true);
+    } else if (mode === 'listen') {
       setDrawer(sidePanel, true);
       setDrawer(routePanel, false);
-      openRightTools(false);
+      applyRightToolsState(getRightTools(), false, true);
     } else if (mode === 'walk') {
       setDrawer(sidePanel, false);
       setDrawer(routePanel, true);
-      openRightTools(false);
+      applyRightToolsState(getRightTools(), false, true);
     } else if (mode === 'data') {
       setDrawer(sidePanel, false);
       setDrawer(routePanel, false);
-      openRightTools(true);
+      applyRightToolsState(getRightTools(), true, false);
       repairRightToolClickability();
     }
 
     updateModeControls(mode);
     ensureLocateButtonVisible();
-    try { localStorage.setItem('haidianPreferredMode', mode); } catch (_) {}
-    if (!silent) showToast(MODE_COPY[mode].toast);
+
+    if (mode !== 'idle') UI_STATE.lastOpenedMode = mode;
+    if (mode !== 'idle' && options.remember !== false) {
+      try { localStorage.setItem('haidianPreferredMode', mode); } catch (_) {}
+    }
+
+    if (!options.silent) showToast(mode === 'idle' ? IDLE_COPY.toast : MODE_COPY[mode].toast);
+    return false;
+  }
+
+  function recalculateModeFromVisiblePanels() {
+    if (isDrawerOpen(getSidePanel())) {
+      setBodyMode('listen');
+    } else if (isDrawerOpen(getRoutePanel())) {
+      setBodyMode('walk');
+    } else if (UI_STATE.rightToolsOpen) {
+      setBodyMode('data');
+    } else {
+      setBodyMode('idle');
+    }
+    updateModeControls(UI_STATE.mode);
+    ensureLocateButtonVisible();
+  }
+
+  window.haidianSwitchMode = function (mode, silent, options) {
+    options = Object.assign({}, options || {}, { silent: !!silent });
+    return switchMode(mode, options);
+  };
+
+  window.haidianV4CloseAll = function (silent) {
+    return switchMode('idle', { silent: silent !== false, remember: false });
+  };
+
+  window.toggleRightToolsPanel = function (event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const wrapper = getRightTools();
+    if (!wrapper) return false;
+    const isOpen = UI_STATE.rightToolsOpen || (wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden'));
+
+    if (isOpen) {
+      applyRightToolsState(wrapper, false, true);
+      if (!isDrawerOpen(getSidePanel()) && !isDrawerOpen(getRoutePanel())) switchMode('idle', { silent: true, remember: false });
+      else recalculateModeFromVisiblePanels();
+    } else {
+      switchMode('data', { silent: false });
+    }
     return false;
   };
 
+  function installTogglePanelOverride() {
+    if (window.togglePanel && window.togglePanel.__haidian96Stable === true) return;
+    legacyTogglePanel = window.togglePanel;
+
+    window.togglePanel = function (id, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      if (!document.body.classList.contains('haidian-v4')) {
+        if (typeof legacyTogglePanel === 'function') return legacyTogglePanel.call(this, id, event);
+        return false;
+      }
+
+      const target = byId(id);
+      if (!target) return false;
+      const willOpen = target.classList.contains('collapsed');
+
+      if (willOpen) {
+        if (id === 'sidePanel') return switchMode('listen', { silent: false });
+        if (id === 'routePanel') return switchMode('walk', { silent: false });
+        setDrawer(target, true);
+        recalculateModeFromVisiblePanels();
+        return false;
+      }
+
+      setDrawer(target, false);
+      if (!anyToolPanelOpen()) switchMode('idle', { silent: true, remember: false });
+      else recalculateModeFromVisiblePanels();
+      return false;
+    };
+    window.togglePanel.__haidian96Stable = true;
+  }
+
+  function isActiveDockModeClick(btn, mode) {
+    if (!btn || !btn.closest || !btn.closest('.haidian-v4-dock')) return false;
+    if (UI_STATE.mode !== mode) return false;
+    if (mode === 'listen') return isDrawerOpen(getSidePanel());
+    if (mode === 'walk') return isDrawerOpen(getRoutePanel());
+    if (mode === 'data') return !!UI_STATE.rightToolsOpen;
+    return false;
+  }
+
   function bindModeClicks() {
+    if (document.documentElement.dataset.haidianV4ModeBinder === 'true') return;
+    document.documentElement.dataset.haidianV4ModeBinder = 'true';
+
     document.addEventListener('click', function (event) {
       const btn = event.target.closest && event.target.closest('[data-haidian-v4-mode]');
       if (!btn) return;
@@ -7120,7 +7324,12 @@ function mountGlobalPlayerIntoPopup_(retry) {
       if (!MODE_COPY[mode]) return;
       event.preventDefault();
       event.stopPropagation();
-      window.haidianSwitchMode(mode, false);
+
+      if (isActiveDockModeClick(btn, mode)) {
+        switchMode('idle', { silent: false, remember: false });
+      } else {
+        switchMode(mode, { silent: false });
+      }
     }, true);
 
     document.addEventListener('click', function (event) {
@@ -7137,22 +7346,53 @@ function mountGlobalPlayerIntoPopup_(retry) {
     }, true);
   }
 
+  function snapshotState() {
+    return {
+      mode: UI_STATE.mode,
+      panels: Object.assign({}, UI_STATE.panels),
+      rightToolsOpen: UI_STATE.rightToolsOpen,
+      rightToolsUserHidden: UI_STATE.rightToolsUserHidden,
+      lastOpenedMode: UI_STATE.lastOpenedMode
+    };
+  }
+
+  function restoreSnapshot(state) {
+    if (!state) return switchMode('idle', { silent: true, remember: false });
+    UI_STATE.mode = normalizeMode(state.mode);
+    UI_STATE.panels = Object.assign({ sidePanel: false, routePanel: false }, state.panels || {});
+    UI_STATE.rightToolsOpen = !!state.rightToolsOpen;
+    UI_STATE.rightToolsUserHidden = !!state.rightToolsUserHidden;
+    UI_STATE.lastOpenedMode = state.lastOpenedMode || null;
+    renderStateFromMemory();
+  }
+
+  window.haidianV4GetState = function () {
+    return snapshotState();
+  };
+
   window.haidianV4SmokeTest = function () {
     const failures = [];
     const eventStub = { preventDefault: function () {}, stopPropagation: function () {} };
-    const originalMode = document.body.dataset.haidianMode || UI_STATE.mode || 'listen';
-    const side = $('#sidePanel');
-    const route = $('#routePanel');
-    const tools = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+    const original = snapshotState();
+    const side = getSidePanel();
+    const route = getRoutePanel();
+    const tools = getRightTools();
 
     function expect(condition, message) {
       if (!condition) failures.push(message);
     }
 
     try {
-      window.haidianSwitchMode('listen', true);
+      switchMode('idle', { silent: true, remember: false });
+      expect(document.body.dataset.haidianMode === 'idle', '預設 idle 模式沒有建立');
+      expect(side && side.classList.contains('collapsed'), 'idle 時聆聽面板不應展開');
+      expect(route && route.classList.contains('collapsed'), 'idle 時走讀面板不應展開');
+      expect(tools && !tools.classList.contains('open'), 'idle 時圖資工具不應展開');
+
+      switchMode('listen', { silent: true, remember: false });
       expect(side && !side.classList.contains('collapsed'), '聆聽模式沒有展開聆聽面板');
       expect(route && route.classList.contains('collapsed'), '聆聽模式沒有收合走讀面板');
+      expect(tools && !tools.classList.contains('open'), '聆聽模式不應展開圖資工具');
 
       if (typeof window.togglePanel === 'function') window.togglePanel('routePanel', eventStub);
       expect(document.body.dataset.haidianMode === 'walk', '聆聽模式下點走讀小耳朵沒有切到走讀');
@@ -7162,41 +7402,50 @@ function mountGlobalPlayerIntoPopup_(retry) {
       expect(document.body.dataset.haidianMode === 'listen', '走讀模式下點聆聽小耳朵沒有切到聆聽');
       expect(side && !side.classList.contains('collapsed'), '聆聽小耳朵沒有展開聆聽面板');
 
-      window.haidianSwitchMode('data', true);
+      if (typeof window.togglePanel === 'function') window.togglePanel('sidePanel', eventStub);
+      expect(document.body.dataset.haidianMode === 'idle', '再次點聆聽小耳朵沒有回到 idle');
+      expect(side && side.classList.contains('collapsed'), '再次點聆聽小耳朵沒有收合聆聽面板');
+
+      switchMode('data', { silent: true, remember: false });
       expect(tools && tools.classList.contains('open'), '圖資模式沒有展開右側圖資工具');
       window.toggleRightToolsPanel(eventStub);
+      expect(document.body.dataset.haidianMode === 'idle', '圖資工具收合後沒有回到 idle');
       expect(tools && tools.classList.contains('haidian-v4-tools-user-hidden'), '圖資工具收合按鈕沒有隱藏選單');
       window.toggleRightToolsPanel(eventStub);
+      expect(document.body.dataset.haidianMode === 'data', 'idle 時點圖資工具沒有切到圖資');
       expect(tools && tools.classList.contains('open') && !tools.classList.contains('haidian-v4-tools-user-hidden'), '圖資工具無法重新展開');
     } catch (err) {
       failures.push('測試執行錯誤：' + (err && err.message ? err.message : String(err)));
     } finally {
-      window.haidianSwitchMode(MODE_COPY[originalMode] ? originalMode : 'listen', true);
+      restoreSnapshot(original);
     }
 
-    return { ok: failures.length === 0, failures: failures, state: Object.assign({}, UI_STATE) };
+    return { ok: failures.length === 0, failures: failures, state: snapshotState() };
   };
 
   ready(function () {
     patchSplashReadability();
-    addPanelHead($('#sidePanel'), 'listen', 'Listen Mode');
-    addPanelHead($('#routePanel'), 'walk', 'Walk Mode');
+    addPanelHead(getSidePanel(), 'listen', 'Listen Mode');
+    addPanelHead(getRoutePanel(), 'walk', 'Walk Mode');
     addDataNote();
     addDock();
     bindModeClicks();
     repairRightToolClickability();
+    installTogglePanelOverride();
     ensureLocateButtonVisible();
 
-    let saved = 'listen';
-    try { saved = localStorage.getItem('haidianPreferredMode') || 'listen'; } catch (_) {}
-    if (!MODE_COPY[saved]) saved = 'listen';
-    setTimeout(function () { window.haidianSwitchMode(saved, true); }, 100);
+    /* 9.6 需求：預設不自動打開聆聽 / 走讀 / 圖資任何一個面板。
+       即使前一版 localStorage 有 haidianPreferredMode，也不再自動復原，避免任一選單 pop 出。 */
+    switchMode('idle', { silent: true, remember: false });
+    setTimeout(function () { switchMode('idle', { silent: true, remember: false }); }, 100);
     setTimeout(patchSplashReadability, 180);
   });
 
   window.addEventListener('resize', function () {
-    const mode = document.body.dataset.haidianMode || 'listen';
-    window.haidianSwitchMode(mode, true);
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      renderStateFromMemory();
+    }, 120);
   });
 })();
 </script>
