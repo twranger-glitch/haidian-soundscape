@@ -1583,8 +1583,8 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] small {
 .haidian-v4-dock.is-minimized .haidian-v4-dock-body { display: none; }
 
 /* 三模式真實路由 */
-body.haidian-v4-mode-listen #sidePanel,
-body.haidian-v4-mode-walk #routePanel {
+body.haidian-v4-mode-listen #sidePanel:not(.collapsed),
+body.haidian-v4-mode-walk #routePanel:not(.collapsed) {
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
@@ -1607,7 +1607,7 @@ body.haidian-v4-mode-data #rightToolsWrapper .tools-menu-container,
 body.haidian-v4-mode-data #rightToolsWrapper .custom-layer-control {
   pointer-events: auto !important;
 }
-body.haidian-v4-mode-data #rightToolsWrapper .tools-menu-container {
+body.haidian-v4-mode-data #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) .tools-menu-container {
   opacity: 1 !important;
   visibility: visible !important;
   transform: translateY(0) scale(1) !important;
@@ -1673,6 +1673,56 @@ body.haidian-v4-mode-data #rightToolsWrapper a {
   }
   .leaflet-control-attribution { margin-right: 0 !important; margin-bottom: 118px !important; }
 }
+
+
+/* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_START =====
+   修正項目：
+   1) 左側/走讀面板在 V4 模式下，點擊小耳朵可以真正收合。
+   2) 圖資模式下，右側圖資工具可由圖層按鈕再次隱藏。
+   3) 右下「探索主線」的收合按鈕避免被其他圖資層干擾。
+*/
+body.haidian-v4 #sidePanel.collapsed,
+body.haidian-v4 #routePanel.collapsed {
+  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #sidePanel.collapsed .drawer-content,
+body.haidian-v4 #routePanel.collapsed .drawer-content {
+  pointer-events: none !important;
+}
+
+body.haidian-v4 #sidePanel .toggle-btn,
+body.haidian-v4 #routePanel .toggle-btn {
+  pointer-events: auto !important;
+}
+
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-10px) scale(0.95) !important;
+  pointer-events: none !important;
+}
+
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .custom-layer-control,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container label,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container input,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container select,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container button,
+body.haidian-v4 #rightToolsWrapper.haidian-v4-tools-user-hidden .tools-menu-container a {
+  pointer-events: none !important;
+}
+
+.haidian-v4-dock-toggle {
+  position: relative;
+  z-index: 2;
+}
+
+.haidian-v4-dock.is-minimized {
+  min-width: 0;
+}
+/* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_END ===== */
+
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
@@ -2056,7 +2106,7 @@ body.haidian-v4-mode-data #rightToolsWrapper a {
         <div class="tools-toggle-btn" onclick="toggleListeningMode()" title="沉浸聆聽模式" style="margin-bottom: 12px; color: #10b981;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-8h3z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-8H3z"></path></svg>
         </div>
-        <div class="tools-toggle-btn" onclick="document.getElementById('rightToolsWrapper').classList.toggle('open')" title="地圖圖層工具">
+        <div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
         </div>
         <div class="tools-menu-container">
@@ -5065,21 +5115,40 @@ map.on('moveend', function() {
         }, 500);
 
         function closeAllDrawers() {
-            document.getElementById('sidePanel').classList.add('collapsed');
-            document.getElementById('routePanel').classList.add('collapsed');
-            document.getElementById('rightToolsWrapper').classList.remove('open');
-            document.getElementById('globalPlayer').classList.remove('force-hide');
+            var side = document.getElementById('sidePanel');
+            var route = document.getElementById('routePanel');
+            var tools = document.getElementById('rightToolsWrapper');
+            var player = document.getElementById('globalPlayer');
+
+            if (side) side.classList.add('collapsed');
+            if (route) route.classList.add('collapsed');
+            if (tools) {
+                tools.classList.remove('open');
+                tools.classList.remove('haidian-v4-data-open');
+                tools.classList.add('haidian-v4-tools-user-hidden');
+                tools.setAttribute('aria-hidden', 'true');
+            }
+            if (player) player.classList.remove('force-hide');
         }
 
         function togglePanel(id, event) {
-            if (event) event.stopPropagation();
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
             var target = document.getElementById(id);
+            if (!target) return false;
             var isClosed = target.classList.contains('collapsed');
             closeAllDrawers();
 
             if (isClosed) {
                 target.classList.remove('collapsed');
+                target.setAttribute('aria-hidden', 'false');
+            } else {
+                target.classList.add('collapsed');
+                target.setAttribute('aria-hidden', 'true');
             }
+            return false;
         }
 
         function openCustomDrawHelp() {
@@ -6775,6 +6844,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
     wrapper.classList.toggle('open', !!open);
     wrapper.classList.toggle('haidian-v4-data-open', !!open);
+    wrapper.classList.remove('haidian-v4-tools-user-hidden');
     wrapper.setAttribute('aria-hidden', open ? 'false' : 'true');
 
     /* 保持原本設計：外層不吃點擊，真正可點的是按鈕與選單。 */
@@ -6795,11 +6865,66 @@ function mountGlobalPlayerIntoPopup_(retry) {
       menu.style.zIndex = open ? '4501' : '';
     }
     if (control) {
-      control.style.pointerEvents = 'auto';
+      control.style.pointerEvents = open ? 'auto' : '';
       control.style.position = 'relative';
       control.style.zIndex = '4502';
     }
   }
+
+  window.toggleRightToolsPanel = function (event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
+    if (!wrapper) return false;
+    const menu = $('.tools-menu-container', wrapper);
+    const control = $('.custom-layer-control', wrapper);
+    const shouldClose = wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden');
+
+    if (shouldClose) {
+      wrapper.classList.remove('open');
+      wrapper.classList.remove('haidian-v4-data-open');
+      wrapper.classList.add('haidian-v4-tools-user-hidden');
+      wrapper.setAttribute('aria-hidden', 'true');
+      wrapper.style.pointerEvents = 'none';
+      if (menu) {
+        menu.style.pointerEvents = 'none';
+        menu.style.opacity = '';
+        menu.style.visibility = '';
+        menu.style.transform = '';
+        menu.style.zIndex = '';
+      }
+      if (control) control.style.pointerEvents = 'none';
+    } else {
+      wrapper.classList.add('open');
+      wrapper.classList.add('haidian-v4-data-open');
+      wrapper.classList.remove('haidian-v4-tools-user-hidden');
+      wrapper.setAttribute('aria-hidden', 'false');
+      wrapper.style.pointerEvents = 'none';
+      wrapper.style.opacity = '1';
+      wrapper.style.visibility = 'visible';
+      wrapper.style.zIndex = '4500';
+      if (menu) {
+        menu.style.pointerEvents = 'auto';
+        menu.style.opacity = '1';
+        menu.style.visibility = 'visible';
+        menu.style.transform = 'translateY(0) scale(1)';
+        menu.style.zIndex = '4501';
+      }
+      if (control) {
+        control.style.pointerEvents = 'auto';
+        control.style.position = 'relative';
+        control.style.zIndex = '4502';
+      }
+    }
+
+    $all('.tools-toggle-btn', wrapper).forEach(function (btn) {
+      btn.style.pointerEvents = 'auto';
+    });
+    return false;
+  };
 
   function updateModeControls(mode) {
     $all('[data-haidian-v4-mode]').forEach(function (btn) {
@@ -6956,10 +7081,14 @@ function mountGlobalPlayerIntoPopup_(retry) {
     document.addEventListener('click', function (event) {
       const toggle = event.target.closest && event.target.closest('.haidian-v4-dock-toggle');
       if (!toggle) return;
+      event.preventDefault();
+      event.stopPropagation();
       const dock = $('.haidian-v4-dock');
       if (!dock) return;
       dock.classList.toggle('is-minimized');
-      toggle.textContent = dock.classList.contains('is-minimized') ? '⌃' : '⌄';
+      const minimized = dock.classList.contains('is-minimized');
+      toggle.textContent = minimized ? '⌃' : '⌄';
+      toggle.setAttribute('aria-label', minimized ? '展開探索主線' : '收合探索主線');
     }, true);
   }
 
