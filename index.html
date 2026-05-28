@@ -2735,36 +2735,26 @@ async function searchPlaceName() {
     resultBox.innerHTML = `
         <div style="padding:10px 12px; border-radius:8px; background:#f8fafc; color:#64748b; font-size:12px; font-weight:700; text-align:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: badgeShine 2s linear infinite; vertical-align:middle;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-            啟動台灣地名搜尋中...
+            火力全開搜尋中...
         </div>
     `;
 
     var places = [];
     var seen = {};
-    var searchSuccess = false;
 
-    // 全台灣搜尋範圍：含台灣本島、澎湖、金門、馬祖的大致範圍
     var taiwanSearchExtent = '118.0,21.5,122.5,26.5';
-
-    // Overpass 使用南西北東 bbox 格式
     var taiwanBbox = '21.5,118.0,26.5,122.5';
-
-    // 單字搜尋通常代表「探索所有相關地名」，例如：鹿、港、溪、庄
-    // 這種情境不能只靠 ArcGIS 前 5 筆，所以會跑完 ArcGIS + Photon + Overpass。
-    var isExplorationSearch = keyword.length <= 1;
+    var safeKeyword = escapePlaceRegex(keyword);
 
     function addPlace(name, lat, lon, typeText, contextText) {
         if (!name || lat == null || lon == null) return;
-
         lat = parseFloat(lat);
         lon = parseFloat(lon);
-
         if (isNaN(lat) || isNaN(lon)) return;
-
-        // 限制結果一定要在台灣大範圍內，避免跑到國外同名地點
         if (lat < 21.5 || lat > 26.5 || lon < 118.0 || lon > 122.5) return;
 
-        var key = name + '|' + Math.round(lat * 1000) + '|' + Math.round(lon * 1000);
+        // 容差去重：將相近的地點合併
+        var key = name + '|' + Math.round(lat * 100) + '|' + Math.round(lon * 100);
         if (!seen[key]) {
             seen[key] = true;
             places.push({
@@ -2777,215 +2767,114 @@ async function searchPlaceName() {
         }
     }
 
-    // ==========================================
-    // 🚀 引擎 A：ArcGIS 台灣中文地名主力
-    // ==========================================
-    var controllerArc = new AbortController();
-    var timeoutArc = setTimeout(function() { controllerArc.abort(); }, 5000);
-
+    // 🚀 優先啟動 引擎 C：Overpass (台灣在地景點、學校最齊全)
+    console.log("啟動引擎 C (Overpass) 搜尋...");
     try {
-        var arcUrl =
-            'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?' +
-            'f=json' +
-            '&singleLine=' + encodeURIComponent(keyword) +
-            '&outFields=Match_addr,PlaceName,Addr_type' +
-            '&maxLocations=10' +
-            '&countryCode=TWN' +
-            '&searchExtent=' + encodeURIComponent(taiwanSearchExtent);
+        var query =
+            '[out:json][timeout:15];' +
+            '(' +
+                'node["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+                'way["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+                'relation["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
+            ');' +
+            'out center tags 30;';
 
-        var resArc = await fetch(arcUrl, { signal: controllerArc.signal });
-        if (!resArc.ok) throw new Error("ArcGIS 異常");
+        var controllerOverpass = new AbortController();
+        var timeoutOverpass = setTimeout(function() { controllerOverpass.abort(); }, 6000);
+        
+        var opRes = await fetch('https://overpass.osm.ch/api/interpreter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: 'data=' + encodeURIComponent(query),
+            signal: controllerOverpass.signal
+        });
+        clearTimeout(timeoutOverpass);
 
-        var dataArc = await resArc.json();
-
-        if (dataArc.candidates && dataArc.candidates.length > 0) {
-            dataArc.candidates.forEach(function(cand) {
-                var name = cand.address || keyword;
-                var lat = cand.location && cand.location.y;
-                var lon = cand.location && cand.location.x;
-                var typeText = cand.attributes && cand.attributes.Addr_type ? cand.attributes.Addr_type : '地標';
-
-                // ArcGIS 偶爾會回傳過長地址，先做簡單清理
-                name = String(name).split(',')[0].replace('台灣', '').trim();
-
-                addPlace(name, lat, lon, typeText, 'ArcGIS');
-            });
-        }
-
-        if (places.length > 0) {
-            searchSuccess = true;
-            console.log("成功透過引擎 A (ArcGIS) 找到地點");
-        } else {
-            throw new Error("ArcGIS 找不到符合的結果");
-        }
-
-    } catch (err) {
-        console.warn("引擎 A ArcGIS 失效或無結果，準備切換備援...", err);
-    } finally {
-        clearTimeout(timeoutArc);
-    }
-
-    // ==========================================
-    // 🚀 引擎 B：Photon 搜尋引擎
-    // 一般搜尋：ArcGIS 找不到才跑
-    // 單字探索：一定會跑，用來補更多可能地名
-    // ==========================================
-    if (!searchSuccess || isExplorationSearch) {
-        console.log("開始使用引擎 B (Photon) 搜尋：" + keyword);
-        var controllerPhoton = new AbortController();
-        var timeoutPhoton = setTimeout(function() { controllerPhoton.abort(); }, 5000);
-
-        try {
-            var photonUrl =
-                'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) +
-                '&lat=23.7' +
-                '&lon=120.9' +
-                '&limit=30';
-
-            var resPhoton = await fetch(photonUrl, { signal: controllerPhoton.signal });
-
-            if (!resPhoton.ok) throw new Error("Photon 伺服器異常");
-
-            var dataPhoton = await resPhoton.json();
-
-            if (dataPhoton.features && dataPhoton.features.length > 0) {
-                dataPhoton.features.forEach(function(feature) {
-                    var props = feature.properties || {};
-                    var name = props.name || '';
-                    if (!name) return;
-
-                    var coords = feature.geometry && feature.geometry.coordinates;
-                    if (!coords) return;
-
-                    var lon = coords[0];
-                    var lat = coords[1];
-                    var typeText = props.osm_value || props.osm_key || '地點';
-                    var contextText = props.city || props.county || props.district || 'Photon';
-
-                    // 探索型搜尋時，必須真的含有關鍵字
-                    if (isExplorationSearch && name.indexOf(keyword) === -1) return;
-
-                    addPlace(name, lat, lon, typeText, contextText);
-                });
-            }
-
-            if (places.length > 0) {
-    searchSuccess = true;
-    console.log("成功透過引擎 B (Photon) 找到地點，共 " + places.length + " 筆");
-} else {
-    console.log("引擎 B (Photon) 沒有找到結果");
-}
-
-        } catch (err) {
-            console.warn("引擎 B Photon 失效，準備切換 Overpass...", err);
-        } finally {
-            clearTimeout(timeoutPhoton);
-        }
-    }
-
-    // ==========================================
-    // 🛡️ 引擎 C：Overpass API
-    // 一般搜尋：前兩個都找不到才跑
-    // 單字探索：一定會跑，最適合撈「所有名字含鹿的 OSM 地名」
-    // ==========================================
-    if (!searchSuccess || isExplorationSearch) {
-    console.log("開始使用引擎 C (Overpass) 搜尋：" + keyword);
-
-    try {
-        var safeKeyword = escapePlaceRegex(keyword);
-
-            var query =
-                '[out:json][timeout:20];' +
-                '(' +
-                    'node["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
-                    'way["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
-                    'relation["name"~"' + safeKeyword + '"](' + taiwanBbox + ');' +
-                ');' +
-                'out center tags 80;';
-
-            var overpassEndpoints = [
-    // 目前壓測中，對台灣大範圍模糊查詢最穩
-    'https://overpass.osm.ch/api/interpreter',
-
-    // 備援節點：狀態會浮動，保留即可
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass-api.de/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter',
-    'https://z.overpass-api.de/api/interpreter'
-];
-
-            // 固定順序：先用目前測試最穩的 overpass.osm.ch
-// 不隨機洗牌，避免每次都先打到較慢節點
-
-            var overpassData = null;
-
-            for (var i = 0; i < overpassEndpoints.length; i++) {
-                var controllerOverpass = new AbortController();
-                var timeoutOverpass = setTimeout(function() { controllerOverpass.abort(); }, 7000);
-
-                try {
-                    var opRes = await fetch(overpassEndpoints[i], {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                        body: 'data=' + encodeURIComponent(query),
-                        signal: controllerOverpass.signal
-                    });
-
-                    if (opRes.ok) {
-                        overpassData = await opRes.json();
-                        console.log("成功使用 Overpass 備援節點完成搜尋：" + overpassEndpoints[i]);
-                        break;
-                    }
-                } catch (e) {
-                    console.warn("Overpass 節點失效或超時，切換下一台：" + overpassEndpoints[i]);
-                } finally {
-                    clearTimeout(timeoutOverpass);
-                }
-            }
-
-            if (overpassData && overpassData.elements && overpassData.elements.length > 0) {
+        if (opRes.ok) {
+            var overpassData = await opRes.json();
+            if (overpassData.elements) {
                 overpassData.elements.forEach(function(el) {
                     var tags = el.tags || {};
                     var name = tags.name || '';
                     if (!name || name.indexOf(keyword) === -1) return;
-
                     var lat = el.lat || (el.center && el.center.lat);
                     var lon = el.lon || (el.center && el.center.lon);
-                    if (lat == null || lon == null) return;
-
-                    var typeText =
-                        tags.amenity ||
-                        tags.tourism ||
-                        tags.place ||
-                        tags.natural ||
-                        tags.waterway ||
-                        tags.highway ||
-                        tags.landuse ||
-                        '地點';
-
-                    addPlace(name, lat, lon, typeText, 'OSM / Overpass');
+                    var typeText = tags.amenity || tags.tourism || tags.historic || tags.natural || tags.place || '在地地標';
+                    addPlace(name, lat, lon, typeText, 'OSM');
                 });
-
-                if (places.length > 0) searchSuccess = true;
             }
-
-        } catch (fallbackErr) {
-            console.error("Overpass 備援系統也失敗：", fallbackErr);
         }
+    } catch (e) {
+        console.warn("Overpass 搜尋超時或失敗", e);
     }
 
-    // ==========================================
+    // 🚀 同時啟動 引擎 A：ArcGIS (補足門牌地址)
+    console.log("啟動引擎 A (ArcGIS) 搜尋...");
+    try {
+        var arcUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=' + encodeURIComponent(keyword) + '&outFields=Addr_type&maxLocations=10&countryCode=TWN&searchExtent=' + encodeURIComponent(taiwanSearchExtent);
+        var controllerArc = new AbortController();
+        var timeoutArc = setTimeout(function() { controllerArc.abort(); }, 5000);
+        
+        var resArc = await fetch(arcUrl, { signal: controllerArc.signal });
+        clearTimeout(timeoutArc);
+        
+        if (resArc.ok) {
+            var dataArc = await resArc.json();
+            if (dataArc.candidates) {
+                dataArc.candidates.forEach(function(cand) {
+                    var name = String(cand.address || keyword).split(',')[0].replace('台灣', '').trim();
+                    var lat = cand.location && cand.location.y;
+                    var lon = cand.location && cand.location.x;
+                    var typeText = cand.attributes && cand.attributes.Addr_type ? cand.attributes.Addr_type : '地址/區劃';
+                    addPlace(name, lat, lon, typeText, 'ArcGIS');
+                });
+            }
+        }
+    } catch (err) {
+        console.warn("ArcGIS 搜尋失效", err);
+    }
+
+    // 🚀 同時啟動 引擎 B：Photon (擴大模糊比對)
+    console.log("啟動引擎 B (Photon) 搜尋...");
+    try {
+        var photonUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) + '&lat=23.7&lon=120.9&limit=15';
+        var controllerPhoton = new AbortController();
+        var timeoutPhoton = setTimeout(function() { controllerPhoton.abort(); }, 5000);
+        
+        var resPhoton = await fetch(photonUrl, { signal: controllerPhoton.signal });
+        clearTimeout(timeoutPhoton);
+
+        if (resPhoton.ok) {
+            var dataPhoton = await resPhoton.json();
+            if (dataPhoton.features) {
+                dataPhoton.features.forEach(function(feature) {
+                    var props = feature.properties || {};
+                    var name = props.name || '';
+                    var coords = feature.geometry && feature.geometry.coordinates;
+                    if (!name || !coords) return;
+                    if (keyword.length > 1 && name.indexOf(keyword) === -1) return; // 嚴格過濾
+                    addPlace(name, coords[1], coords[0], props.osm_value || '地點', 'Photon');
+                });
+            }
+        }
+    } catch (err) {
+        console.warn("Photon 搜尋失效", err);
+    }
+
     // 🎨 渲染結果
-    // ==========================================
-    if (searchSuccess && places.length > 0) {
+    if (places.length > 0) {
+        // 將完全相符的結果排到最前面 (例如: 台南的永康國小)
         places.sort(function(a, b) {
+            var aExact = a.name === keyword ? -1 : 1;
+            var bExact = b.name === keyword ? -1 : 1;
+            if (aExact !== bExact) return aExact - bExact;
             return a.name.localeCompare(b.name, 'zh-Hant');
         });
 
         renderPlaceSearchResults(places, keyword);
 
-        // 探索型搜尋不自動飛到第一筆，避免搜尋「鹿」時直接跳走
-        if (!isExplorationSearch && places.length === 1) {
+        // 如果只有一個結果，直接飛過去
+        if (places.length === 1) {
             focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
         }
     } else {
