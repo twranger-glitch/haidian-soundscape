@@ -2742,13 +2742,11 @@ async function searchPlaceName() {
     var places = [];
     var seen = {};
 
-    // 儲存地點並透過四捨五入經緯度來排除重複
     function addPlace(name, lat, lon, typeText, contextText) {
         if (!name || lat == null || lon == null) return;
         lat = parseFloat(lat);
         lon = parseFloat(lon);
         if (isNaN(lat) || isNaN(lon)) return;
-        // 限制範圍在台灣及離島周邊
         if (lat < 21.5 || lat > 26.5 || lon < 118.0 || lon > 122.5) return;
 
         var key = name + '|' + Math.round(lat * 100) + '|' + Math.round(lon * 100);
@@ -2764,68 +2762,70 @@ async function searchPlaceName() {
         }
     }
 
-    // 🚀 引擎 1：透過 Worker 攔截器呼叫 OSM (完美迴避 IP 封鎖與當機)
-    try {
-        var nomUrl = 'https://haidian-gis-cache.yhzkiki.workers.dev/search?q=' + encodeURIComponent(keyword);
-        var nomRes = await fetch(nomUrl);
-        if (nomRes.ok) {
-            var nomData = await nomRes.json();
-            nomData.forEach(function(item) {
-                addPlace(item.name || keyword, item.lat, item.lon, item.type === 'administrative' ? '行政區' : '在地地標', 'Nominatim');
-            });
-        }
-    } catch (e) {
-        console.warn("Nominatim 引擎超時", e);
-    }
-
-    // 🚀 引擎 2：Photon (擴大模糊比對，並強制以「台南市」為地理權重核心！)
-    try {
-        // 🎯 核心修正：lat=23.00&lon=120.20 (台南市)，解決永康國小跑到南投的問題
-        var photonUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) + '&lat=23.00&lon=120.20&limit=15';
-        var photonRes = await fetch(photonUrl);
-        if (photonRes.ok) {
-            var dataPhoton = await photonRes.json();
-            if (dataPhoton.features) {
-                dataPhoton.features.forEach(function(feature) {
-                    var props = feature.properties || {};
-                    var name = props.name || '';
-                    var coords = feature.geometry && feature.geometry.coordinates;
-                    if (!name || !coords) return;
-                    addPlace(name, coords[1], coords[0], props.osm_value || '地點', 'Photon');
+    // 🚀 引擎 1：透過 Worker 攔截器呼叫 OSM (最強主力)
+    const fetchNominatim = async () => {
+        try {
+            var nomUrl = 'https://haidian-gis-cache.yhzkiki.workers.dev/search?q=' + encodeURIComponent(keyword);
+            var nomRes = await fetch(nomUrl);
+            if (nomRes.ok) {
+                var nomData = await nomRes.json();
+                nomData.forEach(function(item) {
+                    addPlace(item.name || keyword, item.lat, item.lon, item.type === 'administrative' ? '行政區' : '在地地標', 'Nominatim');
                 });
             }
-        }
-    } catch (err) {
-        console.warn("Photon 引擎超時", err);
-    }
+        } catch (e) { console.warn("Nominatim 引擎失敗", e); }
+    };
 
-    // 🚀 引擎 3：ArcGIS (補足常規門牌地址)
-    try {
-        var arcUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=' + encodeURIComponent(keyword) + '&outFields=Addr_type&maxLocations=10&countryCode=TWN';
-        var arcRes = await fetch(arcUrl);
-        if (arcRes.ok) {
-            var dataArc = await arcRes.json();
-            if (dataArc.candidates) {
-                dataArc.candidates.forEach(function(cand) {
-                    var name = String(cand.address || keyword).split(',')[0].replace('台灣', '').trim();
-                    var lat = cand.location && cand.location.y;
-                    var lon = cand.location && cand.location.x;
-                    var typeText = cand.attributes && cand.attributes.Addr_type ? cand.attributes.Addr_type : '地址/區劃';
-                    addPlace(name, lat, lon, typeText, 'ArcGIS');
-                });
+    // 🚀 引擎 2：Photon (加上 2 秒極限防拖累機制)
+    const fetchPhoton = async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 嚴格 2 秒超時！
+        try {
+            var photonUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(keyword) + '&lat=23.00&lon=120.20&limit=15';
+            var photonRes = await fetch(photonUrl, { signal: controller.signal });
+            if (photonRes.ok) {
+                var dataPhoton = await photonRes.json();
+                if (dataPhoton.features) {
+                    dataPhoton.features.forEach(function(feature) {
+                        var props = feature.properties || {};
+                        var name = props.name || '';
+                        var coords = feature.geometry && feature.geometry.coordinates;
+                        if (name && coords) addPlace(name, coords[1], coords[0], props.osm_value || '地點', 'Photon');
+                    });
+                }
             }
+        } catch (err) { 
+            console.warn("Photon 引擎超時，已無情放生", err); 
+        } finally {
+            clearTimeout(timeoutId);
         }
-    } catch (err) {
-        console.warn("ArcGIS 引擎超時", err);
-    }
+    };
+
+    // 🚀 引擎 3：ArcGIS (補足門牌)
+    const fetchArcGIS = async () => {
+        try {
+            var arcUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=' + encodeURIComponent(keyword) + '&outFields=Addr_type&maxLocations=10&countryCode=TWN';
+            var arcRes = await fetch(arcUrl);
+            if (arcRes.ok) {
+                var dataArc = await arcRes.json();
+                if (dataArc.candidates) {
+                    dataArc.candidates.forEach(function(cand) {
+                        var name = String(cand.address || keyword).split(',')[0].replace('台灣', '').trim();
+                        if (cand.location) addPlace(name, cand.location.y, cand.location.x, cand.attributes && cand.attributes.Addr_type ? cand.attributes.Addr_type : '地址/區劃', 'ArcGIS');
+                    });
+                }
+            }
+        } catch (err) { console.warn("ArcGIS 引擎失敗", err); }
+    };
+
+    // 🏆 神級優化：三個引擎「同時出發賽跑」(Promise.allSettled)！不用再排隊等當機！
+    await Promise.allSettled([fetchNominatim(), fetchPhoton(), fetchArcGIS()]);
 
     // 🎨 渲染結果
     if (places.length > 0) {
-        // 排序演算法：優先顯示「完全符合」且「帶有台南特性」的地標
         places.sort(function(a, b) {
             var aExact = (a.name === keyword) ? -10 : 0;
             var bExact = (b.name === keyword) ? -10 : 0;
-            
             var aTainan = (a.name.includes('台南') || a.name.includes('臺南') || a.name.includes('永康') || a.name.includes('安南')) ? -5 : 0;
             var bTainan = (b.name.includes('台南') || b.name.includes('臺南') || b.name.includes('永康') || b.name.includes('安南')) ? -5 : 0;
 
@@ -2838,7 +2838,6 @@ async function searchPlaceName() {
 
         renderPlaceSearchResults(places, keyword);
 
-        // 如果只有一個完美結果，直接導航過去
         if (places.length === 1) {
             focusPlaceFromList(places[0].lat, places[0].lon, places[0].name, places[0].type);
         }
