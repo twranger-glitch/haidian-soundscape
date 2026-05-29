@@ -2764,10 +2764,10 @@ async function searchPlaceName() {
         }
     }
 
-    // 🚀 引擎 1：OSM Nominatim (學校、歷史公園、在地景點精準命中)
+    // 🚀 引擎 1：透過 Worker 攔截器呼叫 OSM (完美迴避 IP 封鎖與當機)
     try {
-        var nomUrl = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(keyword) + '&format=json&countrycodes=tw&limit=10';
-        var nomRes = await fetch(nomUrl, { headers: { 'Accept-Language': 'zh-TW' } });
+        var nomUrl = 'https://haidian-gis-cache.yhzkiki.workers.dev/search?q=' + encodeURIComponent(keyword);
+        var nomRes = await fetch(nomUrl);
         if (nomRes.ok) {
             var nomData = await nomRes.json();
             nomData.forEach(function(item) {
