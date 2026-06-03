@@ -4571,6 +4571,11 @@ function getPmtilesGeomCenter(geom) {
                 // 排除 My Maps 圖釘 icon
                 if (url.indexOf('gstatic.com/mapspro') > -1) return '';
 
+                // 🎯 核心修復：攔截 Google 的怪物級解析度 (如 s16383)
+                // 強制將長邊縮小到 800px (s800)，防爆、省流量且載入極快！
+                url = url.replace(/([?&]fife=s)\d+/i, '$1800');
+                url = url.replace(/=s\d+$/i, '=s800');
+
                 return url;
             }
 
