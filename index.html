@@ -1260,28 +1260,30 @@ body.player-embedded .leaflet-popup .btn-play-main {
             background: #ede9fe;
         }
 
-        .nanshan-search-status {
-            font-size: 11px;
-            color: #7c3aed;
-            font-weight: 800;
-            min-height: 14px;
-            padding: 0 2px;
-            max-height: 220px; /* 限制搜尋結果高度 */
-            overflow-y: auto;  /* 允許搜尋結果獨立捲動 */
-            scrollbar-width: thin;
-        }
-        .nanshan-search-status::-webkit-scrollbar { width: 4px; }
-        .nanshan-search-status::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
-
         .nanshan-category-list {
             overflow-y: auto;
             padding-right: 4px;
             display: flex;
             flex-direction: column;
             gap: 4px;
-            flex: 1; 
+            flex-shrink: 0; 
             max-height: 250px; 
+            transition: max-height 0.3s ease; /* 增加滑順動畫 */
         }
+
+        .nanshan-search-status {
+            font-size: 11px;
+            color: #7c3aed;
+            font-weight: 800;
+            padding: 0 2px;
+            flex: 1; /* 🎯 讓搜尋結果自動填滿下方所有剩餘空間 */
+            overflow-y: auto; /* 🎯 獨立捲動軸 */
+            scrollbar-width: thin;
+            display: flex;
+            flex-direction: column;
+        }
+        .nanshan-search-status::-webkit-scrollbar { width: 4px; }
+        .nanshan-search-status::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
 
         .nanshan-category-list::-webkit-scrollbar { width: 4px; }
         .nanshan-category-list::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 4px; }
@@ -2469,9 +2471,11 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
             <button id="nanshanSearchClearBtn" class="nanshan-search-clear" type="button" onclick="clearNanshanSearch()" title="清除搜尋">×</button>
         </div>
 
-        <div id="nanshanSearchStatus" class="nanshan-search-status"></div>
-
+        <!-- 🎯 分類選單放上面當過濾器 -->
         <div id="nanshanCategoryList" class="nanshan-category-list"></div>
+        
+        <!-- 🎯 搜尋結果放下面並填滿剩餘空間 -->
+        <div id="nanshanSearchStatus" class="nanshan-search-status"></div>
     </div>
 
     <div id="map"></div>
@@ -4168,14 +4172,22 @@ function getPmtilesGeomCenter(geom) {
 
         function renderNanshanSearchResults(resultCount, totalCount) {
             var searchStatus = document.getElementById('nanshanSearchStatus');
-            var catList = document.getElementById('nanshanCategoryList'); /* 抓取底下的分類選單 */
+            var catList = document.getElementById('nanshanCategoryList');
+            var note = document.querySelector('.nanshan-category-note');
             if (!searchStatus) return;
 
             var keywordRaw = nanshanSearchKeyword.trim();
 
-            /* 🎯 搜尋時隱藏底下的分類選單，清除時恢復顯示，解決打架問題 */
+            /* 🎯 兩全其美解法：搜尋時隱藏說明文字，並把分類選單「稍微壓縮」但保持可見與捲動 */
+            if (note) {
+                note.style.display = keywordRaw ? 'none' : 'block';
+            }
             if (catList) {
-                catList.style.display = keywordRaw ? 'none' : 'flex';
+                catList.style.display = 'flex'; // 永遠保持顯示
+                catList.style.maxHeight = keywordRaw ? '110px' : '250px'; // 搜尋時壓縮高度 (約顯示3.5個選項，提示可滑動)
+                catList.style.borderBottom = keywordRaw ? '1px dashed #ddd6fe' : 'none'; // 加上分隔線
+                catList.style.paddingBottom = keywordRaw ? '6px' : '0';
+                catList.style.marginBottom = keywordRaw ? '6px' : '0';
             }
 
             if (!nanshanLayer) {
