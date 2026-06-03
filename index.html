@@ -1368,12 +1368,24 @@ body.player-embedded .leaflet-popup .btn-play-main {
             .nanshan-category-menu {
                 left: 10px;
                 bottom: 18px;
-                width: min(292px, calc(100vw - 20px));
+                width: calc(100vw - 75px); /* 🌟 稍微加寬，只留右側空間給 GPS 準星按鈕 */
                 max-height: calc(100dvh - 230px);
                 padding: 12px;
             }
             .nanshan-category-title { font-size: 13px; }
             .nanshan-category-note { font-size: 11px; }
+        }
+
+        /* 🎯 手機版防打架專屬設定 (結合 V4 模式) */
+        @media (max-width: 760px) {
+            /* 進入南山模式時，完全隱藏下方的探索主線，讓出畫面空間 */
+            body.nanshan-mode .haidian-v4-dock {
+                display: none !important;
+            }
+            /* 讓原本被迫懸在半空中的定位準星按鈕，舒適地降落回右下角 */
+            body.nanshan-mode .locate-me-wrapper {
+                bottom: 18px !important;
+            }
         }
 
 </style>
