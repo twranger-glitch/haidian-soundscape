@@ -1274,6 +1274,8 @@ body.player-embedded .leaflet-popup .btn-play-main {
             display: flex;
             flex-direction: column;
             gap: 4px;
+            flex: 1; 
+            max-height: 250px; 
         }
 
         .nanshan-category-list::-webkit-scrollbar { width: 4px; }
@@ -2230,17 +2232,13 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
                 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 10px 0;">
                 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (預設臺灣精細地圖打底)</div>
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">歷史套疊 (可多重疊加)</div>
                 <label>
-                    <input type="radio" name="historymap" value="none" checked onchange="switchHistoryMap(this.value)"> 
-                    無 / 關閉歷史套疊
-                </label>
-                <label>
-                    <input type="radio" name="historymap" value="history_tainan" onchange="switchHistoryMap(this.value)"> 
+                    <input type="checkbox" value="history_tainan" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 
                     1895 臺南府迅速測圖
                 </label>
                 <label>
-                    <input type="radio" name="historymap" value="history_1904" onchange="switchHistoryMap(this.value)"> 
+                    <input type="checkbox" value="history_1904" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 
                     1904 臺灣堡圖
                 </label>
                 
@@ -2321,6 +2319,9 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
                         <span id="hydrologyOpacityValue">55%</span>
                     </div>
                     <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
+
+                    <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">府城水文史</div>
+                    <label><input type="checkbox" id="hydro_tainan_water_texture" onchange="toggleHydrologyLayer('tainan_water_texture', this.checked)" style="accent-color:#0f766e;"> 府城歷史水系紋理</label>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
                     <label><input type="checkbox" id="hydro_SEAWALLZONE" onchange="toggleHydrologyLayer('SEAWALLZONE', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
@@ -2955,6 +2956,13 @@ async function searchPlaceName() {
 };
 
         var hydrologyLayerMeta = {
+            'tainan_water_texture': {
+                label: '府城歷史水系紋理',
+                path: './tainan_water_texture.geojson', 
+                color: '#3b82f6',     
+                weight: 3,            
+                opacity: 0.85
+            },
             'SEAWALLZONE': {
                 label: '海堤區域',
                 path: 'hydrology/SEAWALLZONE.json',
@@ -3046,6 +3054,9 @@ async function searchPlaceName() {
         map.getPane('floodPane').style.pointerEvents = 'auto';
 
         function getGeoJsonUrls(path) {
+            if (path.startsWith('./') || path.startsWith('http')) {
+                return [path];
+            }
             return [
                 gisWorkerBaseUrl + path,
                 gisHfBaseUrl + path
@@ -4901,53 +4912,36 @@ function getPmtilesGeomCenter(geom) {
         }
 
         // 🚀 負責切換「歷史套疊圖層」
-        function switchHistoryMap(val) {
-            allHistoryLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
-
-            // 同步側邊欄與 Modal 的單選框狀態
-            document.querySelectorAll('input[name="historymap"]').forEach(function(el) {
-                el.checked = (el.value === val);
-            });
-            document.querySelectorAll('input[name="historymap_modal"]').forEach(function(el) {
-                el.checked = (el.value === val);
-            });
-
-            var extLabel = document.getElementById('activeExtendedLayerLabel');
-            var extText = document.getElementById('extendedLayerNameText');
-            var opacityCtrl = document.getElementById('opacityControl');
-            
-            var histNames = {
-                'history_1875': '1874 府城街道圖',
-                'history_tainan': '1895 臺南府迅速測圖',
-                'history_1900': '1900 臺南府城內外略圖',
-                'history_1904': '1904 臺灣堡圖',
-                'history_1920': '1920 臺南市區改正圖',
-                'history_1921': '1921 臺灣堡圖',
-                'history_1944': '1944 美軍航照圖'
+        function switchHistoryMap(val, isChecked) {
+            var layerMap = {
+                'history_1875': history1875Layer,
+                'history_tainan': historyTainanLayer,
+                'history_1900': history1900Layer,
+                'history_1904': history1904Layer,
+                'history_1920': history1920Layer,
+                'history_1921': history1921Layer,
+                'history_1944': history1944Layer
             };
 
-            if (val !== 'none' && histNames[val]) {
-                extLabel.style.display = 'block'; 
-                extText.innerText = histNames[val];
-                opacityCtrl.style.display = 'block';
-                
-                if (window.innerWidth > 600 && (val === 'history_1904' || val === 'history_tainan')) {
-                    extLabel.style.display = 'none';
-                }
-                
-                // 這裡移除舊有的「自動幫忙加底圖」邏輯，全權交給使用者在「現代圖資」自選
-                if (val === 'history_1875') map.addLayer(history1875Layer);
-                else if (val === 'history_tainan') map.addLayer(historyTainanLayer);
-                else if (val === 'history_1900') map.addLayer(history1900Layer);
-                else if (val === 'history_1904') map.addLayer(history1904Layer);
-                else if (val === 'history_1920') map.addLayer(history1920Layer);
-                else if (val === 'history_1921') map.addLayer(history1921Layer);
-                else if (val === 'history_1944') map.addLayer(history1944Layer);
-                
+            var targetLayer = layerMap[val];
+            if (!targetLayer) return;
+
+            if (isChecked) {
+                if (!map.hasLayer(targetLayer)) map.addLayer(targetLayer);
             } else {
-                extLabel.style.display = 'none'; 
-                opacityCtrl.style.display = 'none';
+                if (map.hasLayer(targetLayer)) map.removeLayer(targetLayer);
             }
+
+            var activeCount = 0;
+            allHistoryLayers.forEach(function(l) { if (map.hasLayer(l)) activeCount++; });
+            var opacityCtrl = document.getElementById('opacityControl');
+            if (activeCount > 0) {
+                if (opacityCtrl) opacityCtrl.style.display = 'block';
+            } else {
+                if (opacityCtrl) opacityCtrl.style.display = 'none';
+            }
+            var extLabel = document.getElementById('activeExtendedLayerLabel');
+            if (extLabel) extLabel.style.display = 'none';
         }
 
         function updateOpacity(val) {
