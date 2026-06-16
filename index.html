@@ -1832,9 +1832,491 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
+
+
+<!-- HAIDIAN_SAFE98_STABLE_CLEAR_UI_START -->
+<style id="haidian-safe98-stable-clear-ui">
+/*
+  Safe 98：只做靜態視覺層與可讀性修正，不新增事件監聽、不攔截點擊。
+  原本右上角聆聽／圖層工具、左側抽屜、投稿、播放器、Firebase 全部維持原邏輯。
+*/
+:root {
+    --hd-safe-ink: #062522;
+    --hd-safe-deep: #063f3a;
+    --hd-safe-deep-2: #075c54;
+    --hd-safe-water: #0f8378;
+    --hd-safe-mint: #dff7ef;
+    --hd-safe-paper: #fffdf7;
+    --hd-safe-gold: #f6d06f;
+    --hd-safe-gold-2: #fff1b8;
+    --hd-safe-line: rgba(6, 37, 34, .18);
+    --hd-safe-shadow: 0 18px 46px rgba(6,37,34,.22);
+    --accent-color: #0f766e !important;
+    --text-main: #062522 !important;
+    --text-muted: #365f58 !important;
+    --glass-bg: rgba(255, 253, 247, .94) !important;
+    --glass-border: rgba(6,37,34,.16) !important;
+    --glass-shadow: var(--hd-safe-shadow) !important;
+    --glass-blur: blur(12px) !important;
+}
+html, body {
+    color: var(--hd-safe-ink) !important;
+    -webkit-font-smoothing: antialiased !important;
+    text-rendering: geometricPrecision !important;
+}
+#map::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 410;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 18%, rgba(15,131,120,.12), transparent 33%),
+      radial-gradient(circle at 84% 82%, rgba(246,208,111,.10), transparent 35%),
+      linear-gradient(180deg, rgba(255,253,247,.12), rgba(255,253,247,.02));
+    mix-blend-mode: multiply;
+}
+
+/* 關鍵修正：所有額外學習卡片都不常駐、不攔地圖點擊。 */
+.haidian-v4-dock,
+.haidian-90-journey,
+.haidian-90-insight,
+.haidian98-footprint-trigger,
+.haidian98-journey-trigger,
+.haidian-guide-reopen,
+.haidian-100-panel-close,
+.haidian98-panel-close {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Header：清楚、穩、投影可讀，保留品牌感。 */
+.glass-header {
+    width: min(1120px, calc(100vw - 44px)) !important;
+    max-width: 1120px !important;
+    top: 18px !important;
+    padding: 12px 18px !important;
+    gap: 16px !important;
+    border-radius: 22px !important;
+    background:
+      linear-gradient(135deg, rgba(5,54,50,.98), rgba(7,88,80,.98) 55%, rgba(11,111,102,.98)) !important;
+    border: 2px solid rgba(246,208,111,.96) !important;
+    box-shadow: 0 18px 50px rgba(3, 33, 31, .34), inset 0 1px 0 rgba(255,255,255,.20) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    align-items: center !important;
+}
+.glass-header.compact-mode {
+    width: auto !important;
+    max-width: calc(100vw - 40px) !important;
+    left: 18px !important;
+    top: 18px !important;
+    padding: 10px 14px !important;
+}
+.project-title {
+    color: #fffdf7 !important;
+    font-weight: 1000 !important;
+    font-size: clamp(19px, 1.25vw, 23px) !important;
+    line-height: 1.08 !important;
+    letter-spacing: .045em !important;
+    text-shadow: 0 1px 0 rgba(0,0,0,.45) !important;
+    align-items: center !important;
+    gap: 4px !important;
+    min-width: max-content !important;
+}
+.project-title span.main-title {
+    color: var(--hd-safe-gold-2) !important;
+    margin: 0 4px !important;
+    text-shadow: 0 1px 0 rgba(0,0,0,.46) !important;
+}
+.project-title span.sub-title {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    font-size: 14px !important;
+    font-weight: 950 !important;
+    letter-spacing: .04em !important;
+    margin-left: 4px !important;
+}
+.project-title::after {
+    content: "SEL｜探究｜踏查｜環境守護";
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    margin-left: 10px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: #fff7d6;
+    color: #062522;
+    border: 2px solid var(--hd-safe-gold);
+    box-shadow: 0 8px 18px rgba(0,0,0,.18);
+    font-size: 13px;
+    font-weight: 1000;
+    letter-spacing: .035em;
+    white-space: nowrap;
+    text-shadow: none;
+}
+.glass-header.compact-mode .project-title::after { display: none; }
+.nav-buttons {
+    gap: 10px !important;
+    align-items: stretch !important;
+    flex-wrap: nowrap !important;
+}
+.nav-buttons button {
+    min-height: 44px !important;
+    padding: 8px 15px !important;
+    border-radius: 16px !important;
+    background: #fffdf7 !important;
+    border: 2px solid rgba(246,208,111,.98) !important;
+    color: #062522 !important;
+    box-shadow: 0 9px 20px rgba(0,0,0,.18) !important;
+    font-size: 15px !important;
+    line-height: 1.12 !important;
+    font-weight: 1000 !important;
+    letter-spacing: .025em !important;
+    text-shadow: none !important;
+    text-align: center !important;
+}
+.nav-buttons button svg {
+    color: currentColor !important;
+    stroke-width: 2.9 !important;
+}
+.nav-buttons button:hover,
+.nav-buttons button:focus-visible {
+    background: var(--hd-safe-gold-2) !important;
+    color: #031817 !important;
+    border-color: #ffffff !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 14px 28px rgba(0,0,0,.24), 0 0 0 4px rgba(255,241,184,.28) !important;
+}
+.btn-latest {
+    background: #fff4c2 !important;
+    color: #3b2800 !important;
+}
+.btn-submit {
+    background: #0b766d !important;
+    color: #ffffff !important;
+    border-color: #fffdf7 !important;
+}
+.btn-submit:hover,
+.btn-submit:focus-visible {
+    background: #fffdf7 !important;
+    color: #062522 !important;
+    border-color: var(--hd-safe-gold) !important;
+}
+
+/* 右上角原本操作按鈕：保留主導權，只做清楚化。 */
+.right-tools-wrapper { right: 22px !important; top: 96px !important; }
+.tools-toggle-btn,
+.leaflet-control-zoom a,
+.toggle-btn,
+.header-pull-tab {
+    background: linear-gradient(135deg, #053632, #0b6f66) !important;
+    color: #fffdf7 !important;
+    border: 2px solid rgba(246,208,111,.86) !important;
+    box-shadow: 0 14px 30px rgba(6,37,34,.28) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+.tools-toggle-btn:hover,
+.toggle-btn:hover,
+.header-pull-tab:hover {
+    background: var(--hd-safe-gold-2) !important;
+    color: var(--hd-safe-ink) !important;
+    transform: translateY(-2px) !important;
+}
+.custom-layer-control,
+.drawer-content,
+.modal-box,
+.leaflet-popup-content-wrapper,
+.global-player {
+    background: rgba(255,253,247,.97) !important;
+    color: var(--hd-safe-ink) !important;
+    border: 1.5px solid rgba(6,37,34,.16) !important;
+    box-shadow: var(--hd-safe-shadow) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}
+.drawer-content {
+    border-radius: 24px !important;
+    padding: 22px !important;
+}
+.panel-label {
+    color: var(--hd-safe-ink) !important;
+    font-size: 15px !important;
+    font-weight: 1000 !important;
+    letter-spacing: .04em !important;
+}
+.panel-label::after {
+    content: "SEL・探究・踏查・守護";
+    margin-left: auto;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #fff4c2;
+    color: #3b2800;
+    border: 1px solid rgba(138,90,8,.25);
+    font-size: 11px;
+    font-weight: 1000;
+    white-space: nowrap;
+}
+.search-input,
+.route-btn,
+.layer-card,
+.latest-item,
+.card-meta-box,
+.reaction-btn,
+.ext-link-card {
+    background: #ffffff !important;
+    color: var(--hd-safe-ink) !important;
+    border-color: rgba(6,37,34,.18) !important;
+}
+.search-input {
+    font-size: 15px !important;
+    font-weight: 750 !important;
+}
+.search-input:focus,
+.route-btn:hover,
+.layer-card:hover,
+.latest-item:hover,
+.ext-link-card:hover {
+    border-color: #0f8378 !important;
+    box-shadow: 0 0 0 4px rgba(15,131,120,.13), 0 12px 26px rgba(6,37,34,.12) !important;
+}
+.filter-item,
+.route-btn,
+.custom-layer-control label,
+.meta-item,
+.latest-item-title,
+.latest-item-meta,
+.sound-desc,
+.modal-text {
+    color: var(--hd-safe-ink) !important;
+    font-weight: 820 !important;
+}
+.sound-title,
+.modal-title,
+.latest-item-title {
+    color: #031817 !important;
+    font-weight: 1000 !important;
+}
+.sound-card {
+    background: #fffdf7 !important;
+    border-radius: 18px !important;
+    overflow: hidden !important;
+}
+.sound-cover,
+.modal-img {
+    filter: saturate(1.03) contrast(1.02) !important;
+}
+.btn-play-main,
+.player-control-btn,
+.btn-enter-map {
+    background: linear-gradient(135deg, #075c54, #0f8378) !important;
+    color: #ffffff !important;
+    border: 2px solid rgba(255,253,247,.92) !important;
+    box-shadow: 0 12px 28px rgba(15,118,110,.28) !important;
+    font-weight: 1000 !important;
+}
+.btn-play-main:hover,
+.player-control-btn:hover,
+.btn-enter-map:hover {
+    background: var(--hd-safe-gold-2) !important;
+    color: #062522 !important;
+    border-color: var(--hd-safe-gold) !important;
+}
+
+/* Splash：正式網站入口，不是場合包裝。 */
+#splashScreen {
+    background:
+      radial-gradient(circle at 18% 14%, rgba(15,131,120,.34), transparent 34%),
+      radial-gradient(circle at 82% 82%, rgba(246,208,111,.22), transparent 34%),
+      rgba(6,37,34,.72) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}
+#splashScreen .splash-card {
+    width: min(520px, calc(100vw - 32px)) !important;
+    background: #fffdf7 !important;
+    border: 2px solid rgba(246,208,111,.88) !important;
+    border-radius: 28px !important;
+    box-shadow: 0 30px 70px rgba(0,0,0,.44) !important;
+}
+#splashScreen .splash-card::before {
+    height: 7px !important;
+    background: linear-gradient(90deg, #075c54, #0f8378, #f6d06f) !important;
+}
+#splashScreen .splash-logo {
+    background: #e7fbf3 !important;
+    color: #075c54 !important;
+    border: 2px solid rgba(15,131,120,.18) !important;
+}
+#splashScreen .splash-title {
+    color: #031817 !important;
+    font-weight: 1000 !important;
+    letter-spacing: .08em !important;
+}
+#splashScreen .splash-subtitle {
+    color: #075c54 !important;
+    font-weight: 1000 !important;
+    letter-spacing: .18em !important;
+}
+#splashScreen .splash-quote {
+    background: #ffffff !important;
+    border-left: 6px solid #0f8378 !important;
+    border-top: 1px solid rgba(6,37,34,.10) !important;
+    border-right: 1px solid rgba(6,37,34,.10) !important;
+    border-bottom: 1px solid rgba(6,37,34,.10) !important;
+    box-shadow: 0 12px 28px rgba(6,37,34,.08) !important;
+}
+#splashScreen .splash-quote-title,
+#splashScreen .splash-slogan span,
+#splashScreen .featured-label {
+    color: #075c54 !important;
+    font-weight: 1000 !important;
+}
+#splashScreen .splash-quote-text,
+#splashScreen .splash-slogan {
+    color: #203f3b !important;
+    font-weight: 780 !important;
+}
+#splashScreen .splash-quote-text strong {
+    color: #031817 !important;
+    background: #fff4c2 !important;
+    border: 1px solid rgba(138,90,8,.18) !important;
+}
+#splashScreen .featured-sound-card {
+    background: #ffffff !important;
+    border: 1.5px solid rgba(15,131,120,.20) !important;
+}
+
+/* 地圖標記、cluster、popup 的視覺一致化。 */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+    background: rgba(15,131,120,.20) !important;
+}
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+    background: #fff4c2 !important;
+    color: #062522 !important;
+    border: 2px solid #0f8378 !important;
+    font-weight: 1000 !important;
+}
+.leaflet-container a.leaflet-popup-close-button {
+    background: #062522 !important;
+    color: #ffffff !important;
+    border: 2px solid #fffdf7 !important;
+}
+.leaflet-container a.leaflet-popup-close-button:hover {
+    background: #b91c1c !important;
+}
+
+@media (max-width: 760px) {
+    .glass-header {
+        top: 10px !important;
+        width: calc(100vw - 20px) !important;
+        padding: 11px 12px !important;
+        border-radius: 18px !important;
+        gap: 9px !important;
+    }
+    .project-title {
+        width: 100% !important;
+        min-width: 0 !important;
+        font-size: 18px !important;
+    }
+    .project-title::after {
+        font-size: 11.5px !important;
+        padding: 4px 8px !important;
+        margin-left: 6px !important;
+    }
+    .project-title span.sub-title { font-size: 12px !important; }
+    .nav-buttons {
+        width: 100% !important;
+        gap: 5px !important;
+        justify-content: space-between !important;
+    }
+    .nav-buttons button {
+        min-height: 42px !important;
+        padding: 7px 5px !important;
+        font-size: 12.5px !important;
+        border-radius: 13px !important;
+        letter-spacing: 0 !important;
+    }
+    .right-tools-wrapper { top: 160px !important; right: 12px !important; }
+    .panel-label::after { display: none !important; }
+}
+@media (max-width: 420px) {
+    .project-title::after { display: none !important; }
+    .nav-buttons button svg { display: none !important; }
+}
+@media (prefers-contrast: more) {
+    .glass-header,
+    .nav-buttons button,
+    .tools-toggle-btn,
+    .toggle-btn,
+    .custom-layer-control,
+    .drawer-content,
+    .modal-box {
+        border-width: 2.5px !important;
+    }
+    #map::after { display: none !important; }
+}
+</style>
+<!-- HAIDIAN_SAFE98_STABLE_CLEAR_UI_END -->
+
+
+
+<!-- ===== Clean Panel Label Repair: 主軸不再灌進每一個控制項 ===== -->
+<style id="haidian-clean-panel-label-repair">
+/*
+  這一層專門修正：不要把 SEL／探究／踏查／守護貼到每一個 .panel-label。
+  主軸保留在網站入口與品牌標題即可，操作面板要保持乾淨、可讀、不中斷任務。
+*/
+.drawer-content .panel-label::after,
+.custom-layer-control .panel-label::after,
+.modal-box .panel-label::after,
+.leaflet-popup .panel-label::after {
+    content: none !important;
+    display: none !important;
+}
+
+.drawer-content .panel-label {
+    justify-content: flex-start !important;
+    gap: 9px !important;
+    padding-right: 0 !important;
+    white-space: normal !important;
+}
+
+.drawer-content .panel-label svg {
+    color: #0f766e !important;
+    stroke-width: 2.8 !important;
+}
+
+/* 讓聆聽面板維持高辨識，但不要變成標語牆。 */
+.drawer-content > div {
+    position: relative;
+}
+
+.drawer-content .search-input,
+.drawer-content .time-display,
+.drawer-content .filter-item,
+.drawer-content .route-btn {
+    letter-spacing: .01em !important;
+}
+
+/* 保留主軸，但只在品牌層出現一次；小螢幕避免壓縮導覽。 */
+@media (max-width: 760px) {
+    .project-title::after {
+        display: none !important;
+        content: none !important;
+    }
+}
+</style>
+
 </head><body>
 
-    <!-- 沉浸式迎賓帷幕 -->
+    <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
     <style>
         #splashScreen {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -2003,23 +2485,23 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
                 </div>
                 <h1 class="splash-title">海佃 <span style="color: #059669;">溪遊記</span></h1>
-                <div class="splash-subtitle">聲音地景計畫</div>
+                <div class="splash-subtitle">SEL・探究・踏查・環境守護</div>
             </div>
 
             <div class="splash-quote">
                 <span class="splash-quote-title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    帶回台江的聲音
+                    從聲音出發的地方學習
                 </span>
                 <p class="splash-quote-text">
-                    海佃地下圖書室，如根系般隱身校園，是孵育思想的基地。<br><br>
-                    如今，我們將邊界延伸至真實的土地。邀請你沿著水圳與聚落，用「聆聽」重新覺察環境，把土地最真實的回音，帶回這張用耳朵閱讀的 <strong>海佃地圖</strong>。
+                    從一段聲音開始，孩子先覺察自己的感受，再走入水圳、聚落與日常現場。<br><br>
+                    透過 <strong>SEL</strong> 的聆聽回應、踏查中的觀察紀錄、探究式提問與環境守護行動，這張地圖成為一份持續生長的地方學習紀錄。
                 </p>
             </div>
             
             <div class="splash-slogan">
-                <span>Hidden below, growing beyond.</span>
-                家鄉是認識世界的起點，聆聽是擁抱土地的方式。
+                <span>SEL｜探究｜踏查｜環境守護</span>
+                家鄉是認識世界的起點，聆聽是理解土地與行動的開始。
             </div>
 
             <!-- 🌟 插入：聲景隨機推薦 -->
@@ -2034,7 +2516,7 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
             <button class="btn-enter-map" onclick="enterMap()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-                開啟聲音地圖
+                開始聲音踏查
             </button>
         </div>
     </div>
@@ -6816,19 +7298,19 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
   const MODE_COPY = {
     listen: {
-      title: 'SEL 聆聽：從感受進入地方',
-      copy: '搜尋聲景、依類別與時間篩選，收藏並回應你聽見的土地回音，讓感受成為觀察與表達。',
-      toast: 'SEL 聆聽：已開啟聲景搜尋、類別篩選、時間軸、收藏與回音回應。'
+      title: '聆聽：先找到一段現場聲音',
+      copy: '搜尋聲景、依類別與時間篩選，收藏你想再次回來聽的土地回音。',
+      toast: '聆聽模式：已開啟聲景搜尋、類別篩選、時間軸與收藏。'
     },
     walk: {
-      title: '踏查路線：把問題帶到現場',
-      copy: '選擇主題路線、地理圍籬或手繪範圍，沿著水圳、聚落與歷史現場完成一段田野任務。',
-      toast: '踏查路線：已開啟主題路線、任務與手繪走讀。'
+      title: '走讀：把聲音串成一條路',
+      copy: '選擇主題路線、地理圍籬或手繪範圍，讓地圖帶你完成一段田野任務。',
+      toast: '走讀模式：已開啟主題路線、任務與手繪走讀。'
     },
     data: {
-      title: '探究圖資：用資料理解環境',
-      copy: '疊合底圖、歷史、水文、淹水潛勢與災害圖層，把環境守護轉化為可討論的證據。',
-      toast: '探究圖資：已開啟底圖、歷史、水文、淹水與災害圖層。'
+      title: '圖資：進入研究型地圖',
+      copy: '打開底圖、歷史套疊、淹水潛勢、水文與災害圖資，適合課程研究與田野比對。',
+      toast: '圖資模式：已開啟右側底圖、歷史、水文、淹水與災害圖層。'
     }
   };
 
@@ -7037,7 +7519,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     switcher.className = 'haidian-v4-mode-switcher';
     switcher.setAttribute('role', 'tablist');
     switcher.setAttribute('aria-label', '探索模式切換');
-    switcher.innerHTML = '<button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="listen">SEL 聆聽</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="walk">踏查</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="data">探究圖資</button>';
+    switcher.innerHTML = '<button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="listen">聆聽</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="walk">走讀</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="data">圖資</button>';
     content.insertBefore(switcher, content.firstChild);
     content.insertBefore(head, switcher);
   }
@@ -7047,7 +7529,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     if (!control || control.querySelector('.haidian-v4-data-note')) return;
     const note = document.createElement('div');
     note.className = 'haidian-v4-data-note';
-    note.textContent = '探究圖資｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層，協助把環境守護轉化為可觀察、可討論、可行動的依據。';
+    note.textContent = '圖資模式｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層。可直接點選下方單選或勾選項目切換。';
     control.insertBefore(note, control.firstChild);
   }
 
@@ -7056,7 +7538,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     const dock = document.createElement('aside');
     dock.className = 'haidian-v4-dock';
     dock.setAttribute('aria-label', '探索主線');
-    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>學習主線</strong><span>從 SEL 回應出發，走向環境守護與探究踏查</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合學習主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card axis-sel" data-haidian-v4-mode="listen"><b>SEL 聆聽</b><small>聽見感受、收藏與回應。</small></button><button type="button" class="haidian-v4-card axis-field" data-haidian-v4-mode="walk"><b>踏查路線</b><small>沿水圳與聚落走讀。</small></button><button type="button" class="haidian-v4-card axis-inquiry" data-haidian-v4-mode="data"><b>探究圖資</b><small>用證據提出問題。</small></button><button type="button" class="haidian-v4-card axis-guard" data-haidian-v4-mode="data"><b>環境守護</b><small>辨讀水文與災害線索。</small></button></div>';
+    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下才打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
     document.body.appendChild(dock);
   }
 
@@ -7364,3081 +7846,5 @@ function mountGlobalPlayerIntoPopup_(retry) {
 })();
 </script>
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_END -->
-
-
-<style id="haidian-refined-ui-v5">
-:root {
-    --panel-offset: 22px;
-    --accent-color: #0f9f8d;
-    --accent-deep: #075f57;
-    --accent-soft: #bdeee3;
-    --river-blue: #0f6f86;
-    --warm-gold: #d6ae52;
-    --warm-gold-soft: #f4dfaa;
-    --paper: #fbf7ed;
-    --paper-2: #f2ead7;
-    --ink: #15211f;
-    --muted-ink: #68736e;
-    --night: #061615;
-    --night-2: #092625;
-    --glass-bg: rgba(251, 247, 237, 0.72);
-    --glass-border: rgba(255, 255, 255, 0.38);
-    --glass-shadow: 0 24px 70px rgba(4, 24, 24, 0.28);
-    --glass-blur: blur(24px) saturate(1.12);
-}
-
-html, body {
-    background:
-        radial-gradient(circle at 20% 12%, rgba(14, 159, 141, 0.22), transparent 34%),
-        radial-gradient(circle at 78% 20%, rgba(214, 174, 82, 0.16), transparent 28%),
-        linear-gradient(145deg, #061615 0%, #0a2a29 52%, #081b1c 100%) !important;
-    color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
-    text-rendering: geometricPrecision;
-}
-
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 3;
-    background:
-        linear-gradient(115deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 28px),
-        radial-gradient(circle at 8% 92%, rgba(214,174,82,0.14), transparent 28%),
-        radial-gradient(circle at 92% 78%, rgba(15,159,141,0.12), transparent 30%);
-    mix-blend-mode: screen;
-    opacity: 0.8;
-}
-
-body::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 42vh;
-    pointer-events: none;
-    z-index: 3;
-    background: linear-gradient(to top, rgba(6, 22, 21, 0.38), transparent 78%);
-}
-
-#map {
-    background: #0a2423 !important;
-}
-
-#map::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 280;
-    pointer-events: none;
-    background:
-        radial-gradient(circle at 48% 45%, transparent 0 36%, rgba(5, 18, 18, 0.12) 76%, rgba(5, 18, 18, 0.34) 100%),
-        linear-gradient(180deg, rgba(10, 42, 41, 0.02), rgba(10, 42, 41, 0.20));
-}
-
-#map::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 285;
-    pointer-events: none;
-    opacity: 0.17;
-    background-image:
-        linear-gradient(rgba(251, 247, 237, 0.65) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(251, 247, 237, 0.65) 1px, transparent 1px);
-    background-size: 72px 72px;
-    mask-image: radial-gradient(circle at center, transparent 12%, #000 100%);
-    -webkit-mask-image: radial-gradient(circle at center, transparent 12%, #000 100%);
-}
-
-.leaflet-tile-pane {
-    filter: saturate(0.88) contrast(1.02) brightness(0.92) sepia(0.08);
-}
-
-.leaflet-control-attribution {
-    background: rgba(251, 247, 237, 0.76) !important;
-    border: 1px solid rgba(255,255,255,0.5);
-    border-radius: 10px 0 0 0;
-    color: rgba(21,33,31,0.72) !important;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-}
-
-.glass-header {
-    top: 18px !important;
-    width: min(92vw, 1120px) !important;
-    max-width: 1120px !important;
-    padding: 12px 18px !important;
-    border-radius: 24px !important;
-    background:
-        linear-gradient(135deg, rgba(8, 31, 30, 0.84), rgba(10, 54, 50, 0.62) 52%, rgba(70, 49, 22, 0.56)) !important;
-    border: 1px solid rgba(244, 223, 170, 0.34) !important;
-    box-shadow: 0 26px 70px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.24) !important;
-    backdrop-filter: blur(28px) saturate(1.18) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(1.18) !important;
-    overflow: hidden;
-}
-
-.glass-header::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-        linear-gradient(90deg, transparent, rgba(255,255,255,0.13), transparent),
-        radial-gradient(circle at 18% 0%, rgba(189,238,227,0.28), transparent 36%);
-    opacity: 0.76;
-}
-
-.glass-header::after {
-    content: "";
-    position: absolute;
-    left: 20px;
-    right: 20px;
-    bottom: 0;
-    height: 1px;
-    pointer-events: none;
-    background: linear-gradient(90deg, transparent, rgba(244,223,170,0.9), transparent);
-}
-
-.project-title {
-    color: rgba(251, 247, 237, 0.96) !important;
-    font-size: 20px !important;
-    font-weight: 950 !important;
-    letter-spacing: 0.08em !important;
-    text-shadow: 0 2px 18px rgba(0,0,0,0.35);
-    position: relative;
-    z-index: 1;
-    align-items: center !important;
-    gap: 2px;
-}
-
-.project-title span.main-title,
-.splash-title span {
-    color: transparent !important;
-    background: linear-gradient(135deg, #d8fff4 0%, #6ee7d6 35%, #f4dfaa 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    text-shadow: none;
-}
-
-.project-title span.sub-title {
-    color: rgba(244, 223, 170, 0.92) !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.1em;
-}
-
-.project-title::after {
-    content: "水圳・聚落・聲音採集";
-    margin-left: 10px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(244, 223, 170, 0.35);
-    background: rgba(244, 223, 170, 0.10);
-    color: rgba(251, 247, 237, 0.78);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    font-weight: 850;
-    white-space: nowrap;
-}
-
-.nav-buttons {
-    position: relative;
-    z-index: 1;
-    gap: 8px !important;
-}
-
-.nav-buttons button {
-    position: relative;
-    isolation: isolate;
-    color: rgba(251, 247, 237, 0.86) !important;
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
-    border-radius: 16px !important;
-    padding: 10px 14px !important;
-    font-size: 13px !important;
-    letter-spacing: 0.04em;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
-    overflow: hidden;
-}
-
-.nav-buttons button::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: linear-gradient(135deg, rgba(110,231,214,0.22), rgba(244,223,170,0.16));
-    opacity: 0;
-    transition: opacity 0.22s ease;
-}
-
-.nav-buttons button:hover {
-    color: #ffffff !important;
-    transform: translateY(-2px);
-    border-color: rgba(244, 223, 170, 0.42) !important;
-    box-shadow: 0 14px 30px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.20) !important;
-}
-
-.nav-buttons button:hover::before {
-    opacity: 1;
-}
-
-.btn-latest {
-    color: #ffe7a6 !important;
-}
-
-.btn-submit {
-    background: linear-gradient(135deg, #17b7a2, #0f7f73 58%, #d6ae52) !important;
-    border-color: rgba(244, 223, 170, 0.46) !important;
-    color: #fffdf4 !important;
-    box-shadow: 0 16px 34px rgba(15, 159, 141, 0.34), inset 0 1px 0 rgba(255,255,255,0.32) !important;
-}
-
-.btn-submit:hover {
-    background: linear-gradient(135deg, #21cab3, #0f9f8d 52%, #e6c875) !important;
-}
-
-.header-pull-tab {
-    background: rgba(8,31,30,0.88) !important;
-    border-color: rgba(244,223,170,0.28) !important;
-    color: var(--paper) !important;
-    box-shadow: 0 18px 42px rgba(0,0,0,0.28) !important;
-    backdrop-filter: blur(22px) !important;
-    -webkit-backdrop-filter: blur(22px) !important;
-}
-
-.header-pull-tab .pull-line {
-    background: linear-gradient(90deg, #6ee7d6, #f4dfaa) !important;
-}
-
-.header-pull-tab .pull-text {
-    color: rgba(251,247,237,0.76) !important;
-}
-
-.drawer-content,
-.custom-layer-control,
-.draw-mode-hud,
-.tools-toggle-btn {
-    background:
-        linear-gradient(145deg, rgba(9, 35, 34, 0.84), rgba(12, 58, 54, 0.70) 58%, rgba(42, 32, 18, 0.64)) !important;
-    color: rgba(251,247,237,0.94) !important;
-    border: 1px solid rgba(244,223,170,0.26) !important;
-    box-shadow: 0 26px 70px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.18) !important;
-    backdrop-filter: blur(28px) saturate(1.14) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(1.14) !important;
-}
-
-.drawer-content {
-    border-radius: 26px !important;
-    padding: 24px !important;
-}
-
-.drawer-content::-webkit-scrollbar,
-.tools-menu-container::-webkit-scrollbar,
-.modal-box::-webkit-scrollbar,
-.leaflet-popup-content::-webkit-scrollbar {
-    width: 7px;
-}
-
-.drawer-content::-webkit-scrollbar-thumb,
-.tools-menu-container::-webkit-scrollbar-thumb,
-.modal-box::-webkit-scrollbar-thumb,
-.leaflet-popup-content::-webkit-scrollbar-thumb {
-    background: linear-gradient(#6ee7d6, #d6ae52);
-    border-radius: 999px;
-}
-
-.toggle-btn {
-    right: -40px !important;
-    width: 40px !important;
-    height: 76px !important;
-    border-radius: 0 18px 18px 0 !important;
-    background: linear-gradient(180deg, rgba(9,35,34,0.90), rgba(13,70,64,0.82)) !important;
-    color: rgba(251,247,237,0.92) !important;
-    border-color: rgba(244,223,170,0.24) !important;
-    box-shadow: 12px 0 30px rgba(0,0,0,0.22) !important;
-    backdrop-filter: blur(20px) !important;
-    -webkit-backdrop-filter: blur(20px) !important;
-}
-
-.toggle-btn:hover {
-    color: #f4dfaa !important;
-    background: linear-gradient(180deg, rgba(13,70,64,0.96), rgba(8,35,34,0.90)) !important;
-}
-
-.panel-label {
-    color: #fff9e9 !important;
-    font-size: 14px !important;
-    letter-spacing: 0.12em !important;
-    text-transform: uppercase;
-}
-
-.panel-label svg,
-.route-btn svg,
-.custom-layer-control label svg {
-    color: #8deee0 !important;
-}
-
-.search-input {
-    background: rgba(251,247,237,0.96) !important;
-    border: 1px solid rgba(244,223,170,0.42) !important;
-    color: var(--ink) !important;
-    border-radius: 16px !important;
-    padding: 13px 15px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.10);
-}
-
-.search-input:focus {
-    border-color: #6ee7d6 !important;
-    box-shadow: 0 0 0 4px rgba(110,231,214,0.22), 0 16px 32px rgba(0,0,0,0.16) !important;
-}
-
-.filter-item,
-.custom-layer-control label {
-    color: rgba(251,247,237,0.86) !important;
-    font-weight: 750 !important;
-}
-
-.filter-item input,
-.custom-layer-control input[type="radio"],
-.layer-card input {
-    accent-color: #0f9f8d !important;
-}
-
-.time-display {
-    background: rgba(110,231,214,0.14) !important;
-    color: #d9fff7 !important;
-    border: 1px solid rgba(110,231,214,0.22);
-    border-radius: 14px !important;
-}
-
-.time-slider,
-.volume-slider {
-    accent-color: #0f9f8d !important;
-}
-
-.route-btn,
-.layer-card,
-.latest-item,
-.ext-link-card,
-.wall-badge {
-    background: rgba(251,247,237,0.92) !important;
-    border: 1px solid rgba(14, 90, 83, 0.12) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 12px 26px rgba(0,0,0,0.08);
-}
-
-.route-btn {
-    background: rgba(255,255,255,0.10) !important;
-    color: rgba(251,247,237,0.92) !important;
-    border-color: rgba(255,255,255,0.13) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10) !important;
-}
-
-.route-btn:hover {
-    transform: translateY(-2px);
-    background: rgba(255,255,255,0.16) !important;
-    border-color: rgba(244,223,170,0.32) !important;
-}
-
-.route-btn.active {
-    background: linear-gradient(135deg, #0f9f8d, #0f6f86 65%, #d6ae52) !important;
-    border-color: rgba(244,223,170,0.42) !important;
-    box-shadow: 0 16px 34px rgba(15,159,141,0.28) !important;
-}
-
-.tools-toggle-btn {
-    color: rgba(251,247,237,0.94) !important;
-    border-radius: 18px !important;
-}
-
-.tools-toggle-btn:hover {
-    color: #f4dfaa !important;
-    transform: translateY(-3px) scale(1.03) !important;
-}
-
-.custom-layer-control {
-    border-radius: 24px !important;
-    padding: 17px !important;
-}
-
-.btn-more-layers {
-    background: rgba(244,223,170,0.12) !important;
-    border: 1px dashed rgba(244,223,170,0.42) !important;
-    color: #fff3cc !important;
-    border-radius: 14px !important;
-}
-
-.btn-more-layers:hover {
-    background: rgba(244,223,170,0.2) !important;
-}
-
-.draw-mode-hud {
-    border-radius: 24px !important;
-}
-
-.custom-geoman-container a,
-.hud-close-btn {
-    border-radius: 14px !important;
-}
-
-.custom-geoman-container a {
-    color: rgba(251,247,237,0.86) !important;
-}
-
-.custom-geoman-container a:hover,
-.custom-geoman-container a.active {
-    background: rgba(110,231,214,0.18) !important;
-    color: #d9fff7 !important;
-}
-
-#splashScreen {
-    background:
-        radial-gradient(circle at 30% 18%, rgba(15,159,141,0.35), transparent 30%),
-        radial-gradient(circle at 78% 82%, rgba(214,174,82,0.20), transparent 34%),
-        linear-gradient(145deg, rgba(4,18,18,0.94), rgba(8,45,42,0.92) 52%, rgba(6,22,21,0.96)) !important;
-    backdrop-filter: blur(20px) saturate(1.1) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(1.1) !important;
-}
-
-#splashScreen::before {
-    background:
-        radial-gradient(circle at 18% 22%, rgba(110,231,214,0.20), transparent 22%),
-        radial-gradient(circle at 82% 18%, rgba(244,223,170,0.16), transparent 24%),
-        linear-gradient(135deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 32px) !important;
-    opacity: 1 !important;
-}
-
-#splashScreen::after {
-    opacity: 0.10 !important;
-    background-image:
-        linear-gradient(120deg, rgba(244,223,170,0.7) 1px, transparent 1px),
-        linear-gradient(30deg, rgba(110,231,214,0.6) 1px, transparent 1px) !important;
-    background-size: 54px 54px !important;
-}
-
-.splash-card {
-    width: min(468px, 100%) !important;
-    padding: 46px 40px 38px !important;
-    border-radius: 32px !important;
-    background:
-        linear-gradient(145deg, rgba(251,247,237,0.96), rgba(242,234,215,0.90)),
-        radial-gradient(circle at top left, rgba(110,231,214,0.28), transparent 38%) !important;
-    border: 1px solid rgba(244,223,170,0.62) !important;
-    box-shadow: 0 40px 110px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.75) !important;
-    overflow: hidden;
-}
-
-.splash-card::before {
-    height: 100% !important;
-    background:
-        linear-gradient(90deg, rgba(15,159,141,0.16), transparent 22%, transparent 78%, rgba(214,174,82,0.18)),
-        linear-gradient(180deg, rgba(255,255,255,0.4), transparent 48%) !important;
-    pointer-events: none;
-}
-
-.splash-card::after {
-    content: "";
-    position: absolute;
-    inset: 12px;
-    border: 1px solid rgba(15,95,87,0.12);
-    border-radius: 24px;
-    pointer-events: none;
-}
-
-.splash-header,
-.splash-quote,
-.splash-slogan,
-.featured-sound-card,
-.btn-enter-map {
-    position: relative;
-    z-index: 1;
-}
-
-.splash-logo {
-    width: 68px !important;
-    height: 68px !important;
-    border-radius: 22px !important;
-    background: linear-gradient(135deg, #0f9f8d, #0f6f86 58%, #d6ae52) !important;
-    color: #fffdf4 !important;
-    box-shadow: 0 16px 34px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.35) !important;
-}
-
-.splash-title {
-    color: #13211f !important;
-    font-family: Georgia, "Times New Roman", "Noto Serif TC", serif !important;
-    font-size: 34px !important;
-    letter-spacing: 0.12em !important;
-    line-height: 1.05 !important;
-}
-
-.splash-subtitle {
-    color: #866d2a !important;
-    letter-spacing: 0.36em !important;
-}
-
-.splash-quote {
-    background: rgba(255,255,255,0.58) !important;
-    border: 1px solid rgba(15,95,87,0.12) !important;
-    border-left: 0 !important;
-    border-radius: 20px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 16px 36px rgba(6,22,21,0.08);
-}
-
-.splash-quote-title {
-    color: #075f57 !important;
-}
-
-.splash-quote-title svg {
-    color: #0f9f8d !important;
-}
-
-.splash-quote-text {
-    color: #384541 !important;
-    font-weight: 650 !important;
-}
-
-.splash-quote-text strong {
-    background: linear-gradient(135deg, rgba(15,159,141,0.16), rgba(214,174,82,0.18)) !important;
-    color: #075f57 !important;
-}
-
-.splash-slogan {
-    color: #7a837e !important;
-}
-
-.splash-slogan span {
-    color: #0f7f73 !important;
-}
-
-.featured-sound-card {
-    background: linear-gradient(135deg, rgba(15,159,141,0.10), rgba(214,174,82,0.14), rgba(255,255,255,0.6)) !important;
-    border: 1px solid rgba(15,95,87,0.14) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 18px 38px rgba(6,22,21,0.08) !important;
-}
-
-.featured-label {
-    color: #0f7f73 !important;
-}
-
-.featured-title {
-    color: #15211f !important;
-}
-
-.btn-enter-map,
-.btn-play-main,
-.player-control-btn,
-.btn-claim-badge {
-    background: linear-gradient(135deg, #11ad99, #0f7f73 58%, #d6ae52) !important;
-    border: 1px solid rgba(244,223,170,0.42) !important;
-    color: #fffdf4 !important;
-    box-shadow: 0 18px 38px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.32) !important;
-}
-
-.btn-enter-map {
-    border-radius: 18px !important;
-    padding: 17px 30px !important;
-}
-
-.btn-enter-map:hover,
-.btn-play-main:hover,
-.player-control-btn:hover,
-.btn-claim-badge:hover {
-    background: linear-gradient(135deg, #24c8b3, #0f9f8d 56%, #e7c971) !important;
-    transform: translateY(-3px);
-}
-
-.leaflet-popup-content-wrapper {
-    border-radius: 26px !important;
-    background: transparent !important;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.38) !important;
-    border: 1px solid rgba(244,223,170,0.28) !important;
-    overflow: hidden !important;
-}
-
-.leaflet-popup-tip {
-    background: rgba(251,247,237,0.96) !important;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.18) !important;
-}
-
-.sound-card {
-    background: linear-gradient(180deg, rgba(251,247,237,0.98), rgba(242,234,215,0.96)) !important;
-    overflow: hidden;
-}
-
-.sound-cover {
-    height: 176px !important;
-    filter: saturate(0.94) contrast(1.04) brightness(0.96);
-}
-
-.sound-info {
-    padding: 17px 18px 14px !important;
-    background:
-        radial-gradient(circle at 16% 0%, rgba(15,159,141,0.11), transparent 32%),
-        linear-gradient(180deg, rgba(255,255,255,0.42), rgba(251,247,237,0.98));
-}
-
-.sound-title,
-.modal-title,
-.achievement-title {
-    color: #15211f !important;
-    font-family: Georgia, "Times New Roman", "Noto Serif TC", serif !important;
-    letter-spacing: 0.04em !important;
-}
-
-.sound-title {
-    font-size: 20px !important;
-    line-height: 1.28 !important;
-}
-
-.card-meta-box,
-.quote-block {
-    background: rgba(255,255,255,0.62) !important;
-    border: 1px solid rgba(15,95,87,0.12) !important;
-    border-radius: 16px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
-}
-
-.meta-row,
-.meta-item,
-.sound-desc,
-.modal-text,
-.latest-item-meta,
-.wall-badge-desc {
-    color: #61716c !important;
-}
-
-.meta-author-name,
-.latest-item-title,
-.ext-link-title,
-.wall-badge-name {
-    color: #1b2a27 !important;
-}
-
-.meta-category {
-    border-radius: 999px !important;
-    padding: 4px 9px !important;
-}
-
-.meta-gps {
-    border-radius: 999px !important;
-    background: rgba(255,255,255,0.68) !important;
-}
-
-.cat-nature { background: #d9f8ef !important; color: #075f57 !important; }
-.cat-culture { background: #fff0c4 !important; color: #8a5b08 !important; }
-.cat-industry { background: #ffe0cb !important; color: #9a3d10 !important; }
-.cat-space { background: #dcefff !important; color: #075985 !important; }
-.cat-history { background: #eee4ff !important; color: #6d28d9 !important; }
-.cat-default { background: #e9eee9 !important; color: #53605b !important; }
-
-.reaction-section-title {
-    background: rgba(15,159,141,0.10) !important;
-    color: #0f7f73 !important;
-    border-color: rgba(15,159,141,0.16) !important;
-    border-radius: 999px !important;
-}
-
-.reaction-btn {
-    background: rgba(255,255,255,0.56) !important;
-    border-color: rgba(15,95,87,0.10) !important;
-    border-radius: 999px !important;
-}
-
-.global-player {
-    max-width: 900px !important;
-    border-radius: 26px !important;
-    background:
-        linear-gradient(135deg, rgba(8,31,30,0.94), rgba(12,58,54,0.88) 62%, rgba(56,43,22,0.86)) !important;
-    border: 1px solid rgba(244,223,170,0.30) !important;
-    box-shadow: 0 -24px 80px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.18) !important;
-    backdrop-filter: blur(30px) saturate(1.18) !important;
-    -webkit-backdrop-filter: blur(30px) saturate(1.18) !important;
-}
-
-.player-title {
-    color: #fff9e9 !important;
-    letter-spacing: 0.03em;
-}
-
-.player-time-display {
-    background: rgba(255,255,255,0.10) !important;
-    color: rgba(244,223,170,0.92) !important;
-    border: 1px solid rgba(244,223,170,0.16);
-    border-radius: 999px !important;
-}
-
-.waveform-wrapper {
-    background: rgba(255,255,255,0.12) !important;
-    border-radius: 999px !important;
-    border: 1px solid rgba(255,255,255,0.10);
-}
-
-.volume-control,
-.mute-icon,
-.close-player-btn,
-.fav-btn,
-.share-icon-btn,
-.nav-icon-btn {
-    color: rgba(251,247,237,0.72) !important;
-}
-
-.fav-btn:hover,
-.fav-btn.active { color: #ff6b8a !important; }
-.share-icon-btn:hover { color: #7dd3fc !important; }
-.nav-icon-btn:hover { color: #6ee7d6 !important; }
-.close-player-btn:hover { background: rgba(255,255,255,0.12) !important; color: #ffd1d1 !important; }
-
-.modal-overlay,
-.achievement-overlay {
-    background: rgba(4,18,18,0.76) !important;
-    backdrop-filter: blur(16px) saturate(1.05) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(1.05) !important;
-}
-
-.modal-box,
-.achievement-card {
-    background:
-        radial-gradient(circle at 18% 0%, rgba(15,159,141,0.11), transparent 34%),
-        linear-gradient(180deg, rgba(251,247,237,0.98), rgba(242,234,215,0.98)) !important;
-    border: 1px solid rgba(244,223,170,0.46) !important;
-    border-radius: 30px !important;
-    box-shadow: 0 36px 100px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.76) !important;
-}
-
-.modal-img {
-    height: 250px !important;
-    filter: saturate(0.92) contrast(1.05) brightness(0.96);
-}
-
-.modal-content {
-    padding: 34px !important;
-}
-
-.modal-tag {
-    border-radius: 999px !important;
-    background: rgba(15,159,141,0.10) !important;
-    color: #0f7f73 !important;
-    border-color: rgba(15,159,141,0.16) !important;
-}
-
-.modal-close-btn,
-.leaflet-container a.leaflet-popup-close-button {
-    background: rgba(8,31,30,0.84) !important;
-    color: #fff9e9 !important;
-    border: 1px solid rgba(244,223,170,0.26) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-}
-
-.modal-close-btn:hover,
-.leaflet-container a.leaflet-popup-close-button:hover {
-    background: #b84436 !important;
-    border-color: rgba(255,255,255,0.32) !important;
-}
-
-.latest-item:hover,
-.ext-link-card:hover,
-.layer-card:hover {
-    transform: translateY(-3px) !important;
-    border-color: rgba(15,159,141,0.28) !important;
-    box-shadow: 0 18px 36px rgba(6,22,21,0.14) !important;
-}
-
-.latest-item img {
-    border-radius: 14px !important;
-    filter: saturate(0.94) contrast(1.04);
-}
-
-.ext-link-icon {
-    border-radius: 14px !important;
-    color: #0f7f73 !important;
-}
-
-.ext-link-card:hover .ext-link-icon {
-    background: #0f9f8d !important;
-    border-color: #0f9f8d !important;
-}
-
-.badge-icon-wrapper {
-    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
-}
-
-.wall-badge.unlocked {
-    background: linear-gradient(180deg, #fff7dc, #fbf7ed) !important;
-    border-color: rgba(214,174,82,0.44) !important;
-}
-
-.wall-badge.unlocked .mini-icon {
-    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
-}
-
-.custom-sound-icon {
-    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.24));
-}
-
-.sound-dot-marker {
-    background: rgba(251,247,237,0.92) !important;
-    border: 2px solid rgba(255,255,255,0.96) !important;
-    box-shadow: 0 0 0 5px rgba(15,159,141,0.14), 0 12px 24px rgba(0,0,0,0.24) !important;
-}
-
-.sound-dot-marker::after {
-    background: #0f9f8d !important;
-    box-shadow: 0 0 16px rgba(15,159,141,0.85) !important;
-}
-
-.marker-cluster-small,
-.marker-cluster-medium,
-.marker-cluster-large {
-    background: rgba(15,159,141,0.22) !important;
-    box-shadow: 0 0 0 6px rgba(15,159,141,0.12), 0 14px 28px rgba(0,0,0,0.24) !important;
-}
-
-.marker-cluster-small div,
-.marker-cluster-medium div,
-.marker-cluster-large div {
-    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
-    color: #fffdf4 !important;
-    font-weight: 900 !important;
-}
-
-.flood-depth-tooltip {
-    background: rgba(251,247,237,0.96) !important;
-    border-color: rgba(214,174,82,0.76) !important;
-    color: #6d4b10 !important;
-    border-radius: 999px !important;
-}
-
-.locate-me-wrapper,
-.leaflet-control-zoom a {
-    border-radius: 16px !important;
-}
-
-.leaflet-control-zoom {
-    border: none !important;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.22) !important;
-}
-
-.leaflet-control-zoom a {
-    background: rgba(251,247,237,0.86) !important;
-    color: #0d3f3b !important;
-    border-color: rgba(15,95,87,0.12) !important;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-}
-
-.leaflet-control-zoom a:hover {
-    background: #fff9e9 !important;
-    color: #0f9f8d !important;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .glass-header,
-    .drawer-content,
-    .custom-layer-control,
-    .global-player.active,
-    .modal-overlay.active .modal-box {
-        animation: haidianSoftRise 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    }
-
-    .splash-logo {
-        animation: splashFloat 3.4s ease-in-out infinite, haidianGlow 4.8s ease-in-out infinite !important;
-    }
-
-    .btn-enter-map svg,
-    .btn-submit svg,
-    .btn-play-main svg {
-        filter: drop-shadow(0 0 8px rgba(255,255,255,0.24));
-    }
-}
-
-@keyframes haidianSoftRise {
-    from { opacity: 0; transform: translateY(10px) scale(0.985); }
-    to { opacity: 1; }
-}
-
-@keyframes haidianGlow {
-    0%, 100% { box-shadow: 0 16px 34px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.35); }
-    50% { box-shadow: 0 20px 44px rgba(214,174,82,0.30), inset 0 1px 0 rgba(255,255,255,0.42); }
-}
-
-@media (min-width: 601px) {
-    .glass-header.compact-mode {
-        background: rgba(8,31,30,0.88) !important;
-        border-radius: 20px !important;
-    }
-
-    .glass-header.compact-mode .project-title::after {
-        display: none;
-    }
-
-    .leaflet-popup .embedded-player-slot .global-player.embedded-player,
-    .leaflet-popup .global-player.embedded-player {
-        background: rgba(255,255,255,0.62) !important;
-        border-color: rgba(15,95,87,0.12) !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 12px 26px rgba(6,22,21,0.10) !important;
-    }
-
-    .leaflet-popup .global-player.embedded-player .player-title,
-    .leaflet-popup .embedded-player-slot .global-player.embedded-player .player-title {
-        color: #15211f !important;
-    }
-
-    .leaflet-popup .global-player.embedded-player .player-time-display,
-    .leaflet-popup .embedded-player-slot .global-player.embedded-player .player-time-display {
-        color: #0f7f73 !important;
-        background: rgba(15,159,141,0.10) !important;
-    }
-}
-
-@media (max-width: 600px) {
-    :root { --panel-offset: 10px; }
-
-    body::before,
-    body::after,
-    #map::after {
-        opacity: 0.55;
-    }
-
-    .glass-header {
-        top: 10px !important;
-        width: 94vw !important;
-        border-radius: 22px !important;
-        padding: 12px 14px !important;
-    }
-
-    .project-title {
-        font-size: 18px !important;
-        letter-spacing: 0.05em !important;
-    }
-
-    .project-title::after {
-        display: none;
-    }
-
-    .nav-buttons button {
-        font-size: 12px !important;
-        padding: 9px 6px !important;
-        border-radius: 14px !important;
-    }
-
-    .drawer-content {
-        padding: 18px !important;
-        border-radius: 22px !important;
-        max-height: calc(100dvh - 175px) !important;
-    }
-
-    .toggle-btn {
-        right: -36px !important;
-        width: 36px !important;
-        height: 68px !important;
-    }
-
-    .splash-card {
-        padding: 26px 22px 22px !important;
-        border-radius: 28px !important;
-    }
-
-    .splash-card::after {
-        inset: 9px;
-        border-radius: 21px;
-    }
-
-    .splash-title {
-        font-size: 25px !important;
-        letter-spacing: 0.08em !important;
-    }
-
-    .splash-subtitle {
-        letter-spacing: 0.24em !important;
-    }
-
-    .splash-quote {
-        border-radius: 18px !important;
-    }
-
-    .modal-content {
-        padding: 24px !important;
-    }
-
-    .modal-img {
-        height: 190px !important;
-    }
-
-    .global-player {
-        border-radius: 24px !important;
-    }
-
-    .sound-cover {
-        height: 128px !important;
-    }
-
-    .leaflet-popup-content-wrapper {
-        border-radius: 22px !important;
-    }
-}
-</style>
-
-
-
-<!-- HAIDIAN_SEL_ENVIRONMENT_INQUIRY_REFINEMENT_START -->
-<style id="haidian-sel-environment-inquiry-refinement">
-:root {
-    --haidian-ink-strong: #10231f;
-    --haidian-ink: #18312d;
-    --haidian-muted-strong: #40545e;
-    --haidian-paper: #fffaf0;
-    --haidian-paper-solid: #fffdf8;
-    --haidian-teal-deep: #064842;
-    --haidian-teal: #087f72;
-    --haidian-teal-soft: rgba(8,127,114,0.12);
-    --haidian-gold: #b9841e;
-    --haidian-gold-soft: rgba(185,132,30,0.16);
-    --haidian-sel: #6d4bd1;
-    --haidian-field: #1b6ea8;
-    --haidian-guard: #0b7f55;
-    --haidian-inquiry: #a86b10;
-}
-
-html, body, button, input, select, textarea,
-.leaflet-container,
-.leaflet-popup-content {
-    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif !important;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-}
-
-body {
-    color: var(--haidian-ink) !important;
-    background: #e8efe9 !important;
-}
-
-body::before {
-    background:
-        radial-gradient(circle at 12% 12%, rgba(71,204,181,0.22), transparent 28%),
-        radial-gradient(circle at 82% 18%, rgba(236,185,85,0.22), transparent 25%),
-        linear-gradient(135deg, rgba(7,62,58,0.08), rgba(255,248,232,0.12)) !important;
-}
-
-body::after {
-    opacity: 0.34 !important;
-}
-
-#map::after {
-    opacity: 0.35 !important;
-    background:
-        radial-gradient(circle at 18% 20%, rgba(255,250,240,0.32), transparent 22%),
-        linear-gradient(180deg, rgba(6,72,66,0.08), rgba(255,250,240,0.05) 42%, rgba(6,72,66,0.10)) !important;
-}
-
-/* 首頁：提升可讀性，讓四個學習主軸自然進入第一眼 */
-.splash-card {
-    background:
-        linear-gradient(180deg, rgba(255,253,248,0.98), rgba(255,248,232,0.96)) !important;
-    color: var(--haidian-ink-strong) !important;
-    border-color: rgba(8,127,114,0.18) !important;
-    box-shadow: 0 36px 90px rgba(4,35,33,0.30), inset 0 1px 0 rgba(255,255,255,0.96) !important;
-}
-
-.splash-card::after {
-    border-color: rgba(8,127,114,0.20) !important;
-}
-
-.splash-title {
-    color: var(--haidian-ink-strong) !important;
-    text-shadow: none !important;
-    letter-spacing: 0.12em !important;
-}
-
-.splash-title span,
-.project-title span.main-title {
-    background: linear-gradient(135deg, #e6fff8 0%, #73e5d5 38%, #ffe6a8 100%) !important;
-    -webkit-background-clip: text !important;
-    background-clip: text !important;
-}
-
-.splash-subtitle {
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    color: #075c53 !important;
-    font-size: 13px !important;
-    font-weight: 950 !important;
-    letter-spacing: 0.34em !important;
-    text-shadow: none !important;
-}
-
-.haidian-axis {
-    margin: 18px auto 20px;
-    padding: 16px 16px 14px;
-    width: min(100%, 520px);
-    border: 1px solid rgba(8,127,114,0.18);
-    border-radius: 24px;
-    background:
-        linear-gradient(135deg, rgba(255,255,255,0.86), rgba(243,253,250,0.76)),
-        radial-gradient(circle at 18% 0%, rgba(109,75,209,0.11), transparent 32%),
-        radial-gradient(circle at 92% 100%, rgba(185,132,30,0.12), transparent 34%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 16px 36px rgba(13,63,59,0.10);
-}
-
-.haidian-axis-title {
-    color: var(--haidian-ink-strong);
-    font-size: 14px;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    text-align: center;
-    margin-bottom: 12px;
-}
-
-.haidian-axis-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.haidian-axis-chip {
-    display: flex;
-    min-height: 74px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    padding: 10px 8px;
-    border-radius: 18px;
-    background: rgba(255,255,255,0.82);
-    border: 1px solid rgba(17,77,72,0.10);
-    color: var(--haidian-ink);
-    text-align: center;
-    box-shadow: 0 8px 18px rgba(8,43,40,0.07);
-}
-
-.haidian-axis-chip b {
-    display: block;
-    font-size: 15px;
-    line-height: 1;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-}
-
-.haidian-axis-chip small {
-    display: block;
-    color: var(--haidian-muted-strong);
-    font-size: 11px;
-    line-height: 1.35;
-    font-weight: 800;
-}
-
-.haidian-axis-chip:nth-child(1) { border-top: 4px solid var(--haidian-sel); }
-.haidian-axis-chip:nth-child(2) { border-top: 4px solid var(--haidian-guard); }
-.haidian-axis-chip:nth-child(3) { border-top: 4px solid var(--haidian-inquiry); }
-.haidian-axis-chip:nth-child(4) { border-top: 4px solid var(--haidian-field); }
-
-.splash-card p,
-.splash-quote-text,
-.splash-slogan,
-.featured-desc,
-.modal-text,
-.sound-desc {
-    color: var(--haidian-muted-strong) !important;
-    opacity: 1 !important;
-    font-weight: 650 !important;
-}
-
-.splash-quote,
-.featured-sound {
-    background: rgba(255,255,255,0.74) !important;
-    border-color: rgba(8,127,114,0.16) !important;
-    color: var(--haidian-ink) !important;
-}
-
-.splash-quote-title,
-.featured-label,
-.splash-slogan span {
-    color: #075c53 !important;
-    font-weight: 950 !important;
-}
-
-.btn-enter-map,
-.btn-submit,
-.btn-play-main,
-.player-control-btn,
-.btn-claim-badge {
-    background: linear-gradient(135deg, #086f65, #0a9b88) !important;
-    color: #fffdf6 !important;
-    border: 1px solid rgba(255,255,255,0.24) !important;
-    box-shadow: 0 14px 30px rgba(8,127,114,0.28) !important;
-    font-weight: 950 !important;
-    letter-spacing: 0.08em !important;
-}
-
-.btn-enter-map:hover,
-.btn-submit:hover,
-.btn-play-main:hover,
-.player-control-btn:hover,
-.btn-claim-badge:hover {
-    background: linear-gradient(135deg, #075c53, #087f72) !important;
-    transform: translateY(-2px);
-}
-
-/* 頂部導覽：保留深色質感，但把文字拉到 AA 以上的可讀對比 */
-.glass-header {
-    background:
-        linear-gradient(135deg, rgba(4,43,40,0.94), rgba(6,72,66,0.90) 54%, rgba(64,44,15,0.84)) !important;
-    border-color: rgba(255,231,174,0.42) !important;
-    box-shadow: 0 28px 72px rgba(1,24,22,0.40), inset 0 1px 0 rgba(255,255,255,0.20) !important;
-}
-
-.project-title {
-    color: #fffdf6 !important;
-    text-shadow: 0 2px 12px rgba(0,0,0,0.48) !important;
-}
-
-.project-title span.sub-title {
-    color: #ffeab8 !important;
-    text-shadow: 0 1px 8px rgba(0,0,0,0.40) !important;
-}
-
-.project-title::after {
-    content: "SEL・環境守護・探究・踏查" !important;
-    background: rgba(255,243,204,0.16) !important;
-    color: #fff2c5 !important;
-    border-color: rgba(255,231,174,0.46) !important;
-    text-shadow: none !important;
-}
-
-.nav-buttons button {
-    color: #fff8df !important;
-    background: rgba(255,255,255,0.12) !important;
-    border-color: rgba(255,255,255,0.20) !important;
-    font-weight: 900 !important;
-    text-shadow: 0 1px 8px rgba(0,0,0,0.32);
-}
-
-.nav-buttons button:hover {
-    background: rgba(255,243,204,0.20) !important;
-    color: #ffffff !important;
-    border-color: rgba(255,232,179,0.52) !important;
-}
-
-.btn-latest {
-    color: #fff1bd !important;
-}
-
-/* 面板、卡片與表單：白底上提高文字濃度，避免過淡灰字 */
-.drawer-content,
-.custom-layer-control,
-.modal-box,
-.global-player,
-.leaflet-popup-content-wrapper,
-.haidian-v4-dock,
-.latest-item,
-.layer-card,
-.ext-link-card,
-.card-meta-box,
-.quote-block {
-    color: var(--haidian-ink) !important;
-}
-
-.drawer-content,
-.custom-layer-control,
-.haidian-v4-dock,
-.modal-box {
-    background: rgba(255,253,248,0.94) !important;
-    border-color: rgba(8,127,114,0.16) !important;
-}
-
-.panel-label,
-.modal-title,
-.sound-title,
-.latest-item-title,
-.ext-link-title,
-.route-btn,
-.haidian-v4-panel-head .title,
-.haidian-v4-dock-title strong,
-.haidian-v4-card b,
-.player-title {
-    color: var(--haidian-ink-strong) !important;
-    font-weight: 950 !important;
-}
-
-.time-display,
-.meta-author-name,
-.haidian-v4-panel-head .eyebrow,
-.haidian-v4-data-note,
-.reaction-section-title {
-    color: #075c53 !important;
-}
-
-.meta-row,
-.meta-item,
-.meta-date-text,
-.latest-item-meta,
-.ext-link-label,
-.haidian-v4-panel-head .copy,
-.haidian-v4-dock-title span,
-.haidian-v4-card small,
-.custom-layer-control label,
-.layer-card-content span,
-.player-time-display {
-    color: var(--haidian-muted-strong) !important;
-    opacity: 1 !important;
-}
-
-.search-input,
-.modal-box input,
-.modal-box textarea,
-.modal-box select {
-    color: var(--haidian-ink-strong) !important;
-    background: rgba(255,255,255,0.92) !important;
-    border-color: rgba(8,127,114,0.22) !important;
-    font-weight: 700 !important;
-}
-
-.search-input::placeholder,
-input::placeholder,
-textarea::placeholder {
-    color: #677982 !important;
-    opacity: 1 !important;
-}
-
-.search-input:focus,
-.modal-box input:focus,
-.modal-box textarea:focus,
-.modal-box select:focus {
-    border-color: #087f72 !important;
-    box-shadow: 0 0 0 4px rgba(8,127,114,0.16) !important;
-}
-
-.filter-item,
-.custom-layer-control label,
-.layer-card-content {
-    color: var(--haidian-ink) !important;
-    font-weight: 850 !important;
-}
-
-/* 學習主線 dock：四軸呈現，維持原本點擊模式 */
-.haidian-v4-dock {
-    width: min(520px, calc(100vw - 140px)) !important;
-}
-
-.haidian-v4-dock-body {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 10px !important;
-}
-
-.haidian-v4-card {
-    min-height: 78px !important;
-    background: rgba(255,255,255,0.86) !important;
-    border-color: rgba(8,127,114,0.14) !important;
-    box-shadow: 0 8px 20px rgba(5,39,36,0.06);
-}
-
-.haidian-v4-card.axis-sel { border-top: 4px solid var(--haidian-sel) !important; }
-.haidian-v4-card.axis-field { border-top: 4px solid var(--haidian-field) !important; }
-.haidian-v4-card.axis-inquiry { border-top: 4px solid var(--haidian-inquiry) !important; }
-.haidian-v4-card.axis-guard { border-top: 4px solid var(--haidian-guard) !important; }
-
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
-    background: linear-gradient(135deg, #075c53, #0a9888) !important;
-    color: #fffdf6 !important;
-}
-
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] b,
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] small,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] b,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] small,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] b,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] small {
-    color: #fffdf6 !important;
-}
-
-/* 聲音卡片：更像正式作品頁，文字更清楚 */
-.sound-card {
-    background: var(--haidian-paper-solid) !important;
-}
-
-.sound-info {
-    background:
-        linear-gradient(180deg, rgba(255,253,248,0.98), rgba(255,249,235,0.96)) !important;
-}
-
-.card-meta-box,
-.quote-block,
-.reaction-section-title,
-.time-display {
-    background: rgba(8,127,114,0.07) !important;
-    border-color: rgba(8,127,114,0.14) !important;
-}
-
-.meta-gps {
-    color: #35505a !important;
-    background: #ffffff !important;
-}
-
-.cat-nature, .cat-culture, .cat-industry, .cat-space, .cat-history, .cat-default {
-    color: var(--haidian-ink-strong) !important;
-    border: 1px solid rgba(16,35,31,0.10) !important;
-    font-weight: 900 !important;
-}
-
-.reaction-btn {
-    color: #334850 !important;
-    background: rgba(255,255,255,0.88) !important;
-    border-color: rgba(8,127,114,0.15) !important;
-    font-weight: 850 !important;
-}
-
-/* 讓四個關鍵字出現在側欄上方，但不壓縮操作功能 */
-.haidian-learning-note {
-    margin: 0 0 14px;
-    padding: 12px 13px;
-    border-radius: 18px;
-    background:
-        linear-gradient(135deg, rgba(8,127,114,0.09), rgba(255,243,204,0.20));
-    border: 1px solid rgba(8,127,114,0.14);
-    color: var(--haidian-muted-strong);
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1.55;
-}
-
-.haidian-learning-note strong {
-    color: #075c53;
-    font-weight: 950;
-}
-
-@media (max-width: 760px) {
-    .haidian-axis-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .haidian-axis-chip {
-        min-height: 62px;
-    }
-
-    .haidian-v4-dock {
-        width: auto !important;
-    }
-
-    .haidian-v4-dock-body {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        gap: 6px !important;
-    }
-
-    .haidian-v4-card {
-        min-height: 64px !important;
-        padding: 8px 6px !important;
-    }
-
-    .haidian-v4-card b {
-        font-size: 11px !important;
-        letter-spacing: 0.02em;
-    }
-
-    .haidian-v4-card small {
-        display: none !important;
-    }
-}
-
-@media (max-width: 600px) {
-    .splash-subtitle {
-        letter-spacing: 0.20em !important;
-    }
-
-    .haidian-axis {
-        margin: 14px auto 16px;
-        padding: 12px;
-        border-radius: 20px;
-    }
-
-    .haidian-axis-title {
-        font-size: 12.5px;
-    }
-
-    .project-title::after {
-        display: none !important;
-    }
-
-    .nav-buttons button {
-        color: #fffdf6 !important;
-        font-size: 12px !important;
-        font-weight: 950 !important;
-    }
-
-    .drawer-content,
-    .custom-layer-control,
-    .modal-box {
-        background: rgba(255,253,248,0.97) !important;
-    }
-}
-</style>
-
-<script id="haidian-sel-environment-inquiry-refinement-js">
-(function () {
-    'use strict';
-
-    function ready(fn) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn, { once: true });
-        } else {
-            fn();
-        }
-    }
-
-    function addSplashAxis() {
-        var card = document.querySelector('#splashScreen .splash-card');
-        if (!card || card.querySelector('.haidian-axis')) return;
-
-        var axis = document.createElement('section');
-        axis.className = 'haidian-axis';
-        axis.setAttribute('aria-label', '學習主軸');
-        axis.innerHTML = '' +
-            '<div class="haidian-axis-title">從聲音出發的地方學習</div>' +
-            '<div class="haidian-axis-grid">' +
-                '<div class="haidian-axis-chip"><b>SEL</b><small>聽見感受<br>練習回應</small></div>' +
-                '<div class="haidian-axis-chip"><b>環境守護</b><small>理解水圳<br>關注家園</small></div>' +
-                '<div class="haidian-axis-chip"><b>探究</b><small>提出問題<br>辨讀證據</small></div>' +
-                '<div class="haidian-axis-chip"><b>踏查</b><small>走入現場<br>完成任務</small></div>' +
-            '</div>';
-
-        var subtitle = card.querySelector('.splash-subtitle');
-        if (subtitle && subtitle.parentNode) subtitle.insertAdjacentElement('afterend', axis);
-        else card.insertBefore(axis, card.firstChild);
-    }
-
-    function addPanelLearningNotes() {
-        var sideContent = document.querySelector('#sidePanel .drawer-content');
-        if (sideContent && !sideContent.querySelector('.haidian-learning-note')) {
-            var note = document.createElement('div');
-            note.className = 'haidian-learning-note';
-            note.innerHTML = '<strong>SEL 聲音回應</strong>｜先聽見自己的感受，再看見地方與他人的處境。';
-            var head = sideContent.querySelector('.haidian-v4-panel-head');
-            if (head) head.insertAdjacentElement('afterend', note);
-            else sideContent.insertBefore(note, sideContent.firstChild);
-        }
-
-        var routeContent = document.querySelector('#routePanel .drawer-content');
-        if (routeContent && !routeContent.querySelector('.haidian-learning-note')) {
-            var routeNote = document.createElement('div');
-            routeNote.className = 'haidian-learning-note';
-            routeNote.innerHTML = '<strong>探究踏查</strong>｜沿路觀察水圳、聚落與環境變化，把發現帶回討論與守護行動。';
-            var routeHead = routeContent.querySelector('.haidian-v4-panel-head');
-            if (routeHead) routeHead.insertAdjacentElement('afterend', routeNote);
-            else routeContent.insertBefore(routeNote, routeContent.firstChild);
-        }
-    }
-
-    function refineExistingCopy() {
-        var headerTitle = document.querySelector('.project-title');
-        if (headerTitle) {
-            headerTitle.setAttribute('aria-label', '海佃溪遊記，聲音地景計畫，SEL、環境守護、探究、踏查');
-        }
-
-        var dockTitle = document.querySelector('.haidian-v4-dock-title strong');
-        var dockCopy = document.querySelector('.haidian-v4-dock-title span');
-        if (dockTitle) dockTitle.textContent = '學習主線';
-        if (dockCopy) dockCopy.textContent = '從 SEL 回應出發，走向環境守護與探究踏查';
-    }
-
-    function run() {
-        addSplashAxis();
-        addPanelLearningNotes();
-        refineExistingCopy();
-        setTimeout(function () {
-            addSplashAxis();
-            addPanelLearningNotes();
-            refineExistingCopy();
-        }, 250);
-    }
-
-    ready(run);
-})();
-</script>
-<!-- HAIDIAN_SEL_ENVIRONMENT_INQUIRY_REFINEMENT_END -->
-
-
-
-<!-- HAIDIAN_90PLUS_LEARNING_JOURNEY_LAYER_START -->
-<style id="haidian-90plus-learning-journey-css">
-:root {
-    --hd90-ink: #071f1d;
-    --hd90-ink-soft: #24423e;
-    --hd90-muted: #526760;
-    --hd90-paper: #fffaf0;
-    --hd90-paper-solid: #fffdf7;
-    --hd90-river: #0c7f78;
-    --hd90-river-deep: #064f49;
-    --hd90-river-bright: #18a999;
-    --hd90-gold: #d99a27;
-    --hd90-gold-soft: #fff0c2;
-    --hd90-sky: #eaf9f7;
-    --hd90-rose: #f26457;
-    --hd90-shadow-lg: 0 28px 70px rgba(7, 31, 29, 0.23);
-    --hd90-shadow-md: 0 18px 40px rgba(7, 31, 29, 0.18);
-    --hd90-ring: 0 0 0 4px rgba(24, 169, 153, 0.18);
-}
-
-html, body {
-    color: var(--hd90-ink) !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif !important;
-    text-rendering: geometricPrecision;
-    -webkit-font-smoothing: antialiased;
-}
-
-#map {
-    background: #dbeee9 !important;
-}
-
-#map::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 420;
-    pointer-events: none;
-    background:
-        radial-gradient(circle at 18% 18%, rgba(255, 240, 194, 0.18), transparent 26%),
-        radial-gradient(circle at 88% 18%, rgba(24, 169, 153, 0.10), transparent 28%),
-        linear-gradient(180deg, rgba(255, 253, 247, 0.05), rgba(7, 31, 29, 0.04));
-    mix-blend-mode: multiply;
-}
-
-.leaflet-tile-pane {
-    filter: saturate(1.05) contrast(1.04) sepia(0.02);
-}
-
-.leaflet-control-zoom a,
-.leaflet-bar a {
-    color: var(--hd90-river-deep) !important;
-    background: rgba(255, 253, 247, 0.94) !important;
-    border-color: rgba(12, 127, 120, 0.14) !important;
-    font-weight: 950 !important;
-}
-
-.marker-cluster-small div,
-.marker-cluster-medium div,
-.marker-cluster-large div {
-    background: linear-gradient(135deg, rgba(255,253,247,0.96), rgba(255,240,194,0.96)) !important;
-    color: #064f49 !important;
-    border: 2px solid rgba(255,255,255,0.95) !important;
-    box-shadow: 0 12px 26px rgba(6, 79, 73, 0.24), 0 0 0 6px rgba(24,169,153,0.12) !important;
-    font-weight: 950 !important;
-}
-
-.sound-dot-marker {
-    box-shadow: 0 0 0 5px rgba(24, 169, 153, 0.16), 0 12px 28px rgba(6,79,73,0.25) !important;
-}
-.sound-dot-marker::before {
-    content: "";
-    position: absolute;
-    inset: -7px;
-    border-radius: 999px;
-    border: 1px solid rgba(24,169,153,0.35);
-    animation: hd90MarkerBreath 2.8s ease-in-out infinite;
-}
-@keyframes hd90MarkerBreath {
-    0%, 100% { transform: scale(0.92); opacity: 0.25; }
-    50% { transform: scale(1.16); opacity: 0.55; }
-}
-
-.glass-header {
-    background:
-        linear-gradient(135deg, rgba(6, 79, 73, 0.96), rgba(12, 127, 120, 0.91)) !important;
-    border: 1px solid rgba(255, 240, 194, 0.36) !important;
-    box-shadow: 0 22px 54px rgba(6, 79, 73, 0.30), inset 0 1px 0 rgba(255,255,255,0.20) !important;
-    color: #fffdf7 !important;
-    backdrop-filter: blur(22px) saturate(170%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(170%) !important;
-}
-.glass-header::before {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: inherit;
-    pointer-events: none;
-    background: linear-gradient(90deg, rgba(255,255,255,0.15), transparent 36%, rgba(255,240,194,0.16));
-}
-.project-title,
-.project-title span.sub-title {
-    color: #fffdf7 !important;
-    text-shadow: 0 1px 0 rgba(0,0,0,0.12);
-}
-.project-title span.main-title {
-    color: #ffe6a1 !important;
-}
-.project-title::after {
-    content: "SEL｜探究｜踏查｜環境守護" !important;
-    display: inline-flex !important;
-    margin-left: 12px !important;
-    padding: 4px 10px !important;
-    border-radius: 999px !important;
-    background: rgba(255, 240, 194, 0.18) !important;
-    border: 1px solid rgba(255, 240, 194, 0.36) !important;
-    color: #fff0c2 !important;
-    font-size: 11px !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.08em !important;
-    white-space: nowrap !important;
-}
-.nav-buttons button {
-    color: #fffdf7 !important;
-    font-weight: 900 !important;
-    border: 1px solid transparent !important;
-}
-.nav-buttons button:hover {
-    background: rgba(255, 253, 247, 0.13) !important;
-    border-color: rgba(255, 240, 194, 0.28) !important;
-    color: #fff0c2 !important;
-}
-.btn-submit {
-    background: linear-gradient(135deg, #f5c35b, #fff0b9) !important;
-    color: #123831 !important;
-    box-shadow: 0 12px 26px rgba(128, 82, 8, 0.30) !important;
-}
-.btn-latest {
-    color: #ffe6a1 !important;
-}
-.header-pull-tab {
-    color: var(--hd90-river-deep) !important;
-    border-color: rgba(12, 127, 120, 0.18) !important;
-}
-
-.haidian-90-header-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    margin-left: 10px;
-    border-radius: 999px;
-    background: rgba(255, 253, 247, 0.11);
-    border: 1px solid rgba(255, 240, 194, 0.30);
-    color: #fff0c2;
-    font-size: 11px;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-}
-
-.drawer-content,
-.custom-layer-control,
-.modal-box,
-.leaflet-popup-content-wrapper {
-    color: var(--hd90-ink) !important;
-    background: rgba(255, 253, 247, 0.97) !important;
-    border: 1px solid rgba(255, 255, 255, 0.82) !important;
-    box-shadow: var(--hd90-shadow-md) !important;
-}
-.drawer-content {
-    border-radius: 26px !important;
-    padding: 24px !important;
-}
-.drawer-content::before,
-.custom-layer-control::before,
-.modal-box::before {
-    content: "";
-    display: block;
-    height: 4px;
-    margin: -6px -6px 16px -6px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--hd90-river), var(--hd90-gold), rgba(24,169,153,0.4));
-}
-.panel-label,
-.haidian-v4-panel-head strong,
-.sound-title,
-.modal-title,
-.latest-item-title {
-    color: var(--hd90-ink) !important;
-    letter-spacing: 0.02em;
-}
-.sound-desc,
-.modal-text,
-.meta-row,
-.latest-item-meta,
-.haidian-v4-panel-head span,
-.haidian-learning-note,
-.haidian-v4-dock-title span {
-    color: var(--hd90-muted) !important;
-}
-.search-input,
-#placeSearchInput,
-#nanshanSearchInput {
-    background: #ffffff !important;
-    color: var(--hd90-ink) !important;
-    border: 1px solid rgba(12,127,120,0.22) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85) !important;
-}
-.search-input:focus,
-#placeSearchInput:focus,
-#nanshanSearchInput:focus {
-    border-color: var(--hd90-river-bright) !important;
-    box-shadow: var(--hd90-ring) !important;
-}
-.filter-item,
-.custom-layer-control label,
-.layer-card-content {
-    color: var(--hd90-ink-soft) !important;
-    font-weight: 850 !important;
-}
-
-.route-btn,
-.layer-card,
-.latest-item,
-.card-meta-box,
-.ext-link-card,
-.reaction-btn,
-.wall-badge,
-.haidian-learning-note {
-    background: rgba(255,255,255,0.88) !important;
-    border-color: rgba(12,127,120,0.15) !important;
-}
-.route-btn:hover,
-.layer-card:hover,
-.latest-item:hover,
-.ext-link-card:hover {
-    border-color: rgba(12,127,120,0.35) !important;
-    box-shadow: 0 16px 32px rgba(6,79,73,0.12) !important;
-}
-.route-btn.active,
-.btn-play-main,
-.player-control-btn {
-    background: linear-gradient(135deg, var(--hd90-river), var(--hd90-river-bright)) !important;
-    color: #fffdf7 !important;
-    box-shadow: 0 14px 30px rgba(12,127,120,0.24) !important;
-}
-.time-display {
-    background: #e5f8f4 !important;
-    color: #064f49 !important;
-    border: 1px solid rgba(12,127,120,0.18) !important;
-}
-
-#splashScreen {
-    background:
-        radial-gradient(circle at 18% 18%, rgba(255, 240, 194, 0.32), transparent 28%),
-        radial-gradient(circle at 82% 22%, rgba(24, 169, 153, 0.20), transparent 34%),
-        linear-gradient(135deg, rgba(6, 79, 73, 0.94), rgba(8, 40, 38, 0.92)) !important;
-}
-#splashScreen .splash-card {
-    width: min(560px, calc(100vw - 32px)) !important;
-    background:
-        linear-gradient(180deg, rgba(255,253,247,0.99), rgba(255,250,240,0.985)) !important;
-    border: 1px solid rgba(255, 240, 194, 0.60) !important;
-    box-shadow: 0 34px 90px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.95) !important;
-}
-#splashScreen .splash-card::before {
-    height: 8px !important;
-    background: linear-gradient(90deg, var(--hd90-river-deep), var(--hd90-river-bright), var(--hd90-gold)) !important;
-}
-#splashScreen .splash-title {
-    font-size: clamp(26px, 5vw, 38px) !important;
-    color: var(--hd90-ink) !important;
-    letter-spacing: 0.10em !important;
-}
-#splashScreen .splash-subtitle {
-    color: #526760 !important;
-    letter-spacing: 0.28em !important;
-}
-#splashScreen .splash-logo {
-    background: linear-gradient(135deg, #e5f8f4, #fff0c2) !important;
-    color: var(--hd90-river-deep) !important;
-    box-shadow: 0 16px 34px rgba(12,127,120,0.18) !important;
-}
-.haidian-90-hero {
-    position: relative;
-    margin: 16px 0 18px;
-    padding: 18px 18px 16px;
-    border-radius: 22px;
-    background:
-        radial-gradient(circle at 95% 0%, rgba(255,240,194,0.72), transparent 34%),
-        linear-gradient(135deg, #073f3b, #0c7f78 58%, #128c80);
-    color: #fffdf7;
-    overflow: hidden;
-    text-align: left;
-    box-shadow: 0 20px 42px rgba(6,79,73,0.24);
-}
-.haidian-90-hero::after {
-    content: "";
-    position: absolute;
-    inset: -20% -10% auto auto;
-    width: 190px;
-    height: 190px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.18), transparent 60%);
-    pointer-events: none;
-}
-.haidian-90-hero-kicker {
-    display: inline-flex;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.14);
-    border: 1px solid rgba(255,255,255,0.25);
-    color: #fff0c2;
-    font-size: 11px;
-    font-weight: 950;
-    letter-spacing: 0.10em;
-}
-.haidian-90-hero h2 {
-    position: relative;
-    margin: 12px 0 6px;
-    font-size: clamp(19px, 4vw, 25px);
-    line-height: 1.28;
-    color: #fffdf7;
-    letter-spacing: 0.04em;
-    font-weight: 950;
-}
-.haidian-90-hero p {
-    position: relative;
-    margin: 0;
-    color: rgba(255,253,247,0.90) !important;
-    font-size: 13.5px;
-    line-height: 1.75;
-    font-weight: 760;
-}
-.haidian-90-path {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 14px;
-}
-.haidian-90-path span {
-    display: flex;
-    min-height: 58px;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    border-radius: 16px;
-    padding: 9px 7px;
-    background: rgba(255, 253, 247, 0.12);
-    border: 1px solid rgba(255,255,255,0.20);
-    color: #fffdf7;
-    font-size: 11px;
-    font-weight: 850;
-    text-align: center;
-}
-.haidian-90-path b {
-    color: #fff0c2;
-    font-size: 12px;
-    font-weight: 950;
-}
-.haidian-axis {
-    border-radius: 22px !important;
-    border-color: rgba(12,127,120,0.16) !important;
-    background: linear-gradient(135deg, #ffffff, #f0fbf8) !important;
-}
-.haidian-axis-title {
-    color: var(--hd90-river-deep) !important;
-}
-.haidian-axis-chip {
-    border-radius: 17px !important;
-    background: rgba(255,253,247,0.92) !important;
-    border-color: rgba(12,127,120,0.15) !important;
-}
-.haidian-axis-chip b { color: var(--hd90-ink) !important; }
-.haidian-axis-chip small { color: var(--hd90-muted) !important; }
-
-.haidian-90-journey {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    width: 334px;
-    z-index: 1450;
-    pointer-events: auto;
-    color: var(--hd90-ink);
-    background: rgba(255, 253, 247, 0.96);
-    border: 1px solid rgba(255,255,255,0.86);
-    border-radius: 26px;
-    box-shadow: var(--hd90-shadow-lg);
-    backdrop-filter: blur(18px) saturate(165%);
-    -webkit-backdrop-filter: blur(18px) saturate(165%);
-    padding: 15px;
-    transition: transform .28s ease, opacity .28s ease;
-}
-.haidian-90-journey.is-collapsed {
-    transform: translateY(calc(100% - 52px));
-}
-.haidian-90-journey-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-.haidian-90-journey-title strong {
-    display: block;
-    font-size: 14px;
-    color: var(--hd90-ink);
-    font-weight: 950;
-    letter-spacing: 0.04em;
-}
-.haidian-90-journey-title span {
-    display: block;
-    margin-top: 2px;
-    font-size: 11px;
-    color: var(--hd90-muted);
-    font-weight: 760;
-}
-.haidian-90-toggle {
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    border: 0;
-    color: var(--hd90-river-deep);
-    background: #e5f8f4;
-    font-weight: 950;
-    cursor: pointer;
-}
-.haidian-90-journey-steps {
-    position: relative;
-    display: grid;
-    gap: 8px;
-}
-.haidian-90-journey-steps::before {
-    content: "";
-    position: absolute;
-    left: 16px;
-    top: 18px;
-    bottom: 18px;
-    width: 2px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(12,127,120,0.46), rgba(217,154,39,0.46));
-}
-.haidian-90-step {
-    position: relative;
-    display: grid;
-    grid-template-columns: 34px 1fr auto;
-    gap: 10px;
-    align-items: center;
-    width: 100%;
-    padding: 10px 9px;
-    border: 1px solid rgba(12,127,120,0.12);
-    border-radius: 17px;
-    background: rgba(255,255,255,0.76);
-    text-align: left;
-    cursor: pointer;
-    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
-}
-.haidian-90-step:hover {
-    transform: translateY(-2px);
-    border-color: rgba(12,127,120,0.28);
-    box-shadow: 0 13px 26px rgba(6,79,73,0.12);
-}
-.haidian-90-step-index {
-    width: 31px;
-    height: 31px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    background: #f4fbf9;
-    color: var(--hd90-river-deep);
-    font-size: 11px;
-    font-weight: 950;
-    border: 1px solid rgba(12,127,120,0.14);
-    z-index: 1;
-}
-.haidian-90-step-copy b {
-    display: block;
-    color: var(--hd90-ink);
-    font-size: 13px;
-    font-weight: 950;
-}
-.haidian-90-step-copy small {
-    display: block;
-    margin-top: 2px;
-    color: var(--hd90-muted);
-    font-size: 11px;
-    font-weight: 760;
-    line-height: 1.35;
-}
-.haidian-90-step-action {
-    color: var(--hd90-river);
-    font-size: 16px;
-    font-weight: 950;
-}
-.haidian-90-step.is-active {
-    background: linear-gradient(135deg, #073f3b, #0c7f78) !important;
-    border-color: transparent;
-    box-shadow: 0 18px 34px rgba(12,127,120,0.26);
-}
-.haidian-90-step.is-active .haidian-90-step-index {
-    background: #fff0c2;
-    color: #5c3805;
-    border-color: transparent;
-}
-.haidian-90-step.is-active b,
-.haidian-90-step.is-active small,
-.haidian-90-step.is-active .haidian-90-step-action {
-    color: #fffdf7 !important;
-}
-
-.haidian-90-insight {
-    position: fixed;
-    top: 96px;
-    right: 86px;
-    width: 284px;
-    z-index: 1280;
-    pointer-events: auto;
-    background: rgba(255, 253, 247, 0.96);
-    border: 1px solid rgba(255,255,255,0.86);
-    border-radius: 24px;
-    box-shadow: var(--hd90-shadow-md);
-    backdrop-filter: blur(18px) saturate(165%);
-    -webkit-backdrop-filter: blur(18px) saturate(165%);
-    padding: 14px;
-    color: var(--hd90-ink);
-}
-.haidian-90-insight::before {
-    content: "";
-    display: block;
-    height: 4px;
-    border-radius: 999px;
-    margin-bottom: 12px;
-    background: linear-gradient(90deg, var(--hd90-river), var(--hd90-gold));
-}
-.haidian-90-insight-head strong {
-    display: block;
-    color: var(--hd90-ink);
-    font-size: 14px;
-    font-weight: 950;
-    letter-spacing: 0.04em;
-}
-.haidian-90-insight-head span {
-    display: block;
-    margin-top: 3px;
-    color: var(--hd90-muted);
-    font-size: 11px;
-    line-height: 1.45;
-    font-weight: 760;
-}
-.haidian-90-insight-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0,1fr));
-    gap: 8px;
-    margin-top: 12px;
-}
-.haidian-90-metric {
-    border-radius: 17px;
-    padding: 10px 9px;
-    background: rgba(255,255,255,0.78);
-    border: 1px solid rgba(12,127,120,0.13);
-}
-.haidian-90-metric b {
-    display: block;
-    color: var(--hd90-river-deep);
-    font-size: 20px;
-    line-height: 1;
-    font-weight: 950;
-}
-.haidian-90-metric span {
-    display: block;
-    margin-top: 5px;
-    color: var(--hd90-muted);
-    font-size: 11px;
-    font-weight: 850;
-}
-.haidian-90-insight-note {
-    margin: 10px 0 0;
-    color: var(--hd90-ink-soft);
-    font-size: 11.5px;
-    line-height: 1.55;
-    font-weight: 780;
-}
-
-.haidian-v4-dock {
-    border-radius: 26px !important;
-    border-color: rgba(255,255,255,0.86) !important;
-    background: rgba(255,253,247,0.96) !important;
-    box-shadow: var(--hd90-shadow-lg) !important;
-}
-.haidian-v4-dock-title strong {
-    color: var(--hd90-ink) !important;
-    letter-spacing: 0.04em;
-}
-.haidian-v4-dock-body {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-}
-.haidian-v4-card {
-    min-height: 78px !important;
-    border-radius: 18px !important;
-    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(240,251,248,0.92)) !important;
-}
-.haidian-v4-card b {
-    color: var(--hd90-ink) !important;
-}
-.haidian-v4-card small {
-    color: var(--hd90-muted) !important;
-}
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
-    background: linear-gradient(135deg, var(--hd90-river-deep), var(--hd90-river)) !important;
-}
-
-.leaflet-popup-content-wrapper {
-    border-radius: 22px !important;
-    overflow: hidden !important;
-}
-.sound-card {
-    background: var(--hd90-paper-solid) !important;
-}
-.sound-cover {
-    height: 170px !important;
-    filter: saturate(1.07) contrast(1.04);
-}
-.sound-info {
-    position: relative;
-    padding: 17px 19px 14px !important;
-}
-.sound-info::before {
-    content: "聲景作品";
-    position: absolute;
-    top: -15px;
-    left: 18px;
-    display: inline-flex;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--hd90-gold), #fff0b9);
-    color: #3a2608;
-    font-size: 11px;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    box-shadow: 0 8px 18px rgba(128,82,8,0.20);
-}
-.reaction-section-title {
-    color: var(--hd90-river-deep) !important;
-    background: #e5f8f4 !important;
-    border-color: rgba(12,127,120,0.16) !important;
-}
-.global-player {
-    background: rgba(255,253,247,0.97) !important;
-    border: 1px solid rgba(255,255,255,0.86) !important;
-    box-shadow: 0 -18px 54px rgba(6,79,73,0.20) !important;
-}
-.waveform-wrapper {
-    background: #e5f8f4 !important;
-    border: 1px solid rgba(12,127,120,0.13) !important;
-}
-.player-title {
-    color: var(--hd90-ink) !important;
-}
-.player-time-display {
-    color: var(--hd90-river-deep) !important;
-    background: #fff0c2 !important;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-.haidian-90-step:focus-visible {
-    outline: none !important;
-    box-shadow: var(--hd90-ring) !important;
-}
-
-@media (max-width: 1100px) {
-    .haidian-90-insight {
-        display: none;
-    }
-    .haidian-90-journey {
-        width: 306px;
-    }
-    .haidian-v4-dock {
-        width: min(405px, calc(100vw - 140px)) !important;
-    }
-}
-
-@media (max-width: 760px) {
-    .project-title::after,
-    .haidian-90-header-chip,
-    .haidian-90-insight,
-    .haidian-90-journey {
-        display: none !important;
-    }
-    .glass-header {
-        background: linear-gradient(135deg, rgba(6,79,73,0.98), rgba(12,127,120,0.94)) !important;
-    }
-    .haidian-90-path {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    #splashScreen .splash-card {
-        width: min(520px, calc(100vw - 20px)) !important;
-    }
-    .haidian-90-hero {
-        padding: 14px;
-        margin: 12px 0 14px;
-    }
-    .haidian-90-hero h2 {
-        font-size: 18px;
-    }
-    .haidian-90-hero p {
-        font-size: 12.5px;
-        line-height: 1.65;
-    }
-    .haidian-v4-dock-body {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    }
-    .haidian-v4-card {
-        min-height: 68px !important;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .sound-dot-marker::before,
-    .splash-logo,
-    .badge-icon-wrapper,
-    .route-path-animated {
-        animation: none !important;
-    }
-}
-</style>
-
-<script id="haidian-90plus-learning-journey-js">
-(function () {
-    'use strict';
-
-    function ready(fn) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn, { once: true });
-        } else {
-            fn();
-        }
-    }
-
-    function $(selector, root) {
-        return (root || document).querySelector(selector);
-    }
-
-    function $all(selector, root) {
-        return Array.prototype.slice.call((root || document).querySelectorAll(selector));
-    }
-
-    function switchLearningMode(mode) {
-        if (typeof window.haidianSwitchMode === 'function') {
-            window.haidianSwitchMode(mode, false);
-            return;
-        }
-        var target = document.querySelector('[data-haidian-v4-mode="' + mode + '"]');
-        if (target) target.click();
-    }
-
-    function addHeroNarrative() {
-        var card = $('#splashScreen .splash-card');
-        if (!card || $('.haidian-90-hero', card)) return;
-
-        var hero = document.createElement('section');
-        hero.className = 'haidian-90-hero';
-        hero.setAttribute('aria-label', '地方學習主軸');
-        hero.innerHTML = '' +
-            '<div class="haidian-90-hero-kicker">聲音地景 × 社會情緒學習 × 環境行動</div>' +
-            '<h2>聽見自己，也聽見家園正在說話</h2>' +
-            '<p>從一段聲音開始，學生練習辨識感受、走入現場、提出問題，並用圖資與觀察回應水圳、聚落與生活環境。</p>' +
-            '<div class="haidian-90-path" aria-label="四段式學習路徑">' +
-                '<span><b>SEL</b>聽見感受</span>' +
-                '<span><b>踏查</b>走入現場</span>' +
-                '<span><b>探究</b>辨讀證據</span>' +
-                '<span><b>守護</b>回應家園</span>' +
-            '</div>';
-
-        var axis = $('.haidian-axis', card);
-        var quote = $('.splash-quote', card);
-        if (axis) axis.insertAdjacentElement('beforebegin', hero);
-        else if (quote) quote.insertAdjacentElement('afterend', hero);
-        else card.insertBefore(hero, card.firstChild);
-    }
-
-    function addHeaderMicrocopy() {
-        var header = $('.glass-header');
-        if (!header || $('.haidian-90-header-chip', header)) return;
-        var nav = $('.nav-buttons', header);
-        var chip = document.createElement('div');
-        chip.className = 'haidian-90-header-chip';
-        chip.textContent = '地方聲景學習';
-        if (nav) header.insertBefore(chip, nav);
-        else header.appendChild(chip);
-    }
-
-    function addJourneyRail() {
-        if ($('.haidian-90-journey')) return;
-        var rail = document.createElement('aside');
-        rail.className = 'haidian-90-journey';
-        rail.setAttribute('aria-label', '地方學習旅程');
-        rail.innerHTML = '' +
-            '<div class="haidian-90-journey-head">' +
-                '<div class="haidian-90-journey-title"><strong>地方學習旅程</strong><span>依序打開聲景、路線與圖資工具</span></div>' +
-                '<button type="button" class="haidian-90-toggle" aria-label="收合地方學習旅程" aria-expanded="true">⌄</button>' +
-            '</div>' +
-            '<div class="haidian-90-journey-steps">' +
-                '<button type="button" class="haidian-90-step" data-mode="listen"><span class="haidian-90-step-index">01</span><span class="haidian-90-step-copy"><b>聽見自己</b><small>SEL 回應、收藏聲景與情緒標記</small></span><span class="haidian-90-step-action">›</span></button>' +
-                '<button type="button" class="haidian-90-step" data-mode="walk"><span class="haidian-90-step-index">02</span><span class="haidian-90-step-copy"><b>走入現場</b><small>踏查路線、地理圍籬與手繪範圍</small></span><span class="haidian-90-step-action">›</span></button>' +
-                '<button type="button" class="haidian-90-step" data-mode="data"><span class="haidian-90-step-index">03</span><span class="haidian-90-step-copy"><b>提出問題</b><small>疊合歷史、水文與環境圖資</small></span><span class="haidian-90-step-action">›</span></button>' +
-                '<button type="button" class="haidian-90-step" data-mode="data"><span class="haidian-90-step-index">04</span><span class="haidian-90-step-copy"><b>回應家園</b><small>把觀察轉成環境守護行動</small></span><span class="haidian-90-step-action">›</span></button>' +
-            '</div>';
-        document.body.appendChild(rail);
-
-        rail.addEventListener('click', function (event) {
-            var toggle = event.target.closest('.haidian-90-toggle');
-            if (toggle) {
-                rail.classList.toggle('is-collapsed');
-                var expanded = !rail.classList.contains('is-collapsed');
-                toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                toggle.textContent = expanded ? '⌄' : '⌃';
-                return;
-            }
-            var step = event.target.closest('.haidian-90-step');
-            if (step) switchLearningMode(step.getAttribute('data-mode') || 'listen');
-        });
-    }
-
-    function addInsightPanel() {
-        if ($('.haidian-90-insight')) return;
-        var panel = document.createElement('aside');
-        panel.className = 'haidian-90-insight';
-        panel.setAttribute('aria-label', '學習足跡');
-        panel.innerHTML = '' +
-            '<div class="haidian-90-insight-head"><strong>學習足跡</strong><span>把聲音、踏查、圖資與回應整理成可見的學習線索。</span></div>' +
-            '<div class="haidian-90-insight-grid">' +
-                '<div class="haidian-90-metric"><b data-metric="sounds">—</b><span>聲景紀錄</span></div>' +
-                '<div class="haidian-90-metric"><b data-metric="routes">—</b><span>學習路線</span></div>' +
-                '<div class="haidian-90-metric"><b data-metric="layers">—</b><span>圖層線索</span></div>' +
-                '<div class="haidian-90-metric"><b data-metric="sel">4</b><span>SEL 回應</span></div>' +
-            '</div>' +
-            '<p class="haidian-90-insight-note">每一個點位都是一次感受辨識、現場觀察與環境提問。</p>';
-        document.body.appendChild(panel);
-        updateMetrics();
-    }
-
-    function safeCount(value) {
-        return Number.isFinite(value) && value > 0 ? String(value) : '—';
-    }
-
-    function updateMetrics() {
-        var panel = $('.haidian-90-insight');
-        if (!panel) return;
-
-        var sounds = Array.isArray(window.allMarkersData) ? window.allMarkersData.filter(function (item) {
-            return item && !item.isProcessing && item.title;
-        }).length : 0;
-        if (!sounds) {
-            sounds = $all('.leaflet-marker-icon .sound-dot-marker').length || $all('.latest-item').length;
-        }
-
-        var routes = $all('.route-btn').length;
-        var layerInputs = $all('.custom-layer-control input[type="radio"], .custom-layer-control input[type="checkbox"], .layer-card input[type="radio"], .layer-card input[type="checkbox"]').length;
-
-        var soundsEl = $('[data-metric="sounds"]', panel);
-        var routesEl = $('[data-metric="routes"]', panel);
-        var layersEl = $('[data-metric="layers"]', panel);
-        if (soundsEl) soundsEl.textContent = safeCount(sounds);
-        if (routesEl) routesEl.textContent = safeCount(routes);
-        if (layersEl) layersEl.textContent = safeCount(layerInputs);
-    }
-
-    function updateActiveJourney() {
-        var mode = 'idle';
-        if (document.body.classList.contains('haidian-v4-mode-listen')) mode = 'listen';
-        else if (document.body.classList.contains('haidian-v4-mode-walk')) mode = 'walk';
-        else if (document.body.classList.contains('haidian-v4-mode-data')) mode = 'data';
-        $all('.haidian-90-step').forEach(function (step) {
-            step.classList.toggle('is-active', step.getAttribute('data-mode') === mode);
-        });
-    }
-
-    function refineLearningCopy() {
-        var title = $('.haidian-v4-dock-title strong');
-        var copy = $('.haidian-v4-dock-title span');
-        if (title) title.textContent = '四段式地方學習';
-        if (copy) copy.textContent = '聽見自己 → 走入現場 → 辨讀證據 → 回應家園';
-
-        var cards = {
-            listen: ['SEL 聆聽', '從感受出發，聽見地方與自己。'],
-            walk: ['踏查現場', '沿著水圳、聚落與路線完成觀察。'],
-            data: ['探究圖資', '用歷史、水文與災害圖層提出問題。']
-        };
-        Object.keys(cards).forEach(function (mode) {
-            var btn = $('.haidian-v4-card[data-haidian-v4-mode="' + mode + '"]');
-            if (!btn) return;
-            var b = $('b', btn);
-            var small = $('small', btn);
-            if (b) b.textContent = cards[mode][0];
-            if (small) small.textContent = cards[mode][1];
-        });
-        var guard = $('.haidian-v4-card.axis-guard');
-        if (guard) {
-            var gb = $('b', guard);
-            var gs = $('small', guard);
-            if (gb) gb.textContent = '環境守護';
-            if (gs) gs.textContent = '把觀察轉化為在地行動。';
-        }
-    }
-
-    function enrichPanelNotes() {
-        var sideNote = $('#sidePanel .haidian-learning-note');
-        if (sideNote) sideNote.innerHTML = '<strong>SEL 聲音回應</strong>｜先辨識自己的感受，再理解地方聲音背後的人、環境與生活脈絡。';
-        var routeNote = $('#routePanel .haidian-learning-note');
-        if (routeNote) routeNote.innerHTML = '<strong>探究踏查任務</strong>｜把聲音、路線、圖資與現場觀察串起來，形成可以討論、驗證與行動的問題。';
-    }
-
-    function run() {
-        document.body.classList.add('haidian-90plus');
-        addHeroNarrative();
-        addHeaderMicrocopy();
-        addJourneyRail();
-        addInsightPanel();
-        refineLearningCopy();
-        enrichPanelNotes();
-        updateActiveJourney();
-        updateMetrics();
-    }
-
-    ready(function () {
-        run();
-        setTimeout(run, 300);
-        setTimeout(updateMetrics, 1000);
-        setTimeout(updateMetrics, 2500);
-        setInterval(function () {
-            updateActiveJourney();
-            updateMetrics();
-        }, 1200);
-    });
-})();
-</script>
-<!-- HAIDIAN_90PLUS_LEARNING_JOURNEY_LAYER_END -->
-
-
-
-<!-- HAIDIAN_NEAR100_ACCESSIBLE_GUIDE_REFINEMENT_START -->
-<style id="haidian-near100-accessible-guide-css">
-:root {
-    --hd100-ink: #041f1d;
-    --hd100-deep: #033c38;
-    --hd100-teal: #08756f;
-    --hd100-teal-2: #0d8f84;
-    --hd100-cream: #fffdfa;
-    --hd100-cream-2: #fff6d8;
-    --hd100-gold: #c47d13;
-    --hd100-muted: #274944;
-    --hd100-shadow: 0 24px 64px rgba(3, 60, 56, 0.24);
-    --hd100-ring: 0 0 0 4px rgba(255, 222, 145, 0.58), 0 0 0 7px rgba(3, 60, 56, 0.30);
-}
-
-html, body,
-button, input, select, textarea {
-    -webkit-font-smoothing: subpixel-antialiased !important;
-    text-rendering: optimizeLegibility !important;
-}
-
-/* 導覽列：提高老花、色弱環境下的辨識度；減少半透明造成的字糊。 */
-.glass-header {
-    background: linear-gradient(135deg, #033c38 0%, #075f58 58%, #0b7169 100%) !important;
-    border: 1.5px solid rgba(255, 246, 216, 0.78) !important;
-    box-shadow: 0 18px 50px rgba(3, 60, 56, 0.34), inset 0 1px 0 rgba(255,255,255,0.22) !important;
-    backdrop-filter: blur(14px) saturate(130%) !important;
-    -webkit-backdrop-filter: blur(14px) saturate(130%) !important;
-}
-.glass-header::before {
-    opacity: 0.18 !important;
-    background: linear-gradient(90deg, rgba(255,255,255,0.16), transparent 42%, rgba(255,246,216,0.16)) !important;
-}
-.project-title,
-.project-title span.sub-title,
-.nav-buttons button,
-.haidian-90-header-chip,
-.project-title::after {
-    text-shadow: none !important;
-    filter: none !important;
-}
-.project-title {
-    color: #ffffff !important;
-    font-size: 19px !important;
-    font-weight: 1000 !important;
-    letter-spacing: 0.03em !important;
-    line-height: 1.2 !important;
-}
-.project-title span.main-title {
-    color: #ffe28b !important;
-    font-weight: 1000 !important;
-}
-.project-title span.sub-title {
-    color: #ffffff !important;
-    opacity: 0.96 !important;
-    font-size: 13.5px !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.02em !important;
-}
-.project-title::after {
-    background: #fffdfa !important;
-    color: #033c38 !important;
-    border: 1.5px solid #ffe28b !important;
-    box-shadow: 0 7px 16px rgba(0,0,0,0.18) !important;
-    font-size: 12.5px !important;
-    font-weight: 1000 !important;
-    letter-spacing: 0.035em !important;
-    padding: 5px 11px !important;
-}
-.haidian-90-header-chip {
-    background: #fffdfa !important;
-    color: #033c38 !important;
-    border: 1.5px solid #ffe28b !important;
-    box-shadow: 0 7px 16px rgba(0,0,0,0.16) !important;
-    font-size: 12.5px !important;
-    font-weight: 1000 !important;
-    letter-spacing: 0.035em !important;
-    padding: 6px 12px !important;
-}
-.nav-buttons {
-    gap: 9px !important;
-}
-.nav-buttons button {
-    min-height: 40px !important;
-    padding: 8px 13px !important;
-    border-radius: 13px !important;
-    background: rgba(255,255,255,0.13) !important;
-    border: 1.5px solid rgba(255,255,255,0.44) !important;
-    color: #ffffff !important;
-    font-size: 14.5px !important;
-    line-height: 1.15 !important;
-    font-weight: 1000 !important;
-    letter-spacing: 0.015em !important;
-}
-.nav-buttons button:hover,
-.nav-buttons button:focus-visible {
-    background: #fffdfa !important;
-    border-color: #ffe28b !important;
-    color: #033c38 !important;
-    transform: translateY(-1px) !important;
-}
-.btn-latest {
-    color: #fff6d8 !important;
-    background: rgba(255, 246, 216, 0.18) !important;
-    border-color: rgba(255, 226, 139, 0.72) !important;
-}
-.btn-latest:hover,
-.btn-latest:focus-visible {
-    color: #4a2b00 !important;
-    background: #fff6d8 !important;
-}
-.btn-submit {
-    background: #fff6d8 !important;
-    color: #033c38 !important;
-    border: 1.5px solid #ffe28b !important;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.24) !important;
-}
-.btn-submit:hover,
-.btn-submit:focus-visible {
-    background: #ffffff !important;
-    color: #032b28 !important;
-}
-
-/* 所有學習輔助層：不再與功能面板搶畫面。 */
-.haidian-90-journey,
-.haidian-90-insight,
-.haidian-v4-dock {
-    transition: opacity .24s ease, transform .24s ease, visibility .24s ease, filter .24s ease !important;
-    will-change: opacity, transform;
-}
-body.haidian-guides-auto-hidden .haidian-90-journey,
-body.haidian-guides-auto-hidden .haidian-90-insight,
-body.haidian-guides-auto-hidden .haidian-v4-dock,
-body.haidian-guides-user-hidden .haidian-90-journey,
-body.haidian-guides-user-hidden .haidian-90-insight,
-body.haidian-guides-user-hidden .haidian-v4-dock {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    filter: blur(2px) !important;
-}
-body.haidian-guides-auto-hidden .haidian-90-journey,
-body.haidian-guides-user-hidden .haidian-90-journey {
-    transform: translateY(24px) scale(.96) !important;
-}
-body.haidian-guides-auto-hidden .haidian-90-insight,
-body.haidian-guides-user-hidden .haidian-90-insight {
-    transform: translateX(20px) scale(.96) !important;
-}
-body.haidian-guides-auto-hidden .haidian-v4-dock,
-body.haidian-guides-user-hidden .haidian-v4-dock {
-    transform: translateX(-50%) translateY(22px) scale(.96) !important;
-}
-
-.haidian-100-panel-close {
-    appearance: none;
-    border: 1.5px solid rgba(3,60,56,0.22);
-    background: #ffffff;
-    color: #033c38;
-    border-radius: 999px;
-    width: 34px;
-    height: 34px;
-    display: inline-grid;
-    place-items: center;
-    cursor: pointer;
-    font-size: 19px;
-    line-height: 1;
-    font-weight: 1000;
-    box-shadow: 0 8px 18px rgba(3,60,56,0.14);
-    transition: transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
-}
-.haidian-100-panel-close:hover,
-.haidian-100-panel-close:focus-visible {
-    background: #033c38;
-    color: #fffdfa;
-    border-color: #033c38;
-    transform: translateY(-1px) scale(1.03);
-}
-.haidian-90-insight .haidian-100-panel-close,
-.haidian-90-journey .haidian-100-panel-close,
-.haidian-v4-dock .haidian-100-panel-close {
-    flex: 0 0 auto;
-}
-.haidian-90-insight-head,
-.haidian-90-journey-head,
-.haidian-v4-dock-head {
-    align-items: flex-start !important;
-}
-.haidian-90-insight-head {
-    display: grid !important;
-    grid-template-columns: 1fr auto !important;
-    column-gap: 10px !important;
-}
-.haidian-90-insight-head strong,
-.haidian-90-insight-head span {
-    grid-column: 1 / 2;
-}
-.haidian-90-insight-head .haidian-100-panel-close {
-    grid-column: 2 / 3;
-    grid-row: 1 / span 2;
-}
-.haidian-90-journey-head,
-.haidian-v4-dock-head {
-    gap: 8px !important;
-}
-.haidian-90-toggle,
-.haidian-v4-dock-toggle {
-    border: 1.5px solid rgba(3,60,56,0.16) !important;
-    background: #fffdfa !important;
-    color: #033c38 !important;
-    font-size: 18px !important;
-    font-weight: 1000 !important;
-}
-
-.haidian-guide-reopen {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    z-index: 5200;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 42px;
-    padding: 9px 14px;
-    border: 1.5px solid rgba(255, 226, 139, 0.86);
-    border-radius: 999px;
-    background: #033c38;
-    color: #fffdfa;
-    box-shadow: 0 18px 42px rgba(3,60,56,0.28);
-    font-size: 14px;
-    font-weight: 1000;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(12px);
-    transition: opacity .22s ease, transform .22s ease, visibility .22s ease, background .18s ease;
-}
-.haidian-guide-reopen::before {
-    content: "☰";
-    color: #ffe28b;
-    font-size: 15px;
-}
-body.haidian-guides-auto-hidden .haidian-guide-reopen,
-body.haidian-guides-user-hidden .haidian-guide-reopen {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(0);
-}
-.haidian-guide-reopen:hover,
-.haidian-guide-reopen:focus-visible {
-    background: #fffdfa;
-    color: #033c38;
-    border-color: #033c38;
-}
-
-/* 學習面板本體：更高文字對比與更穩的字級。 */
-.haidian-90-insight,
-.haidian-90-journey,
-.haidian-v4-dock,
-.drawer-content,
-.custom-layer-control,
-.leaflet-popup-content-wrapper,
-.modal-box {
-    color: var(--hd100-ink) !important;
-}
-.haidian-90-insight-head strong,
-.haidian-90-journey-title strong,
-.haidian-v4-dock-title strong,
-.panel-label,
-.haidian-v4-panel-head .title,
-.sound-title,
-.modal-title {
-    color: var(--hd100-ink) !important;
-    font-weight: 1000 !important;
-    letter-spacing: 0.015em !important;
-}
-.haidian-90-insight-head span,
-.haidian-90-insight-note,
-.haidian-90-journey-title span,
-.haidian-v4-dock-title span,
-.haidian-90-step-copy small,
-.haidian-v4-card small,
-.sound-desc,
-.modal-text,
-.meta-row,
-.latest-item-meta {
-    color: var(--hd100-muted) !important;
-    font-weight: 820 !important;
-}
-.haidian-90-metric b {
-    color: #064f49 !important;
-    font-size: 22px !important;
-}
-.haidian-90-metric span,
-.haidian-v4-card b,
-.haidian-90-step-copy b {
-    color: var(--hd100-ink) !important;
-    font-weight: 1000 !important;
-}
-.haidian-90-step.is-active,
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
-    background: linear-gradient(135deg, #033c38, #08756f) !important;
-}
-.haidian-90-step.is-active b,
-.haidian-90-step.is-active small,
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] b,
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] small,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] b,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] small,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] b,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] small {
-    color: #ffffff !important;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-.haidian-90-step:focus-visible,
-.haidian-v4-card:focus-visible,
-.haidian-guide-reopen:focus-visible {
-    outline: none !important;
-    box-shadow: var(--hd100-ring) !important;
-}
-
-@media (max-width: 760px) {
-    .nav-buttons button {
-        font-size: 13.5px !important;
-        min-height: 38px !important;
-        padding: 8px 6px !important;
-    }
-    .project-title {
-        font-size: 18px !important;
-    }
-    .project-title span.sub-title {
-        font-size: 12.5px !important;
-    }
-    .haidian-guide-reopen {
-        left: 12px;
-        bottom: 12px;
-        min-height: 40px;
-        font-size: 13px;
-        padding: 8px 12px;
-    }
-}
-
-@media (prefers-contrast: more) {
-    .glass-header {
-        background: #033c38 !important;
-    }
-    .nav-buttons button,
-    .project-title::after,
-    .haidian-90-header-chip {
-        border-width: 2px !important;
-    }
-}
-</style>
-
-<script id="haidian-near100-accessible-guide-js">
-(function () {
-    'use strict';
-
-    function ready(fn) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn, { once: true });
-        } else {
-            fn();
-        }
-    }
-    function $(selector, root) {
-        return (root || document).querySelector(selector);
-    }
-    function $all(selector, root) {
-        return Array.prototype.slice.call((root || document).querySelectorAll(selector));
-    }
-    function isOpenDrawer(selector) {
-        var el = $(selector);
-        return !!el && !el.classList.contains('collapsed');
-    }
-    function isRightToolsOpen() {
-        var wrapper = $('#rightToolsWrapper') || $('.right-tools-wrapper');
-        return !!wrapper && wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden');
-    }
-    function hasActiveModal() {
-        return !!$('.modal-overlay.active') || !!$('.achievement-overlay.active');
-    }
-    function getMode() {
-        return (document.body && document.body.dataset && document.body.dataset.haidianMode) || '';
-    }
-    function shouldAutoHideGuides() {
-        var mode = getMode();
-        if (mode && mode !== 'idle') return true;
-        if (document.body.classList.contains('haidian-v4-mode-listen') ||
-            document.body.classList.contains('haidian-v4-mode-walk') ||
-            document.body.classList.contains('haidian-v4-mode-data')) return true;
-        return isOpenDrawer('#sidePanel') || isOpenDrawer('#routePanel') || isRightToolsOpen() || hasActiveModal();
-    }
-    function syncGuideVisibility() {
-        if (!document.body) return;
-        document.body.classList.toggle('haidian-guides-auto-hidden', shouldAutoHideGuides());
-    }
-    function hideGuidesByUser() {
-        document.body.classList.add('haidian-guides-user-hidden');
-        syncGuideVisibility();
-    }
-    function reopenGuides() {
-        document.body.classList.remove('haidian-guides-user-hidden');
-        if (typeof window.haidianV4CloseAll === 'function') {
-            window.haidianV4CloseAll(true);
-        } else if (typeof window.haidianSwitchMode === 'function') {
-            window.haidianSwitchMode('idle', true, { remember: false });
-        }
-        setTimeout(syncGuideVisibility, 40);
-    }
-
-    function makeCloseButton(label) {
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'haidian-100-panel-close';
-        button.setAttribute('aria-label', label || '隱藏學習導引');
-        button.title = label || '隱藏學習導引';
-        button.textContent = '×';
-        button.addEventListener('click', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            hideGuidesByUser();
-        });
-        return button;
-    }
-
-    function enhanceCloseControls() {
-        var insightHead = $('.haidian-90-insight-head');
-        if (insightHead && !$('.haidian-100-panel-close', insightHead)) {
-            insightHead.appendChild(makeCloseButton('隱藏學習足跡'));
-        }
-
-        var journeyHead = $('.haidian-90-journey-head');
-        if (journeyHead && !$('.haidian-100-panel-close', journeyHead)) {
-            journeyHead.appendChild(makeCloseButton('隱藏地方學習旅程'));
-        }
-
-        var dockHead = $('.haidian-v4-dock-head');
-        if (dockHead && !$('.haidian-100-panel-close', dockHead)) {
-            dockHead.appendChild(makeCloseButton('隱藏地方學習主線'));
-        }
-    }
-
-    function addReopenButton() {
-        if ($('.haidian-guide-reopen')) return;
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'haidian-guide-reopen';
-        button.textContent = '學習導引';
-        button.setAttribute('aria-label', '重新開啟學習導引');
-        button.addEventListener('click', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            reopenGuides();
-        });
-        document.body.appendChild(button);
-    }
-
-    function wrapFunction(name) {
-        var original = window[name];
-        if (typeof original !== 'function' || original.__haidianNear100Wrapped === true) return;
-        var wrapped = function () {
-            var result = original.apply(this, arguments);
-            setTimeout(syncGuideVisibility, 30);
-            setTimeout(syncGuideVisibility, 180);
-            return result;
-        };
-        wrapped.__haidianNear100Wrapped = true;
-        window[name] = wrapped;
-    }
-
-    function installObservers() {
-        if (document.documentElement.dataset.haidianNear100Observers === 'true') return;
-        document.documentElement.dataset.haidianNear100Observers = 'true';
-
-        var targets = [document.body, $('#sidePanel'), $('#routePanel'), $('#rightToolsWrapper') || $('.right-tools-wrapper')].filter(Boolean);
-        targets.forEach(function (target) {
-            try {
-                new MutationObserver(syncGuideVisibility).observe(target, {
-                    attributes: true,
-                    attributeFilter: ['class', 'style', 'data-haidian-mode', 'data-haidian-panel-open', 'data-haidian-tools-open']
-                });
-            } catch (_) {}
-        });
-
-        document.addEventListener('click', function (event) {
-            var interactive = event.target.closest && event.target.closest(
-                '.nav-buttons button, .toggle-btn, .tools-toggle-btn, .haidian-v4-card, .haidian-90-step, .modal-close-btn, .leaflet-popup-close-button, .header-pull-tab'
-            );
-            if (interactive) {
-                setTimeout(syncGuideVisibility, 60);
-                setTimeout(syncGuideVisibility, 240);
-            }
-        }, true);
-    }
-
-    function run() {
-        document.body.classList.add('haidian-near100-readable');
-        enhanceCloseControls();
-        addReopenButton();
-        wrapFunction('haidianSwitchMode');
-        wrapFunction('haidianV4CloseAll');
-        wrapFunction('togglePanel');
-        wrapFunction('toggleRightToolsPanel');
-        installObservers();
-        syncGuideVisibility();
-    }
-
-    ready(function () {
-        run();
-        setTimeout(run, 300);
-        setTimeout(run, 900);
-        setInterval(function () {
-            enhanceCloseControls();
-            syncGuideVisibility();
-        }, 1200);
-    });
-})();
-</script>
-<!-- HAIDIAN_NEAR100_ACCESSIBLE_GUIDE_REFINEMENT_END -->
 
 </body></html>
