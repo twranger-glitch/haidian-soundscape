@@ -1834,7 +1834,7 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
 </head><body>
 
-    <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
+    <!-- 沉浸式迎賓帷幕 -->
     <style>
         #splashScreen {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -6816,19 +6816,19 @@ function mountGlobalPlayerIntoPopup_(retry) {
 
   const MODE_COPY = {
     listen: {
-      title: '聆聽：先找到一段現場聲音',
-      copy: '搜尋聲景、依類別與時間篩選，收藏你想再次回來聽的土地回音。',
-      toast: '聆聽模式：已開啟聲景搜尋、類別篩選、時間軸與收藏。'
+      title: 'SEL 聆聽：從感受進入地方',
+      copy: '搜尋聲景、依類別與時間篩選，收藏並回應你聽見的土地回音，讓感受成為觀察與表達。',
+      toast: 'SEL 聆聽：已開啟聲景搜尋、類別篩選、時間軸、收藏與回音回應。'
     },
     walk: {
-      title: '走讀：把聲音串成一條路',
-      copy: '選擇主題路線、地理圍籬或手繪範圍，讓地圖帶你完成一段田野任務。',
-      toast: '走讀模式：已開啟主題路線、任務與手繪走讀。'
+      title: '踏查路線：把問題帶到現場',
+      copy: '選擇主題路線、地理圍籬或手繪範圍，沿著水圳、聚落與歷史現場完成一段田野任務。',
+      toast: '踏查路線：已開啟主題路線、任務與手繪走讀。'
     },
     data: {
-      title: '圖資：進入研究型地圖',
-      copy: '打開底圖、歷史套疊、淹水潛勢、水文與災害圖資，適合課程研究與田野比對。',
-      toast: '圖資模式：已開啟右側底圖、歷史、水文、淹水與災害圖層。'
+      title: '探究圖資：用資料理解環境',
+      copy: '疊合底圖、歷史、水文、淹水潛勢與災害圖層，把環境守護轉化為可討論的證據。',
+      toast: '探究圖資：已開啟底圖、歷史、水文、淹水與災害圖層。'
     }
   };
 
@@ -7037,7 +7037,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     switcher.className = 'haidian-v4-mode-switcher';
     switcher.setAttribute('role', 'tablist');
     switcher.setAttribute('aria-label', '探索模式切換');
-    switcher.innerHTML = '<button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="listen">聆聽</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="walk">走讀</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="data">圖資</button>';
+    switcher.innerHTML = '<button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="listen">SEL 聆聽</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="walk">踏查</button><button type="button" class="haidian-v4-mode-btn" data-haidian-v4-mode="data">探究圖資</button>';
     content.insertBefore(switcher, content.firstChild);
     content.insertBefore(head, switcher);
   }
@@ -7047,7 +7047,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     if (!control || control.querySelector('.haidian-v4-data-note')) return;
     const note = document.createElement('div');
     note.className = 'haidian-v4-data-note';
-    note.textContent = '圖資模式｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層。可直接點選下方單選或勾選項目切換。';
+    note.textContent = '探究圖資｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層，協助把環境守護轉化為可觀察、可討論、可行動的依據。';
     control.insertBefore(note, control.firstChild);
   }
 
@@ -7056,7 +7056,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
     const dock = document.createElement('aside');
     dock.className = 'haidian-v4-dock';
     dock.setAttribute('aria-label', '探索主線');
-    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下才打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
+    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>學習主線</strong><span>從 SEL 回應出發，走向環境守護與探究踏查</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合學習主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card axis-sel" data-haidian-v4-mode="listen"><b>SEL 聆聽</b><small>聽見感受、收藏與回應。</small></button><button type="button" class="haidian-v4-card axis-field" data-haidian-v4-mode="walk"><b>踏查路線</b><small>沿水圳與聚落走讀。</small></button><button type="button" class="haidian-v4-card axis-inquiry" data-haidian-v4-mode="data"><b>探究圖資</b><small>用證據提出問題。</small></button><button type="button" class="haidian-v4-card axis-guard" data-haidian-v4-mode="data"><b>環境守護</b><small>辨讀水文與災害線索。</small></button></div>';
     document.body.appendChild(dock);
   }
 
@@ -7364,5 +7364,1603 @@ function mountGlobalPlayerIntoPopup_(retry) {
 })();
 </script>
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_END -->
+
+
+<style id="haidian-refined-ui-v5">
+:root {
+    --panel-offset: 22px;
+    --accent-color: #0f9f8d;
+    --accent-deep: #075f57;
+    --accent-soft: #bdeee3;
+    --river-blue: #0f6f86;
+    --warm-gold: #d6ae52;
+    --warm-gold-soft: #f4dfaa;
+    --paper: #fbf7ed;
+    --paper-2: #f2ead7;
+    --ink: #15211f;
+    --muted-ink: #68736e;
+    --night: #061615;
+    --night-2: #092625;
+    --glass-bg: rgba(251, 247, 237, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.38);
+    --glass-shadow: 0 24px 70px rgba(4, 24, 24, 0.28);
+    --glass-blur: blur(24px) saturate(1.12);
+}
+
+html, body {
+    background:
+        radial-gradient(circle at 20% 12%, rgba(14, 159, 141, 0.22), transparent 34%),
+        radial-gradient(circle at 78% 20%, rgba(214, 174, 82, 0.16), transparent 28%),
+        linear-gradient(145deg, #061615 0%, #0a2a29 52%, #081b1c 100%) !important;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
+    text-rendering: geometricPrecision;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    background:
+        linear-gradient(115deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 28px),
+        radial-gradient(circle at 8% 92%, rgba(214,174,82,0.14), transparent 28%),
+        radial-gradient(circle at 92% 78%, rgba(15,159,141,0.12), transparent 30%);
+    mix-blend-mode: screen;
+    opacity: 0.8;
+}
+
+body::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 42vh;
+    pointer-events: none;
+    z-index: 3;
+    background: linear-gradient(to top, rgba(6, 22, 21, 0.38), transparent 78%);
+}
+
+#map {
+    background: #0a2423 !important;
+}
+
+#map::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 280;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 48% 45%, transparent 0 36%, rgba(5, 18, 18, 0.12) 76%, rgba(5, 18, 18, 0.34) 100%),
+        linear-gradient(180deg, rgba(10, 42, 41, 0.02), rgba(10, 42, 41, 0.20));
+}
+
+#map::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 285;
+    pointer-events: none;
+    opacity: 0.17;
+    background-image:
+        linear-gradient(rgba(251, 247, 237, 0.65) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(251, 247, 237, 0.65) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: radial-gradient(circle at center, transparent 12%, #000 100%);
+    -webkit-mask-image: radial-gradient(circle at center, transparent 12%, #000 100%);
+}
+
+.leaflet-tile-pane {
+    filter: saturate(0.88) contrast(1.02) brightness(0.92) sepia(0.08);
+}
+
+.leaflet-control-attribution {
+    background: rgba(251, 247, 237, 0.76) !important;
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 10px 0 0 0;
+    color: rgba(21,33,31,0.72) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.glass-header {
+    top: 18px !important;
+    width: min(92vw, 1120px) !important;
+    max-width: 1120px !important;
+    padding: 12px 18px !important;
+    border-radius: 24px !important;
+    background:
+        linear-gradient(135deg, rgba(8, 31, 30, 0.84), rgba(10, 54, 50, 0.62) 52%, rgba(70, 49, 22, 0.56)) !important;
+    border: 1px solid rgba(244, 223, 170, 0.34) !important;
+    box-shadow: 0 26px 70px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.24) !important;
+    backdrop-filter: blur(28px) saturate(1.18) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(1.18) !important;
+    overflow: hidden;
+}
+
+.glass-header::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, transparent, rgba(255,255,255,0.13), transparent),
+        radial-gradient(circle at 18% 0%, rgba(189,238,227,0.28), transparent 36%);
+    opacity: 0.76;
+}
+
+.glass-header::after {
+    content: "";
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(244,223,170,0.9), transparent);
+}
+
+.project-title {
+    color: rgba(251, 247, 237, 0.96) !important;
+    font-size: 20px !important;
+    font-weight: 950 !important;
+    letter-spacing: 0.08em !important;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.35);
+    position: relative;
+    z-index: 1;
+    align-items: center !important;
+    gap: 2px;
+}
+
+.project-title span.main-title,
+.splash-title span {
+    color: transparent !important;
+    background: linear-gradient(135deg, #d8fff4 0%, #6ee7d6 35%, #f4dfaa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: none;
+}
+
+.project-title span.sub-title {
+    color: rgba(244, 223, 170, 0.92) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.1em;
+}
+
+.project-title::after {
+    content: "水圳・聚落・聲音採集";
+    margin-left: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(244, 223, 170, 0.35);
+    background: rgba(244, 223, 170, 0.10);
+    color: rgba(251, 247, 237, 0.78);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.nav-buttons {
+    position: relative;
+    z-index: 1;
+    gap: 8px !important;
+}
+
+.nav-buttons button {
+    position: relative;
+    isolation: isolate;
+    color: rgba(251, 247, 237, 0.86) !important;
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 16px !important;
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    letter-spacing: 0.04em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+    overflow: hidden;
+}
+
+.nav-buttons button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(135deg, rgba(110,231,214,0.22), rgba(244,223,170,0.16));
+    opacity: 0;
+    transition: opacity 0.22s ease;
+}
+
+.nav-buttons button:hover {
+    color: #ffffff !important;
+    transform: translateY(-2px);
+    border-color: rgba(244, 223, 170, 0.42) !important;
+    box-shadow: 0 14px 30px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.20) !important;
+}
+
+.nav-buttons button:hover::before {
+    opacity: 1;
+}
+
+.btn-latest {
+    color: #ffe7a6 !important;
+}
+
+.btn-submit {
+    background: linear-gradient(135deg, #17b7a2, #0f7f73 58%, #d6ae52) !important;
+    border-color: rgba(244, 223, 170, 0.46) !important;
+    color: #fffdf4 !important;
+    box-shadow: 0 16px 34px rgba(15, 159, 141, 0.34), inset 0 1px 0 rgba(255,255,255,0.32) !important;
+}
+
+.btn-submit:hover {
+    background: linear-gradient(135deg, #21cab3, #0f9f8d 52%, #e6c875) !important;
+}
+
+.header-pull-tab {
+    background: rgba(8,31,30,0.88) !important;
+    border-color: rgba(244,223,170,0.28) !important;
+    color: var(--paper) !important;
+    box-shadow: 0 18px 42px rgba(0,0,0,0.28) !important;
+    backdrop-filter: blur(22px) !important;
+    -webkit-backdrop-filter: blur(22px) !important;
+}
+
+.header-pull-tab .pull-line {
+    background: linear-gradient(90deg, #6ee7d6, #f4dfaa) !important;
+}
+
+.header-pull-tab .pull-text {
+    color: rgba(251,247,237,0.76) !important;
+}
+
+.drawer-content,
+.custom-layer-control,
+.draw-mode-hud,
+.tools-toggle-btn {
+    background:
+        linear-gradient(145deg, rgba(9, 35, 34, 0.84), rgba(12, 58, 54, 0.70) 58%, rgba(42, 32, 18, 0.64)) !important;
+    color: rgba(251,247,237,0.94) !important;
+    border: 1px solid rgba(244,223,170,0.26) !important;
+    box-shadow: 0 26px 70px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.18) !important;
+    backdrop-filter: blur(28px) saturate(1.14) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(1.14) !important;
+}
+
+.drawer-content {
+    border-radius: 26px !important;
+    padding: 24px !important;
+}
+
+.drawer-content::-webkit-scrollbar,
+.tools-menu-container::-webkit-scrollbar,
+.modal-box::-webkit-scrollbar,
+.leaflet-popup-content::-webkit-scrollbar {
+    width: 7px;
+}
+
+.drawer-content::-webkit-scrollbar-thumb,
+.tools-menu-container::-webkit-scrollbar-thumb,
+.modal-box::-webkit-scrollbar-thumb,
+.leaflet-popup-content::-webkit-scrollbar-thumb {
+    background: linear-gradient(#6ee7d6, #d6ae52);
+    border-radius: 999px;
+}
+
+.toggle-btn {
+    right: -40px !important;
+    width: 40px !important;
+    height: 76px !important;
+    border-radius: 0 18px 18px 0 !important;
+    background: linear-gradient(180deg, rgba(9,35,34,0.90), rgba(13,70,64,0.82)) !important;
+    color: rgba(251,247,237,0.92) !important;
+    border-color: rgba(244,223,170,0.24) !important;
+    box-shadow: 12px 0 30px rgba(0,0,0,0.22) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.toggle-btn:hover {
+    color: #f4dfaa !important;
+    background: linear-gradient(180deg, rgba(13,70,64,0.96), rgba(8,35,34,0.90)) !important;
+}
+
+.panel-label {
+    color: #fff9e9 !important;
+    font-size: 14px !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase;
+}
+
+.panel-label svg,
+.route-btn svg,
+.custom-layer-control label svg {
+    color: #8deee0 !important;
+}
+
+.search-input {
+    background: rgba(251,247,237,0.96) !important;
+    border: 1px solid rgba(244,223,170,0.42) !important;
+    color: var(--ink) !important;
+    border-radius: 16px !important;
+    padding: 13px 15px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.10);
+}
+
+.search-input:focus {
+    border-color: #6ee7d6 !important;
+    box-shadow: 0 0 0 4px rgba(110,231,214,0.22), 0 16px 32px rgba(0,0,0,0.16) !important;
+}
+
+.filter-item,
+.custom-layer-control label {
+    color: rgba(251,247,237,0.86) !important;
+    font-weight: 750 !important;
+}
+
+.filter-item input,
+.custom-layer-control input[type="radio"],
+.layer-card input {
+    accent-color: #0f9f8d !important;
+}
+
+.time-display {
+    background: rgba(110,231,214,0.14) !important;
+    color: #d9fff7 !important;
+    border: 1px solid rgba(110,231,214,0.22);
+    border-radius: 14px !important;
+}
+
+.time-slider,
+.volume-slider {
+    accent-color: #0f9f8d !important;
+}
+
+.route-btn,
+.layer-card,
+.latest-item,
+.ext-link-card,
+.wall-badge {
+    background: rgba(251,247,237,0.92) !important;
+    border: 1px solid rgba(14, 90, 83, 0.12) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 12px 26px rgba(0,0,0,0.08);
+}
+
+.route-btn {
+    background: rgba(255,255,255,0.10) !important;
+    color: rgba(251,247,237,0.92) !important;
+    border-color: rgba(255,255,255,0.13) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10) !important;
+}
+
+.route-btn:hover {
+    transform: translateY(-2px);
+    background: rgba(255,255,255,0.16) !important;
+    border-color: rgba(244,223,170,0.32) !important;
+}
+
+.route-btn.active {
+    background: linear-gradient(135deg, #0f9f8d, #0f6f86 65%, #d6ae52) !important;
+    border-color: rgba(244,223,170,0.42) !important;
+    box-shadow: 0 16px 34px rgba(15,159,141,0.28) !important;
+}
+
+.tools-toggle-btn {
+    color: rgba(251,247,237,0.94) !important;
+    border-radius: 18px !important;
+}
+
+.tools-toggle-btn:hover {
+    color: #f4dfaa !important;
+    transform: translateY(-3px) scale(1.03) !important;
+}
+
+.custom-layer-control {
+    border-radius: 24px !important;
+    padding: 17px !important;
+}
+
+.btn-more-layers {
+    background: rgba(244,223,170,0.12) !important;
+    border: 1px dashed rgba(244,223,170,0.42) !important;
+    color: #fff3cc !important;
+    border-radius: 14px !important;
+}
+
+.btn-more-layers:hover {
+    background: rgba(244,223,170,0.2) !important;
+}
+
+.draw-mode-hud {
+    border-radius: 24px !important;
+}
+
+.custom-geoman-container a,
+.hud-close-btn {
+    border-radius: 14px !important;
+}
+
+.custom-geoman-container a {
+    color: rgba(251,247,237,0.86) !important;
+}
+
+.custom-geoman-container a:hover,
+.custom-geoman-container a.active {
+    background: rgba(110,231,214,0.18) !important;
+    color: #d9fff7 !important;
+}
+
+#splashScreen {
+    background:
+        radial-gradient(circle at 30% 18%, rgba(15,159,141,0.35), transparent 30%),
+        radial-gradient(circle at 78% 82%, rgba(214,174,82,0.20), transparent 34%),
+        linear-gradient(145deg, rgba(4,18,18,0.94), rgba(8,45,42,0.92) 52%, rgba(6,22,21,0.96)) !important;
+    backdrop-filter: blur(20px) saturate(1.1) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.1) !important;
+}
+
+#splashScreen::before {
+    background:
+        radial-gradient(circle at 18% 22%, rgba(110,231,214,0.20), transparent 22%),
+        radial-gradient(circle at 82% 18%, rgba(244,223,170,0.16), transparent 24%),
+        linear-gradient(135deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 32px) !important;
+    opacity: 1 !important;
+}
+
+#splashScreen::after {
+    opacity: 0.10 !important;
+    background-image:
+        linear-gradient(120deg, rgba(244,223,170,0.7) 1px, transparent 1px),
+        linear-gradient(30deg, rgba(110,231,214,0.6) 1px, transparent 1px) !important;
+    background-size: 54px 54px !important;
+}
+
+.splash-card {
+    width: min(468px, 100%) !important;
+    padding: 46px 40px 38px !important;
+    border-radius: 32px !important;
+    background:
+        linear-gradient(145deg, rgba(251,247,237,0.96), rgba(242,234,215,0.90)),
+        radial-gradient(circle at top left, rgba(110,231,214,0.28), transparent 38%) !important;
+    border: 1px solid rgba(244,223,170,0.62) !important;
+    box-shadow: 0 40px 110px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.75) !important;
+    overflow: hidden;
+}
+
+.splash-card::before {
+    height: 100% !important;
+    background:
+        linear-gradient(90deg, rgba(15,159,141,0.16), transparent 22%, transparent 78%, rgba(214,174,82,0.18)),
+        linear-gradient(180deg, rgba(255,255,255,0.4), transparent 48%) !important;
+    pointer-events: none;
+}
+
+.splash-card::after {
+    content: "";
+    position: absolute;
+    inset: 12px;
+    border: 1px solid rgba(15,95,87,0.12);
+    border-radius: 24px;
+    pointer-events: none;
+}
+
+.splash-header,
+.splash-quote,
+.splash-slogan,
+.featured-sound-card,
+.btn-enter-map {
+    position: relative;
+    z-index: 1;
+}
+
+.splash-logo {
+    width: 68px !important;
+    height: 68px !important;
+    border-radius: 22px !important;
+    background: linear-gradient(135deg, #0f9f8d, #0f6f86 58%, #d6ae52) !important;
+    color: #fffdf4 !important;
+    box-shadow: 0 16px 34px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.35) !important;
+}
+
+.splash-title {
+    color: #13211f !important;
+    font-family: Georgia, "Times New Roman", "Noto Serif TC", serif !important;
+    font-size: 34px !important;
+    letter-spacing: 0.12em !important;
+    line-height: 1.05 !important;
+}
+
+.splash-subtitle {
+    color: #866d2a !important;
+    letter-spacing: 0.36em !important;
+}
+
+.splash-quote {
+    background: rgba(255,255,255,0.58) !important;
+    border: 1px solid rgba(15,95,87,0.12) !important;
+    border-left: 0 !important;
+    border-radius: 20px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 16px 36px rgba(6,22,21,0.08);
+}
+
+.splash-quote-title {
+    color: #075f57 !important;
+}
+
+.splash-quote-title svg {
+    color: #0f9f8d !important;
+}
+
+.splash-quote-text {
+    color: #384541 !important;
+    font-weight: 650 !important;
+}
+
+.splash-quote-text strong {
+    background: linear-gradient(135deg, rgba(15,159,141,0.16), rgba(214,174,82,0.18)) !important;
+    color: #075f57 !important;
+}
+
+.splash-slogan {
+    color: #7a837e !important;
+}
+
+.splash-slogan span {
+    color: #0f7f73 !important;
+}
+
+.featured-sound-card {
+    background: linear-gradient(135deg, rgba(15,159,141,0.10), rgba(214,174,82,0.14), rgba(255,255,255,0.6)) !important;
+    border: 1px solid rgba(15,95,87,0.14) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 18px 38px rgba(6,22,21,0.08) !important;
+}
+
+.featured-label {
+    color: #0f7f73 !important;
+}
+
+.featured-title {
+    color: #15211f !important;
+}
+
+.btn-enter-map,
+.btn-play-main,
+.player-control-btn,
+.btn-claim-badge {
+    background: linear-gradient(135deg, #11ad99, #0f7f73 58%, #d6ae52) !important;
+    border: 1px solid rgba(244,223,170,0.42) !important;
+    color: #fffdf4 !important;
+    box-shadow: 0 18px 38px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.32) !important;
+}
+
+.btn-enter-map {
+    border-radius: 18px !important;
+    padding: 17px 30px !important;
+}
+
+.btn-enter-map:hover,
+.btn-play-main:hover,
+.player-control-btn:hover,
+.btn-claim-badge:hover {
+    background: linear-gradient(135deg, #24c8b3, #0f9f8d 56%, #e7c971) !important;
+    transform: translateY(-3px);
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 26px !important;
+    background: transparent !important;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.38) !important;
+    border: 1px solid rgba(244,223,170,0.28) !important;
+    overflow: hidden !important;
+}
+
+.leaflet-popup-tip {
+    background: rgba(251,247,237,0.96) !important;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.18) !important;
+}
+
+.sound-card {
+    background: linear-gradient(180deg, rgba(251,247,237,0.98), rgba(242,234,215,0.96)) !important;
+    overflow: hidden;
+}
+
+.sound-cover {
+    height: 176px !important;
+    filter: saturate(0.94) contrast(1.04) brightness(0.96);
+}
+
+.sound-info {
+    padding: 17px 18px 14px !important;
+    background:
+        radial-gradient(circle at 16% 0%, rgba(15,159,141,0.11), transparent 32%),
+        linear-gradient(180deg, rgba(255,255,255,0.42), rgba(251,247,237,0.98));
+}
+
+.sound-title,
+.modal-title,
+.achievement-title {
+    color: #15211f !important;
+    font-family: Georgia, "Times New Roman", "Noto Serif TC", serif !important;
+    letter-spacing: 0.04em !important;
+}
+
+.sound-title {
+    font-size: 20px !important;
+    line-height: 1.28 !important;
+}
+
+.card-meta-box,
+.quote-block {
+    background: rgba(255,255,255,0.62) !important;
+    border: 1px solid rgba(15,95,87,0.12) !important;
+    border-radius: 16px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+}
+
+.meta-row,
+.meta-item,
+.sound-desc,
+.modal-text,
+.latest-item-meta,
+.wall-badge-desc {
+    color: #61716c !important;
+}
+
+.meta-author-name,
+.latest-item-title,
+.ext-link-title,
+.wall-badge-name {
+    color: #1b2a27 !important;
+}
+
+.meta-category {
+    border-radius: 999px !important;
+    padding: 4px 9px !important;
+}
+
+.meta-gps {
+    border-radius: 999px !important;
+    background: rgba(255,255,255,0.68) !important;
+}
+
+.cat-nature { background: #d9f8ef !important; color: #075f57 !important; }
+.cat-culture { background: #fff0c4 !important; color: #8a5b08 !important; }
+.cat-industry { background: #ffe0cb !important; color: #9a3d10 !important; }
+.cat-space { background: #dcefff !important; color: #075985 !important; }
+.cat-history { background: #eee4ff !important; color: #6d28d9 !important; }
+.cat-default { background: #e9eee9 !important; color: #53605b !important; }
+
+.reaction-section-title {
+    background: rgba(15,159,141,0.10) !important;
+    color: #0f7f73 !important;
+    border-color: rgba(15,159,141,0.16) !important;
+    border-radius: 999px !important;
+}
+
+.reaction-btn {
+    background: rgba(255,255,255,0.56) !important;
+    border-color: rgba(15,95,87,0.10) !important;
+    border-radius: 999px !important;
+}
+
+.global-player {
+    max-width: 900px !important;
+    border-radius: 26px !important;
+    background:
+        linear-gradient(135deg, rgba(8,31,30,0.94), rgba(12,58,54,0.88) 62%, rgba(56,43,22,0.86)) !important;
+    border: 1px solid rgba(244,223,170,0.30) !important;
+    box-shadow: 0 -24px 80px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.18) !important;
+    backdrop-filter: blur(30px) saturate(1.18) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(1.18) !important;
+}
+
+.player-title {
+    color: #fff9e9 !important;
+    letter-spacing: 0.03em;
+}
+
+.player-time-display {
+    background: rgba(255,255,255,0.10) !important;
+    color: rgba(244,223,170,0.92) !important;
+    border: 1px solid rgba(244,223,170,0.16);
+    border-radius: 999px !important;
+}
+
+.waveform-wrapper {
+    background: rgba(255,255,255,0.12) !important;
+    border-radius: 999px !important;
+    border: 1px solid rgba(255,255,255,0.10);
+}
+
+.volume-control,
+.mute-icon,
+.close-player-btn,
+.fav-btn,
+.share-icon-btn,
+.nav-icon-btn {
+    color: rgba(251,247,237,0.72) !important;
+}
+
+.fav-btn:hover,
+.fav-btn.active { color: #ff6b8a !important; }
+.share-icon-btn:hover { color: #7dd3fc !important; }
+.nav-icon-btn:hover { color: #6ee7d6 !important; }
+.close-player-btn:hover { background: rgba(255,255,255,0.12) !important; color: #ffd1d1 !important; }
+
+.modal-overlay,
+.achievement-overlay {
+    background: rgba(4,18,18,0.76) !important;
+    backdrop-filter: blur(16px) saturate(1.05) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(1.05) !important;
+}
+
+.modal-box,
+.achievement-card {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(15,159,141,0.11), transparent 34%),
+        linear-gradient(180deg, rgba(251,247,237,0.98), rgba(242,234,215,0.98)) !important;
+    border: 1px solid rgba(244,223,170,0.46) !important;
+    border-radius: 30px !important;
+    box-shadow: 0 36px 100px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.76) !important;
+}
+
+.modal-img {
+    height: 250px !important;
+    filter: saturate(0.92) contrast(1.05) brightness(0.96);
+}
+
+.modal-content {
+    padding: 34px !important;
+}
+
+.modal-tag {
+    border-radius: 999px !important;
+    background: rgba(15,159,141,0.10) !important;
+    color: #0f7f73 !important;
+    border-color: rgba(15,159,141,0.16) !important;
+}
+
+.modal-close-btn,
+.leaflet-container a.leaflet-popup-close-button {
+    background: rgba(8,31,30,0.84) !important;
+    color: #fff9e9 !important;
+    border: 1px solid rgba(244,223,170,0.26) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.modal-close-btn:hover,
+.leaflet-container a.leaflet-popup-close-button:hover {
+    background: #b84436 !important;
+    border-color: rgba(255,255,255,0.32) !important;
+}
+
+.latest-item:hover,
+.ext-link-card:hover,
+.layer-card:hover {
+    transform: translateY(-3px) !important;
+    border-color: rgba(15,159,141,0.28) !important;
+    box-shadow: 0 18px 36px rgba(6,22,21,0.14) !important;
+}
+
+.latest-item img {
+    border-radius: 14px !important;
+    filter: saturate(0.94) contrast(1.04);
+}
+
+.ext-link-icon {
+    border-radius: 14px !important;
+    color: #0f7f73 !important;
+}
+
+.ext-link-card:hover .ext-link-icon {
+    background: #0f9f8d !important;
+    border-color: #0f9f8d !important;
+}
+
+.badge-icon-wrapper {
+    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
+}
+
+.wall-badge.unlocked {
+    background: linear-gradient(180deg, #fff7dc, #fbf7ed) !important;
+    border-color: rgba(214,174,82,0.44) !important;
+}
+
+.wall-badge.unlocked .mini-icon {
+    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
+}
+
+.custom-sound-icon {
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.24));
+}
+
+.sound-dot-marker {
+    background: rgba(251,247,237,0.92) !important;
+    border: 2px solid rgba(255,255,255,0.96) !important;
+    box-shadow: 0 0 0 5px rgba(15,159,141,0.14), 0 12px 24px rgba(0,0,0,0.24) !important;
+}
+
+.sound-dot-marker::after {
+    background: #0f9f8d !important;
+    box-shadow: 0 0 16px rgba(15,159,141,0.85) !important;
+}
+
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+    background: rgba(15,159,141,0.22) !important;
+    box-shadow: 0 0 0 6px rgba(15,159,141,0.12), 0 14px 28px rgba(0,0,0,0.24) !important;
+}
+
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+    background: linear-gradient(135deg, #0f9f8d, #d6ae52) !important;
+    color: #fffdf4 !important;
+    font-weight: 900 !important;
+}
+
+.flood-depth-tooltip {
+    background: rgba(251,247,237,0.96) !important;
+    border-color: rgba(214,174,82,0.76) !important;
+    color: #6d4b10 !important;
+    border-radius: 999px !important;
+}
+
+.locate-me-wrapper,
+.leaflet-control-zoom a {
+    border-radius: 16px !important;
+}
+
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.22) !important;
+}
+
+.leaflet-control-zoom a {
+    background: rgba(251,247,237,0.86) !important;
+    color: #0d3f3b !important;
+    border-color: rgba(15,95,87,0.12) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.leaflet-control-zoom a:hover {
+    background: #fff9e9 !important;
+    color: #0f9f8d !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .glass-header,
+    .drawer-content,
+    .custom-layer-control,
+    .global-player.active,
+    .modal-overlay.active .modal-box {
+        animation: haidianSoftRise 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+
+    .splash-logo {
+        animation: splashFloat 3.4s ease-in-out infinite, haidianGlow 4.8s ease-in-out infinite !important;
+    }
+
+    .btn-enter-map svg,
+    .btn-submit svg,
+    .btn-play-main svg {
+        filter: drop-shadow(0 0 8px rgba(255,255,255,0.24));
+    }
+}
+
+@keyframes haidianSoftRise {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to { opacity: 1; }
+}
+
+@keyframes haidianGlow {
+    0%, 100% { box-shadow: 0 16px 34px rgba(15,159,141,0.28), inset 0 1px 0 rgba(255,255,255,0.35); }
+    50% { box-shadow: 0 20px 44px rgba(214,174,82,0.30), inset 0 1px 0 rgba(255,255,255,0.42); }
+}
+
+@media (min-width: 601px) {
+    .glass-header.compact-mode {
+        background: rgba(8,31,30,0.88) !important;
+        border-radius: 20px !important;
+    }
+
+    .glass-header.compact-mode .project-title::after {
+        display: none;
+    }
+
+    .leaflet-popup .embedded-player-slot .global-player.embedded-player,
+    .leaflet-popup .global-player.embedded-player {
+        background: rgba(255,255,255,0.62) !important;
+        border-color: rgba(15,95,87,0.12) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 12px 26px rgba(6,22,21,0.10) !important;
+    }
+
+    .leaflet-popup .global-player.embedded-player .player-title,
+    .leaflet-popup .embedded-player-slot .global-player.embedded-player .player-title {
+        color: #15211f !important;
+    }
+
+    .leaflet-popup .global-player.embedded-player .player-time-display,
+    .leaflet-popup .embedded-player-slot .global-player.embedded-player .player-time-display {
+        color: #0f7f73 !important;
+        background: rgba(15,159,141,0.10) !important;
+    }
+}
+
+@media (max-width: 600px) {
+    :root { --panel-offset: 10px; }
+
+    body::before,
+    body::after,
+    #map::after {
+        opacity: 0.55;
+    }
+
+    .glass-header {
+        top: 10px !important;
+        width: 94vw !important;
+        border-radius: 22px !important;
+        padding: 12px 14px !important;
+    }
+
+    .project-title {
+        font-size: 18px !important;
+        letter-spacing: 0.05em !important;
+    }
+
+    .project-title::after {
+        display: none;
+    }
+
+    .nav-buttons button {
+        font-size: 12px !important;
+        padding: 9px 6px !important;
+        border-radius: 14px !important;
+    }
+
+    .drawer-content {
+        padding: 18px !important;
+        border-radius: 22px !important;
+        max-height: calc(100dvh - 175px) !important;
+    }
+
+    .toggle-btn {
+        right: -36px !important;
+        width: 36px !important;
+        height: 68px !important;
+    }
+
+    .splash-card {
+        padding: 26px 22px 22px !important;
+        border-radius: 28px !important;
+    }
+
+    .splash-card::after {
+        inset: 9px;
+        border-radius: 21px;
+    }
+
+    .splash-title {
+        font-size: 25px !important;
+        letter-spacing: 0.08em !important;
+    }
+
+    .splash-subtitle {
+        letter-spacing: 0.24em !important;
+    }
+
+    .splash-quote {
+        border-radius: 18px !important;
+    }
+
+    .modal-content {
+        padding: 24px !important;
+    }
+
+    .modal-img {
+        height: 190px !important;
+    }
+
+    .global-player {
+        border-radius: 24px !important;
+    }
+
+    .sound-cover {
+        height: 128px !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+        border-radius: 22px !important;
+    }
+}
+</style>
+
+
+
+<!-- HAIDIAN_SEL_ENVIRONMENT_INQUIRY_REFINEMENT_START -->
+<style id="haidian-sel-environment-inquiry-refinement">
+:root {
+    --haidian-ink-strong: #10231f;
+    --haidian-ink: #18312d;
+    --haidian-muted-strong: #40545e;
+    --haidian-paper: #fffaf0;
+    --haidian-paper-solid: #fffdf8;
+    --haidian-teal-deep: #064842;
+    --haidian-teal: #087f72;
+    --haidian-teal-soft: rgba(8,127,114,0.12);
+    --haidian-gold: #b9841e;
+    --haidian-gold-soft: rgba(185,132,30,0.16);
+    --haidian-sel: #6d4bd1;
+    --haidian-field: #1b6ea8;
+    --haidian-guard: #0b7f55;
+    --haidian-inquiry: #a86b10;
+}
+
+html, body, button, input, select, textarea,
+.leaflet-container,
+.leaflet-popup-content {
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+body {
+    color: var(--haidian-ink) !important;
+    background: #e8efe9 !important;
+}
+
+body::before {
+    background:
+        radial-gradient(circle at 12% 12%, rgba(71,204,181,0.22), transparent 28%),
+        radial-gradient(circle at 82% 18%, rgba(236,185,85,0.22), transparent 25%),
+        linear-gradient(135deg, rgba(7,62,58,0.08), rgba(255,248,232,0.12)) !important;
+}
+
+body::after {
+    opacity: 0.34 !important;
+}
+
+#map::after {
+    opacity: 0.35 !important;
+    background:
+        radial-gradient(circle at 18% 20%, rgba(255,250,240,0.32), transparent 22%),
+        linear-gradient(180deg, rgba(6,72,66,0.08), rgba(255,250,240,0.05) 42%, rgba(6,72,66,0.10)) !important;
+}
+
+/* 首頁：提升可讀性，讓四個學習主軸自然進入第一眼 */
+.splash-card {
+    background:
+        linear-gradient(180deg, rgba(255,253,248,0.98), rgba(255,248,232,0.96)) !important;
+    color: var(--haidian-ink-strong) !important;
+    border-color: rgba(8,127,114,0.18) !important;
+    box-shadow: 0 36px 90px rgba(4,35,33,0.30), inset 0 1px 0 rgba(255,255,255,0.96) !important;
+}
+
+.splash-card::after {
+    border-color: rgba(8,127,114,0.20) !important;
+}
+
+.splash-title {
+    color: var(--haidian-ink-strong) !important;
+    text-shadow: none !important;
+    letter-spacing: 0.12em !important;
+}
+
+.splash-title span,
+.project-title span.main-title {
+    background: linear-gradient(135deg, #e6fff8 0%, #73e5d5 38%, #ffe6a8 100%) !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+}
+
+.splash-subtitle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    color: #075c53 !important;
+    font-size: 13px !important;
+    font-weight: 950 !important;
+    letter-spacing: 0.34em !important;
+    text-shadow: none !important;
+}
+
+.haidian-axis {
+    margin: 18px auto 20px;
+    padding: 16px 16px 14px;
+    width: min(100%, 520px);
+    border: 1px solid rgba(8,127,114,0.18);
+    border-radius: 24px;
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.86), rgba(243,253,250,0.76)),
+        radial-gradient(circle at 18% 0%, rgba(109,75,209,0.11), transparent 32%),
+        radial-gradient(circle at 92% 100%, rgba(185,132,30,0.12), transparent 34%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 16px 36px rgba(13,63,59,0.10);
+}
+
+.haidian-axis-title {
+    color: var(--haidian-ink-strong);
+    font-size: 14px;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.haidian-axis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.haidian-axis-chip {
+    display: flex;
+    min-height: 74px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 10px 8px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.82);
+    border: 1px solid rgba(17,77,72,0.10);
+    color: var(--haidian-ink);
+    text-align: center;
+    box-shadow: 0 8px 18px rgba(8,43,40,0.07);
+}
+
+.haidian-axis-chip b {
+    display: block;
+    font-size: 15px;
+    line-height: 1;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+}
+
+.haidian-axis-chip small {
+    display: block;
+    color: var(--haidian-muted-strong);
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 800;
+}
+
+.haidian-axis-chip:nth-child(1) { border-top: 4px solid var(--haidian-sel); }
+.haidian-axis-chip:nth-child(2) { border-top: 4px solid var(--haidian-guard); }
+.haidian-axis-chip:nth-child(3) { border-top: 4px solid var(--haidian-inquiry); }
+.haidian-axis-chip:nth-child(4) { border-top: 4px solid var(--haidian-field); }
+
+.splash-card p,
+.splash-quote-text,
+.splash-slogan,
+.featured-desc,
+.modal-text,
+.sound-desc {
+    color: var(--haidian-muted-strong) !important;
+    opacity: 1 !important;
+    font-weight: 650 !important;
+}
+
+.splash-quote,
+.featured-sound {
+    background: rgba(255,255,255,0.74) !important;
+    border-color: rgba(8,127,114,0.16) !important;
+    color: var(--haidian-ink) !important;
+}
+
+.splash-quote-title,
+.featured-label,
+.splash-slogan span {
+    color: #075c53 !important;
+    font-weight: 950 !important;
+}
+
+.btn-enter-map,
+.btn-submit,
+.btn-play-main,
+.player-control-btn,
+.btn-claim-badge {
+    background: linear-gradient(135deg, #086f65, #0a9b88) !important;
+    color: #fffdf6 !important;
+    border: 1px solid rgba(255,255,255,0.24) !important;
+    box-shadow: 0 14px 30px rgba(8,127,114,0.28) !important;
+    font-weight: 950 !important;
+    letter-spacing: 0.08em !important;
+}
+
+.btn-enter-map:hover,
+.btn-submit:hover,
+.btn-play-main:hover,
+.player-control-btn:hover,
+.btn-claim-badge:hover {
+    background: linear-gradient(135deg, #075c53, #087f72) !important;
+    transform: translateY(-2px);
+}
+
+/* 頂部導覽：保留深色質感，但把文字拉到 AA 以上的可讀對比 */
+.glass-header {
+    background:
+        linear-gradient(135deg, rgba(4,43,40,0.94), rgba(6,72,66,0.90) 54%, rgba(64,44,15,0.84)) !important;
+    border-color: rgba(255,231,174,0.42) !important;
+    box-shadow: 0 28px 72px rgba(1,24,22,0.40), inset 0 1px 0 rgba(255,255,255,0.20) !important;
+}
+
+.project-title {
+    color: #fffdf6 !important;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.48) !important;
+}
+
+.project-title span.sub-title {
+    color: #ffeab8 !important;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.40) !important;
+}
+
+.project-title::after {
+    content: "SEL・環境守護・探究・踏查" !important;
+    background: rgba(255,243,204,0.16) !important;
+    color: #fff2c5 !important;
+    border-color: rgba(255,231,174,0.46) !important;
+    text-shadow: none !important;
+}
+
+.nav-buttons button {
+    color: #fff8df !important;
+    background: rgba(255,255,255,0.12) !important;
+    border-color: rgba(255,255,255,0.20) !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.32);
+}
+
+.nav-buttons button:hover {
+    background: rgba(255,243,204,0.20) !important;
+    color: #ffffff !important;
+    border-color: rgba(255,232,179,0.52) !important;
+}
+
+.btn-latest {
+    color: #fff1bd !important;
+}
+
+/* 面板、卡片與表單：白底上提高文字濃度，避免過淡灰字 */
+.drawer-content,
+.custom-layer-control,
+.modal-box,
+.global-player,
+.leaflet-popup-content-wrapper,
+.haidian-v4-dock,
+.latest-item,
+.layer-card,
+.ext-link-card,
+.card-meta-box,
+.quote-block {
+    color: var(--haidian-ink) !important;
+}
+
+.drawer-content,
+.custom-layer-control,
+.haidian-v4-dock,
+.modal-box {
+    background: rgba(255,253,248,0.94) !important;
+    border-color: rgba(8,127,114,0.16) !important;
+}
+
+.panel-label,
+.modal-title,
+.sound-title,
+.latest-item-title,
+.ext-link-title,
+.route-btn,
+.haidian-v4-panel-head .title,
+.haidian-v4-dock-title strong,
+.haidian-v4-card b,
+.player-title {
+    color: var(--haidian-ink-strong) !important;
+    font-weight: 950 !important;
+}
+
+.time-display,
+.meta-author-name,
+.haidian-v4-panel-head .eyebrow,
+.haidian-v4-data-note,
+.reaction-section-title {
+    color: #075c53 !important;
+}
+
+.meta-row,
+.meta-item,
+.meta-date-text,
+.latest-item-meta,
+.ext-link-label,
+.haidian-v4-panel-head .copy,
+.haidian-v4-dock-title span,
+.haidian-v4-card small,
+.custom-layer-control label,
+.layer-card-content span,
+.player-time-display {
+    color: var(--haidian-muted-strong) !important;
+    opacity: 1 !important;
+}
+
+.search-input,
+.modal-box input,
+.modal-box textarea,
+.modal-box select {
+    color: var(--haidian-ink-strong) !important;
+    background: rgba(255,255,255,0.92) !important;
+    border-color: rgba(8,127,114,0.22) !important;
+    font-weight: 700 !important;
+}
+
+.search-input::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: #677982 !important;
+    opacity: 1 !important;
+}
+
+.search-input:focus,
+.modal-box input:focus,
+.modal-box textarea:focus,
+.modal-box select:focus {
+    border-color: #087f72 !important;
+    box-shadow: 0 0 0 4px rgba(8,127,114,0.16) !important;
+}
+
+.filter-item,
+.custom-layer-control label,
+.layer-card-content {
+    color: var(--haidian-ink) !important;
+    font-weight: 850 !important;
+}
+
+/* 學習主線 dock：四軸呈現，維持原本點擊模式 */
+.haidian-v4-dock {
+    width: min(520px, calc(100vw - 140px)) !important;
+}
+
+.haidian-v4-dock-body {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+}
+
+.haidian-v4-card {
+    min-height: 78px !important;
+    background: rgba(255,255,255,0.86) !important;
+    border-color: rgba(8,127,114,0.14) !important;
+    box-shadow: 0 8px 20px rgba(5,39,36,0.06);
+}
+
+.haidian-v4-card.axis-sel { border-top: 4px solid var(--haidian-sel) !important; }
+.haidian-v4-card.axis-field { border-top: 4px solid var(--haidian-field) !important; }
+.haidian-v4-card.axis-inquiry { border-top: 4px solid var(--haidian-inquiry) !important; }
+.haidian-v4-card.axis-guard { border-top: 4px solid var(--haidian-guard) !important; }
+
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
+    background: linear-gradient(135deg, #075c53, #0a9888) !important;
+    color: #fffdf6 !important;
+}
+
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] b,
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] small,
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] b,
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] small,
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] b,
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] small {
+    color: #fffdf6 !important;
+}
+
+/* 聲音卡片：更像正式作品頁，文字更清楚 */
+.sound-card {
+    background: var(--haidian-paper-solid) !important;
+}
+
+.sound-info {
+    background:
+        linear-gradient(180deg, rgba(255,253,248,0.98), rgba(255,249,235,0.96)) !important;
+}
+
+.card-meta-box,
+.quote-block,
+.reaction-section-title,
+.time-display {
+    background: rgba(8,127,114,0.07) !important;
+    border-color: rgba(8,127,114,0.14) !important;
+}
+
+.meta-gps {
+    color: #35505a !important;
+    background: #ffffff !important;
+}
+
+.cat-nature, .cat-culture, .cat-industry, .cat-space, .cat-history, .cat-default {
+    color: var(--haidian-ink-strong) !important;
+    border: 1px solid rgba(16,35,31,0.10) !important;
+    font-weight: 900 !important;
+}
+
+.reaction-btn {
+    color: #334850 !important;
+    background: rgba(255,255,255,0.88) !important;
+    border-color: rgba(8,127,114,0.15) !important;
+    font-weight: 850 !important;
+}
+
+/* 讓四個關鍵字出現在側欄上方，但不壓縮操作功能 */
+.haidian-learning-note {
+    margin: 0 0 14px;
+    padding: 12px 13px;
+    border-radius: 18px;
+    background:
+        linear-gradient(135deg, rgba(8,127,114,0.09), rgba(255,243,204,0.20));
+    border: 1px solid rgba(8,127,114,0.14);
+    color: var(--haidian-muted-strong);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.55;
+}
+
+.haidian-learning-note strong {
+    color: #075c53;
+    font-weight: 950;
+}
+
+@media (max-width: 760px) {
+    .haidian-axis-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .haidian-axis-chip {
+        min-height: 62px;
+    }
+
+    .haidian-v4-dock {
+        width: auto !important;
+    }
+
+    .haidian-v4-dock-body {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 6px !important;
+    }
+
+    .haidian-v4-card {
+        min-height: 64px !important;
+        padding: 8px 6px !important;
+    }
+
+    .haidian-v4-card b {
+        font-size: 11px !important;
+        letter-spacing: 0.02em;
+    }
+
+    .haidian-v4-card small {
+        display: none !important;
+    }
+}
+
+@media (max-width: 600px) {
+    .splash-subtitle {
+        letter-spacing: 0.20em !important;
+    }
+
+    .haidian-axis {
+        margin: 14px auto 16px;
+        padding: 12px;
+        border-radius: 20px;
+    }
+
+    .haidian-axis-title {
+        font-size: 12.5px;
+    }
+
+    .project-title::after {
+        display: none !important;
+    }
+
+    .nav-buttons button {
+        color: #fffdf6 !important;
+        font-size: 12px !important;
+        font-weight: 950 !important;
+    }
+
+    .drawer-content,
+    .custom-layer-control,
+    .modal-box {
+        background: rgba(255,253,248,0.97) !important;
+    }
+}
+</style>
+
+<script id="haidian-sel-environment-inquiry-refinement-js">
+(function () {
+    'use strict';
+
+    function ready(fn) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn, { once: true });
+        } else {
+            fn();
+        }
+    }
+
+    function addSplashAxis() {
+        var card = document.querySelector('#splashScreen .splash-card');
+        if (!card || card.querySelector('.haidian-axis')) return;
+
+        var axis = document.createElement('section');
+        axis.className = 'haidian-axis';
+        axis.setAttribute('aria-label', '學習主軸');
+        axis.innerHTML = '' +
+            '<div class="haidian-axis-title">從聲音出發的地方學習</div>' +
+            '<div class="haidian-axis-grid">' +
+                '<div class="haidian-axis-chip"><b>SEL</b><small>聽見感受<br>練習回應</small></div>' +
+                '<div class="haidian-axis-chip"><b>環境守護</b><small>理解水圳<br>關注家園</small></div>' +
+                '<div class="haidian-axis-chip"><b>探究</b><small>提出問題<br>辨讀證據</small></div>' +
+                '<div class="haidian-axis-chip"><b>踏查</b><small>走入現場<br>完成任務</small></div>' +
+            '</div>';
+
+        var subtitle = card.querySelector('.splash-subtitle');
+        if (subtitle && subtitle.parentNode) subtitle.insertAdjacentElement('afterend', axis);
+        else card.insertBefore(axis, card.firstChild);
+    }
+
+    function addPanelLearningNotes() {
+        var sideContent = document.querySelector('#sidePanel .drawer-content');
+        if (sideContent && !sideContent.querySelector('.haidian-learning-note')) {
+            var note = document.createElement('div');
+            note.className = 'haidian-learning-note';
+            note.innerHTML = '<strong>SEL 聲音回應</strong>｜先聽見自己的感受，再看見地方與他人的處境。';
+            var head = sideContent.querySelector('.haidian-v4-panel-head');
+            if (head) head.insertAdjacentElement('afterend', note);
+            else sideContent.insertBefore(note, sideContent.firstChild);
+        }
+
+        var routeContent = document.querySelector('#routePanel .drawer-content');
+        if (routeContent && !routeContent.querySelector('.haidian-learning-note')) {
+            var routeNote = document.createElement('div');
+            routeNote.className = 'haidian-learning-note';
+            routeNote.innerHTML = '<strong>探究踏查</strong>｜沿路觀察水圳、聚落與環境變化，把發現帶回討論與守護行動。';
+            var routeHead = routeContent.querySelector('.haidian-v4-panel-head');
+            if (routeHead) routeHead.insertAdjacentElement('afterend', routeNote);
+            else routeContent.insertBefore(routeNote, routeContent.firstChild);
+        }
+    }
+
+    function refineExistingCopy() {
+        var headerTitle = document.querySelector('.project-title');
+        if (headerTitle) {
+            headerTitle.setAttribute('aria-label', '海佃溪遊記，聲音地景計畫，SEL、環境守護、探究、踏查');
+        }
+
+        var dockTitle = document.querySelector('.haidian-v4-dock-title strong');
+        var dockCopy = document.querySelector('.haidian-v4-dock-title span');
+        if (dockTitle) dockTitle.textContent = '學習主線';
+        if (dockCopy) dockCopy.textContent = '從 SEL 回應出發，走向環境守護與探究踏查';
+    }
+
+    function run() {
+        addSplashAxis();
+        addPanelLearningNotes();
+        refineExistingCopy();
+        setTimeout(function () {
+            addSplashAxis();
+            addPanelLearningNotes();
+            refineExistingCopy();
+        }, 250);
+    }
+
+    ready(run);
+})();
+</script>
+<!-- HAIDIAN_SEL_ENVIRONMENT_INQUIRY_REFINEMENT_END -->
 
 </body></html>
