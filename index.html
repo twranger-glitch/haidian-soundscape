@@ -6808,7 +6808,874 @@ function mountGlobalPlayerIntoPopup_(retry) {
         };
     </script>
 
+<!-- HAIDIAN_UI_POLISH_ONLY_START -->
+<style id="haidian-ui-polish-only">
+/*
+  HAIDIAN UI POLISH ONLY
+  純 CSS 視覺優化版。
+  不修改 JS、不改功能、不新增監聽、不碰 Firebase / Firestore / Leaflet 邏輯。
+*/
 
+/* =========================
+   1. 全域設計語彙
+========================= */
+:root {
+    --accent-color: #0f8f6f;
+    --text-main: #10201d;
+    --text-muted: #66736f;
+
+    --ui-ink: #10201d;
+    --ui-muted: #64748b;
+    --ui-subtle: #94a3b8;
+    --ui-paper: rgba(255, 253, 247, 0.92);
+    --ui-paper-solid: #fffdf7;
+    --ui-card: rgba(255, 255, 255, 0.9);
+    --ui-line: rgba(148, 163, 184, 0.28);
+
+    --ui-green: #0f8f6f;
+    --ui-green-deep: #047857;
+    --ui-river: #1f8a93;
+    --ui-gold: #f5c76d;
+    --ui-red: #e65b4f;
+    --ui-blue: #3b82f6;
+    --ui-violet: #7c3aed;
+
+    --ui-radius-sm: 10px;
+    --ui-radius-md: 16px;
+    --ui-radius-lg: 22px;
+    --ui-radius-xl: 28px;
+
+    --ui-shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.12);
+    --ui-shadow-card: 0 18px 45px rgba(15, 23, 42, 0.16);
+    --ui-shadow-heavy: 0 28px 70px rgba(15, 23, 42, 0.28);
+    --ui-blur: blur(18px) saturate(150%);
+}
+
+body,
+html {
+    font-family: Inter, "Noto Sans TC", "Helvetica Neue", Arial, "微軟正黑體", sans-serif;
+    background:
+        radial-gradient(circle at 8% 12%, rgba(15, 143, 111, 0.12), transparent 30%),
+        radial-gradient(circle at 90% 78%, rgba(31, 138, 147, 0.12), transparent 32%),
+        #e8eee9;
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select {
+    font-family: inherit;
+}
+
+/* 細緻捲軸 */
+.drawer-content,
+.modal-box,
+.tools-menu-container,
+.custom-layer-control,
+.latest-list,
+.sound-desc,
+.nanshan-category-list,
+.nanshan-search-status,
+.nanshan-popup-content,
+.leaflet-popup-content {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 143, 111, 0.38) transparent;
+}
+
+.drawer-content::-webkit-scrollbar,
+.modal-box::-webkit-scrollbar,
+.tools-menu-container::-webkit-scrollbar,
+.custom-layer-control::-webkit-scrollbar,
+.latest-list::-webkit-scrollbar,
+.sound-desc::-webkit-scrollbar,
+.nanshan-category-list::-webkit-scrollbar,
+.nanshan-search-status::-webkit-scrollbar,
+.nanshan-popup-content::-webkit-scrollbar,
+.leaflet-popup-content::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.drawer-content::-webkit-scrollbar-thumb,
+.modal-box::-webkit-scrollbar-thumb,
+.tools-menu-container::-webkit-scrollbar-thumb,
+.custom-layer-control::-webkit-scrollbar-thumb,
+.latest-list::-webkit-scrollbar-thumb,
+.sound-desc::-webkit-scrollbar-thumb,
+.nanshan-category-list::-webkit-scrollbar-thumb,
+.nanshan-search-status::-webkit-scrollbar-thumb,
+.nanshan-popup-content::-webkit-scrollbar-thumb,
+.leaflet-popup-content::-webkit-scrollbar-thumb {
+    background: rgba(15, 143, 111, 0.38);
+    border-radius: 999px;
+}
+
+/* =========================
+   2. 頂部導覽列
+========================= */
+.glass-header {
+    background:
+        linear-gradient(135deg, rgba(255, 253, 247, 0.92), rgba(255, 255, 255, 0.72)) !important;
+    -webkit-backdrop-filter: var(--ui-blur);
+    backdrop-filter: var(--ui-blur);
+    border: 1px solid rgba(255, 255, 255, 0.76) !important;
+    border-bottom-color: rgba(15, 143, 111, 0.16) !important;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14) !important;
+}
+
+.glass-header::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(15, 143, 111, 0.12), transparent 28%, rgba(245, 199, 109, 0.16));
+    opacity: 0.8;
+}
+
+.project-title {
+    position: relative;
+    color: var(--ui-ink) !important;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.project-title span.main-title {
+    color: var(--ui-green-deep) !important;
+    position: relative;
+}
+
+.project-title span.main-title::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -5px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--ui-green), var(--ui-gold));
+    opacity: 0.8;
+}
+
+.project-title span.sub-title {
+    color: #6b7c77 !important;
+}
+
+.nav-buttons button {
+    position: relative;
+    border-radius: 999px !important;
+    color: #31423e !important;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid transparent;
+}
+
+.nav-buttons button:hover {
+    background: rgba(15, 143, 111, 0.1) !important;
+    color: var(--ui-green-deep) !important;
+    border-color: rgba(15, 143, 111, 0.18);
+    transform: translateY(-1px);
+}
+
+.nav-buttons .btn-submit,
+#authBtn.btn-submit {
+    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.58) !important;
+    color: #fff !important;
+    box-shadow: 0 12px 26px rgba(15, 143, 111, 0.28) !important;
+}
+
+.nav-buttons .btn-submit:hover,
+#authBtn.btn-submit:hover {
+    background: linear-gradient(135deg, #047857, #147d84) !important;
+    color: #fff !important;
+    transform: translateY(-2px);
+}
+
+.btn-latest {
+    color: #b45309 !important;
+}
+
+.btn-latest:hover {
+    background: rgba(245, 158, 11, 0.1) !important;
+    color: #92400e !important;
+}
+
+/* =========================
+   3. 左側抽屜與搜尋篩選
+========================= */
+.drawer-content {
+    background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.95), rgba(255, 255, 255, 0.86)) !important;
+    -webkit-backdrop-filter: var(--ui-blur);
+    backdrop-filter: var(--ui-blur);
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    box-shadow: var(--ui-shadow-card) !important;
+    border-radius: var(--ui-radius-xl) !important;
+}
+
+.drawer-content hr {
+    border-top-color: rgba(15, 143, 111, 0.12) !important;
+}
+
+.toggle-btn {
+    background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.74)) !important;
+    border-color: rgba(15, 143, 111, 0.16) !important;
+    color: var(--ui-green-deep) !important;
+    box-shadow: 8px 0 22px rgba(15, 23, 42, 0.12) !important;
+}
+
+.toggle-btn:hover {
+    background: #fff !important;
+    color: var(--ui-green) !important;
+    transform: translateX(2px);
+}
+
+.panel-label {
+    color: var(--ui-ink) !important;
+}
+
+.panel-label svg {
+    color: var(--ui-green-deep) !important;
+}
+
+.search-input {
+    border-radius: 14px !important;
+    border: 1px solid rgba(148, 163, 184, 0.34) !important;
+    background: rgba(248, 250, 252, 0.86) !important;
+    color: var(--ui-ink) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.search-input:focus {
+    background: #fff !important;
+    border-color: rgba(15, 143, 111, 0.55) !important;
+    box-shadow:
+        0 0 0 4px rgba(15, 143, 111, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.filter-item {
+    border-radius: 999px;
+    padding: 7px 9px;
+    width: calc(50% - 6px) !important;
+    background: rgba(248, 250, 252, 0.74);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-sizing: border-box;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.filter-item:hover {
+    background: rgba(15, 143, 111, 0.08);
+    border-color: rgba(15, 143, 111, 0.2);
+    transform: translateY(-1px);
+}
+
+.filter-item input,
+.custom-layer-control input,
+.layer-card input {
+    accent-color: var(--ui-green);
+}
+
+.time-display {
+    background: linear-gradient(135deg, rgba(15, 143, 111, 0.1), rgba(31, 138, 147, 0.1)) !important;
+    color: var(--ui-green-deep) !important;
+    border: 1px solid rgba(15, 143, 111, 0.16);
+    border-radius: 12px !important;
+}
+
+/* =========================
+   4. 右側圖資工具
+========================= */
+.tools-toggle-btn,
+.locate-me-btn {
+    background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.72)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.78) !important;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16) !important;
+}
+
+.tools-toggle-btn:hover,
+.locate-me-btn:hover {
+    transform: translateY(-2px) scale(1.04) !important;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.2) !important;
+}
+
+.custom-layer-control {
+    background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.88)) !important;
+    -webkit-backdrop-filter: var(--ui-blur);
+    backdrop-filter: var(--ui-blur);
+    border: 1px solid rgba(255, 255, 255, 0.78) !important;
+    border-radius: 22px !important;
+    box-shadow: var(--ui-shadow-card) !important;
+}
+
+.custom-layer-control label {
+    border-radius: 12px;
+    padding: 6px 8px;
+    margin-left: -3px;
+    margin-right: -3px;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.custom-layer-control label:hover {
+    background: rgba(15, 143, 111, 0.07);
+    transform: translateX(2px);
+}
+
+#floodControlPanel,
+#hydrologyControlPanel,
+#officialHazardControlPanel {
+    border-radius: 16px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+/* =========================
+   5. V4 探索主線 Dock
+========================= */
+.haidian-v4-dock {
+    background:
+        linear-gradient(135deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.82)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.82) !important;
+    border-bottom-color: rgba(15, 143, 111, 0.18) !important;
+    box-shadow: 0 22px 55px rgba(15, 23, 42, 0.2) !important;
+}
+
+.haidian-v4-dock::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(15, 143, 111, 0.13), transparent 38%),
+        radial-gradient(circle at 92% 100%, rgba(245, 199, 109, 0.16), transparent 42%);
+}
+
+.haidian-v4-card {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.76) !important;
+    border: 1px solid rgba(15, 143, 111, 0.13) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.haidian-v4-card::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
+    height: 3px;
+    border-radius: 999px 999px 0 0;
+    background: linear-gradient(90deg, var(--ui-green), var(--ui-gold));
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.haidian-v4-card:hover::after,
+body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"]::after,
+body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"]::after,
+body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"]::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.haidian-v4-dock-toggle {
+    background: rgba(15, 143, 111, 0.1) !important;
+    color: var(--ui-green-deep) !important;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.haidian-v4-dock-toggle:hover {
+    background: rgba(15, 143, 111, 0.16) !important;
+    transform: translateY(-1px);
+}
+
+.haidian-v4-panel-head {
+    background:
+        linear-gradient(135deg, rgba(15, 143, 111, 0.11), rgba(245, 199, 109, 0.18)),
+        rgba(255, 255, 255, 0.72) !important;
+    border-radius: 20px !important;
+    border-color: rgba(15, 143, 111, 0.18) !important;
+}
+
+.haidian-v4-mode-switcher {
+    background: rgba(255, 255, 255, 0.76) !important;
+    border: 1px solid rgba(15, 143, 111, 0.12) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+/* =========================
+   6. Leaflet Popup 聲景卡片
+========================= */
+.leaflet-popup-content-wrapper {
+    border-radius: 24px !important;
+    overflow: hidden !important;
+    background: rgba(255, 253, 247, 0.98) !important;
+    box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+    border: 1px solid rgba(255, 255, 255, 0.78);
+}
+
+.leaflet-popup-tip {
+    background: rgba(255, 253, 247, 0.98) !important;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18) !important;
+}
+
+.sound-card {
+    background:
+        linear-gradient(180deg, #fffdf7 0%, #ffffff 48%, #f8fafc 100%) !important;
+}
+
+.sound-cover {
+    height: 172px !important;
+    filter: saturate(1.04) contrast(1.02);
+}
+
+.sound-info {
+    padding: 16px 18px 14px 18px !important;
+}
+
+.sound-title {
+    color: var(--ui-ink) !important;
+    letter-spacing: 0.02em;
+}
+
+.card-meta-box {
+    background:
+        linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 253, 247, 0.94)) !important;
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+    border-radius: 16px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.meta-gps,
+.meta-category,
+.modal-tag {
+    border-radius: 999px !important;
+}
+
+.sound-desc {
+    color: #52635e !important;
+    line-height: 1.72 !important;
+}
+
+.btn-play-main {
+    border-radius: 16px !important;
+    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
+    box-shadow: 0 14px 28px rgba(15, 143, 111, 0.25) !important;
+}
+
+.btn-play-main:hover {
+    background: linear-gradient(135deg, #047857, #147d84) !important;
+    box-shadow: 0 18px 36px rgba(15, 143, 111, 0.32) !important;
+}
+
+.btn-play-main.playing {
+    background: linear-gradient(135deg, #e65b4f, #c2410c) !important;
+}
+
+.share-icon-btn,
+.nav-icon-btn,
+.fav-btn {
+    border-radius: 999px;
+}
+
+.share-icon-btn:hover,
+.nav-icon-btn:hover,
+.fav-btn:hover {
+    background: rgba(15, 143, 111, 0.08);
+}
+
+.reaction-section-title {
+    border-radius: 999px !important;
+    background: rgba(15, 143, 111, 0.08) !important;
+    border-color: rgba(15, 143, 111, 0.12) !important;
+    color: var(--ui-green-deep) !important;
+}
+
+.reaction-box {
+    gap: 7px !important;
+}
+
+.reaction-btn {
+    border-radius: 999px !important;
+    background: rgba(248, 250, 252, 0.9) !important;
+    border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.reaction-btn:hover {
+    background: #fff !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+/* Marker 更精緻 */
+.sound-dot-marker {
+    background: rgba(255, 253, 247, 0.92) !important;
+    box-shadow:
+        0 0 0 5px rgba(15, 143, 111, 0.13),
+        0 10px 24px rgba(15, 23, 42, 0.2) !important;
+}
+
+/* =========================
+   7. 全域播放器
+========================= */
+.global-player {
+    background:
+        linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.86)) !important;
+    -webkit-backdrop-filter: var(--ui-blur);
+    backdrop-filter: var(--ui-blur);
+    border: 1px solid rgba(255, 255, 255, 0.82) !important;
+    border-bottom-color: rgba(15, 143, 111, 0.18) !important;
+    box-shadow: 0 -18px 55px rgba(15, 23, 42, 0.18) !important;
+    border-radius: 24px !important;
+}
+
+.player-control-btn {
+    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
+    box-shadow: 0 12px 26px rgba(15, 143, 111, 0.28) !important;
+}
+
+.waveform-wrapper {
+    border-radius: 999px !important;
+    background:
+        linear-gradient(180deg, rgba(226, 232, 240, 0.88), rgba(248, 250, 252, 0.94)) !important;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.player-time-display {
+    border-radius: 999px !important;
+    background: rgba(15, 143, 111, 0.08) !important;
+    color: var(--ui-green-deep) !important;
+}
+
+/* 桌機卡片內嵌播放器 */
+.leaflet-popup .embedded-player-slot .global-player.embedded-player,
+.leaflet-popup .global-player.embedded-player {
+    background:
+        linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 253, 247, 0.94)) !important;
+    border-radius: 20px !important;
+    border-color: rgba(15, 143, 111, 0.13) !important;
+}
+
+/* =========================
+   8. Modal 視覺精修
+========================= */
+.modal-overlay {
+    background:
+        radial-gradient(circle at 30% 20%, rgba(15, 143, 111, 0.18), transparent 28%),
+        rgba(15, 23, 42, 0.62) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(125%);
+    backdrop-filter: blur(10px) saturate(125%);
+}
+
+.modal-box {
+    background:
+        linear-gradient(180deg, #fffdf7 0%, #ffffff 52%, #f8fafc 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 26px !important;
+    box-shadow: var(--ui-shadow-heavy) !important;
+}
+
+.modal-img {
+    height: 235px !important;
+    filter: saturate(1.04) contrast(1.03);
+}
+
+.modal-content {
+    color: var(--ui-ink);
+}
+
+.modal-title {
+    color: var(--ui-ink) !important;
+}
+
+.modal-close-btn {
+    background: rgba(255, 253, 247, 0.96) !important;
+    border: 1px solid rgba(255, 255, 255, 0.76) !important;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18) !important;
+}
+
+.modal-close-btn:hover {
+    background: var(--ui-red) !important;
+    color: #fff !important;
+}
+
+.latest-item,
+.layer-card,
+.ext-link-card {
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9)) !important;
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    border-radius: 18px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.latest-item:hover,
+.layer-card:hover,
+.ext-link-card:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12) !important;
+    border-color: rgba(15, 143, 111, 0.28) !important;
+}
+
+/* =========================
+   9. Splash 入口卡片
+========================= */
+#splashScreen {
+    background:
+        radial-gradient(circle at 18% 18%, rgba(15, 143, 111, 0.26), transparent 28%),
+        radial-gradient(circle at 82% 80%, rgba(31, 138, 147, 0.2), transparent 30%),
+        rgba(15, 23, 42, 0.72) !important;
+}
+
+#splashScreen .splash-card {
+    background:
+        linear-gradient(180deg, #fffdf7 0%, #ffffff 54%, #f8fafc 100%) !important;
+    border-radius: 30px !important;
+    box-shadow:
+        0 35px 90px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.82) !important;
+}
+
+#splashScreen .splash-card::before {
+    height: 7px !important;
+    background: linear-gradient(90deg, var(--ui-green), var(--ui-river), var(--ui-gold)) !important;
+}
+
+.splash-logo {
+    background:
+        linear-gradient(135deg, rgba(15, 143, 111, 0.12), rgba(245, 199, 109, 0.18)) !important;
+    color: var(--ui-green-deep) !important;
+    border: 1px solid rgba(15, 143, 111, 0.14);
+}
+
+.splash-quote {
+    background:
+        linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(236, 253, 245, 0.86)) !important;
+    border-left-color: var(--ui-green) !important;
+    border-radius: 0 18px 18px 0 !important;
+}
+
+.featured-sound-card {
+    background:
+        linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(255, 251, 235, 0.9)) !important;
+    border-color: rgba(15, 143, 111, 0.16) !important;
+    border-radius: 18px !important;
+}
+
+.btn-enter-map {
+    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
+    color: #fff !important;
+    border-radius: 18px !important;
+    box-shadow: 0 18px 36px rgba(15, 143, 111, 0.3) !important;
+}
+
+.btn-enter-map:hover {
+    background: linear-gradient(135deg, #047857, #147d84) !important;
+}
+
+/* =========================
+   10. 南山公墓 UI
+========================= */
+.nanshan-category-menu {
+    background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.88)) !important;
+    border-color: rgba(124, 58, 237, 0.18) !important;
+    border-radius: 24px !important;
+    box-shadow: var(--ui-shadow-card) !important;
+}
+
+.nanshan-category-note,
+.nanshan-search-box {
+    border-radius: 16px !important;
+}
+
+.nanshan-mini-btn {
+    border-radius: 999px !important;
+}
+
+.nanshan-popup-content {
+    background:
+        linear-gradient(180deg, #fffdf7, #ffffff 54%, #f8fafc) !important;
+}
+
+.nanshan-popup-content h3 {
+    color: #5b21b6 !important;
+}
+
+.nanshan-photo-gallery {
+    border-bottom-color: rgba(124, 58, 237, 0.18) !important;
+}
+
+/* =========================
+   11. 成就牆與徽章
+========================= */
+.achievement-card {
+    background:
+        linear-gradient(180deg, #fffdf7 0%, #ffffff 55%, #fffbeb 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 30px !important;
+}
+
+.badge-icon-wrapper {
+    background: linear-gradient(135deg, #fde68a, #f59e0b, #f97316) !important;
+}
+
+.wall-badge {
+    border-radius: 20px !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92)) !important;
+}
+
+.wall-badge.unlocked {
+    background:
+        linear-gradient(180deg, #fffbeb, #ffffff) !important;
+    border-color: rgba(245, 158, 11, 0.36) !important;
+    box-shadow: 0 12px 24px rgba(245, 158, 11, 0.12) !important;
+}
+
+/* =========================
+   12. 浮動結束路線任務按鈕
+========================= */
+#floatingClearRouteBtn {
+    border-radius: 999px !important;
+    padding: 12px 18px !important;
+    background: linear-gradient(135deg, #fff1f2, #ffffff) !important;
+    border: 1px solid rgba(239, 68, 68, 0.28) !important;
+    box-shadow: 0 18px 38px rgba(127, 29, 29, 0.18) !important;
+}
+
+/* =========================
+   13. Mobile 優化
+========================= */
+@media (max-width: 760px) {
+    .glass-header {
+        width: calc(100vw - 20px) !important;
+        border-radius: 20px !important;
+        padding: 12px 14px !important;
+    }
+
+    .nav-buttons {
+        gap: 6px !important;
+    }
+
+    .nav-buttons button {
+        border-radius: 14px !important;
+        font-size: 11.5px !important;
+        padding: 8px 5px !important;
+    }
+
+    .drawer-content {
+        border-radius: 22px !important;
+        padding: 18px !important;
+    }
+
+    .filter-item {
+        width: 100% !important;
+    }
+
+    .right-tools-wrapper {
+        right: 10px !important;
+    }
+
+    .tools-toggle-btn,
+    .locate-me-btn {
+        width: 46px !important;
+        height: 46px !important;
+        border-radius: 16px !important;
+    }
+
+    .custom-layer-control {
+        width: min(280px, calc(100vw - 28px)) !important;
+        border-radius: 22px !important;
+    }
+
+    .haidian-v4-dock {
+        border-radius: 22px !important;
+        padding: 12px !important;
+    }
+
+    .haidian-v4-dock-body {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .haidian-v4-card {
+        border-radius: 16px !important;
+        min-height: 62px !important;
+    }
+
+    .leaflet-popup-content {
+        width: min(286px, calc(100vw - 78px)) !important;
+    }
+
+    .sound-cover {
+        height: 118px !important;
+    }
+
+    .sound-info {
+        padding: 13px !important;
+    }
+
+    .sound-title {
+        font-size: 17px !important;
+    }
+
+    .reaction-box {
+        gap: 5px !important;
+    }
+
+    .reaction-btn {
+        font-size: 10.5px !important;
+        padding: 7px 0 !important;
+    }
+
+    .global-player {
+        border-radius: 22px !important;
+    }
+
+    #splashScreen .splash-card {
+        border-radius: 24px !important;
+    }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .glass-header {
+        border-radius: 16px !important;
+    }
+
+    .sound-cover {
+        height: 92px !important;
+    }
+
+    .drawer-content {
+        max-height: calc(100vh - 56px) !important;
+    }
+}
+
+/* =========================
+   14. 減少動態效果偏好
+========================= */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+</style>
+<!-- HAIDIAN_UI_POLISH_ONLY_END -->
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
 <script id="haidian-9plus-stable-v4-js">
 (function () {
