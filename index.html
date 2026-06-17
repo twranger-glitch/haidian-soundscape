@@ -1823,10 +1823,6 @@ body.haidian-v4-mode-idle #rightToolsWrapper .tools-menu-container a {
 body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
   outline: none;
 }
-
-body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
-  content: "｜預設不自動開啟";
-}
 /* ===== HAIDIAN_96_ENGINEERING_STABLE_UI_STATE_END ===== */
 
 </style>
@@ -2042,7 +2038,7 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
     <!-- 🌟 插入：聆聽模式退出提示 -->
     <div class="listening-hint" onclick="toggleListeningMode()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        點擊退出聆聽模式
+        點擊退出專注模式
     </div>
 
     <header class="glass-header">
@@ -6808,2048 +6804,105 @@ function mountGlobalPlayerIntoPopup_(retry) {
         };
     </script>
 
-<!-- HAIDIAN_UI_POLISH_ONLY_START -->
-<style id="haidian-ui-polish-only">
+
+<!-- HAIDIAN_FINAL_UI_PACK_START -->
+<style id="haidian-final-ui-pack">
 /*
-  HAIDIAN UI POLISH ONLY
-  純 CSS 視覺優化版。
-  不修改 JS、不改功能、不新增監聽、不碰 Firebase / Firestore / Leaflet 邏輯。
+  HAIDIAN_FINAL_UI_PACK
+  整理版 UI 覆蓋層：只處理文案、排版與手機版可用性。
+  不修改 Firebase / Firestore / Leaflet / 投稿 / 播放 / 圖資功能邏輯。
 */
 
-/* =========================
-   1. 全域設計語彙
-========================= */
 :root {
-    --accent-color: #0f8f6f;
-    --text-main: #10201d;
-    --text-muted: #66736f;
-
-    --ui-ink: #10201d;
-    --ui-muted: #64748b;
-    --ui-subtle: #94a3b8;
-    --ui-paper: rgba(255, 253, 247, 0.92);
-    --ui-paper-solid: #fffdf7;
-    --ui-card: rgba(255, 255, 255, 0.9);
-    --ui-line: rgba(148, 163, 184, 0.28);
-
-    --ui-green: #0f8f6f;
-    --ui-green-deep: #047857;
-    --ui-river: #1f8a93;
-    --ui-gold: #f5c76d;
-    --ui-red: #e65b4f;
-    --ui-blue: #3b82f6;
-    --ui-violet: #7c3aed;
-
-    --ui-radius-sm: 10px;
-    --ui-radius-md: 16px;
-    --ui-radius-lg: 22px;
-    --ui-radius-xl: 28px;
-
-    --ui-shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.12);
-    --ui-shadow-card: 0 18px 45px rgba(15, 23, 42, 0.16);
-    --ui-shadow-heavy: 0 28px 70px rgba(15, 23, 42, 0.28);
-    --ui-blur: blur(18px) saturate(150%);
+  --haidian-final-ink: #0f172a;
+  --haidian-final-muted: #64748b;
+  --haidian-final-green: #0f8f6f;
+  --haidian-final-green-deep: #047857;
+  --haidian-final-teal: #1f8a93;
+  --haidian-final-violet: #7c3aed;
+  --haidian-final-paper: rgba(255, 253, 247, 0.94);
+  --haidian-final-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
 }
 
-body,
-html {
-    font-family: Inter, "Noto Sans TC", "Helvetica Neue", Arial, "微軟正黑體", sans-serif;
-    background:
-        radial-gradient(circle at 8% 12%, rgba(15, 143, 111, 0.12), transparent 30%),
-        radial-gradient(circle at 90% 78%, rgba(31, 138, 147, 0.12), transparent 32%),
-        #e8eee9;
-}
-
-* {
-    -webkit-tap-highlight-color: transparent;
-}
-
-button,
-input,
-select {
-    font-family: inherit;
-}
-
-/* 細緻捲軸 */
-.drawer-content,
-.modal-box,
-.tools-menu-container,
-.custom-layer-control,
-.latest-list,
-.sound-desc,
-.nanshan-category-list,
-.nanshan-search-status,
-.nanshan-popup-content,
-.leaflet-popup-content {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(15, 143, 111, 0.38) transparent;
-}
-
-.drawer-content::-webkit-scrollbar,
-.modal-box::-webkit-scrollbar,
-.tools-menu-container::-webkit-scrollbar,
-.custom-layer-control::-webkit-scrollbar,
-.latest-list::-webkit-scrollbar,
-.sound-desc::-webkit-scrollbar,
-.nanshan-category-list::-webkit-scrollbar,
-.nanshan-search-status::-webkit-scrollbar,
-.nanshan-popup-content::-webkit-scrollbar,
-.leaflet-popup-content::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-}
-
-.drawer-content::-webkit-scrollbar-thumb,
-.modal-box::-webkit-scrollbar-thumb,
-.tools-menu-container::-webkit-scrollbar-thumb,
-.custom-layer-control::-webkit-scrollbar-thumb,
-.latest-list::-webkit-scrollbar-thumb,
-.sound-desc::-webkit-scrollbar-thumb,
-.nanshan-category-list::-webkit-scrollbar-thumb,
-.nanshan-search-status::-webkit-scrollbar-thumb,
-.nanshan-popup-content::-webkit-scrollbar-thumb,
-.leaflet-popup-content::-webkit-scrollbar-thumb {
-    background: rgba(15, 143, 111, 0.38);
-    border-radius: 999px;
-}
-
-/* =========================
-   2. 頂部導覽列
-========================= */
+/* 上方 banner：讓課程定位更明確，避免「聲音地景」重複堆疊。 */
 .glass-header {
-    background:
-        linear-gradient(135deg, rgba(255, 253, 247, 0.92), rgba(255, 255, 255, 0.72)) !important;
-    -webkit-backdrop-filter: var(--ui-blur);
-    backdrop-filter: var(--ui-blur);
-    border: 1px solid rgba(255, 255, 255, 0.76) !important;
-    border-bottom-color: rgba(15, 143, 111, 0.16) !important;
-    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14) !important;
+  background: rgba(255, 253, 247, 0.9) !important;
+  border: 1px solid rgba(15, 143, 111, 0.13) !important;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.14) !important;
 }
-
-.glass-header::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-        linear-gradient(90deg, rgba(15, 143, 111, 0.12), transparent 28%, rgba(245, 199, 109, 0.16));
-    opacity: 0.8;
-}
-
-.project-title {
-    position: relative;
-    color: var(--ui-ink) !important;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
-.project-title span.main-title {
-    color: var(--ui-green-deep) !important;
-    position: relative;
-}
-
-.project-title span.main-title::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -5px;
-    height: 3px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--ui-green), var(--ui-gold));
-    opacity: 0.8;
-}
-
-.project-title span.sub-title {
-    color: #6b7c77 !important;
-}
-
-.nav-buttons button {
-    position: relative;
-    border-radius: 999px !important;
-    color: #31423e !important;
-    background: rgba(255, 255, 255, 0.18);
-    border: 1px solid transparent;
-}
-
-.nav-buttons button:hover {
-    background: rgba(15, 143, 111, 0.1) !important;
-    color: var(--ui-green-deep) !important;
-    border-color: rgba(15, 143, 111, 0.18);
-    transform: translateY(-1px);
-}
-
-.nav-buttons .btn-submit,
-#authBtn.btn-submit {
-    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
-    border: 1px solid rgba(255, 255, 255, 0.58) !important;
-    color: #fff !important;
-    box-shadow: 0 12px 26px rgba(15, 143, 111, 0.28) !important;
-}
-
-.nav-buttons .btn-submit:hover,
-#authBtn.btn-submit:hover {
-    background: linear-gradient(135deg, #047857, #147d84) !important;
-    color: #fff !important;
-    transform: translateY(-2px);
-}
-
-.btn-latest {
-    color: #b45309 !important;
-}
-
-.btn-latest:hover {
-    background: rgba(245, 158, 11, 0.1) !important;
-    color: #92400e !important;
-}
-
-/* =========================
-   3. 左側抽屜與搜尋篩選
-========================= */
-.drawer-content {
-    background:
-        linear-gradient(180deg, rgba(255, 253, 247, 0.95), rgba(255, 255, 255, 0.86)) !important;
-    -webkit-backdrop-filter: var(--ui-blur);
-    backdrop-filter: var(--ui-blur);
-    border: 1px solid rgba(255, 255, 255, 0.78);
-    box-shadow: var(--ui-shadow-card) !important;
-    border-radius: var(--ui-radius-xl) !important;
-}
-
-.drawer-content hr {
-    border-top-color: rgba(15, 143, 111, 0.12) !important;
-}
-
-.toggle-btn {
-    background:
-        linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.74)) !important;
-    border-color: rgba(15, 143, 111, 0.16) !important;
-    color: var(--ui-green-deep) !important;
-    box-shadow: 8px 0 22px rgba(15, 23, 42, 0.12) !important;
-}
-
-.toggle-btn:hover {
-    background: #fff !important;
-    color: var(--ui-green) !important;
-    transform: translateX(2px);
-}
-
-.panel-label {
-    color: var(--ui-ink) !important;
-}
-
-.panel-label svg {
-    color: var(--ui-green-deep) !important;
-}
-
-.search-input {
-    border-radius: 14px !important;
-    border: 1px solid rgba(148, 163, 184, 0.34) !important;
-    background: rgba(248, 250, 252, 0.86) !important;
-    color: var(--ui-ink) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.search-input:focus {
-    background: #fff !important;
-    border-color: rgba(15, 143, 111, 0.55) !important;
-    box-shadow:
-        0 0 0 4px rgba(15, 143, 111, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-}
-
-.filter-item {
-    border-radius: 999px;
-    padding: 7px 9px;
-    width: calc(50% - 6px) !important;
-    background: rgba(248, 250, 252, 0.74);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    box-sizing: border-box;
-    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
-}
-
-.filter-item:hover {
-    background: rgba(15, 143, 111, 0.08);
-    border-color: rgba(15, 143, 111, 0.2);
-    transform: translateY(-1px);
-}
-
-.filter-item input,
-.custom-layer-control input,
-.layer-card input {
-    accent-color: var(--ui-green);
-}
-
-.time-display {
-    background: linear-gradient(135deg, rgba(15, 143, 111, 0.1), rgba(31, 138, 147, 0.1)) !important;
-    color: var(--ui-green-deep) !important;
-    border: 1px solid rgba(15, 143, 111, 0.16);
-    border-radius: 12px !important;
-}
-
-/* =========================
-   4. 右側圖資工具
-========================= */
-.tools-toggle-btn,
-.locate-me-btn {
-    background:
-        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.72)) !important;
-    border: 1px solid rgba(255, 255, 255, 0.78) !important;
-    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16) !important;
-}
-
-.tools-toggle-btn:hover,
-.locate-me-btn:hover {
-    transform: translateY(-2px) scale(1.04) !important;
-    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.2) !important;
-}
-
-.custom-layer-control {
-    background:
-        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.88)) !important;
-    -webkit-backdrop-filter: var(--ui-blur);
-    backdrop-filter: var(--ui-blur);
-    border: 1px solid rgba(255, 255, 255, 0.78) !important;
-    border-radius: 22px !important;
-    box-shadow: var(--ui-shadow-card) !important;
-}
-
-.custom-layer-control label {
-    border-radius: 12px;
-    padding: 6px 8px;
-    margin-left: -3px;
-    margin-right: -3px;
-    transition: background 0.18s ease, transform 0.18s ease;
-}
-
-.custom-layer-control label:hover {
-    background: rgba(15, 143, 111, 0.07);
-    transform: translateX(2px);
-}
-
-#floodControlPanel,
-#hydrologyControlPanel,
-#officialHazardControlPanel {
-    border-radius: 16px !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
-}
-
-/* =========================
-   5. V4 探索主線 Dock
-========================= */
-.haidian-v4-dock {
-    background:
-        linear-gradient(135deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.82)) !important;
-    border: 1px solid rgba(255, 255, 255, 0.82) !important;
-    border-bottom-color: rgba(15, 143, 111, 0.18) !important;
-    box-shadow: 0 22px 55px rgba(15, 23, 42, 0.2) !important;
-}
-
-.haidian-v4-dock::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-        radial-gradient(circle at 15% 0%, rgba(15, 143, 111, 0.13), transparent 38%),
-        radial-gradient(circle at 92% 100%, rgba(245, 199, 109, 0.16), transparent 42%);
-}
-
-.haidian-v4-card {
-    position: relative;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.76) !important;
-    border: 1px solid rgba(15, 143, 111, 0.13) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.haidian-v4-card::after {
-    content: "";
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 0;
-    height: 3px;
-    border-radius: 999px 999px 0 0;
-    background: linear-gradient(90deg, var(--ui-green), var(--ui-gold));
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.haidian-v4-card:hover::after,
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"]::after,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"]::after,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"]::after {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.haidian-v4-dock-toggle {
-    background: rgba(15, 143, 111, 0.1) !important;
-    color: var(--ui-green-deep) !important;
-    transition: transform 0.2s ease, background 0.2s ease;
-}
-
-.haidian-v4-dock-toggle:hover {
-    background: rgba(15, 143, 111, 0.16) !important;
-    transform: translateY(-1px);
-}
-
-.haidian-v4-panel-head {
-    background:
-        linear-gradient(135deg, rgba(15, 143, 111, 0.11), rgba(245, 199, 109, 0.18)),
-        rgba(255, 255, 255, 0.72) !important;
-    border-radius: 20px !important;
-    border-color: rgba(15, 143, 111, 0.18) !important;
-}
-
-.haidian-v4-mode-switcher {
-    background: rgba(255, 255, 255, 0.76) !important;
-    border: 1px solid rgba(15, 143, 111, 0.12) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-}
-
-/* =========================
-   6. Leaflet Popup 聲景卡片
-========================= */
-.leaflet-popup-content-wrapper {
-    border-radius: 24px !important;
-    overflow: hidden !important;
-    background: rgba(255, 253, 247, 0.98) !important;
-    box-shadow:
-        0 24px 60px rgba(15, 23, 42, 0.28),
-        inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
-    border: 1px solid rgba(255, 255, 255, 0.78);
-}
-
-.leaflet-popup-tip {
-    background: rgba(255, 253, 247, 0.98) !important;
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18) !important;
-}
-
-.sound-card {
-    background:
-        linear-gradient(180deg, #fffdf7 0%, #ffffff 48%, #f8fafc 100%) !important;
-}
-
-.sound-cover {
-    height: 172px !important;
-    filter: saturate(1.04) contrast(1.02);
-}
-
-.sound-info {
-    padding: 16px 18px 14px 18px !important;
-}
-
-.sound-title {
-    color: var(--ui-ink) !important;
-    letter-spacing: 0.02em;
-}
-
-.card-meta-box {
-    background:
-        linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 253, 247, 0.94)) !important;
-    border: 1px solid rgba(148, 163, 184, 0.22) !important;
-    border-radius: 16px !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-}
-
-.meta-gps,
-.meta-category,
-.modal-tag {
-    border-radius: 999px !important;
-}
-
-.sound-desc {
-    color: #52635e !important;
-    line-height: 1.72 !important;
-}
-
-.btn-play-main {
-    border-radius: 16px !important;
-    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
-    box-shadow: 0 14px 28px rgba(15, 143, 111, 0.25) !important;
-}
-
-.btn-play-main:hover {
-    background: linear-gradient(135deg, #047857, #147d84) !important;
-    box-shadow: 0 18px 36px rgba(15, 143, 111, 0.32) !important;
-}
-
-.btn-play-main.playing {
-    background: linear-gradient(135deg, #e65b4f, #c2410c) !important;
-}
-
-.share-icon-btn,
-.nav-icon-btn,
-.fav-btn {
-    border-radius: 999px;
-}
-
-.share-icon-btn:hover,
-.nav-icon-btn:hover,
-.fav-btn:hover {
-    background: rgba(15, 143, 111, 0.08);
-}
-
-.reaction-section-title {
-    border-radius: 999px !important;
-    background: rgba(15, 143, 111, 0.08) !important;
-    border-color: rgba(15, 143, 111, 0.12) !important;
-    color: var(--ui-green-deep) !important;
-}
-
-.reaction-box {
-    gap: 7px !important;
-}
-
-.reaction-btn {
-    border-radius: 999px !important;
-    background: rgba(248, 250, 252, 0.9) !important;
-    border-color: rgba(148, 163, 184, 0.24) !important;
-}
-
-.reaction-btn:hover {
-    background: #fff !important;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-/* Marker 更精緻 */
-.sound-dot-marker {
-    background: rgba(255, 253, 247, 0.92) !important;
-    box-shadow:
-        0 0 0 5px rgba(15, 143, 111, 0.13),
-        0 10px 24px rgba(15, 23, 42, 0.2) !important;
-}
-
-/* =========================
-   7. 全域播放器
-========================= */
-.global-player {
-    background:
-        linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.86)) !important;
-    -webkit-backdrop-filter: var(--ui-blur);
-    backdrop-filter: var(--ui-blur);
-    border: 1px solid rgba(255, 255, 255, 0.82) !important;
-    border-bottom-color: rgba(15, 143, 111, 0.18) !important;
-    box-shadow: 0 -18px 55px rgba(15, 23, 42, 0.18) !important;
-    border-radius: 24px !important;
-}
-
-.player-control-btn {
-    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
-    box-shadow: 0 12px 26px rgba(15, 143, 111, 0.28) !important;
-}
-
-.waveform-wrapper {
-    border-radius: 999px !important;
-    background:
-        linear-gradient(180deg, rgba(226, 232, 240, 0.88), rgba(248, 250, 252, 0.94)) !important;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.player-time-display {
-    border-radius: 999px !important;
-    background: rgba(15, 143, 111, 0.08) !important;
-    color: var(--ui-green-deep) !important;
-}
-
-/* 桌機卡片內嵌播放器 */
-.leaflet-popup .embedded-player-slot .global-player.embedded-player,
-.leaflet-popup .global-player.embedded-player {
-    background:
-        linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 253, 247, 0.94)) !important;
-    border-radius: 20px !important;
-    border-color: rgba(15, 143, 111, 0.13) !important;
-}
-
-/* =========================
-   8. Modal 視覺精修
-========================= */
-.modal-overlay {
-    background:
-        radial-gradient(circle at 30% 20%, rgba(15, 143, 111, 0.18), transparent 28%),
-        rgba(15, 23, 42, 0.62) !important;
-    -webkit-backdrop-filter: blur(10px) saturate(125%);
-    backdrop-filter: blur(10px) saturate(125%);
-}
-
-.modal-box {
-    background:
-        linear-gradient(180deg, #fffdf7 0%, #ffffff 52%, #f8fafc 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.82);
-    border-radius: 26px !important;
-    box-shadow: var(--ui-shadow-heavy) !important;
-}
-
-.modal-img {
-    height: 235px !important;
-    filter: saturate(1.04) contrast(1.03);
-}
-
-.modal-content {
-    color: var(--ui-ink);
-}
-
-.modal-title {
-    color: var(--ui-ink) !important;
-}
-
-.modal-close-btn {
-    background: rgba(255, 253, 247, 0.96) !important;
-    border: 1px solid rgba(255, 255, 255, 0.76) !important;
-    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18) !important;
-}
-
-.modal-close-btn:hover {
-    background: var(--ui-red) !important;
-    color: #fff !important;
-}
-
-.latest-item,
-.layer-card,
-.ext-link-card {
-    background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9)) !important;
-    border-color: rgba(148, 163, 184, 0.22) !important;
-    border-radius: 18px !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-.latest-item:hover,
-.layer-card:hover,
-.ext-link-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12) !important;
-    border-color: rgba(15, 143, 111, 0.28) !important;
-}
-
-/* =========================
-   9. Splash 入口卡片
-========================= */
-#splashScreen {
-    background:
-        radial-gradient(circle at 18% 18%, rgba(15, 143, 111, 0.26), transparent 28%),
-        radial-gradient(circle at 82% 80%, rgba(31, 138, 147, 0.2), transparent 30%),
-        rgba(15, 23, 42, 0.72) !important;
-}
-
-#splashScreen .splash-card {
-    background:
-        linear-gradient(180deg, #fffdf7 0%, #ffffff 54%, #f8fafc 100%) !important;
-    border-radius: 30px !important;
-    box-shadow:
-        0 35px 90px rgba(0, 0, 0, 0.42),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
-    border: 1px solid rgba(255, 255, 255, 0.82) !important;
-}
-
-#splashScreen .splash-card::before {
-    height: 7px !important;
-    background: linear-gradient(90deg, var(--ui-green), var(--ui-river), var(--ui-gold)) !important;
-}
-
-.splash-logo {
-    background:
-        linear-gradient(135deg, rgba(15, 143, 111, 0.12), rgba(245, 199, 109, 0.18)) !important;
-    color: var(--ui-green-deep) !important;
-    border: 1px solid rgba(15, 143, 111, 0.14);
-}
-
-.splash-quote {
-    background:
-        linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(236, 253, 245, 0.86)) !important;
-    border-left-color: var(--ui-green) !important;
-    border-radius: 0 18px 18px 0 !important;
-}
-
-.featured-sound-card {
-    background:
-        linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(255, 251, 235, 0.9)) !important;
-    border-color: rgba(15, 143, 111, 0.16) !important;
-    border-radius: 18px !important;
-}
-
-.btn-enter-map {
-    background: linear-gradient(135deg, var(--ui-green), var(--ui-river)) !important;
-    color: #fff !important;
-    border-radius: 18px !important;
-    box-shadow: 0 18px 36px rgba(15, 143, 111, 0.3) !important;
-}
-
-.btn-enter-map:hover {
-    background: linear-gradient(135deg, #047857, #147d84) !important;
-}
-
-/* =========================
-   10. 南山公墓 UI
-========================= */
-.nanshan-category-menu {
-    background:
-        linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 255, 255, 0.88)) !important;
-    border-color: rgba(124, 58, 237, 0.18) !important;
-    border-radius: 24px !important;
-    box-shadow: var(--ui-shadow-card) !important;
-}
-
-.nanshan-category-note,
-.nanshan-search-box {
-    border-radius: 16px !important;
-}
-
-.nanshan-mini-btn {
-    border-radius: 999px !important;
-}
-
-.nanshan-popup-content {
-    background:
-        linear-gradient(180deg, #fffdf7, #ffffff 54%, #f8fafc) !important;
-}
-
-.nanshan-popup-content h3 {
-    color: #5b21b6 !important;
-}
-
-.nanshan-photo-gallery {
-    border-bottom-color: rgba(124, 58, 237, 0.18) !important;
-}
-
-/* =========================
-   11. 成就牆與徽章
-========================= */
-.achievement-card {
-    background:
-        linear-gradient(180deg, #fffdf7 0%, #ffffff 55%, #fffbeb 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.82);
-    border-radius: 30px !important;
-}
-
-.badge-icon-wrapper {
-    background: linear-gradient(135deg, #fde68a, #f59e0b, #f97316) !important;
-}
-
-.wall-badge {
-    border-radius: 20px !important;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92)) !important;
-}
-
-.wall-badge.unlocked {
-    background:
-        linear-gradient(180deg, #fffbeb, #ffffff) !important;
-    border-color: rgba(245, 158, 11, 0.36) !important;
-    box-shadow: 0 12px 24px rgba(245, 158, 11, 0.12) !important;
-}
-
-/* =========================
-   12. 浮動結束路線任務按鈕
-========================= */
-#floatingClearRouteBtn {
-    border-radius: 999px !important;
-    padding: 12px 18px !important;
-    background: linear-gradient(135deg, #fff1f2, #ffffff) !important;
-    border: 1px solid rgba(239, 68, 68, 0.28) !important;
-    box-shadow: 0 18px 38px rgba(127, 29, 29, 0.18) !important;
-}
-
-/* =========================
-   13. Mobile 優化
-========================= */
-@media (max-width: 760px) {
-    .glass-header {
-        width: calc(100vw - 20px) !important;
-        border-radius: 20px !important;
-        padding: 12px 14px !important;
-    }
-
-    .nav-buttons {
-        gap: 6px !important;
-    }
-
-    .nav-buttons button {
-        border-radius: 14px !important;
-        font-size: 11.5px !important;
-        padding: 8px 5px !important;
-    }
-
-    .drawer-content {
-        border-radius: 22px !important;
-        padding: 18px !important;
-    }
-
-    .filter-item {
-        width: 100% !important;
-    }
-
-    .right-tools-wrapper {
-        right: 10px !important;
-    }
-
-    .tools-toggle-btn,
-    .locate-me-btn {
-        width: 46px !important;
-        height: 46px !important;
-        border-radius: 16px !important;
-    }
-
-    .custom-layer-control {
-        width: min(280px, calc(100vw - 28px)) !important;
-        border-radius: 22px !important;
-    }
-
-    .haidian-v4-dock {
-        border-radius: 22px !important;
-        padding: 12px !important;
-    }
-
-    .haidian-v4-dock-body {
-        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    }
-
-    .haidian-v4-card {
-        border-radius: 16px !important;
-        min-height: 62px !important;
-    }
-
-    .leaflet-popup-content {
-        width: min(286px, calc(100vw - 78px)) !important;
-    }
-
-    .sound-cover {
-        height: 118px !important;
-    }
-
-    .sound-info {
-        padding: 13px !important;
-    }
-
-    .sound-title {
-        font-size: 17px !important;
-    }
-
-    .reaction-box {
-        gap: 5px !important;
-    }
-
-    .reaction-btn {
-        font-size: 10.5px !important;
-        padding: 7px 0 !important;
-    }
-
-    .global-player {
-        border-radius: 22px !important;
-    }
-
-    #splashScreen .splash-card {
-        border-radius: 24px !important;
-    }
-}
-
-@media (max-height: 500px) and (orientation: landscape) {
-    .glass-header {
-        border-radius: 16px !important;
-    }
-
-    .sound-cover {
-        height: 92px !important;
-    }
-
-    .drawer-content {
-        max-height: calc(100vh - 56px) !important;
-    }
-}
-
-/* =========================
-   14. 減少動態效果偏好
-========================= */
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-    }
-}
-</style>
-<!-- HAIDIAN_UI_POLISH_ONLY_END -->
-    <!-- HAIDIAN_CURRICULUM_UI_SKIN_START -->
-<style id="haidian-curriculum-ui-skin">
-/*
-  HAIDIAN CURRICULUM UI SKIN
-  主題：用耳朵走讀小台江
-  核心語彙：聲音地景 × SEL × 環境行動 × 流域學習
-  安全策略：純 CSS，不新增 JS，不改 Firebase / Firestore / Leaflet 功能。
-*/
-
-/* =========================
-   0. 課程型視覺系統
-========================= */
-:root {
-    --accent-color: #0f8f6f;
-    --text-main: #10201d;
-    --text-muted: #66736f;
-
-    --edu-ink: #10201d;
-    --edu-muted: #5f706b;
-    --edu-soft: #f5f0df;
-    --edu-paper: #fffdf5;
-    --edu-card: rgba(255, 253, 245, 0.92);
-
-    --edu-river: #1f8a93;
-    --edu-river-deep: #0f766e;
-    --edu-leaf: #0f8f6f;
-    --edu-earth: #9a6b38;
-    --edu-sun: #f2c66d;
-    --edu-sel: #7c3aed;
-    --edu-action: #e65b4f;
-
-    --edu-blue-soft: #e0f2fe;
-    --edu-green-soft: #dcfce7;
-    --edu-yellow-soft: #fef3c7;
-    --edu-violet-soft: #ede9fe;
-    --edu-red-soft: #fee2e2;
-
-    --edu-line: rgba(15, 143, 111, 0.16);
-    --edu-line-strong: rgba(15, 143, 111, 0.28);
-
-    --edu-shadow-sm: 0 8px 22px rgba(15, 23, 42, 0.1);
-    --edu-shadow-md: 0 18px 45px rgba(15, 23, 42, 0.16);
-    --edu-shadow-lg: 0 28px 75px rgba(15, 23, 42, 0.26);
-
-    --edu-radius-sm: 12px;
-    --edu-radius-md: 18px;
-    --edu-radius-lg: 24px;
-    --edu-radius-xl: 30px;
-
-    --edu-blur: blur(18px) saturate(150%);
-}
-
-/* 地圖底下加一層「流域紙張」氣氛，不干擾地圖互動 */
-body,
-html {
-    background:
-        radial-gradient(circle at 12% 18%, rgba(31, 138, 147, 0.14), transparent 28%),
-        radial-gradient(circle at 84% 80%, rgba(242, 198, 109, 0.14), transparent 32%),
-        linear-gradient(135deg, #e8eee9, #f6f1e5) !important;
-    font-family: Inter, "Noto Sans TC", "Helvetica Neue", Arial, "微軟正黑體", sans-serif !important;
-}
-
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background:
-        linear-gradient(115deg, rgba(255,255,255,0.26) 1px, transparent 1px),
-        linear-gradient(25deg, rgba(15,143,111,0.07) 1px, transparent 1px);
-    background-size: 56px 56px, 72px 72px;
-    opacity: 0.28;
-}
-
-#map {
-    filter: saturate(0.96) contrast(1.02);
-}
-
-/* =========================
-   1. 首頁迎賓：從聲音地圖變課程入口
-========================= */
-#splashScreen {
-    background:
-        radial-gradient(circle at 18% 14%, rgba(31,138,147,0.32), transparent 30%),
-        radial-gradient(circle at 78% 84%, rgba(242,198,109,0.26), transparent 34%),
-        linear-gradient(135deg, rgba(13, 35, 34, 0.84), rgba(15, 23, 42, 0.78)) !important;
-}
-
-#splashScreen::before {
-    background:
-        radial-gradient(circle at 22% 20%, rgba(15,143,111,0.2), transparent 26%),
-        radial-gradient(circle at 76% 68%, rgba(124,58,237,0.12), transparent 28%),
-        radial-gradient(circle at 52% 92%, rgba(242,198,109,0.14), transparent 24%) !important;
-    opacity: 1 !important;
-}
-
-#splashScreen .splash-card {
-    background:
-        linear-gradient(180deg, #fffdf5 0%, #ffffff 48%, #f8fafc 100%) !important;
-    border: 1px solid rgba(255,255,255,0.86) !important;
-    border-radius: 32px !important;
-    box-shadow:
-        0 36px 90px rgba(0,0,0,0.42),
-        inset 0 1px 0 rgba(255,255,255,0.94) !important;
-}
-
-#splashScreen .splash-card::before {
-    height: 8px !important;
-    background:
-        linear-gradient(90deg,
-            var(--edu-river),
-            var(--edu-leaf),
-            var(--edu-sun),
-            var(--edu-sel)
-        ) !important;
-}
-
-.splash-logo {
-    background:
-        linear-gradient(135deg, rgba(31,138,147,0.12), rgba(242,198,109,0.22)) !important;
-    color: var(--edu-river-deep) !important;
-    border: 1px solid rgba(15,143,111,0.16);
-    box-shadow: 0 12px 28px rgba(15,143,111,0.16) !important;
-}
-
-.splash-title {
-    letter-spacing: 1.5px !important;
-}
-
-.splash-title::after {
-    content: "用耳朵走讀小台江";
-    display: block;
-    margin-top: 8px;
-    color: var(--edu-river-deep);
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 0.18em;
-}
-
-.splash-subtitle::after {
-    content: "｜SEL × 環境行動";
-    color: var(--edu-sel);
-    letter-spacing: 0.12em;
-}
-
-.splash-quote {
-    background:
-        linear-gradient(135deg, rgba(224,242,254,0.72), rgba(220,252,231,0.72), rgba(254,243,199,0.56)) !important;
-    border-left: 5px solid var(--edu-river) !important;
-    border-radius: 0 20px 20px 0 !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.78);
-}
-
-.splash-quote-title {
-    color: var(--edu-river-deep) !important;
-}
-
-.splash-quote-title::after {
-    content: "聲音・情緒・環境";
-    margin-left: auto;
-    padding: 4px 9px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.76);
-    color: var(--edu-sel);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-}
-
-.splash-quote-text strong {
-    background: linear-gradient(135deg, #d1fae5, #fef3c7) !important;
-    color: var(--edu-river-deep) !important;
-}
-
-.splash-slogan {
-    color: var(--edu-muted) !important;
-}
-
-.splash-slogan span {
-    color: var(--edu-river-deep) !important;
-}
-
-/* 在入口卡片中用 CSS 補上四節課模組感 */
-.featured-sound-card {
-    position: relative;
-    background:
-        linear-gradient(135deg, rgba(255,255,255,0.92), rgba(236,253,245,0.88)) !important;
-    border: 1px solid rgba(15,143,111,0.16) !important;
-    border-radius: 20px !important;
-    box-shadow: 0 10px 24px rgba(15,23,42,0.08) !important;
-}
-
-.featured-sound-card::after {
-    content: "第1節 採集　→　第2節 詮釋　→　第3節 地圖　→　第4節 行動";
-    display: block;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px dashed rgba(15,143,111,0.22);
-    color: #64748b;
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    line-height: 1.5;
-}
-
-.btn-enter-map {
-    background:
-        linear-gradient(135deg, var(--edu-river-deep), var(--edu-river)) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 18px 38px rgba(15,118,110,0.32) !important;
-}
-
-.btn-enter-map:hover {
-    background:
-        linear-gradient(135deg, #0b615a, #19767f) !important;
-    transform: translateY(-3px) !important;
-}
-
-/* =========================
-   2. 頂部導覽：像課程平台，不只是工具列
-========================= */
-.glass-header {
-    background:
-        linear-gradient(135deg, rgba(255,253,245,0.94), rgba(255,255,255,0.76)) !important;
-    -webkit-backdrop-filter: var(--edu-blur);
-    backdrop-filter: var(--edu-blur);
-    border: 1px solid rgba(255,255,255,0.84) !important;
-    border-bottom: 1px solid rgba(15,143,111,0.2) !important;
-    box-shadow: var(--edu-shadow-md) !important;
-}
-
-.glass-header::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-        linear-gradient(90deg, rgba(31,138,147,0.1), transparent 32%, rgba(242,198,109,0.16));
-}
-
-.project-title {
-    position: relative;
-    color: var(--edu-ink) !important;
-}
-
 .project-title::after {
-    content: "聲音地景課程平台";
-    display: inline-flex;
-    margin-left: 10px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    background: rgba(15,143,111,0.08);
-    color: var(--edu-river-deep);
-    border: 1px solid rgba(15,143,111,0.14);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    vertical-align: middle;
-}
-
-.project-title span.main-title {
-    color: var(--edu-river-deep) !important;
-}
-
-.project-title span.main-title::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -5px;
-    height: 3px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--edu-river), var(--edu-sun));
-}
-
-.nav-buttons button {
-    border-radius: 999px !important;
-    color: #31423e !important;
-    border: 1px solid transparent;
-    background: rgba(255,255,255,0.18);
-}
-
-.nav-buttons button:hover {
-    background: rgba(15,143,111,0.1) !important;
-    color: var(--edu-river-deep) !important;
-    border-color: rgba(15,143,111,0.18);
-    transform: translateY(-1px);
-}
-
-.nav-buttons .btn-submit,
-#authBtn.btn-submit {
-    background:
-        linear-gradient(135deg, var(--edu-river-deep), var(--edu-river)) !important;
-    color: #fff !important;
-    border: 1px solid rgba(255,255,255,0.58) !important;
-    box-shadow: 0 12px 26px rgba(15,118,110,0.26) !important;
-}
-
-.btn-latest {
-    color: #b45309 !important;
-}
-
-.btn-latest:hover {
-    background: rgba(242,198,109,0.16) !important;
-    color: #92400e !important;
-}
-
-/* =========================
-   3. 探索主線：變成課程學習路徑
-========================= */
-.haidian-v4-dock {
-    background:
-        linear-gradient(135deg, rgba(255,253,245,0.97), rgba(255,255,255,0.86)) !important;
-    border: 1px solid rgba(255,255,255,0.86) !important;
-    border-bottom-color: rgba(15,143,111,0.18) !important;
-    border-radius: 26px !important;
-    box-shadow: 0 22px 56px rgba(15,23,42,0.2) !important;
-}
-
-.haidian-v4-dock::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-        radial-gradient(circle at 12% 0%, rgba(31,138,147,0.13), transparent 36%),
-        radial-gradient(circle at 100% 100%, rgba(242,198,109,0.18), transparent 42%);
-}
-
-.haidian-v4-dock-title strong::before {
-    content: "四節課模組｜";
-    color: var(--edu-river-deep);
-}
-
-.haidian-v4-dock-title span {
-    color: var(--edu-muted) !important;
-}
-
-.haidian-v4-dock-title span::before {
-    content: "聲音 → 情緒 → 地圖 → 行動｜";
-    color: var(--edu-sel);
-    font-weight: 900;
-}
-
-.haidian-v4-card {
-    position: relative;
-    overflow: hidden;
-    border-radius: 18px !important;
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,252,0.88)) !important;
-    border: 1px solid rgba(15,143,111,0.14) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
-}
-
-.haidian-v4-card::before {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    margin-bottom: 8px;
-    border-radius: 999px;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 950;
-    box-shadow: 0 8px 18px rgba(15,23,42,0.12);
-}
-
-.haidian-v4-card[data-haidian-v4-mode="listen"]::before {
-    content: "1";
-    background: linear-gradient(135deg, var(--edu-river), var(--edu-river-deep));
-}
-
-.haidian-v4-card[data-haidian-v4-mode="walk"]::before {
-    content: "2";
-    background: linear-gradient(135deg, var(--edu-sun), #d97706);
-}
-
-.haidian-v4-card[data-haidian-v4-mode="data"]::before {
-    content: "3";
-    background: linear-gradient(135deg, var(--edu-sel), #5b21b6);
-}
-
-.haidian-v4-card b {
-    color: var(--edu-ink) !important;
-}
-
-.haidian-v4-card small {
-    color: var(--edu-muted) !important;
-}
-
-.haidian-v4-card[data-haidian-v4-mode="listen"] b::after {
-    content: "｜自我覺察";
-    color: var(--edu-river-deep);
-    font-size: 10px;
-}
-
-.haidian-v4-card[data-haidian-v4-mode="walk"] b::after {
-    content: "｜社會覺察";
-    color: #b45309;
-    font-size: 10px;
-}
-
-.haidian-v4-card[data-haidian-v4-mode="data"] b::after {
-    content: "｜環境行動";
-    color: var(--edu-sel);
-    font-size: 10px;
-}
-
-.haidian-v4-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 16px 32px rgba(15,23,42,0.13) !important;
-}
-
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"],
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"],
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] {
-    background:
-        linear-gradient(135deg, var(--edu-river-deep), var(--edu-river)) !important;
-}
-
-body.haidian-v4-mode-listen .haidian-v4-card[data-haidian-v4-mode="listen"] *,
-body.haidian-v4-mode-walk .haidian-v4-card[data-haidian-v4-mode="walk"] *,
-body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
-    color: #fff !important;
-}
-
-/* =========================
-   4. 左側面板：聲音採集 / 聲音詮釋
-========================= */
-.drawer-content {
-    background:
-        linear-gradient(180deg, rgba(255,253,245,0.96), rgba(255,255,255,0.88)) !important;
-    -webkit-backdrop-filter: var(--edu-blur);
-    backdrop-filter: var(--edu-blur);
-    border: 1px solid rgba(255,255,255,0.82);
-    border-radius: 28px !important;
-    box-shadow: var(--edu-shadow-md) !important;
-}
-
-.haidian-v4-panel-head {
-    background:
-        linear-gradient(135deg, rgba(224,242,254,0.76), rgba(220,252,231,0.72), rgba(254,243,199,0.54)) !important;
-    border: 1px solid rgba(15,143,111,0.18) !important;
-    border-radius: 22px !important;
-}
-
-.haidian-v4-panel-head .eyebrow::before {
-    content: "課程任務｜";
-}
-
-.haidian-v4-panel-head .title {
-    color: var(--edu-ink) !important;
-}
-
-.haidian-v4-panel-head .copy {
-    color: var(--edu-muted) !important;
-}
-
-#sidePanel .haidian-v4-panel-head .title::after {
-    content: "｜第1節 聲音採集";
-    display: block;
-    margin-top: 5px;
-    color: var(--edu-river-deep);
-    font-size: 12px;
-    font-weight: 900;
-}
-
-#routePanel .haidian-v4-panel-head .title::after {
-    content: "｜第3節 聲音地圖";
-    display: block;
-    margin-top: 5px;
-    color: #b45309;
-    font-size: 12px;
-    font-weight: 900;
-}
-
-.haidian-v4-mode-switcher {
-    background: rgba(255,255,255,0.78) !important;
-    border: 1px solid rgba(15,143,111,0.13) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.84);
-}
-
-.haidian-v4-mode-btn {
-    border-radius: 999px !important;
-}
-
-.panel-label {
-    color: var(--edu-ink) !important;
-}
-
-.panel-label svg {
-    color: var(--edu-river-deep) !important;
-}
-
-.panel-label::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(15,143,111,0.18), transparent);
-}
-
-.search-input {
-    border-radius: 16px !important;
-    background: rgba(248,250,252,0.88) !important;
-    border: 1px solid rgba(148,163,184,0.32) !important;
-    color: var(--edu-ink) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.82);
-}
-
-.search-input:focus {
-    background: #fff !important;
-    border-color: rgba(15,143,111,0.55) !important;
-    box-shadow:
-        0 0 0 4px rgba(15,143,111,0.12),
-        inset 0 1px 0 rgba(255,255,255,0.82) !important;
-}
-
-.filter-item {
-    width: calc(50% - 6px) !important;
-    padding: 8px 9px;
-    border-radius: 999px;
-    box-sizing: border-box;
-    background: rgba(255,255,255,0.62);
-    border: 1px solid rgba(148,163,184,0.2);
-    transition: transform .18s ease, background .18s ease, border-color .18s ease;
-}
-
-.filter-item:hover {
-    background: rgba(15,143,111,0.08);
-    border-color: rgba(15,143,111,0.22);
-    transform: translateY(-1px);
-}
-
-.time-display {
-    background:
-        linear-gradient(135deg, rgba(31,138,147,0.11), rgba(15,143,111,0.1)) !important;
-    color: var(--edu-river-deep) !important;
-    border: 1px solid rgba(15,143,111,0.18);
-    border-radius: 14px !important;
-}
-
-.toggle-btn {
-    background:
-        linear-gradient(180deg, rgba(255,253,245,0.98), rgba(255,255,255,0.74)) !important;
-    border-color: rgba(15,143,111,0.16) !important;
-    color: var(--edu-river-deep) !important;
-    box-shadow: 8px 0 22px rgba(15,23,42,0.12) !important;
-}
-
-/* =========================
-   5. 右側圖資：環境資料 / 公民科學感
-========================= */
-.tools-toggle-btn,
-.locate-me-btn {
-    background:
-        linear-gradient(180deg, rgba(255,253,245,0.98), rgba(255,255,255,0.76)) !important;
-    border: 1px solid rgba(255,255,255,0.82) !important;
-    box-shadow: 0 16px 34px rgba(15,23,42,0.16) !important;
-}
-
-.tools-toggle-btn:hover,
-.locate-me-btn:hover {
-    transform: translateY(-2px) scale(1.04) !important;
-}
-
-.custom-layer-control {
-    background:
-        linear-gradient(180deg, rgba(255,253,245,0.96), rgba(255,255,255,0.9)) !important;
-    -webkit-backdrop-filter: var(--edu-blur);
-    backdrop-filter: var(--edu-blur);
-    border: 1px solid rgba(255,255,255,0.82) !important;
-    border-radius: 24px !important;
-    box-shadow: var(--edu-shadow-md) !important;
-}
-
-.custom-layer-control::before {
-    content: "第4節｜聲音、環境與選擇";
-    display: block;
-    margin-bottom: 12px;
-    padding: 10px 12px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, rgba(237,233,254,0.9), rgba(224,242,254,0.74));
-    color: var(--edu-sel);
-    border: 1px solid rgba(124,58,237,0.16);
-    font-size: 12px;
-    font-weight: 950;
-    letter-spacing: 0.04em;
-}
-
-.custom-layer-control label {
-    border-radius: 12px;
-    padding: 6px 8px;
-    margin-left: -4px;
-    margin-right: -4px;
-    transition: background .18s ease, transform .18s ease;
-}
-
-.custom-layer-control label:hover {
-    background: rgba(31,138,147,0.08);
-    transform: translateX(2px);
-}
-
-.custom-layer-control input[type="radio"],
-.custom-layer-control input[type="checkbox"],
-.filter-item input,
-.layer-card input {
-    accent-color: var(--edu-river-deep) !important;
-}
-
-#floodControlPanel {
-    background: linear-gradient(135deg, #eff6ff, #f8fafc) !important;
-    border-radius: 18px !important;
-}
-
-#hydrologyControlPanel {
-    background: linear-gradient(135deg, #ecfeff, #f0fdfa) !important;
-    border-radius: 18px !important;
-}
-
-#officialHazardControlPanel {
-    background: linear-gradient(135deg, #f5f3ff, #faf5ff) !important;
-    border-radius: 18px !important;
-}
-
-/* =========================
-   6. 聲景作品卡片：從作品卡變學習證據
-========================= */
-.leaflet-popup-content-wrapper {
-    background:
-        linear-gradient(180deg, #fffdf5 0%, #ffffff 48%, #f8fafc 100%) !important;
-    border: 1px solid rgba(255,255,255,0.84);
-    border-radius: 26px !important;
-    overflow: hidden !important;
-    box-shadow:
-        0 26px 64px rgba(15,23,42,0.28),
-        inset 0 1px 0 rgba(255,255,255,0.9) !important;
-}
-
-.leaflet-popup-tip {
-    background: #fffdf5 !important;
-}
-
-.sound-card {
-    background:
-        linear-gradient(180deg, #fffdf5 0%, #ffffff 50%, #f8fafc 100%) !important;
-}
-
-.sound-cover {
-    height: 174px !important;
-    filter: saturate(1.06) contrast(1.03);
-}
-
-.sound-info {
-    padding: 16px 18px 14px 18px !important;
-}
-
-.sound-title {
-    color: var(--edu-ink) !important;
-    letter-spacing: 0.02em;
-}
-
-.sound-title::before {
-    content: "聲音故事";
-    display: inline-flex;
-    margin-right: 8px;
-    margin-bottom: 6px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: rgba(15,143,111,0.1);
-    color: var(--edu-river-deep);
-    font-size: 10px;
-    font-weight: 950;
-    vertical-align: middle;
-}
-
-.card-meta-box {
-    background:
-        linear-gradient(135deg, rgba(248,250,252,0.96), rgba(255,253,245,0.94)) !important;
-    border: 1px solid rgba(148,163,184,0.22) !important;
-    border-radius: 18px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.82);
-}
-
-.meta-category,
-.meta-gps,
-.modal-tag {
-    border-radius: 999px !important;
-}
-
-.sound-desc {
-    color: #52635e !important;
-    line-height: 1.75 !important;
-}
-
-.sound-desc::before {
-    content: "環境詮釋｜";
-    color: var(--edu-earth);
-    font-weight: 900;
-}
-
-.reaction-section-title {
-    background:
-        linear-gradient(135deg, rgba(237,233,254,0.78), rgba(224,242,254,0.58)) !important;
-    border: 1px solid rgba(124,58,237,0.14) !important;
-    color: var(--edu-sel) !important;
-    border-radius: 999px !important;
-}
-
-.reaction-section-title::after {
-    content: "SEL";
-    margin-left: auto;
-    padding: 2px 7px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.76);
-    color: var(--edu-sel);
-    font-size: 9px;
-    font-weight: 950;
-}
-
-.reaction-btn {
-    border-radius: 999px !important;
-    background: rgba(255,255,255,0.78) !important;
-    border-color: rgba(148,163,184,0.24) !important;
-}
-
-.reaction-btn:hover {
-    background: #fff !important;
-    box-shadow: 0 8px 18px rgba(15,23,42,0.08);
-}
-
-.btn-play-main {
-    border-radius: 18px !important;
-    background:
-        linear-gradient(135deg, var(--edu-river-deep), var(--edu-river)) !important;
-    box-shadow: 0 14px 28px rgba(15,118,110,0.26) !important;
-}
-
-.btn-play-main:hover {
-    background:
-        linear-gradient(135deg, #0b615a, #19767f) !important;
-}
-
-.btn-play-main.playing {
-    background:
-        linear-gradient(135deg, var(--edu-action), #c2410c) !important;
-}
-
-.share-icon-btn,
-.nav-icon-btn,
-.fav-btn {
-    border-radius: 999px;
-}
-
-.share-icon-btn:hover,
-.nav-icon-btn:hover,
-.fav-btn:hover {
-    background: rgba(15,143,111,0.08);
-}
-
-/* 聲音點：像田野資料點 */
-.sound-dot-marker {
-    background: rgba(255,253,245,0.92) !important;
-    box-shadow:
-        0 0 0 5px rgba(15,143,111,0.13),
-        0 10px 24px rgba(15,23,42,0.2) !important;
-}
-
-/* =========================
-   7. 播放器：聆聽實驗室
-========================= */
-.global-player {
-    background:
-        linear-gradient(135deg, rgba(255,253,245,0.98), rgba(255,255,255,0.86)) !important;
-    -webkit-backdrop-filter: var(--edu-blur);
-    backdrop-filter: var(--edu-blur);
-    border: 1px solid rgba(255,255,255,0.84) !important;
-    border-bottom-color: rgba(15,143,111,0.18) !important;
-    border-radius: 26px !important;
-    box-shadow: 0 -18px 55px rgba(15,23,42,0.18) !important;
-}
-
-.global-player::before {
-    content: "聆聽實驗室";
-    position: absolute;
-    top: -12px;
-    left: 22px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--edu-river-deep), var(--edu-river));
-    color: #fff;
-    font-size: 10px;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    box-shadow: 0 8px 18px rgba(15,23,42,0.14);
-}
-
-.player-control-btn {
-    background:
-        linear-gradient(135deg, var(--edu-river-deep), var(--edu-river)) !important;
-    box-shadow: 0 12px 26px rgba(15,118,110,0.28) !important;
-}
-
-.waveform-wrapper {
-    border-radius: 999px !important;
-    background:
-        linear-gradient(180deg, rgba(226,232,240,0.88), rgba(248,250,252,0.94)) !important;
-    border: 1px solid rgba(148,163,184,0.2);
-}
-
-.player-time-display {
-    border-radius: 999px !important;
-    background: rgba(15,143,111,0.08) !important;
-    color: var(--edu-river-deep) !important;
-}
-
-/* =========================
-   8. Modal：課程說明、成果展示
-========================= */
-.modal-overlay {
-    background:
-        radial-gradient(circle at 30% 20%, rgba(31,138,147,0.18), transparent 28%),
-        radial-gradient(circle at 80% 80%, rgba(124,58,237,0.12), transparent 30%),
-        rgba(15,23,42,0.62) !important;
-    -webkit-backdrop-filter: blur(10px) saturate(125%);
-    backdrop-filter: blur(10px) saturate(125%);
-}
-
-.modal-box {
-    background:
-        linear-gradient(180deg, #fffdf5 0%, #ffffff 52%, #f8fafc 100%) !important;
-    border: 1px solid rgba(255,255,255,0.84);
-    border-radius: 28px !important;
-    box-shadow: var(--edu-shadow-lg) !important;
-}
-
-.modal-img {
-    height: 238px !important;
-    filter: saturate(1.04) contrast(1.03);
-}
-
-.modal-title {
-    color: var(--edu-ink) !important;
-}
-
-#aboutModal .modal-title::after {
-    content: "聲音—情緒—環境";
-    margin-left: 8px;
-    padding: 5px 9px;
-    border-radius: 999px;
-    background: rgba(237,233,254,0.9);
-    color: var(--edu-sel);
-    font-size: 10px;
-    font-weight: 950;
-    letter-spacing: 0.06em;
-}
-
-.modal-text {
-    color: #52635e !important;
-    line-height: 1.78 !important;
-}
-
-.quote-block {
-    background:
-        linear-gradient(135deg, rgba(220,252,231,0.7), rgba(254,243,199,0.55)) !important;
-    border-left-color: var(--edu-river) !important;
-    border-radius: 0 18px 18px 0 !important;
-}
-
-.latest-item,
-.layer-card,
-.ext-link-card {
-    background:
-        linear-gradient(135deg, rgba(255,255,255,0.96), rgba(248,250,252,0.9)) !important;
-    border-color: rgba(148,163,184,0.22) !important;
-    border-radius: 20px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
-}
-
-.latest-item:hover,
-.layer-card:hover,
-.ext-link-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 16px 30px rgba(15,23,42,0.12) !important;
-    border-color: rgba(15,143,111,0.28) !important;
-}
-
-.modal-close-btn {
-    background: rgba(255,253,245,0.96) !important;
-    border: 1px solid rgba(255,255,255,0.76) !important;
-    box-shadow: 0 12px 26px rgba(15,23,42,0.18) !important;
-}
-
-.modal-close-btn:hover {
-    background: var(--edu-action) !important;
-    color: #fff !important;
-}
-
-/* =========================
-   9. 成就牆：環境行動徽章
-========================= */
-.achievement-card {
-    background:
-        linear-gradient(180deg, #fffdf5 0%, #ffffff 55%, #fffbeb 100%) !important;
-    border: 1px solid rgba(255,255,255,0.84);
-    border-radius: 32px !important;
-}
-
-.badge-icon-wrapper {
-    background:
-        linear-gradient(135deg, #fde68a, #f59e0b, #f97316) !important;
-}
-
-.wall-badge {
-    border-radius: 22px !important;
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92)) !important;
-}
-
-.wall-badge.unlocked {
-    background:
-        linear-gradient(180deg, #fffbeb, #ffffff) !important;
-    border-color: rgba(245,158,11,0.36) !important;
-    box-shadow: 0 12px 24px rgba(245,158,11,0.12) !important;
-}
-
-.wall-badge-name::before {
-    content: "環境行動｜";
-    color: var(--edu-river-deep);
-    font-size: 10px;
-}
-
-/* =========================
-   10. 南山公墓：文史田野感
-========================= */
-.nanshan-category-menu {
-    background:
-        linear-gradient(180deg, rgba(255,253,245,0.96), rgba(255,255,255,0.88)) !important;
-    border-color: rgba(124,58,237,0.18) !important;
-    border-radius: 26px !important;
-    box-shadow: var(--edu-shadow-md) !important;
-}
-
-.nanshan-category-title::after {
-    content: "文史田野";
-    margin-left: auto;
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: rgba(237,233,254,0.9);
-    color: var(--edu-sel);
-    font-size: 10px;
-    font-weight: 950;
-}
-
-.nanshan-category-note,
-.nanshan-search-box {
-    border-radius: 18px !important;
-}
-
-.nanshan-mini-btn {
-    border-radius: 999px !important;
-}
-
-.nanshan-popup-content {
-    background:
-        linear-gradient(180deg, #fffdf5, #ffffff 54%, #f8fafc) !important;
-}
-
-.nanshan-popup-content h3 {
-    color: #5b21b6 !important;
-}
-
-/* =========================
-   11. 浮動狀態、提示、路線按鈕
-========================= */
-#floatingClearRouteBtn {
-    border-radius: 999px !important;
-    padding: 12px 18px !important;
-    background: linear-gradient(135deg, #fff1f2, #ffffff) !important;
-    border: 1px solid rgba(239,68,68,0.28) !important;
-    box-shadow: 0 18px 38px rgba(127,29,29,0.18) !important;
-}
-
-.haidian-mode-toast,
+  content: "SEL × 在地探究" !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: 10px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(15, 143, 111, 0.08) !important;
+  color: var(--haidian-final-green-deep) !important;
+  border: 1px solid rgba(15, 143, 111, 0.16) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.08em !important;
+  white-space: nowrap !important;
+}
+.project-title span.sub-title {
+  color: var(--haidian-final-muted) !important;
+  font-weight: 750 !important;
+}
+
+/* 專注模式提示：原聆聽沉浸模式改成「專注模式」。 */
 .listening-hint {
-    background:
-        linear-gradient(135deg, rgba(15,118,110,0.94), rgba(31,138,147,0.92)) !important;
-    border: 1px solid rgba(255,255,255,0.18) !important;
-    box-shadow: 0 18px 38px rgba(15,23,42,0.26) !important;
+  background: linear-gradient(135deg, rgba(15, 143, 111, 0.96), rgba(31, 138, 147, 0.96)) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.28) !important;
 }
-
 .listening-hint::after {
-    content: "｜第1節：重新學會聽";
-    opacity: 0.9;
+  content: "｜專注模式" !important;
+  opacity: 0.95 !important;
 }
 
-/* =========================
-   12. Mobile：保持課程感但不擠爆
-========================= */
-@media (max-width: 760px) {
-    .glass-header {
-        width: calc(100vw - 20px) !important;
-        border-radius: 22px !important;
-        padding: 12px 14px !important;
-    }
-
-    .project-title::after {
-        display: none;
-    }
-
-    .nav-buttons {
-        gap: 6px !important;
-    }
-
-    .nav-buttons button {
-        border-radius: 14px !important;
-        font-size: 11.5px !important;
-        padding: 8px 5px !important;
-    }
-
-    .drawer-content {
-        border-radius: 24px !important;
-        padding: 18px !important;
-    }
-
-    .filter-item {
-        width: 100% !important;
-    }
-
-    .right-tools-wrapper {
-        right: 10px !important;
-    }
-
-    .tools-toggle-btn,
-    .locate-me-btn {
-        width: 46px !important;
-        height: 46px !important;
-        border-radius: 16px !important;
-    }
-
-    .custom-layer-control {
-        width: min(280px, calc(100vw - 28px)) !important;
-        border-radius: 24px !important;
-    }
-
-    .haidian-v4-dock {
-        border-radius: 22px !important;
-        padding: 12px !important;
-    }
-
-    .haidian-v4-dock-body {
-        gap: 6px !important;
-    }
-
-    .haidian-v4-card {
-        border-radius: 16px !important;
-        min-height: 64px !important;
-        padding: 9px 8px !important;
-    }
-
-    .haidian-v4-card::before {
-        width: 22px;
-        height: 22px;
-        margin-bottom: 5px;
-        font-size: 10px;
-    }
-
-    .haidian-v4-card b {
-        font-size: 12px !important;
-    }
-
-    .haidian-v4-card small {
-        font-size: 10px !important;
-    }
-
-    .leaflet-popup-content {
-        width: min(286px, calc(100vw - 78px)) !important;
-    }
-
-    .sound-cover {
-        height: 118px !important;
-    }
-
-    .sound-info {
-        padding: 13px !important;
-    }
-
-    .sound-title {
-        font-size: 17px !important;
-    }
-
-    .sound-title::before {
-        display: flex;
-        width: fit-content;
-    }
-
-    .reaction-box {
-        gap: 5px !important;
-    }
-
-    .reaction-btn {
-        font-size: 10.5px !important;
-        padding: 7px 0 !important;
-    }
-
-    .global-player {
-        border-radius: 22px !important;
-    }
-
-    .global-player::before {
-        display: none;
-    }
-
-    #splashScreen .splash-card {
-        border-radius: 24px !important;
-    }
-
-    .featured-sound-card::after {
-        font-size: 10px;
-    }
+/* 圖資面板：移除第幾節課語氣，改成工具面板語氣。 */
+.custom-layer-control::before {
+  content: "圖資工具｜底圖・歷史・水文・災害" !important;
+  display: block !important;
+  margin-bottom: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(239, 246, 255, 0.86)) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.04em !important;
+}
+.haidian-v4-data-note {
+  background: rgba(240, 253, 250, 0.86) !important;
+  border: 1px solid rgba(153, 246, 228, 0.8) !important;
+  color: #115e59 !important;
+  font-weight: 850 !important;
 }
 
-@media (max-height: 500px) and (orientation: landscape) {
-    .glass-header {
-        border-radius: 16px !important;
-    }
-
-    .sound-cover {
-        height: 92px !important;
-    }
-
-    .drawer-content {
-        max-height: calc(100vh - 56px) !important;
-    }
-
-    .splash-title::after,
-    .featured-sound-card::after {
-        display: none;
-    }
+/* 課程模組 dock：統一文字與手機版收合行為。 */
+.haidian-v4-dock {
+  background: var(--haidian-final-paper) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: var(--haidian-final-shadow) !important;
 }
-
-/* =========================
-   13. 無障礙：降低動態效果偏好
-========================= */
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-    }
-}
-</style>
-<!-- HAIDIAN_CURRICULUM_UI_SKIN_END -->
-    <!-- HAIDIAN_MOBILE_DOCK_FIX_START -->
-<style id="haidian-mobile-dock-fix">
-/* 1. 下方卡片標題修正：四節課模組 → 課程模組 */
 .haidian-v4-dock-title strong {
-  font-size: 0 !important;
+  display: block !important;
+  color: var(--haidian-final-ink) !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
 }
-
-.haidian-v4-dock-title strong::after {
-  content: "課程模組｜探索主線";
-  font-size: 14px;
-  font-weight: 950;
-  color: #0f172a;
+.haidian-v4-dock-title span {
+  color: var(--haidian-final-muted) !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
 }
-
-/* 2. 把下方課程卡片的收合按鈕改成明確 X */
+body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
+  content: "" !important;
+}
 .haidian-v4-dock-toggle {
   position: relative !important;
   z-index: 10 !important;
@@ -8858,33 +6911,37 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
   justify-content: center !important;
   width: 34px !important;
   height: 34px !important;
+  border: 0 !important;
   border-radius: 999px !important;
   background: rgba(15, 23, 42, 0.08) !important;
-  color: #0f172a !important;
+  color: var(--haidian-final-ink) !important;
   font-size: 0 !important;
   line-height: 1 !important;
+  cursor: pointer !important;
 }
-
 .haidian-v4-dock-toggle::after {
   content: "×";
   font-size: 22px;
-  font-weight: 900;
+  font-weight: 950;
   transform: translateY(-1px);
 }
-
 .haidian-v4-dock.is-minimized .haidian-v4-dock-toggle::after {
   content: "＋";
   font-size: 20px;
 }
 
-/* 3. 手機版：定位按鈕不要壓到下方課程卡片 */
 @media (max-width: 760px) {
-  .locate-me-wrapper {
-    right: 12px !important;
-    bottom: 218px !important;
-    z-index: 3600 !important;
+  .glass-header {
+    width: min(94%, calc(100vw - 20px)) !important;
+    padding: 11px 14px !important;
+    border-radius: 18px !important;
   }
-
+  .project-title::after {
+    margin-left: 8px !important;
+    padding: 3px 8px !important;
+    font-size: 9.5px !important;
+    letter-spacing: 0.04em !important;
+  }
   .haidian-v4-dock {
     left: 10px !important;
     right: 10px !important;
@@ -8893,31 +6950,32 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
     max-height: 168px !important;
     overflow: hidden !important;
     z-index: 1400 !important;
+    padding: 12px !important;
+    border-radius: 20px !important;
   }
-
   .haidian-v4-dock-head {
     margin-bottom: 8px !important;
   }
-
   .haidian-v4-dock-body {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
   }
-
   .haidian-v4-card {
     min-height: 58px !important;
     padding: 9px 8px !important;
   }
-
   .haidian-v4-card b {
     font-size: 12px !important;
   }
-
   .haidian-v4-card small {
     font-size: 10px !important;
     line-height: 1.35 !important;
   }
-
-  /* 收合後只留一顆小膠囊，不再擋地圖 */
+  .locate-me-wrapper {
+    right: 12px !important;
+    bottom: 218px !important;
+    z-index: 3600 !important;
+  }
   .haidian-v4-dock.is-minimized {
     left: auto !important;
     right: 12px !important;
@@ -8928,177 +6986,93 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
     padding: 8px !important;
     border-radius: 999px !important;
   }
-
   .haidian-v4-dock.is-minimized .haidian-v4-dock-head {
     margin: 0 !important;
   }
-
   .haidian-v4-dock.is-minimized .haidian-v4-dock-title,
   .haidian-v4-dock.is-minimized .haidian-v4-dock-body {
     display: none !important;
   }
-
   .haidian-v4-dock.is-minimized .haidian-v4-dock-toggle {
     width: 42px !important;
     height: 42px !important;
     background: rgba(255, 255, 255, 0.96) !important;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22) !important;
   }
-
-  .haidian-v4-dock.is-minimized + .locate-me-wrapper {
-    bottom: 144px !important;
-  }
-}
-
-/* 南山模式沿用原本邏輯，但不要讓定位按鈕壓到卡片 */
-@media (max-width: 760px) {
   body.nanshan-mode .locate-me-wrapper {
     bottom: 18px !important;
   }
-
   body.nanshan-mode .haidian-v4-dock {
     display: none !important;
   }
 }
-</style>
 
-<script id="haidian-mobile-dock-fix-js">
+@media (max-height: 500px) and (orientation: landscape) {
+  .haidian-v4-dock { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+<script id="haidian-final-ui-pack-js">
 (function () {
-  "use strict";
+  'use strict';
 
   function ready(fn) {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn, { once: true });
     } else {
       fn();
     }
   }
 
-  ready(function () {
-    var dock = document.querySelector(".haidian-v4-dock");
+  function applyCopy() {
+    var hint = document.querySelector('.listening-hint');
+    if (hint) {
+      hint.childNodes.forEach(function (node) {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          node.textContent = ' 點擊退出專注模式';
+        }
+      });
+      hint.setAttribute('title', '點擊退出專注模式');
+      hint.setAttribute('aria-label', '點擊退出專注模式');
+    }
+
+    var dock = document.querySelector('.haidian-v4-dock');
     if (!dock) return;
 
-    var title = dock.querySelector(".haidian-v4-dock-title strong");
-    if (title) title.textContent = "課程模組｜探索主線";
+    var title = dock.querySelector('.haidian-v4-dock-title strong');
+    var subtitle = dock.querySelector('.haidian-v4-dock-title span');
+    var toggle = dock.querySelector('.haidian-v4-dock-toggle');
 
-    var toggle = dock.querySelector(".haidian-v4-dock-toggle");
+    if (title) title.textContent = '課程模組｜探索主線';
+    if (subtitle) subtitle.textContent = '聲音 × SEL × 在地探究｜點一下打開對應工具面板';
     if (toggle) {
-      toggle.setAttribute("aria-label", "收合或展開課程模組");
-      toggle.setAttribute("title", "收合或展開課程模組");
+      toggle.textContent = '';
+      toggle.setAttribute('aria-label', '收合或展開課程模組');
+      toggle.setAttribute('title', '收合或展開課程模組');
     }
 
-    /*
-      手機版預設先收合，避免一進網站就擋住地圖。
-      使用者點右下角「＋」可以再打開。
-    */
-    if (window.matchMedia && window.matchMedia("(max-width: 760px)").matches) {
-      dock.classList.add("is-minimized");
-      if (toggle) toggle.textContent = "";
+    if (window.matchMedia && window.matchMedia('(max-width: 760px)').matches) {
+      dock.classList.add('is-minimized');
     }
+  }
+
+  ready(function () {
+    applyCopy();
+    setTimeout(applyCopy, 120);
+    setTimeout(applyCopy, 450);
   });
 })();
 </script>
-<!-- HAIDIAN_MOBILE_DOCK_FIX_END -->
-    <!-- HAIDIAN_COPY_REFINEMENT_PATCH_START -->
-<style id="haidian-copy-refinement-patch">
-/* 1. 上方 banner 膠囊：不要再重複「聲音地景課程平台」 */
-.project-title::after {
-  content: "SEL × 在地探究" !important;
-  display: inline-flex !important;
-  margin-left: 10px !important;
-  padding: 4px 10px !important;
-  border-radius: 999px !important;
-  background: rgba(15, 143, 111, 0.08) !important;
-  color: #047857 !important;
-  border: 1px solid rgba(15, 143, 111, 0.16) !important;
-  font-size: 10px !important;
-  font-weight: 950 !important;
-  letter-spacing: 0.08em !important;
-  vertical-align: middle !important;
-  white-space: nowrap !important;
-}
+<!-- HAIDIAN_FINAL_UI_PACK_END -->
 
-/* 手機版也保留膠囊，但不要太佔空間 */
-@media (max-width: 760px) {
-  .project-title::after {
-    content: "SEL × 在地探究" !important;
-    display: inline-flex !important;
-    margin-left: 8px !important;
-    padding: 3px 8px !important;
-    font-size: 9.5px !important;
-    letter-spacing: 0.04em !important;
-  }
-}
-
-/* 2. 右上圖層選單：移除「第4節」語氣，改成工具型標題 */
-.custom-layer-control::before {
-  content: "圖資工具｜底圖・歷史・水文・災害" !important;
-  display: block !important;
-  margin-bottom: 12px !important;
-  padding: 10px 12px !important;
-  border-radius: 16px !important;
-  background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(239, 246, 255, 0.82)) !important;
-  color: #0f766e !important;
-  border: 1px solid rgba(15, 118, 110, 0.18) !important;
-  font-size: 12px !important;
-  font-weight: 950 !important;
-  letter-spacing: 0.04em !important;
-}
-
-/* 3. V4 自動插入的圖資說明也改掉，不要像第幾節課 */
-.haidian-v4-data-note {
-  font-size: 0 !important;
-  color: transparent !important;
-}
-
-.haidian-v4-data-note::after {
-  content: "在地探究｜比較底圖、歷史套疊、水文與災害圖資，觀察小台江環境變化。";
-  display: block;
-  color: #115e59;
-  font-size: 12px;
-  line-height: 1.6;
-  font-weight: 850;
-}
-
-/* 4. 下方課程模組標題也避免出現「四節課」 */
-.haidian-v4-dock-title strong {
-  font-size: 0 !important;
-}
-
-.haidian-v4-dock-title strong::after {
-  content: "課程模組｜探索主線";
-  font-size: 14px;
-  font-weight: 950;
-  color: #0f172a;
-}
-
-.haidian-v4-dock-title span::before {
-  content: "聲音 × SEL × 在地探究｜" !important;
-  color: #7c3aed;
-  font-weight: 900;
-}
-
-/* 5. 如果入口推薦卡之前有「第1節、第2節」字樣，也改成模組語氣 */
-.featured-sound-card::after {
-  content: "採集模組 → 詮釋模組 → 地圖模組 → 行動模組" !important;
-  display: block;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(15, 143, 111, 0.22);
-  color: #64748b;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  line-height: 1.5;
-}
-
-/* 6. 聆聽模式提示也不要寫第幾節 */
-.listening-hint::after {
-  content: "｜聲音採集模式" !important;
-  opacity: 0.9;
-}
-</style>
-<!-- HAIDIAN_COPY_REFINEMENT_PATCH_END -->
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
 <script id="haidian-9plus-stable-v4-js">
 (function () {
@@ -9337,7 +7311,7 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
     if (!control || control.querySelector('.haidian-v4-data-note')) return;
     const note = document.createElement('div');
     note.className = 'haidian-v4-data-note';
-    note.textContent = '圖資模式｜這裡集中底圖、歷史套疊、淹水潛勢、水文與官方災害圖層。可直接點選下方單選或勾選項目切換。';
+    note.textContent = '在地探究｜比較底圖、歷史套疊、水文與災害圖資，觀察小台江環境變化。';
     control.insertBefore(note, control.firstChild);
   }
 
@@ -9346,7 +7320,7 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
     const dock = document.createElement('aside');
     dock.className = 'haidian-v4-dock';
     dock.setAttribute('aria-label', '探索主線');
-    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>探索主線</strong><span>點一下才打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合探索主線">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
+    dock.innerHTML = '<div class="haidian-v4-dock-head"><div class="haidian-v4-dock-title"><strong>課程模組｜探索主線</strong><span>聲音 × SEL × 在地探究｜點一下打開對應工具面板</span></div><button type="button" class="haidian-v4-dock-toggle" aria-label="收合或展開課程模組">⌄</button></div><div class="haidian-v4-dock-body"><button type="button" class="haidian-v4-card" data-haidian-v4-mode="listen"><b>聆聽</b><small>找聲景、播放、收藏、回應。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="walk"><b>走讀</b><small>路線、任務、空間探索。</small></button><button type="button" class="haidian-v4-card" data-haidian-v4-mode="data"><b>圖資</b><small>歷史、水文、災害圖層。</small></button></div>';
     document.body.appendChild(dock);
   }
 
