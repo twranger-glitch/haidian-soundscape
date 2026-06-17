@@ -8999,6 +8999,106 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
 })();
 </script>
 <!-- HAIDIAN_MOBILE_DOCK_FIX_END -->
+    <!-- HAIDIAN_COPY_REFINEMENT_PATCH_START -->
+<style id="haidian-copy-refinement-patch">
+/* 1. 上方 banner 膠囊：不要再重複「聲音地景課程平台」 */
+.project-title::after {
+  content: "SEL × 在地探究" !important;
+  display: inline-flex !important;
+  margin-left: 10px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(15, 143, 111, 0.08) !important;
+  color: #047857 !important;
+  border: 1px solid rgba(15, 143, 111, 0.16) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.08em !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+/* 手機版也保留膠囊，但不要太佔空間 */
+@media (max-width: 760px) {
+  .project-title::after {
+    content: "SEL × 在地探究" !important;
+    display: inline-flex !important;
+    margin-left: 8px !important;
+    padding: 3px 8px !important;
+    font-size: 9.5px !important;
+    letter-spacing: 0.04em !important;
+  }
+}
+
+/* 2. 右上圖層選單：移除「第4節」語氣，改成工具型標題 */
+.custom-layer-control::before {
+  content: "圖資工具｜底圖・歷史・水文・災害" !important;
+  display: block !important;
+  margin-bottom: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(239, 246, 255, 0.82)) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* 3. V4 自動插入的圖資說明也改掉，不要像第幾節課 */
+.haidian-v4-data-note {
+  font-size: 0 !important;
+  color: transparent !important;
+}
+
+.haidian-v4-data-note::after {
+  content: "在地探究｜比較底圖、歷史套疊、水文與災害圖資，觀察小台江環境變化。";
+  display: block;
+  color: #115e59;
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 850;
+}
+
+/* 4. 下方課程模組標題也避免出現「四節課」 */
+.haidian-v4-dock-title strong {
+  font-size: 0 !important;
+}
+
+.haidian-v4-dock-title strong::after {
+  content: "課程模組｜探索主線";
+  font-size: 14px;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.haidian-v4-dock-title span::before {
+  content: "聲音 × SEL × 在地探究｜" !important;
+  color: #7c3aed;
+  font-weight: 900;
+}
+
+/* 5. 如果入口推薦卡之前有「第1節、第2節」字樣，也改成模組語氣 */
+.featured-sound-card::after {
+  content: "採集模組 → 詮釋模組 → 地圖模組 → 行動模組" !important;
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(15, 143, 111, 0.22);
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+}
+
+/* 6. 聆聽模式提示也不要寫第幾節 */
+.listening-hint::after {
+  content: "｜聲音採集模式" !important;
+  opacity: 0.9;
+}
+</style>
+<!-- HAIDIAN_COPY_REFINEMENT_PATCH_END -->
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
 <script id="haidian-9plus-stable-v4-js">
 (function () {
