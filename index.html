@@ -8835,6 +8835,170 @@ body.haidian-v4-mode-data .haidian-v4-card[data-haidian-v4-mode="data"] * {
 }
 </style>
 <!-- HAIDIAN_CURRICULUM_UI_SKIN_END -->
+    <!-- HAIDIAN_MOBILE_DOCK_FIX_START -->
+<style id="haidian-mobile-dock-fix">
+/* 1. 下方卡片標題修正：四節課模組 → 課程模組 */
+.haidian-v4-dock-title strong {
+  font-size: 0 !important;
+}
+
+.haidian-v4-dock-title strong::after {
+  content: "課程模組｜探索主線";
+  font-size: 14px;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+/* 2. 把下方課程卡片的收合按鈕改成明確 X */
+.haidian-v4-dock-toggle {
+  position: relative !important;
+  z-index: 10 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.08) !important;
+  color: #0f172a !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+}
+
+.haidian-v4-dock-toggle::after {
+  content: "×";
+  font-size: 22px;
+  font-weight: 900;
+  transform: translateY(-1px);
+}
+
+.haidian-v4-dock.is-minimized .haidian-v4-dock-toggle::after {
+  content: "＋";
+  font-size: 20px;
+}
+
+/* 3. 手機版：定位按鈕不要壓到下方課程卡片 */
+@media (max-width: 760px) {
+  .locate-me-wrapper {
+    right: 12px !important;
+    bottom: 218px !important;
+    z-index: 3600 !important;
+  }
+
+  .haidian-v4-dock {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 12px !important;
+    width: auto !important;
+    max-height: 168px !important;
+    overflow: hidden !important;
+    z-index: 1400 !important;
+  }
+
+  .haidian-v4-dock-head {
+    margin-bottom: 8px !important;
+  }
+
+  .haidian-v4-dock-body {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .haidian-v4-card {
+    min-height: 58px !important;
+    padding: 9px 8px !important;
+  }
+
+  .haidian-v4-card b {
+    font-size: 12px !important;
+  }
+
+  .haidian-v4-card small {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* 收合後只留一顆小膠囊，不再擋地圖 */
+  .haidian-v4-dock.is-minimized {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 84px !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding: 8px !important;
+    border-radius: 999px !important;
+  }
+
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-head {
+    margin: 0 !important;
+  }
+
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-title,
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-body {
+    display: none !important;
+  }
+
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-toggle {
+    width: 42px !important;
+    height: 42px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22) !important;
+  }
+
+  .haidian-v4-dock.is-minimized + .locate-me-wrapper {
+    bottom: 144px !important;
+  }
+}
+
+/* 南山模式沿用原本邏輯，但不要讓定位按鈕壓到卡片 */
+@media (max-width: 760px) {
+  body.nanshan-mode .locate-me-wrapper {
+    bottom: 18px !important;
+  }
+
+  body.nanshan-mode .haidian-v4-dock {
+    display: none !important;
+  }
+}
+</style>
+
+<script id="haidian-mobile-dock-fix-js">
+(function () {
+  "use strict";
+
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  ready(function () {
+    var dock = document.querySelector(".haidian-v4-dock");
+    if (!dock) return;
+
+    var title = dock.querySelector(".haidian-v4-dock-title strong");
+    if (title) title.textContent = "課程模組｜探索主線";
+
+    var toggle = dock.querySelector(".haidian-v4-dock-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-label", "收合或展開課程模組");
+      toggle.setAttribute("title", "收合或展開課程模組");
+    }
+
+    /*
+      手機版預設先收合，避免一進網站就擋住地圖。
+      使用者點右下角「＋」可以再打開。
+    */
+    if (window.matchMedia && window.matchMedia("(max-width: 760px)").matches) {
+      dock.classList.add("is-minimized");
+      if (toggle) toggle.textContent = "";
+    }
+  });
+})();
+</script>
+<!-- HAIDIAN_MOBILE_DOCK_FIX_END -->
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
 <script id="haidian-9plus-stable-v4-js">
 (function () {
