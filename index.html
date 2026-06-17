@@ -6290,8 +6290,27 @@ function mountGlobalPlayerIntoPopup_(retry) {
                 : auth.signInWithPopup(provider);
 
             loginAction.catch(error => {
+                const silentLoginCancelCodes = new Set([
+                    "auth/popup-closed-by-user",
+                    "auth/cancelled-popup-request",
+                    "auth/redirect-cancelled-by-user",
+                    "auth/user-cancelled"
+                ]);
+
+                const errorCode = error && error.code ? error.code : "";
+                const errorMessage = error && error.message ? error.message : "";
+
+                // 使用者主動關閉 Google 登入視窗時，視為取消登入，不顯示錯誤彈窗。
+                if (
+                    silentLoginCancelCodes.has(errorCode) ||
+                    errorMessage.includes("popup-closed-by-user") ||
+                    errorMessage.includes("closed by the user")
+                ) {
+                    return;
+                }
+
                 console.error("登入失敗:", error);
-                alert("登入失敗：" + (error.message || "請重試"));
+                alert("登入失敗：" + (errorMessage || "請重試"));
             });
         }
 
@@ -6808,7 +6827,7 @@ function mountGlobalPlayerIntoPopup_(retry) {
 <!-- HAIDIAN_FINAL_UI_PACK_START -->
 <style id="haidian-final-ui-pack">
 /*
-  HAIDIAN_FINAL_UI_PACK v2
+  HAIDIAN_FINAL_UI_PACK
   整理版 UI 覆蓋層：只處理文案、排版與手機版可用性。
   不修改 Firebase / Firestore / Leaflet / 投稿 / 播放 / 圖資功能邏輯。
 */
@@ -6862,10 +6881,19 @@ function mountGlobalPlayerIntoPopup_(retry) {
   opacity: 0.95 !important;
 }
 
-/* 圖資面板：移除額外標題，只保留實際圖資選項與在地探究說明。 */
+/* 圖資面板：移除第幾節課語氣，改成工具面板語氣。 */
 .custom-layer-control::before {
-  content: none !important;
-  display: none !important;
+  content: "圖資工具｜底圖・歷史・水文・災害" !important;
+  display: block !important;
+  margin-bottom: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(239, 246, 255, 0.86)) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.04em !important;
 }
 .haidian-v4-data-note {
   background: rgba(240, 253, 250, 0.86) !important;
@@ -6893,10 +6921,6 @@ function mountGlobalPlayerIntoPopup_(retry) {
 }
 body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
   content: "" !important;
-}
-/* 專注模式下收起所有課程 dock，讓地圖與聲音保持沉浸。 */
-body.listening-mode .haidian-v4-dock {
-  display: none !important;
 }
 .haidian-v4-dock-toggle {
   position: relative !important;
