@@ -306,7 +306,7 @@ const icon = {
         </section>
         ${airQualitySection(payload)}
         <section class="hr-advice">
-          <span>現在最重要</span>
+          <span>目前建議</span>
           <p>${advice}</p>
         </section>
 
@@ -880,6 +880,36 @@ const icon = {
         font-weight: 750;
         line-height: 1.55;
       }
+.leaflet-tooltip.hr-source-map-label {
+  padding: 7px 9px;
+  border: 1px solid rgba(13, 148, 136, 0.34);
+  border-radius: 10px;
+  color: #0f766e;
+  background: rgba(240, 253, 250, 0.97);
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
+  font-family: "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.hr-source-map-label span {
+  display: block;
+  color: #0f766e;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.leaflet-tooltip.hr-source-map-label b {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #134e4a;
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
       .hr-source {
         display: grid;
@@ -1054,15 +1084,82 @@ const icon = {
     document.head.appendChild(style);
   }
 
+function removeSourceAnnotation() {
+  if (sourceLink) {
+    map.removeLayer(sourceLink);
+    sourceLink = null;
+  }
+
+  if (sourceMarker) {
+    map.removeLayer(sourceMarker);
+    sourceMarker = null;
+  }
+}
+
+function showMicroSourceAnnotation(selectedLatlng, source) {
+  removeSourceAnnotation();
+
+  // 僅標註本次熱風險採用的微型感測器；
+  // 若本次使用 CWA 備援站，則不顯示微型測站標記。
+  if (source?.source !== "micro") return;
+
+  const latitude = asNumber(source?.latitude);
+  const longitude = asNumber(source?.longitude);
+
+  if (latitude === null || longitude === null) return;
+
+  const stationLatlng = L.latLng(latitude, longitude);
+  const stationName = escapeHtml(source?.stationName || "本次採用的微型測站");
+
+  sourceLink = L.polyline([selectedLatlng, stationLatlng], {
+    color: "#0f766e",
+    weight: 2,
+    opacity: 0.72,
+    dashArray: "6 8",
+    interactive: false
+  }).addTo(map);
+
+  sourceMarker = L.circleMarker(stationLatlng, {
+    radius: 10,
+    weight: 3,
+    color: "#0f766e",
+    fillColor: "#ecfdf5",
+    fillOpacity: 0.98,
+    interactive: false
+  }).addTo(map);
+
+  sourceMarker.bindTooltip(
+    `<span>本次採用的微型測站</span><b>${stationName}</b>`,
+    {
+      permanent: true,
+      direction: "top",
+      offset: [0, -10],
+      className: "hr-source-map-label",
+      opacity: 1
+    }
+  );
+
+  window.requestAnimationFrame(() => {
+    const bounds = L.latLngBounds([selectedLatlng, stationLatlng]);
+
+    map.panInsideBounds(bounds.pad(0.18), {
+      paddingTopLeft: [24, 112],
+      paddingBottomRight: [24, 160],
+      animate: true
+    });
+  });
+}
+  
   function removeMarker() {
     if (marker) map.removeLayer(marker);
     marker = null;
   }
 
-  function setMarker(latlng) {
-    removeMarker();
+function setMarker(latlng) {
+  removeMarker();
+  removeSourceAnnotation();
 
-    marker = L.circleMarker(latlng, {
+  marker = L.circleMarker(latlng, {
       radius: 8,
       weight: 3,
       color: "#e11d48",
@@ -1102,10 +1199,11 @@ const icon = {
     popup.setLatLng(latlng).setContent(html).openOn(map);
   }
 
-  function closeCard() {
-    if (popup) map.closePopup(popup);
-    removeMarker();
-  }
+function closeCard() {
+  if (popup) map.closePopup(popup);
+  removeMarker();
+  removeSourceAnnotation();
+}
 
   function updateButton() {
     if (!button) return;
@@ -1182,7 +1280,8 @@ const icon = {
         throw new Error(friendlyError(payload, response.status));
       }
 
-      openCard(latlng, resultCard(payload));
+openCard(latlng, resultCard(payload));
+showMicroSourceAnnotation(latlng, payload.source);
     } catch (error) {
       const message =
         error?.name === "AbortError"
@@ -1253,9 +1352,10 @@ const icon = {
     assess(event.latlng);
   });
 
-  map.on("popupclose", (event) => {
-    if (event.popup === popup) {
-      removeMarker();
-    }
-  });
+map.on("popupclose", (event) => {
+  if (event.popup === popup) {
+    removeMarker();
+    removeSourceAnnotation();
+  }
+});
 })();
