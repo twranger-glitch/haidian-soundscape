@@ -239,7 +239,7 @@
 
   function addControl() {
     const HeatRiskControl = L.Control.extend({
-      options: { position: "topright" },
+      options: { position: "bottomright" },
       onAdd() {
         const container = L.DomUtil.create("div", "heat-risk-control");
         controlButton = L.DomUtil.create("button", "", container);
