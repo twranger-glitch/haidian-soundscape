@@ -16,8 +16,10 @@
 
   const map = window.map;
   let selecting = false;
-  let marker = null;
-  let popup = null;
+let marker = null;
+let sourceMarker = null;
+let sourceLink = null;
+let popup = null;
 let controller = null;
 let button = null;
 
