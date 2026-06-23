@@ -1175,6 +1175,41 @@ function setMarker(latlng) {
     return Math.max(240, Math.min(360, map.getSize().x - 28));
   }
 
+function keepHeatPopupInView() {
+  if (!window.matchMedia("(max-width: 600px)").matches) return;
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const popupElement = popup?.getElement?.();
+      const mapElement = map.getContainer();
+
+      if (!popupElement || !mapElement) return;
+
+      const popupRect = popupElement.getBoundingClientRect();
+      const mapRect = mapElement.getBoundingClientRect();
+
+      // 留出上方「顯示選單」空間，並保留底部地圖可讀性。
+      const safeTop = mapRect.top + 52;
+      const safeBottom = mapRect.bottom - 16;
+
+      let panY = 0;
+
+      if (popupRect.top < safeTop) {
+        panY = popupRect.top - safeTop;
+      } else if (popupRect.bottom > safeBottom) {
+        panY = popupRect.bottom - safeBottom;
+      }
+
+      if (panY !== 0) {
+        map.panBy([0, panY], {
+          animate: true,
+          duration: 0.22
+        });
+      }
+    });
+  });
+}
+
   function openCard(latlng, html) {
     const popupWidth = getHeatPopupWidth();
 
@@ -1199,7 +1234,8 @@ function setMarker(latlng) {
     popup.options.maxWidth = popupWidth;
     popup.options.minWidth = popupWidth;
 
-    popup.setLatLng(latlng).setContent(html).openOn(map);
+popup.setLatLng(latlng).setContent(html).openOn(map);
+keepHeatPopupInView();
   }
 
 function closeCard() {
@@ -1337,6 +1373,25 @@ showMicroSourceAnnotation(latlng, payload.source);
 
   addStyles();
   addButton();
+
+function positionLeafletAttribution() {
+  if (!map.attributionControl) return;
+
+  const mobile = window.matchMedia("(max-width: 760px)").matches;
+  const position = mobile ? "bottomleft" : "bottomright";
+
+  if (map.attributionControl.getPosition() !== position) {
+    map.attributionControl.setPosition(position);
+  }
+}
+
+positionLeafletAttribution();
+
+window.addEventListener(
+  "resize",
+  positionLeafletAttribution,
+  { passive: true }
+);
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-hr-close]")) {
