@@ -449,6 +449,15 @@ const icon = {
         cursor: crosshair;
       }
 
+      @media (max-width: 600px) {
+        body.heat-risk-card-open #rightToolsWrapper,
+        body.heat-risk-card-open .drawer-panel .toggle-btn,
+        body.heat-risk-card-open .header-pull-tab {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      }
+
       .leaflet-popup.hr-popup .leaflet-popup-content-wrapper {
         padding: 0;
         overflow: hidden;
@@ -1249,20 +1258,32 @@ function keepHeatPopupInView() {
       const popupRect = popupElement.getBoundingClientRect();
       const mapRect = mapElement.getBoundingClientRect();
 
-      // 留出上方「顯示選單」空間，並保留底部地圖可讀性。
+      const safeLeft = mapRect.left + 14;
+      const safeRight = mapRect.right - 14;
       const safeTop = mapRect.top + 52;
       const safeBottom = mapRect.bottom - 16;
 
+      let panX = 0;
       let panY = 0;
 
+      // 左側超出：負值，讓卡片往右回到畫面內。
+      if (popupRect.left < safeLeft) {
+        panX = popupRect.left - safeLeft;
+      } else if (popupRect.right > safeRight) {
+        // 右側超出：正值，讓卡片往左回到畫面內。
+        panX = popupRect.right - safeRight;
+      }
+
+      // 上方超出：負值，讓卡片往下回到畫面內。
       if (popupRect.top < safeTop) {
         panY = popupRect.top - safeTop;
       } else if (popupRect.bottom > safeBottom) {
+        // 下方超出：正值，讓卡片往上回到畫面內。
         panY = popupRect.bottom - safeBottom;
       }
 
-      if (panY !== 0) {
-        map.panBy([0, panY], {
+      if (panX !== 0 || panY !== 0) {
+        map.panBy([panX, panY], {
           animate: true,
           duration: 0.22
         });
@@ -1295,12 +1316,19 @@ function keepHeatPopupInView() {
     popup.options.maxWidth = popupWidth;
     popup.options.minWidth = popupWidth;
 
-popup.setLatLng(latlng).setContent(html).openOn(map);
-keepHeatPopupInView();
+    if (window.matchMedia("(max-width: 600px)").matches) {
+      document.body.classList.add("heat-risk-card-open");
+    }
+
+    popup.setLatLng(latlng).setContent(html).openOn(map);
+    keepHeatPopupInView();
   }
 
 function closeCard() {
+  document.body.classList.remove("heat-risk-card-open");
+
   if (popup) map.closePopup(popup);
+
   removeMarker();
   removeSourceAnnotation();
 }
@@ -1492,6 +1520,7 @@ window.addEventListener(
 
 map.on("popupclose", (event) => {
   if (event.popup === popup) {
+    document.body.classList.remove("heat-risk-card-open");
     removeMarker();
     removeSourceAnnotation();
   }
