@@ -1218,8 +1218,15 @@ const icon = {
       setSelecting(!selecting);
     });
 
-    // 視覺順序：耳機 → 圖層 → 熱風險 → 展開的圖層面板
-    wrapper.insertBefore(button, menu);
+    // 視覺順序：耳機 → 熱風險 → 圖層 → 展開的圖層面板
+    const layerButton = menu.previousElementSibling;
+
+    if (layerButton && layerButton.parentElement === wrapper) {
+      wrapper.insertBefore(button, layerButton);
+    } else {
+      // 若圖層按鈕的結構改變，仍放在圖層面板前。
+      wrapper.insertBefore(button, menu);
+    }
 
     updateButton();
   }
