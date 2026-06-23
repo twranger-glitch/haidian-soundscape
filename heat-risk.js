@@ -1,31 +1,47 @@
 /*
- * Haidian Soundscape — heat-risk map tool
- *
- * Install:
- * 1. Put this file beside index.html as heat-risk.js
- * 2. Edit ONLY the HEAT_API_BASE value below.
- * 3. Add: <script src="./heat-risk.js"></script> just before </body> in index.html.
- *
- * This file expects the existing soundscape page to have Leaflet's global `L`
- * and its global `map` variable already initialized.
+ * Haidian Soundscape — Heat Risk Tool
+ * Replace the ENTIRE contents of heat-risk.js with this file.
  */
 (function () {
   "use strict";
 
-  const HEAT_API_BASE = "https://haidian-heat-risk-api.yhzkiki.workers.dev";
-  const REQUEST_TIMEOUT_MS = 12000;
+  const API_BASE = "https://haidian-heat-risk-api.yhzkiki.workers.dev";
+  const TIMEOUT_MS = 12000;
+  const STYLE_ID = "heat-risk-screen-styles";
 
   if (!window.L || !window.map) {
-    console.error("Heat risk tool needs Leaflet and the global map variable.");
+    console.error("Heat risk tool requires Leaflet and the global map variable.");
     return;
   }
 
-  function apiIsConfigured() {
-    return (
-      HEAT_API_BASE.startsWith("https://") &&
-      !HEAT_API_BASE.includes("REPLACE-WITH-YOUR-WORKER")
-    );
-  }
+  const map = window.map;
+  let selecting = false;
+  let marker = null;
+  let popup = null;
+  let controller = null;
+  let button = null;
+
+  const icon = {
+    heat: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 14.7V5a4 4 0 0 0-8 0v9.7a6 6 0 1 0 8 0Z"></path>
+        <path d="M10 10v6M18 8h2M18 12h2M18 16h2"></path>
+      </svg>`,
+    pin: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
+        <circle cx="12" cy="10" r="2.5"></circle>
+      </svg>`,
+    shield: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3 20 6v5c0 5.4-3.4 8.8-8 10-4.6-1.2-8-4.6-8-10V6l8-3Z"></path>
+        <path d="m9 12 2 2 4-4"></path>
+      </svg>`,
+    close: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6l12 12M18 6 6 18"></path>
+      </svg>`
+  };
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -36,236 +52,938 @@
       .replace(/'/g, "&#039;");
   }
 
-  function formatTaipeiTime(isoText) {
+  function asNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function fixed(value, digits, fallback = "—") {
+    const number = asNumber(value);
+    return number === null ? fallback : number.toFixed(digits);
+  }
+
+  function riskTone(code) {
+    const tones = {
+      normal: "normal",
+      caution: "caution",
+      extreme_caution: "extreme-caution",
+      danger: "danger",
+      extreme_danger: "extreme-danger"
+    };
+    return tones[String(code || "").toLowerCase()] || "caution";
+  }
+
+  function taipeiTime(isoText) {
     const date = new Date(isoText);
-    if (Number.isNaN(date.getTime())) return "時間未提供";
+    if (!isoText || Number.isNaN(date.getTime())) return "時間未提供";
 
     return new Intl.DateTimeFormat("zh-TW", {
       timeZone: "Asia/Taipei",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
+      month: "numeric",
+      day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      hour12: false
     }).format(date);
   }
 
-  function riskClass(code) {
-    const classes = {
-      normal: "heat-risk-normal",
-      caution: "heat-risk-caution",
-      extreme_caution: "heat-risk-extreme-caution",
-      danger: "heat-risk-danger",
-      extreme_danger: "heat-risk-extreme-danger",
-    };
-    return classes[code] || "heat-risk-normal";
+  function ageText(value) {
+    const minutes = asNumber(value);
+    if (minutes === null) return "時間未提供";
+    if (minutes < 1) return "1 分鐘內";
+    if (minutes < 60) return `${Math.round(minutes)} 分鐘前`;
+    return `${(minutes / 60).toFixed(1)} 小時前`;
   }
 
-  function popupShell(content) {
-    return `<div class="heat-risk-card">${content}</div>`;
+  function distanceText(value) {
+    const km = asNumber(value);
+    if (km === null) return "距離未提供";
+    if (km < 1) return `距選點 ${Math.max(1, Math.round(km * 1000))} m`;
+    return `距選點 ${km.toFixed(2)} km`;
   }
 
-  function renderLoadingPopup() {
-    return popupShell(`
-      <div class="heat-risk-kicker">即時熱風險</div>
-      <div class="heat-risk-loading"><span class="heat-risk-spinner"></span>正在找最近的合格測點…</div>
-    `);
+  function closeButton() {
+    return `
+      <button class="hr-close" type="button" data-hr-close aria-label="關閉熱風險卡片">
+        ${icon.close}
+      </button>`;
   }
 
-  function renderResultPopup(payload) {
-    const assessment = payload.assessment;
-    const source = payload.source;
-    const risk = assessment.risk;
+  function loadingCard() {
+    return `
+      <article class="hr-card hr-card--loading" aria-live="polite">
+        <header class="hr-top">
+          <div>
+            <div class="hr-eyebrow">地圖選點・即時熱風險</div>
+            <h2>正在讀取附近測點</h2>
+          </div>
+          ${closeButton()}
+        </header>
 
-    return popupShell(`
-      <div class="heat-risk-kicker">地圖選點・即時熱風險</div>
-      <div class="heat-risk-title-row">
-        <strong>${escapeHtml(risk.label)}</strong>
-        <span class="heat-risk-badge ${riskClass(risk.code)}">${assessment.heatIndexC.toFixed(1)} °C</span>
-      </div>
-      <div class="heat-risk-metrics">
-        <div><span>氣溫</span><b>${assessment.temperatureC.toFixed(1)} °C</b></div>
-        <div><span>相對濕度</span><b>${assessment.relativeHumidity.toFixed(0)} %</b></div>
-      </div>
-      <p class="heat-risk-advice">${escapeHtml(risk.advice)}</p>
-      <div class="heat-risk-source">
-        <b>資料來源</b><br>
-        ${escapeHtml(source.stationName)}・${escapeHtml(source.qualityLabel)}<br>
-        距選點 ${source.sourceDistanceKm.toFixed(2)} km・觀測 ${escapeHtml(formatTaipeiTime(source.observedAt))}<br>
-        資料年齡約 ${source.ageMinutes.toFixed(0)} 分鐘
-      </div>
-      <p class="heat-risk-caveat">${escapeHtml(payload.caveat)}</p>
-    `);
+        <div class="hr-state">
+          <span class="hr-spinner"></span>
+          <div>
+            <b>正在整合溫度與濕度</b>
+            <p>尋找最近、且仍在有效時間內的觀測資料。</p>
+          </div>
+        </div>
+      </article>`;
   }
 
-  function renderErrorPopup(message) {
-    return popupShell(`
-      <div class="heat-risk-kicker">即時熱風險</div>
-      <div class="heat-risk-error">${escapeHtml(message)}</div>
-      <p class="heat-risk-caveat">系統不會以距離過遠或過期資料勉強產生評估。</p>
-    `);
+  function errorCard(message) {
+    return `
+      <article class="hr-card hr-card--error" aria-live="polite">
+        <header class="hr-top">
+          <div>
+            <div class="hr-eyebrow">地圖選點・即時熱風險</div>
+            <h2>目前無法完成評估</h2>
+          </div>
+          ${closeButton()}
+        </header>
+
+        <div class="hr-state">
+          <span class="hr-error-mark">!</span>
+          <div>
+            <b>${escapeHtml(message)}</b>
+            <p>系統不會用距離過遠或過期的資料勉強產生評估，請稍後再試。</p>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  function resultCard(payload) {
+    const assessment = payload?.assessment || {};
+    const source = payload?.source || {};
+    const risk = assessment?.risk || {};
+
+    const tone = riskTone(risk.code);
+    const label = escapeHtml(risk.label || "熱風險評估");
+    const advice = escapeHtml(
+      risk.advice || "請留意身體狀況，適時補充水分並降低曝曬。"
+    );
+    const station = escapeHtml(source.stationName || "最近合格測點");
+    const quality = escapeHtml(source.qualityLabel || "即時觀測資料");
+    const caveat = escapeHtml(
+      payload?.caveat || "此結果由鄰近合格測點推估，並非選點位置的直接實測。"
+    );
+
+    return `
+      <article class="hr-card hr-card--${tone}" aria-live="polite">
+        <header class="hr-top">
+          <div>
+            <div class="hr-eyebrow"><i></i>地圖選點・即時熱風險</div>
+            <div class="hr-title-row">
+              <h2>${label}</h2>
+              <span class="hr-status">${icon.shield} 即時判讀</span>
+            </div>
+          </div>
+          ${closeButton()}
+        </header>
+
+        <section class="hr-hero">
+          <div>
+            <span>推估熱指數</span>
+            <div class="hr-index">
+              <strong>${fixed(assessment.heatIndexC, 1)}</strong>
+              <em>°C</em>
+            </div>
+          </div>
+          <div class="hr-heat-icon">${icon.heat}</div>
+        </section>
+
+        <section class="hr-metrics" aria-label="即時氣象條件">
+          <div>
+            <span>氣溫</span>
+            <b>${fixed(assessment.temperatureC, 1)}<small>°C</small></b>
+          </div>
+          <div>
+            <span>相對濕度</span>
+            <b>${fixed(assessment.relativeHumidity, 0)}<small>%</small></b>
+          </div>
+        </section>
+
+        <section class="hr-advice">
+          <span>現在最重要</span>
+          <p>${advice}</p>
+        </section>
+
+        <section class="hr-source">
+          <div class="hr-pin">${icon.pin}</div>
+
+          <div class="hr-source-copy">
+            <span>最近合格測點</span>
+            <b>${station}</b>
+            <p>${quality}・${distanceText(source.sourceDistanceKm)}</p>
+          </div>
+
+          <div class="hr-time">
+            <b>${ageText(source.ageMinutes)}</b>
+            <span>${taipeiTime(source.observedAt)}</span>
+          </div>
+        </section>
+
+        <footer class="hr-foot">
+          <span>資料說明</span>
+          <p>${caveat}</p>
+        </footer>
+      </article>`;
   }
 
   function addStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+
     const style = document.createElement("style");
+    style.id = STYLE_ID;
+
     style.textContent = `
-      .heat-risk-control {
-        background: rgba(255,255,255,.96);
-        border: 1px solid rgba(15,23,42,.10);
-        border-radius: 12px;
-        box-shadow: 0 6px 18px rgba(15,23,42,.14);
+      #rightToolsWrapper .heat-risk-tool {
+        pointer-events: auto;
+        position: relative;
+        width: 48px;
+        height: 48px;
+        margin: 0 0 12px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(234, 88, 12, 0.2);
+        border-radius: 16px;
+        cursor: pointer;
+        color: #ea580c;
+        background:
+          radial-gradient(circle at 28% 20%, rgba(255,255,255,.98) 0 15%, transparent 16%),
+          linear-gradient(145deg, #fffaf2, #ffead3);
+        box-shadow:
+          0 10px 24px rgba(194,65,12,.16),
+          inset 0 1px 0 rgba(255,255,255,.9);
+        transition:
+          transform .2s ease,
+          box-shadow .2s ease,
+          background .2s ease,
+          color .2s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      #rightToolsWrapper .heat-risk-tool:hover {
+        transform: translateY(-2px) scale(1.03);
+        color: #c2410c;
+        box-shadow:
+          0 15px 30px rgba(194,65,12,.24),
+          inset 0 1px 0 #fff;
+      }
+
+      #rightToolsWrapper .heat-risk-tool:focus-visible {
+        outline: 3px solid rgba(251,146,60,.4);
+        outline-offset: 3px;
+      }
+
+      #rightToolsWrapper .heat-risk-tool svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.15;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      #rightToolsWrapper .heat-risk-tool::after {
+        content: attr(data-tip);
+        position: absolute;
+        right: 58px;
+        top: 50%;
+        transform: translate(6px, -50%);
+        opacity: 0;
+        visibility: hidden;
+        white-space: nowrap;
+        padding: 8px 10px;
+        border: 1px solid rgba(15,23,42,.08);
+        border-radius: 10px;
+        color: #334155;
+        background: rgba(255,255,255,.97);
+        box-shadow: 0 10px 24px rgba(15,23,42,.16);
+        font: 800 12px/1.2 "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+        transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
+        pointer-events: none;
+      }
+
+      #rightToolsWrapper .heat-risk-tool:hover::after,
+      #rightToolsWrapper .heat-risk-tool.is-on::after {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(0, -50%);
+      }
+
+      #rightToolsWrapper .heat-risk-tool.is-on {
+        color: #fff;
+        border-color: rgba(190,24,93,.38);
+        background: linear-gradient(145deg, #fb7185, #e11d48);
+        box-shadow: 0 12px 28px rgba(225,29,72,.32);
+        animation: hr-pulse 1.6s ease-in-out infinite;
+      }
+
+      #rightToolsWrapper .heat-risk-tool.is-on::after {
+        color: #9f1239;
+        background: #fff1f2;
+        border-color: rgba(251,113,133,.25);
+      }
+
+      #map.heat-risk-selecting {
+        cursor: crosshair;
+      }
+
+      .leaflet-popup.hr-popup .leaflet-popup-content-wrapper {
+        padding: 0;
         overflow: hidden;
+        border-radius: 24px;
+        background: transparent;
+        box-shadow: 0 20px 55px rgba(15,23,42,.26);
       }
-      .heat-risk-control button {
-        appearance: none; border: 0; background: transparent; cursor: pointer;
-        color: #0f172a; font: 800 13px/1.2 "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
-        padding: 10px 12px; min-height: 42px;
+
+      .leaflet-popup.hr-popup .leaflet-popup-content {
+        width: min(360px, calc(100vw - 36px)) !important;
+        min-width: 0;
+        margin: 0 !important;
       }
-      .heat-risk-control button.is-active { background: #fff7ed; color: #c2410c; }
-      #map.heat-risk-selecting { cursor: crosshair; }
-      .heat-risk-card { min-width: 270px; max-width: 320px; font-family: "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif; color: #334155; line-height: 1.48; }
-      .heat-risk-kicker { color:#64748b; font-size:10px; letter-spacing:.08em; font-weight:900; margin-bottom:4px; }
-      .heat-risk-title-row { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:17px; color:#0f172a; margin-bottom:10px; }
-      .heat-risk-badge { font-size:13px; line-height:1; padding:7px 9px; border-radius:999px; font-weight:900; white-space:nowrap; }
-      .heat-risk-normal { background:#ecfdf5; color:#047857; }
-      .heat-risk-caution { background:#fffbeb; color:#b45309; }
-      .heat-risk-extreme-caution { background:#fff7ed; color:#c2410c; }
-      .heat-risk-danger { background:#fff1f2; color:#be123c; }
-      .heat-risk-extreme-danger { background:#4c0519; color:#fff; }
-      .heat-risk-metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
-      .heat-risk-metrics > div { background:#f8fafc; border:1px solid #e2e8f0; padding:8px; border-radius:9px; }
-      .heat-risk-metrics span { display:block; color:#64748b; font-size:11px; font-weight:700; }
-      .heat-risk-metrics b { font-size:15px; color:#0f172a; }
-      .heat-risk-advice { margin:10px 0; padding:9px 10px; background:#f8fafc; border-left:3px solid #fb923c; border-radius:0 8px 8px 0; font-size:12.5px; }
-      .heat-risk-source { border-top:1px solid #e2e8f0; padding-top:8px; color:#475569; font-size:11.5px; }
-      .heat-risk-caveat { margin:8px 0 0; color:#64748b; font-size:10.5px; }
-      .heat-risk-loading { display:flex; align-items:center; gap:8px; padding:12px 0; font-size:13px; }
-      .heat-risk-spinner { width:14px; height:14px; border:2px solid #cbd5e1; border-top-color:#f97316; border-radius:50%; animation: heat-risk-spin .8s linear infinite; }
-      .heat-risk-error { color:#b91c1c; font-weight:800; padding:10px 0 2px; font-size:13px; }
-      @keyframes heat-risk-spin { to { transform:rotate(360deg); } }
+
+      .leaflet-popup.hr-popup .leaflet-popup-tip {
+        background: #fff;
+      }
+
+      .hr-card {
+        --hr: #f59e0b;
+        --hr-deep: #b45309;
+        --hr-soft: #fffbeb;
+        --hr-tint: rgba(245,158,11,.14);
+
+        width: min(360px, calc(100vw - 36px));
+        overflow: hidden;
+        color: #1e293b;
+        background: #fff;
+        font-family: "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+      }
+
+      .hr-card--normal {
+        --hr: #14b8a6;
+        --hr-deep: #0f766e;
+        --hr-soft: #f0fdfa;
+        --hr-tint: rgba(20,184,166,.13);
+      }
+
+      .hr-card--caution {
+        --hr: #f59e0b;
+        --hr-deep: #b45309;
+        --hr-soft: #fffbeb;
+        --hr-tint: rgba(245,158,11,.14);
+      }
+
+      .hr-card--extreme-caution {
+        --hr: #f97316;
+        --hr-deep: #c2410c;
+        --hr-soft: #fff7ed;
+        --hr-tint: rgba(249,115,22,.15);
+      }
+
+      .hr-card--danger {
+        --hr: #e11d48;
+        --hr-deep: #9f1239;
+        --hr-soft: #fff1f2;
+        --hr-tint: rgba(225,29,72,.14);
+      }
+
+      .hr-card--extreme-danger {
+        --hr: #be123c;
+        --hr-deep: #4c0519;
+        --hr-soft: #fff1f2;
+        --hr-tint: rgba(190,18,60,.16);
+      }
+
+      .hr-card--loading,
+      .hr-card--error {
+        --hr: #f97316;
+        --hr-deep: #c2410c;
+        --hr-soft: #fff7ed;
+        --hr-tint: rgba(249,115,22,.14);
+      }
+
+      .hr-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 18px 18px 15px;
+        border-bottom: 1px solid rgba(148,163,184,.14);
+        background:
+          radial-gradient(circle at 90% -25%, var(--hr-tint) 0 38%, transparent 39%),
+          linear-gradient(145deg, #fff, var(--hr-soft));
+      }
+
+      .hr-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 6px;
+        color: #64748b;
+        font-size: 10.5px;
+        line-height: 1.1;
+        font-weight: 900;
+        letter-spacing: .095em;
+      }
+
+      .hr-eyebrow i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--hr);
+        box-shadow: 0 0 0 4px var(--hr-tint);
+      }
+
+      .hr-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .hr-top h2 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 21px;
+        line-height: 1.16;
+        font-weight: 900;
+        letter-spacing: .01em;
+      }
+
+      .hr-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px 7px;
+        border: 1px solid var(--hr-tint);
+        border-radius: 999px;
+        color: var(--hr-deep);
+        background: rgba(255,255,255,.74);
+        font-size: 10.5px;
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      .hr-status svg {
+        width: 12px;
+        height: 12px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .hr-close {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        margin: -4px -4px 0 0;
+        padding: 0;
+        color: #64748b;
+        background: rgba(255,255,255,.78);
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: transform .18s ease, background .18s ease, color .18s ease;
+      }
+
+      .hr-close:hover {
+        color: #fff;
+        background: #e11d48;
+        transform: rotate(90deg) scale(1.05);
+      }
+
+      .hr-close svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.3;
+        stroke-linecap: round;
+      }
+
+      .hr-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px 13px;
+      }
+
+      .hr-hero > div > span,
+      .hr-advice > span,
+      .hr-foot > span {
+        display: block;
+        color: #64748b;
+        font-size: 10.5px;
+        font-weight: 850;
+        letter-spacing: .07em;
+        line-height: 1.1;
+      }
+
+      .hr-index {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+        margin-top: 4px;
+        color: var(--hr-deep);
+      }
+
+      .hr-index strong {
+        font-size: 46px;
+        line-height: .95;
+        font-weight: 950;
+        letter-spacing: -.055em;
+      }
+
+      .hr-index em {
+        font-style: normal;
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .hr-heat-icon {
+        width: 60px;
+        height: 60px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--hr-tint);
+        border-radius: 20px;
+        color: var(--hr-deep);
+        background:
+          radial-gradient(circle at 30% 25%, #fff 0 15%, transparent 16%),
+          linear-gradient(145deg, var(--hr-soft), #fff);
+        box-shadow: inset 0 1px 0 #fff, 0 8px 18px var(--hr-tint);
+      }
+
+      .hr-heat-icon svg {
+        width: 31px;
+        height: 31px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.85;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .hr-metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 0 18px 13px;
+      }
+
+      .hr-metrics > div {
+        padding: 10px 11px 9px;
+        border: 1px solid #eef2f6;
+        border-radius: 13px;
+        background: #f8fafc;
+      }
+
+      .hr-metrics span {
+        display: block;
+        color: #64748b;
+        font-size: 10.5px;
+        font-weight: 800;
+      }
+
+      .hr-metrics b {
+        display: block;
+        margin-top: 3px;
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: -.02em;
+      }
+
+      .hr-metrics small {
+        margin-left: 3px;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .hr-advice {
+        margin: 0 18px 13px;
+        padding: 11px 12px;
+        border: 1px solid var(--hr-tint);
+        border-left: 4px solid var(--hr);
+        border-radius: 0 13px 13px 0;
+        background: var(--hr-soft);
+      }
+
+      .hr-advice p {
+        margin: 5px 0 0;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 750;
+        line-height: 1.55;
+      }
+
+      .hr-source {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        padding: 12px 18px;
+        border-top: 1px solid #edf2f7;
+      }
+
+      .hr-pin {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 11px;
+        color: #64748b;
+        background: #f1f5f9;
+      }
+
+      .hr-pin svg {
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .hr-source-copy {
+        min-width: 0;
+      }
+
+      .hr-source-copy span,
+      .hr-source-copy p,
+      .hr-time span {
+        color: #64748b;
+        font-size: 10.5px;
+        line-height: 1.35;
+        font-weight: 750;
+      }
+
+      .hr-source-copy b {
+        display: block;
+        overflow: hidden;
+        margin: 1px 0;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.25;
+        font-weight: 850;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .hr-source-copy p {
+        margin: 0;
+      }
+
+      .hr-time {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        padding-left: 7px;
+        text-align: right;
+      }
+
+      .hr-time b {
+        color: var(--hr-deep);
+        font-size: 10.5px;
+        line-height: 1.2;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .hr-foot {
+        padding: 9px 18px 13px;
+        border-top: 1px solid #edf2f7;
+        background: #f8fafc;
+      }
+
+      .hr-foot p {
+        margin: 3px 0 0;
+        color: #64748b;
+        font-size: 10.5px;
+        line-height: 1.45;
+        font-weight: 700;
+      }
+
+      .hr-state {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 20px 18px 22px;
+      }
+
+      .hr-state b {
+        display: block;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.35;
+        font-weight: 850;
+      }
+
+      .hr-state p {
+        margin: 5px 0 0;
+        color: #64748b;
+        font-size: 11.5px;
+        line-height: 1.55;
+        font-weight: 700;
+      }
+
+      .hr-spinner {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 22px;
+        box-sizing: border-box;
+        border: 3px solid #fed7aa;
+        border-top-color: #f97316;
+        border-radius: 50%;
+        animation: hr-spin .8s linear infinite;
+      }
+
+      .hr-error-mark {
+        width: 25px;
+        height: 25px;
+        flex: 0 0 25px;
+        display: grid;
+        place-items: center;
+        margin-top: 1px;
+        border-radius: 50%;
+        color: #fff;
+        background: #e11d48;
+        font-size: 15px;
+        line-height: 1;
+        font-weight: 950;
+      }
+
+      @keyframes hr-pulse {
+        0%, 100% {
+          box-shadow: 0 12px 28px rgba(225,29,72,.30);
+        }
+        50% {
+          box-shadow:
+            0 12px 0 8px rgba(251,113,133,.14),
+            0 16px 34px rgba(225,29,72,.35);
+        }
+      }
+
+      @keyframes hr-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @media (max-width: 600px) {
+        .leaflet-popup.hr-popup .leaflet-popup-content,
+        .hr-card {
+          width: min(338px, calc(100vw - 28px)) !important;
+        }
+
+        .hr-top { padding: 16px 16px 13px; }
+        .hr-hero { padding: 13px 16px 12px; }
+        .hr-metrics { padding: 0 16px 12px; }
+        .hr-advice { margin: 0 16px 12px; }
+        .hr-source { padding: 12px 16px; }
+        .hr-foot { padding: 8px 16px 12px; }
+
+        #rightToolsWrapper .heat-risk-tool::after {
+          display: none;
+        }
+      }
     `;
+
     document.head.appendChild(style);
   }
 
-  let selectMode = false;
-  let selectedMarker = null;
-  let requestController = null;
-  let controlButton = null;
-
-  function updateControlButton() {
-    if (!controlButton) return;
-    controlButton.classList.toggle("is-active", selectMode);
-    controlButton.textContent = selectMode ? "點地圖評估中…" : "🌡 熱風險選點";
-    map.getContainer().classList.toggle("heat-risk-selecting", selectMode);
+  function removeMarker() {
+    if (marker) map.removeLayer(marker);
+    marker = null;
   }
 
-  function setSelectMode(value) {
-    selectMode = value;
-    updateControlButton();
-  }
+  function setMarker(latlng) {
+    removeMarker();
 
-  function ensureSelectionMarker(latlng) {
-    if (selectedMarker) map.removeLayer(selectedMarker);
-    selectedMarker = L.circleMarker(latlng, {
+    marker = L.circleMarker(latlng, {
       radius: 8,
       weight: 3,
-      color: "#ea580c",
+      color: "#e11d48",
       fillColor: "#fff7ed",
-      fillOpacity: 0.95,
-      interactive: false,
+      fillOpacity: 0.96,
+      interactive: false
     }).addTo(map);
   }
 
-  function openPopup(latlng, html) {
-    L.popup({
-      className: "heat-risk-popup",
-      autoClose: true,
-      closeOnClick: false,
-      maxWidth: 350,
-    })
-      .setLatLng(latlng)
-      .setContent(html)
-      .openOn(map);
+  function openCard(latlng, html) {
+    if (!popup) {
+      popup = L.popup({
+        className: "hr-popup",
+        closeButton: false,
+        closeOnClick: false,
+        autoClose: true,
+        autoPan: true,
+        autoPanPaddingTopLeft: [20, 112],
+        autoPanPaddingBottomRight: [24, 154],
+        maxWidth: 390
+      });
+    }
+
+    popup.setLatLng(latlng).setContent(html).openOn(map);
   }
 
-  async function requestHeatRisk(latlng) {
-    if (!apiIsConfigured()) {
-      openPopup(
-        latlng,
-        renderErrorPopup("尚未設定 heat-risk.js 裡的 Worker 網址。")
-      );
+  function closeCard() {
+    if (popup) map.closePopup(popup);
+    removeMarker();
+  }
+
+  function updateButton() {
+    if (!button) return;
+
+    button.classList.toggle("is-on", selecting);
+    button.setAttribute("aria-pressed", String(selecting));
+    button.setAttribute(
+      "aria-label",
+      selecting ? "正在選取熱風險位置，請點擊地圖" : "啟用熱風險地圖選點"
+    );
+
+    button.dataset.tip = selecting
+      ? "點地圖任一處開始評估"
+      : "熱風險選點";
+
+    map.getContainer().classList.toggle("heat-risk-selecting", selecting);
+  }
+
+  function setSelecting(value) {
+    selecting = Boolean(value);
+    updateButton();
+  }
+
+  function friendlyError(payload, status) {
+    const code = payload?.error?.code || payload?.error;
+    const message = payload?.error?.message || payload?.message;
+
+    if (code === "NO_QUALIFIED_SOURCE") {
+      return "附近暫無可用的合格測點";
+    }
+
+    if (status === 429) {
+      return "目前查詢量較高，請稍後再試";
+    }
+
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+
+    return status
+      ? `熱風險服務暫時無法使用（HTTP ${status}）`
+      : "熱風險服務暫時無法使用";
+  }
+
+  async function assess(latlng) {
+    if (!API_BASE.startsWith("https://") || API_BASE.includes("REPLACE-WITH")) {
+      openCard(latlng, errorCard("尚未設定熱風險服務網址"));
       return;
     }
 
-    if (requestController) requestController.abort();
-    requestController = new AbortController();
-    const timer = window.setTimeout(
-      () => requestController?.abort(),
-      REQUEST_TIMEOUT_MS
-    );
+    if (controller) controller.abort();
+
+    const request = new AbortController();
+    controller = request;
+
+    const timeout = window.setTimeout(() => request.abort(), TIMEOUT_MS);
 
     try {
-      const url = new URL("/risk", HEAT_API_BASE);
+      const url = new URL("/risk", API_BASE);
       url.searchParams.set("lat", latlng.lat.toFixed(6));
       url.searchParams.set("lon", latlng.lng.toFixed(6));
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(url, {
         method: "GET",
         mode: "cors",
         credentials: "omit",
-        signal: requestController.signal,
+        headers: { Accept: "application/json" },
+        signal: request.signal
       });
 
       const payload = await response.json().catch(() => null);
+
       if (!response.ok || !payload?.ok) {
-        throw new Error(
-          payload?.error?.message || `熱風險服務暫時無法使用（HTTP ${response.status}）。`
-        );
+        throw new Error(friendlyError(payload, response.status));
       }
 
-      openPopup(latlng, renderResultPopup(payload));
+      openCard(latlng, resultCard(payload));
     } catch (error) {
       const message =
         error?.name === "AbortError"
-          ? "查詢逾時，請稍後再試。"
-          : error?.message || "熱風險服務暫時無法使用。";
-      openPopup(latlng, renderErrorPopup(message));
+          ? "查詢逾時，請稍後再試"
+          : (error?.message || "熱風險服務暫時無法使用");
+
+      openCard(latlng, errorCard(message));
     } finally {
-      window.clearTimeout(timer);
-      requestController = null;
+      window.clearTimeout(timeout);
+
+      if (controller === request) {
+        controller = null;
+      }
     }
   }
 
-  function addControl() {
-    const HeatRiskControl = L.Control.extend({
-      options: { position: "bottomright" },
-      onAdd() {
-        const container = L.DomUtil.create("div", "heat-risk-control");
-        controlButton = L.DomUtil.create("button", "", container);
-        controlButton.type = "button";
-        controlButton.title = "選取地圖上一點，查看鄰近即時熱風險";
-        controlButton.textContent = "🌡 熱風險選點";
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-        L.DomEvent.on(controlButton, "click", () => setSelectMode(!selectMode));
-        return container;
-      },
+  function addButton() {
+    const wrapper = document.getElementById("rightToolsWrapper");
+    const menu = wrapper?.querySelector(".tools-menu-container");
+
+    if (!wrapper || !menu) {
+      console.error("Heat risk tool could not find #rightToolsWrapper.");
+      return;
+    }
+
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "heat-risk-tool";
+    button.title = "選取地圖上的位置，評估即時熱風險";
+    button.innerHTML = icon.heat;
+
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelecting(!selecting);
     });
 
-    map.addControl(new HeatRiskControl());
+    // 視覺順序：耳機 → 圖層 → 熱風險 → 展開的圖層面板
+    wrapper.insertBefore(button, menu);
+
+    updateButton();
   }
 
   addStyles();
-  addControl();
+  addButton();
 
-  // The soundscape page already uses right-click / long-press to submit sound
-  // contributions. A separate tool mode keeps that interaction unchanged.
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-hr-close]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCard();
+    }
+  });
+
   map.on("click", (event) => {
-    if (!selectMode) return;
-    setSelectMode(false);
-    ensureSelectionMarker(event.latlng);
-    openPopup(event.latlng, renderLoadingPopup());
-    requestHeatRisk(event.latlng);
+    if (!selecting) return;
+
+    setSelecting(false);
+    setMarker(event.latlng);
+    openCard(event.latlng, loadingCard());
+    assess(event.latlng);
+  });
+
+  map.on("popupclose", (event) => {
+    if (event.popup === popup) {
+      removeMarker();
+    }
   });
 })();
