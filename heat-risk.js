@@ -21,11 +21,11 @@
   let controller = null;
   let button = null;
 
-  const icon = {
     heat: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M14 14.7V5a4 4 0 0 0-8 0v9.7a6 6 0 1 0 8 0Z"></path>
-        <path d="M10 10v6M18 8h2M18 12h2M18 16h2"></path>
+        <circle cx="12" cy="12" r="3.4"></circle>
+        <path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path>
+        <path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path>
       </svg>`,
         air: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -435,7 +435,8 @@
       }
 
       .leaflet-popup.hr-popup .leaflet-popup-content {
-        width: min(360px, calc(100vw - 36px)) !important;
+        width: var(--hr-popup-width, 360px) !important;
+        max-width: none !important;
         min-width: 0;
         margin: 0 !important;
       }
@@ -450,7 +451,8 @@
         --hr-soft: #fffbeb;
         --hr-tint: rgba(245,158,11,.14);
 
-        width: min(360px, calc(100vw - 36px));
+        width: var(--hr-popup-width, 360px);
+        box-sizing: border-box;
         overflow: hidden;
         color: #1e293b;
         background: #fff;
@@ -1025,10 +1027,7 @@
       }
 
       @media (max-width: 600px) {
-        .leaflet-popup.hr-popup .leaflet-popup-content,
-        .hr-card {
-          width: min(338px, calc(100vw - 28px)) !important;
-        }
+
 
         .hr-top { padding: 16px 16px 13px; }
         .hr-hero { padding: 13px 16px 12px; }
@@ -1064,8 +1063,17 @@
       interactive: false
     }).addTo(map);
   }
+  function getHeatPopupWidth() {
+    return Math.max(240, Math.min(360, map.getSize().x - 28));
+  }
 
   function openCard(latlng, html) {
+    const popupWidth = getHeatPopupWidth();
+
+    map
+      .getContainer()
+      .style.setProperty("--hr-popup-width", `${popupWidth}px`);
+
     if (!popup) {
       popup = L.popup({
         className: "hr-popup",
@@ -1073,11 +1081,15 @@
         closeOnClick: false,
         autoClose: true,
         autoPan: true,
-        autoPanPaddingTopLeft: [20, 112],
-        autoPanPaddingBottomRight: [24, 154],
-        maxWidth: 390
+        autoPanPaddingTopLeft: [24, 104],
+        autoPanPaddingBottomRight: [24, 160],
+        maxWidth: popupWidth,
+        minWidth: popupWidth
       });
     }
+
+    popup.options.maxWidth = popupWidth;
+    popup.options.minWidth = popupWidth;
 
     popup.setLatLng(latlng).setContent(html).openOn(map);
   }
