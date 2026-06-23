@@ -1142,16 +1142,6 @@ function showMicroSourceAnnotation(selectedLatlng, source) {
   );
 }
 
-  window.requestAnimationFrame(() => {
-    const bounds = L.latLngBounds([selectedLatlng, stationLatlng]);
-
-    map.panInsideBounds(bounds.pad(0.18), {
-      paddingTopLeft: [24, 112],
-      paddingBottomRight: [24, 160],
-      animate: true
-    });
-  });
-}
   
   function removeMarker() {
     if (marker) map.removeLayer(marker);
