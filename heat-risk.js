@@ -1099,8 +1099,8 @@ function removeSourceAnnotation() {
 function showMicroSourceAnnotation(selectedLatlng, source) {
   removeSourceAnnotation();
 
-  // 僅標註本次熱風險採用的微型感測器；
-  // 若本次使用 CWA 備援站，則不顯示微型測站標記。
+  // 只標示本次熱風險真正採用的微型感測器。
+  // 若使用 CWA 備援站，則不顯示微型測站標記。
   if (source?.source !== "micro") return;
 
   const latitude = asNumber(source?.latitude);
@@ -1109,7 +1109,9 @@ function showMicroSourceAnnotation(selectedLatlng, source) {
   if (latitude === null || longitude === null) return;
 
   const stationLatlng = L.latLng(latitude, longitude);
-  const stationName = escapeHtml(source?.stationName || "本次採用的微型測站");
+  const stationName = escapeHtml(
+    source?.stationName || "本次採用的微型測站"
+  );
 
   sourceLink = L.polyline([selectedLatlng, stationLatlng], {
     color: "#0f766e",
@@ -1138,6 +1140,7 @@ function showMicroSourceAnnotation(selectedLatlng, source) {
       opacity: 1
     }
   );
+}
 
   window.requestAnimationFrame(() => {
     const bounds = L.latLngBounds([selectedLatlng, stationLatlng]);
