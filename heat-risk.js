@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const HEAT_API_BASE = "https://REPLACE-WITH-YOUR-WORKER.workers.dev";
+  const HEAT_API_BASE = "https://haidian-heat-risk-api.yhzkiki.workers.dev";
   const REQUEST_TIMEOUT_MS = 12000;
 
   if (!window.L || !window.map) {
