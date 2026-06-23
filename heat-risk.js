@@ -18,7 +18,7 @@
   let selecting = false;
   let marker = null;
   let popup = null;
-  let controller = null;
+let controller = null;
 let button = null;
 
 const icon = {
@@ -28,55 +28,32 @@ const icon = {
       <path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path>
       <path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path>
     </svg>`,
+
   air: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 10h10.5a3.5 3.5 0 1 0-3.3-4.7"></path>
       <path d="M4 14h14a3 3 0 1 1-2.7 4.3"></path>
       <path d="M4 18h5"></path>
     </svg>`,
+
   pin: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
       <circle cx="12" cy="10" r="2.5"></circle>
     </svg>`,
+
   shield: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 3 20 6v5c0 5.4-3.4 8.8-8 10-4.6-1.2-8-4.6-8-10V6l8-3Z"></path>
       <path d="m9 12 2 2 4-4"></path>
     </svg>`,
+
   close: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M6 6l12 12M18 6 6 18"></path>
     </svg>`
 };
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="3.4"></circle>
-        <path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path>
-        <path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path>
-      </svg>`,
-        air: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 10h10.5a3.5 3.5 0 1 0-3.3-4.7"></path>
-        <path d="M4 14h14a3 3 0 1 1-2.7 4.3"></path>
-        <path d="M4 18h5"></path>
-      </svg>`,
-    pin: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
-        <circle cx="12" cy="10" r="2.5"></circle>
-      </svg>`,
-    shield: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 3 20 6v5c0 5.4-3.4 8.8-8 10-4.6-1.2-8-4.6-8-10V6l8-3Z"></path>
-        <path d="m9 12 2 2 4-4"></path>
-      </svg>`,
-    close: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 6l12 12M18 6 6 18"></path>
-      </svg>`
-  };
 
-  function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
