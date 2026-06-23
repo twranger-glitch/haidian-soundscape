@@ -270,6 +270,15 @@ const icon = {
       payload?.caveat || "此結果由鄰近合格測點推估，並非選點位置的直接實測。"
     );
 
+    const sourceLat = asNumber(source.latitude);
+    const sourceLon = asNumber(source.longitude);
+    const sourceCanFocus =
+      sourceLat !== null && sourceLon !== null;
+
+    const sourceFocusAttributes = sourceCanFocus
+      ? ` role="button" tabindex="0" data-hr-focus-source data-source-lat="${sourceLat}" data-source-lon="${sourceLon}" aria-label="查看本次採用測點的位置"`
+      : "";
+
     return `
       <article class="hr-card hr-card--${tone}" aria-live="polite">
         <header class="hr-top">
@@ -310,11 +319,17 @@ const icon = {
           <p>${advice}</p>
         </section>
 
-        <section class="hr-source">
+        <section class="hr-source${sourceCanFocus ? " hr-source--focusable" : ""}"${sourceFocusAttributes}>
           <div class="hr-pin">${icon.pin}</div>
 
           <div class="hr-source-copy">
-            <span>最近合格測點</span>
+            <span>
+              最近合格測點${
+                sourceCanFocus
+                  ? ' <small class="hr-source-jump">查看位置</small>'
+                  : ""
+              }
+            </span>
             <b>${station}</b>
             <p>${quality}・${distanceText(source.sourceDistanceKm)}</p>
           </div>
@@ -911,6 +926,35 @@ const icon = {
   white-space: nowrap;
 }
 
+      .hr-source--focusable {
+        position: relative;
+        cursor: pointer;
+        transition: background .18s ease, box-shadow .18s ease;
+      }
+
+      .hr-source--focusable:hover {
+        background: #f8fafc;
+        box-shadow: inset 3px 0 0 #0f766e;
+      }
+
+      .hr-source--focusable:active {
+        background: #f0fdfa;
+      }
+
+      .hr-source--focusable:focus-visible {
+        outline: 3px solid rgba(20, 184, 166, .34);
+        outline-offset: -3px;
+      }
+
+      .hr-source-jump {
+        margin-left: 4px;
+        color: #0f766e;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: .04em;
+      }
+
+
       .hr-source {
         display: grid;
         grid-template-columns: 34px minmax(0, 1fr) auto;
@@ -1141,6 +1185,33 @@ function showMicroSourceAnnotation(selectedLatlng, source) {
     }
   );
 }
+
+  function focusSourceStation(sourceElement) {
+    const latitude = asNumber(sourceElement?.dataset?.sourceLat);
+    const longitude = asNumber(sourceElement?.dataset?.sourceLon);
+
+    if (latitude === null || longitude === null) return;
+
+    const stationLatlng = L.latLng(latitude, longitude);
+    const zoom = Math.max(map.getZoom(), 17);
+
+    map.flyTo(stationLatlng, zoom, {
+      animate: true,
+      duration: 0.65,
+      easeLinearity: 0.25
+    });
+
+    // 若目前本來就顯示同一座微型測站，讓它浮到最上層。
+    if (
+      sourceMarker &&
+      sourceMarker.getLatLng().distanceTo(stationLatlng) < 1
+    ) {
+      if (sourceLink) sourceLink.bringToBack();
+
+      sourceMarker.bringToFront();
+      sourceMarker.openTooltip();
+    }
+  }
 
   
   function removeMarker() {
@@ -1384,11 +1455,30 @@ window.addEventListener(
 );
 
   document.addEventListener("click", (event) => {
+    const sourceTarget = event.target.closest("[data-hr-focus-source]");
+
+    if (sourceTarget) {
+      event.preventDefault();
+      event.stopPropagation();
+      focusSourceStation(sourceTarget);
+      return;
+    }
+
     if (event.target.closest("[data-hr-close]")) {
       event.preventDefault();
       event.stopPropagation();
       closeCard();
     }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const sourceTarget = event.target?.closest?.("[data-hr-focus-source]");
+
+    if (!sourceTarget) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    event.preventDefault();
+    focusSourceStation(sourceTarget);
   });
 
   map.on("click", (event) => {
