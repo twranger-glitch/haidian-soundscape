@@ -27,6 +27,12 @@
         <path d="M14 14.7V5a4 4 0 0 0-8 0v9.7a6 6 0 1 0 8 0Z"></path>
         <path d="M10 10v6M18 8h2M18 12h2M18 16h2"></path>
       </svg>`,
+        air: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 10h10.5a3.5 3.5 0 1 0-3.3-4.7"></path>
+        <path d="M4 14h14a3 3 0 1 1-2.7 4.3"></path>
+        <path d="M4 18h5"></path>
+      </svg>`,
     pin: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
@@ -102,6 +108,95 @@
     return `距選點 ${km.toFixed(2)} km`;
   }
 
+  function pm25Risk(pm25, declaredRisk) {
+    const declaredCode = String(declaredRisk?.code || "")
+      .trim()
+      .toLowerCase();
+
+    const declaredLabel = String(declaredRisk?.label || "").trim();
+
+    const declaredMap = {
+      low: { code: "low", label: "低風險" },
+      low_risk: { code: "low", label: "低風險" },
+      attention: { code: "attention", label: "要注意" },
+      caution: { code: "attention", label: "要注意" },
+      high: { code: "high", label: "高風險" },
+      high_risk: { code: "high", label: "高風險" },
+    };
+
+    if (declaredMap[declaredCode]) {
+      return {
+        ...declaredMap[declaredCode],
+        label: declaredLabel || declaredMap[declaredCode].label,
+      };
+    }
+
+    const value = asNumber(pm25);
+
+    if (value === null) {
+      return { code: "unavailable", label: "暫無資料" };
+    }
+
+    if (value <= 15) return { code: "low", label: "低風險" };
+    if (value <= 35) return { code: "attention", label: "要注意" };
+
+    return { code: "high", label: "高風險" };
+  }
+
+  function airQualitySection(payload) {
+    const air = payload?.airQuality || payload?.air_quality || {};
+    const source = air?.source || {};
+    const pm25 = asNumber(air?.pm25 ?? air?.pm25UgM3 ?? air?.PM25);
+
+    const caveat = escapeHtml(
+      air?.caveat || "微型感測器即時監測，僅供參考"
+    );
+
+    if (air?.available === false || pm25 === null) {
+      return `
+        <section class="hr-air hr-air--unavailable" aria-label="微型感測器空氣品質">
+          <div class="hr-air-icon">${icon.air}</div>
+          <div>
+            <span>微型感測器・空氣品質</span>
+            <b>附近暫時無PM2.5資料</b>
+            <p>${caveat}</p>
+          </div>
+        </section>`;
+    }
+
+    const risk = pm25Risk(pm25, air?.risk);
+
+    const stationName = escapeHtml(
+      source?.stationName || "附近微型感測器"
+    );
+
+    return `
+      <section class="hr-air hr-air--${risk.code}" aria-label="微型感測器空氣品質">
+        <div class="hr-air-head">
+          <div>
+            <span>微型感測器・空氣品質</span>
+            <b>PM2.5 即時濃度</b>
+          </div>
+          <i>${escapeHtml(risk.label)}</i>
+        </div>
+
+        <div class="hr-air-reading">
+          <div class="hr-air-number">
+            <strong>${fixed(pm25, 1)}</strong><em>μg/m³</em>
+          </div>
+
+          <div class="hr-air-meta">
+            <b>${stationName}</b>
+            <span>${distanceText(source?.sourceDistanceKm)}・${ageText(source?.ageMinutes)}</span>
+          </div>
+
+          <div class="hr-air-icon">${icon.air}</div>
+        </div>
+
+        <p>${caveat}</p>
+      </section>`;
+  }
+  
   function closeButton() {
     return `
       <button class="hr-close" type="button" data-hr-close aria-label="關閉熱風險卡片">
@@ -123,7 +218,7 @@
         <div class="hr-state">
           <span class="hr-spinner"></span>
           <div>
-            <b>正在整合溫度與濕度</b>
+            <b>正在整合溫度、濕度與 PM2.5</b>
             <p>尋找最近、且仍在有效時間內的觀測資料。</p>
           </div>
         </div>
@@ -201,7 +296,7 @@
             <b>${fixed(assessment.relativeHumidity, 0)}<small>%</small></b>
           </div>
         </section>
-
+        ${airQualitySection(payload)}
         <section class="hr-advice">
           <span>現在最重要</span>
           <p>${advice}</p>
@@ -609,6 +704,155 @@
         font-weight: 800;
         letter-spacing: 0;
       }
+      .hr-air {
+        --hr-air-deep: #334155;
+        --hr-air-soft: #f8fafc;
+        --hr-air-tint: rgba(100,116,139,.14);
+        margin: 0 18px 13px;
+        padding: 12px;
+        border: 1px solid var(--hr-air-tint);
+        border-radius: 16px;
+        background: linear-gradient(135deg, var(--hr-air-soft), #fff);
+      }
+
+      .hr-air--low {
+        --hr-air-deep: #047857;
+        --hr-air-soft: #ecfdf5;
+        --hr-air-tint: rgba(5,150,105,.16);
+      }
+
+      .hr-air--attention {
+        --hr-air-deep: #b45309;
+        --hr-air-soft: #fffbeb;
+        --hr-air-tint: rgba(217,119,6,.18);
+      }
+
+      .hr-air--high {
+        --hr-air-deep: #be123c;
+        --hr-air-soft: #fff1f2;
+        --hr-air-tint: rgba(225,29,72,.17);
+      }
+
+      .hr-air--unavailable {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .hr-air-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .hr-air-head span,
+      .hr-air--unavailable span {
+        display: block;
+        color: #64748b;
+        font-size: 10.5px;
+        font-weight: 850;
+        letter-spacing: .065em;
+      }
+
+      .hr-air-head b,
+      .hr-air--unavailable b {
+        display: block;
+        margin-top: 3px;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .hr-air-head i {
+        padding: 6px 8px;
+        border: 1px solid var(--hr-air-tint);
+        border-radius: 999px;
+        color: var(--hr-air-deep);
+        background: rgba(255,255,255,.78);
+        font-size: 10.5px;
+        font-style: normal;
+        font-weight: 900;
+      }
+
+      .hr-air-reading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 42px;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .hr-air-number {
+        color: var(--hr-air-deep);
+        white-space: nowrap;
+      }
+
+      .hr-air-number strong {
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -.045em;
+      }
+
+      .hr-air-number em {
+        margin-left: 4px;
+        font-size: 10px;
+        font-style: normal;
+        font-weight: 850;
+      }
+
+      .hr-air-meta {
+        min-width: 0;
+        padding-left: 8px;
+        border-left: 1px solid var(--hr-air-tint);
+      }
+
+      .hr-air-meta b {
+        display: block;
+        overflow: hidden;
+        color: #475569;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .hr-air-meta span {
+        display: block;
+        margin-top: 2px;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .hr-air-icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--hr-air-tint);
+        border-radius: 13px;
+        color: var(--hr-air-deep);
+        background: rgba(255,255,255,.72);
+      }
+
+      .hr-air-icon svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+      }
+
+      .hr-air > p,
+      .hr-air--unavailable p {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: 10px;
+        line-height: 1.4;
+        font-weight: 750;
+      }
 
       .hr-advice {
         margin: 0 18px 13px;
@@ -789,6 +1033,7 @@
         .hr-top { padding: 16px 16px 13px; }
         .hr-hero { padding: 13px 16px 12px; }
         .hr-metrics { padding: 0 16px 12px; }
+        .hr-air,
         .hr-advice { margin: 0 16px 12px; }
         .hr-source { padding: 12px 16px; }
         .hr-foot { padding: 8px 16px 12px; }
