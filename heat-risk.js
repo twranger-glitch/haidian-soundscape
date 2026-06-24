@@ -1,5 +1,6 @@
 /*
- * Haidian Soundscape — Heat Risk Tool
+ * Haidian Soundscape — Heat Risk Tool + CWA Grid Analysis
+ * Current handoff snapshot reconstructed from the latest working conversation state.
  * Replace the ENTIRE contents of heat-risk.js with this file.
  */
 (function () {
@@ -16,48 +17,43 @@
 
   const map = window.map;
   let selecting = false;
-let marker = null;
-let sourceMarker = null;
-let sourceLink = null;
-let popup = null;
-let controller = null;
-let button = null;
+  let marker = null;
+  let sourceMarker = null;
+  let sourceLink = null;
+  let popup = null;
+  let controller = null;
+  let button = null;
 
-const icon = {
-  heat: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.4"></circle>
-      <path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path>
-      <path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path>
-    </svg>`,
-
-  air: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 10h10.5a3.5 3.5 0 1 0-3.3-4.7"></path>
-      <path d="M4 14h14a3 3 0 1 1-2.7 4.3"></path>
-      <path d="M4 18h5"></path>
-    </svg>`,
-
-  pin: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
-      <circle cx="12" cy="10" r="2.5"></circle>
-    </svg>`,
-
-  shield: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3 20 6v5c0 5.4-3.4 8.8-8 10-4.6-1.2-8-4.6-8-10V6l8-3Z"></path>
-      <path d="m9 12 2 2 4-4"></path>
-    </svg>`,
-
-  close: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 6l12 12M18 6 6 18"></path>
-    </svg>`
-};
+  const icon = {
+    heat: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.4"></circle>
+        <path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path>
+        <path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path>
+      </svg>`,
+    air: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 10h10.5a3.5 3.5 0 1 0-3.3-4.7"></path>
+        <path d="M4 14h14a3 3 0 1 1-2.7 4.3"></path>
+        <path d="M4 18h5"></path>
+      </svg>`,
+    pin: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
+        <circle cx="12" cy="10" r="2.5"></circle>
+      </svg>`,
+    shield: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3 20 6v5c0 5.4-3.4 8.8-8 10-4.6-1.2-8-4.6-8-10V6l8-3Z"></path>
+        <path d="m9 12 2 2 4-4"></path>
+      </svg>`,
+    close: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6l12 12M18 6 6 18"></path>
+      </svg>`
+  };
 
   function escapeHtml(value) {
-  
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -117,12 +113,8 @@ const icon = {
   }
 
   function pm25Risk(pm25, declaredRisk) {
-    const declaredCode = String(declaredRisk?.code || "")
-      .trim()
-      .toLowerCase();
-
+    const declaredCode = String(declaredRisk?.code || "").trim().toLowerCase();
     const declaredLabel = String(declaredRisk?.label || "").trim();
-
     const declaredMap = {
       low: { code: "low", label: "低風險" },
       low_risk: { code: "low", label: "低風險" },
@@ -140,14 +132,9 @@ const icon = {
     }
 
     const value = asNumber(pm25);
-
-    if (value === null) {
-      return { code: "unavailable", label: "暫無資料" };
-    }
-
+    if (value === null) return { code: "unavailable", label: "暫無資料" };
     if (value <= 15) return { code: "low", label: "低風險" };
     if (value <= 35) return { code: "attention", label: "要注意" };
-
     return { code: "high", label: "高風險" };
   }
 
@@ -155,7 +142,6 @@ const icon = {
     const air = payload?.airQuality || payload?.air_quality || {};
     const source = air?.source || {};
     const pm25 = asNumber(air?.pm25 ?? air?.pm25UgM3 ?? air?.PM25);
-
     const caveat = escapeHtml(
       air?.caveat || "微型感測器即時監測，僅供參考"
     );
@@ -173,10 +159,7 @@ const icon = {
     }
 
     const risk = pm25Risk(pm25, air?.risk);
-
-    const stationName = escapeHtml(
-      source?.stationName || "附近微型感測器"
-    );
+    const stationName = escapeHtml(source?.stationName || "附近微型感測器");
 
     return `
       <section class="hr-air hr-air--${risk.code}" aria-label="微型感測器空氣品質">
@@ -187,24 +170,20 @@ const icon = {
           </div>
           <i>${escapeHtml(risk.label)}</i>
         </div>
-
         <div class="hr-air-reading">
           <div class="hr-air-number">
             <strong>${fixed(pm25, 1)}</strong><em>μg/m³</em>
           </div>
-
           <div class="hr-air-meta">
             <b>${stationName}</b>
             <span>${distanceText(source?.sourceDistanceKm)}・${ageText(source?.ageMinutes)}</span>
           </div>
-
           <div class="hr-air-icon">${icon.air}</div>
         </div>
-
         <p>${caveat}</p>
       </section>`;
   }
-  
+
   function closeButton() {
     return `
       <button class="hr-close" type="button" data-hr-close aria-label="關閉熱風險卡片">
@@ -226,8 +205,8 @@ const icon = {
         <div class="hr-state">
           <span class="hr-spinner"></span>
           <div>
-            <b>正在整合溫度、濕度與 PM2.5</b>
-            <p>尋找最近、且仍在有效時間內的觀測資料。</p>
+            <b>正在整合官方格點、附近觀測與 PM2.5</b>
+            <p>先顯示附近合格測點，官方區域格點分析會隨後補上。</p>
           </div>
         </div>
       </article>`;
@@ -254,7 +233,73 @@ const icon = {
       </article>`;
   }
 
-  function resultCard(payload) {
+  function nearbyObservationLabel(source) {
+    const kind = String(source?.source || "").toLowerCase();
+    if (kind === "micro") return "附近即時觀測・微型感測器";
+    if (kind === "cwa") return "附近即時觀測・CWA 測站備援";
+    return "附近即時觀測";
+  }
+
+  function cwaGridSection(gridState) {
+    if (gridState?.state === "loading") {
+      return `
+        <section class="hr-cwa-grid hr-cwa-grid--loading" aria-label="中央氣象署區域溫度分析">
+          <div class="hr-cwa-grid-icon">${icon.heat}</div>
+          <div>
+            <span>中央氣象署・區域溫度分析</span>
+            <b>正在讀取官方 0.03° 格點資料…</b>
+            <p>不影響附近即時觀測與熱風險判讀。</p>
+          </div>
+        </section>`;
+    }
+
+    if (!gridState?.available || !gridState?.analysis) {
+      const message = escapeHtml(
+        gridState?.message || "此位置目前沒有可用的官方溫度格點分析。"
+      );
+      return `
+        <section class="hr-cwa-grid hr-cwa-grid--unavailable" aria-label="中央氣象署區域溫度分析">
+          <div class="hr-cwa-grid-icon">${icon.heat}</div>
+          <div>
+            <span>中央氣象署・區域溫度分析</span>
+            <b>暫無可用格點數值</b>
+            <p>${message}</p>
+          </div>
+        </section>`;
+    }
+
+    const analysis = gridState.analysis;
+    const grid = analysis?.grid || {};
+    const resolution = asNumber(grid?.resolutionDegrees);
+    const distance = asNumber(grid?.distanceKm);
+    const time = analysis?.dataTime ? taipeiTime(analysis.dataTime) : "資料時間未提供";
+    const distanceLabel = distance === null
+      ? "最近格點距離未提供"
+      : distance < 1
+        ? `距最近格點 ${Math.max(1, Math.round(distance * 1000))} m`
+        : `距最近格點 ${distance.toFixed(1)} km`;
+
+    return `
+      <section class="hr-cwa-grid" aria-label="中央氣象署區域溫度分析">
+        <div class="hr-cwa-grid-head">
+          <div>
+            <span>中央氣象署・區域溫度分析</span>
+            <b>小時溫度觀測分析格點</b>
+          </div>
+          <i>官方分析</i>
+        </div>
+        <div class="hr-cwa-grid-reading">
+          <strong>${fixed(analysis?.temperatureC, 1)}</strong><em>°C</em>
+          <div>
+            <b>${time}</b>
+            <span>${resolution === null ? "格點解析度未提供" : `約 ${resolution.toFixed(2)}° 格點`}・${distanceLabel}</span>
+          </div>
+        </div>
+        <p>以官方測站資料內插產製的區域分析；不是點選位置的直接實測。</p>
+      </section>`;
+  }
+
+  function resultCard(payload, gridState = { state: "loading" }) {
     const assessment = payload?.assessment || {};
     const source = payload?.source || {};
     const risk = assessment?.risk || {};
@@ -266,14 +311,14 @@ const icon = {
     );
     const station = escapeHtml(source.stationName || "最近合格測點");
     const quality = escapeHtml(source.qualityLabel || "即時觀測資料");
+    const observationLabel = escapeHtml(nearbyObservationLabel(source));
     const caveat = escapeHtml(
       payload?.caveat || "此結果由鄰近合格測點推估，並非選點位置的直接實測。"
     );
 
     const sourceLat = asNumber(source.latitude);
     const sourceLon = asNumber(source.longitude);
-    const sourceCanFocus =
-      sourceLat !== null && sourceLon !== null;
+    const sourceCanFocus = sourceLat !== null && sourceLon !== null;
 
     const sourceFocusAttributes = sourceCanFocus
       ? ` role="button" tabindex="0" data-hr-focus-source data-source-lat="${sourceLat}" data-source-lon="${sourceLon}" aria-label="查看本次採用測點的位置"`
@@ -283,7 +328,7 @@ const icon = {
       <article class="hr-card hr-card--${tone}" aria-live="polite">
         <header class="hr-top">
           <div>
-            <div class="hr-eyebrow"><i></i>地圖選點・即時熱風險</div>
+            <div class="hr-eyebrow"><i></i>地圖選點・雙來源熱風險</div>
             <div class="hr-title-row">
               <h2>${label}</h2>
               <span class="hr-status">${icon.shield} 即時判讀</span>
@@ -303,17 +348,27 @@ const icon = {
           <div class="hr-heat-icon">${icon.heat}</div>
         </section>
 
-        <section class="hr-metrics" aria-label="即時氣象條件">
-          <div>
-            <span>氣溫</span>
-            <b>${fixed(assessment.temperatureC, 1)}<small>°C</small></b>
+        ${cwaGridSection(gridState)}
+
+        <section class="hr-observed" aria-label="附近即時觀測">
+          <div class="hr-observed-head">
+            <span>${observationLabel}</span>
+            <em>用於熱風險計算</em>
           </div>
-          <div>
-            <span>相對濕度</span>
-            <b>${fixed(assessment.relativeHumidity, 0)}<small>%</small></b>
+          <div class="hr-metrics">
+            <div>
+              <span>氣溫</span>
+              <b>${fixed(assessment.temperatureC, 1)}<small>°C</small></b>
+            </div>
+            <div>
+              <span>相對濕度</span>
+              <b>${fixed(assessment.relativeHumidity, 0)}<small>%</small></b>
+            </div>
           </div>
         </section>
+
         ${airQualitySection(payload)}
+
         <section class="hr-advice">
           <span>目前建議</span>
           <p>${advice}</p>
@@ -321,10 +376,9 @@ const icon = {
 
         <section class="hr-source${sourceCanFocus ? " hr-source--focusable" : ""}"${sourceFocusAttributes}>
           <div class="hr-pin">${icon.pin}</div>
-
           <div class="hr-source-copy">
             <span>
-              最近合格測點${
+              本次採用的附近測點${
                 sourceCanFocus
                   ? ' <small class="hr-source-jump">查看位置</small>'
                   : ""
@@ -333,7 +387,6 @@ const icon = {
             <b>${station}</b>
             <p>${quality}・${distanceText(source.sourceDistanceKm)}</p>
           </div>
-
           <div class="hr-time">
             <b>${ageText(source.ageMinutes)}</b>
             <span>${taipeiTime(source.observedAt)}</span>
@@ -342,7 +395,7 @@ const icon = {
 
         <footer class="hr-foot">
           <span>資料說明</span>
-          <p>${caveat}</p>
+          <p>熱風險依附近即時溫濕度計算；CWA 區域溫度分析僅用來對照。${caveat}</p>
         </footer>
       </article>`;
   }
@@ -467,8 +520,7 @@ const icon = {
       }
 
       .leaflet-popup.hr-popup .leaflet-popup-content {
-        width: var(--hr-popup-width, 360px) !important;
-        max-width: none !important;
+        width: min(360px, calc(100vw - 36px)) !important;
         min-width: 0;
         margin: 0 !important;
       }
@@ -483,8 +535,7 @@ const icon = {
         --hr-soft: #fffbeb;
         --hr-tint: rgba(245,158,11,.14);
 
-        width: var(--hr-popup-width, 360px);
-        box-sizing: border-box;
+        width: min(360px, calc(100vw - 36px));
         overflow: hidden;
         color: #1e293b;
         background: #fff;
@@ -738,7 +789,164 @@ const icon = {
         font-weight: 800;
         letter-spacing: 0;
       }
+
+      .hr-cwa-grid {
+        margin: 0 18px 13px;
+        padding: 12px;
+        border: 1px solid rgba(14, 116, 144, .20);
+        border-radius: 16px;
+        background: linear-gradient(135deg, #ecfeff, #f8fafc 76%);
+      }
+
+      .hr-cwa-grid--loading,
+      .hr-cwa-grid--unavailable {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .hr-cwa-grid--unavailable {
+        border-color: rgba(100,116,139,.18);
+        background: #f8fafc;
+      }
+
+      .hr-cwa-grid-head,
+      .hr-observed-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 9px;
+      }
+
+      .hr-cwa-grid-head span,
+      .hr-observed-head > span,
+      .hr-cwa-grid--loading span,
+      .hr-cwa-grid--unavailable span {
+        display: block;
+        color: #0f766e;
+        font-size: 10.5px;
+        font-weight: 900;
+        letter-spacing: .045em;
+      }
+
+      .hr-cwa-grid-head b,
+      .hr-cwa-grid--loading b,
+      .hr-cwa-grid--unavailable b {
+        display: block;
+        margin-top: 3px;
+        color: #164e63;
+        font-size: 12.5px;
+        line-height: 1.3;
+        font-weight: 900;
+      }
+
+      .hr-cwa-grid-head i,
+      .hr-observed-head em {
+        flex: 0 0 auto;
+        padding: 4px 7px;
+        border: 1px solid rgba(14,116,144,.18);
+        border-radius: 999px;
+        color: #0e7490;
+        background: rgba(255,255,255,.8);
+        font-size: 9.5px;
+        font-style: normal;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .hr-observed-head em {
+        border-color: rgba(234,88,12,.16);
+        color: #c2410c;
+      }
+
+      .hr-cwa-grid-reading {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 8px;
+      }
+
+      .hr-cwa-grid-reading > strong {
+        color: #0e7490;
+        font-size: 32px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -.045em;
+      }
+
+      .hr-cwa-grid-reading > em {
+        align-self: flex-end;
+        margin: 0 4px 3px 0;
+        color: #0e7490;
+        font-size: 11px;
+        font-style: normal;
+        font-weight: 900;
+      }
+
+      .hr-cwa-grid-reading > div {
+        min-width: 0;
+        margin-left: 4px;
+        padding-left: 9px;
+        border-left: 1px solid rgba(14,116,144,.16);
+      }
+
+      .hr-cwa-grid-reading > div b,
+      .hr-cwa-grid-reading > div span {
+        display: block;
+        color: #475569;
+        font-size: 10px;
+        line-height: 1.35;
+        font-weight: 800;
+      }
+
+      .hr-cwa-grid-reading > div span { color: #64748b; font-weight: 750; }
+
+      .hr-cwa-grid > p,
+      .hr-cwa-grid--loading p,
+      .hr-cwa-grid--unavailable p {
+        margin: 8px 0 0;
+        color: #475569;
+        font-size: 10px;
+        line-height: 1.42;
+        font-weight: 750;
+      }
+
+      .hr-cwa-grid-icon {
+        width: 39px;
+        height: 39px;
+        flex: 0 0 39px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(14,116,144,.15);
+        border-radius: 12px;
+        color: #0e7490;
+        background: rgba(255,255,255,.8);
+      }
+
+      .hr-cwa-grid-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .hr-observed {
+        margin: 0 18px 13px;
+        padding: 11px;
+        border: 1px solid rgba(234,88,12,.14);
+        border-radius: 16px;
+        background: linear-gradient(135deg, #fff7ed, #fff 76%);
+      }
+
+      .hr-observed .hr-metrics {
+        padding: 8px 0 0;
+      }
+
       .hr-air {
+        --hr-air: #64748b;
         --hr-air-deep: #334155;
         --hr-air-soft: #f8fafc;
         --hr-air-tint: rgba(100,116,139,.14);
@@ -750,18 +958,21 @@ const icon = {
       }
 
       .hr-air--low {
+        --hr-air: #059669;
         --hr-air-deep: #047857;
         --hr-air-soft: #ecfdf5;
         --hr-air-tint: rgba(5,150,105,.16);
       }
 
       .hr-air--attention {
+        --hr-air: #d97706;
         --hr-air-deep: #b45309;
         --hr-air-soft: #fffbeb;
         --hr-air-tint: rgba(217,119,6,.18);
       }
 
       .hr-air--high {
+        --hr-air: #e11d48;
         --hr-air-deep: #be123c;
         --hr-air-soft: #fff1f2;
         --hr-air-tint: rgba(225,29,72,.17);
@@ -904,36 +1115,38 @@ const icon = {
         font-weight: 750;
         line-height: 1.55;
       }
-.leaflet-tooltip.hr-source-map-label {
-  padding: 7px 9px;
-  border: 1px solid rgba(13, 148, 136, 0.34);
-  border-radius: 10px;
-  color: #0f766e;
-  background: rgba(240, 253, 250, 0.97);
-  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
-  font-family: "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
-  white-space: nowrap;
-}
 
-.leaflet-tooltip.hr-source-map-label span {
-  display: block;
-  color: #0f766e;
-  font-size: 9.5px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-}
 
-.leaflet-tooltip.hr-source-map-label b {
-  display: block;
-  max-width: 180px;
-  overflow: hidden;
-  margin-top: 2px;
-  color: #134e4a;
-  font-size: 11px;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+      .leaflet-tooltip.hr-source-map-label {
+        padding: 7px 9px;
+        border: 1px solid rgba(13, 148, 136, 0.34);
+        border-radius: 10px;
+        color: #0f766e;
+        background: rgba(240, 253, 250, 0.97);
+        box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
+        font-family: "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+        white-space: nowrap;
+      }
+
+      .leaflet-tooltip.hr-source-map-label span {
+        display: block;
+        color: #0f766e;
+        font-size: 9.5px;
+        font-weight: 900;
+        letter-spacing: 0.05em;
+      }
+
+      .leaflet-tooltip.hr-source-map-label b {
+        display: block;
+        max-width: 180px;
+        overflow: hidden;
+        margin-top: 2px;
+        color: #134e4a;
+        font-size: 11px;
+        font-weight: 850;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
       .hr-source--focusable {
         position: relative;
@@ -962,7 +1175,6 @@ const icon = {
         font-weight: 900;
         letter-spacing: .04em;
       }
-
 
       .hr-source {
         display: grid;
@@ -1118,13 +1330,13 @@ const icon = {
       }
 
       @media (max-width: 600px) {
-
-
         .hr-top { padding: 16px 16px 13px; }
         .hr-hero { padding: 13px 16px 12px; }
         .hr-metrics { padding: 0 16px 12px; }
         .hr-air,
-        .hr-advice { margin: 0 16px 12px; }
+        .hr-advice,
+        .hr-cwa-grid,
+        .hr-observed { margin: 0 16px 12px; }
         .hr-source { padding: 12px 16px; }
         .hr-foot { padding: 8px 16px 12px; }
 
@@ -1137,68 +1349,64 @@ const icon = {
     document.head.appendChild(style);
   }
 
-function removeSourceAnnotation() {
-  if (sourceLink) {
-    map.removeLayer(sourceLink);
-    sourceLink = null;
-  }
-
-  if (sourceMarker) {
-    map.removeLayer(sourceMarker);
-    sourceMarker = null;
-  }
-}
-
-function showMicroSourceAnnotation(selectedLatlng, source) {
-  removeSourceAnnotation();
-
-  // 只標示本次熱風險真正採用的微型感測器。
-  // 若使用 CWA 備援站，則不顯示微型測站標記。
-  if (source?.source !== "micro") return;
-
-  const latitude = asNumber(source?.latitude);
-  const longitude = asNumber(source?.longitude);
-
-  if (latitude === null || longitude === null) return;
-
-  const stationLatlng = L.latLng(latitude, longitude);
-  const stationName = escapeHtml(
-    source?.stationName || "本次採用的微型測站"
-  );
-
-  sourceLink = L.polyline([selectedLatlng, stationLatlng], {
-    color: "#0f766e",
-    weight: 2,
-    opacity: 0.72,
-    dashArray: "6 8",
-    interactive: false
-  }).addTo(map);
-
-  sourceMarker = L.circleMarker(stationLatlng, {
-    radius: 10,
-    weight: 3,
-    color: "#0f766e",
-    fillColor: "#ecfdf5",
-    fillOpacity: 0.98,
-    interactive: false
-  }).addTo(map);
-
-  sourceMarker.bindTooltip(
-    `<span>本次採用的微型測站</span><b>${stationName}</b>`,
-    {
-      permanent: true,
-      direction: "top",
-      offset: [0, -10],
-      className: "hr-source-map-label",
-      opacity: 1
+  function removeSourceAnnotation() {
+    if (sourceLink) {
+      map.removeLayer(sourceLink);
+      sourceLink = null;
     }
-  );
-}
+
+    if (sourceMarker) {
+      map.removeLayer(sourceMarker);
+      sourceMarker = null;
+    }
+  }
+
+  function showMicroSourceAnnotation(selectedLatlng, source) {
+    removeSourceAnnotation();
+
+    if (source?.source !== "micro") return;
+
+    const latitude = asNumber(source?.latitude);
+    const longitude = asNumber(source?.longitude);
+    if (latitude === null || longitude === null) return;
+
+    const stationLatlng = L.latLng(latitude, longitude);
+    const stationName = escapeHtml(
+      source?.stationName || "本次採用的微型測站"
+    );
+
+    sourceLink = L.polyline([selectedLatlng, stationLatlng], {
+      color: "#0f766e",
+      weight: 2,
+      opacity: 0.72,
+      dashArray: "6 8",
+      interactive: false
+    }).addTo(map);
+
+    sourceMarker = L.circleMarker(stationLatlng, {
+      radius: 10,
+      weight: 3,
+      color: "#0f766e",
+      fillColor: "#ecfdf5",
+      fillOpacity: 0.98,
+      interactive: false
+    }).addTo(map);
+
+    sourceMarker.bindTooltip(
+      `<span>本次採用的微型測站</span><b>${stationName}</b>`,
+      {
+        permanent: true,
+        direction: "top",
+        offset: [0, -10],
+        className: "hr-source-map-label",
+        opacity: 1
+      }
+    );
+  }
 
   function focusSourceStation(sourceElement) {
     const latitude = asNumber(sourceElement?.dataset?.sourceLat);
     const longitude = asNumber(sourceElement?.dataset?.sourceLon);
-
     if (latitude === null || longitude === null) return;
 
     const stationLatlng = L.latLng(latitude, longitude);
@@ -1210,29 +1418,26 @@ function showMicroSourceAnnotation(selectedLatlng, source) {
       easeLinearity: 0.25
     });
 
-    // 若目前本來就顯示同一座微型測站，讓它浮到最上層。
     if (
       sourceMarker &&
       sourceMarker.getLatLng().distanceTo(stationLatlng) < 1
     ) {
       if (sourceLink) sourceLink.bringToBack();
-
       sourceMarker.bringToFront();
       sourceMarker.openTooltip();
     }
   }
 
-  
   function removeMarker() {
     if (marker) map.removeLayer(marker);
     marker = null;
   }
 
-function setMarker(latlng) {
-  removeMarker();
-  removeSourceAnnotation();
+  function setMarker(latlng) {
+    removeMarker();
+    removeSourceAnnotation();
 
-  marker = L.circleMarker(latlng, {
+    marker = L.circleMarker(latlng, {
       radius: 8,
       weight: 3,
       color: "#e11d48",
@@ -1241,63 +1446,58 @@ function setMarker(latlng) {
       interactive: false
     }).addTo(map);
   }
+
   function getHeatPopupWidth() {
     return Math.max(240, Math.min(360, map.getSize().x - 28));
   }
 
-function keepHeatPopupInView() {
-  if (!window.matchMedia("(max-width: 600px)").matches) return;
+  function keepHeatPopupInView() {
+    if (!window.matchMedia("(max-width: 600px)").matches) return;
 
-  window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
-      const popupElement = popup?.getElement?.();
-      const mapElement = map.getContainer();
+      window.requestAnimationFrame(() => {
+        const popupElement = popup?.getElement?.();
+        const mapElement = map.getContainer();
+        if (!popupElement || !mapElement) return;
 
-      if (!popupElement || !mapElement) return;
+        const popupRect = popupElement.getBoundingClientRect();
+        const mapRect = mapElement.getBoundingClientRect();
+        const safeLeft = mapRect.left + 14;
+        const safeRight = mapRect.right - 14;
+        const safeTop = mapRect.top + 52;
+        const safeBottom = mapRect.bottom - 16;
 
-      const popupRect = popupElement.getBoundingClientRect();
-      const mapRect = mapElement.getBoundingClientRect();
+        let panX = 0;
+        let panY = 0;
 
-      const safeLeft = mapRect.left + 14;
-      const safeRight = mapRect.right - 14;
-      const safeTop = mapRect.top + 52;
-      const safeBottom = mapRect.bottom - 16;
+        if (popupRect.left < safeLeft) {
+          panX = popupRect.left - safeLeft;
+        } else if (popupRect.right > safeRight) {
+          panX = popupRect.right - safeRight;
+        }
 
-      let panX = 0;
-      let panY = 0;
+        if (popupRect.top < safeTop) {
+          panY = popupRect.top - safeTop;
+        } else if (popupRect.bottom > safeBottom) {
+          panY = popupRect.bottom - safeBottom;
+        }
 
-      // 左側超出：負值，讓卡片往右回到畫面內。
-      if (popupRect.left < safeLeft) {
-        panX = popupRect.left - safeLeft;
-      } else if (popupRect.right > safeRight) {
-        // 右側超出：正值，讓卡片往左回到畫面內。
-        panX = popupRect.right - safeRight;
-      }
-
-      // 上方超出：負值，讓卡片往下回到畫面內。
-      if (popupRect.top < safeTop) {
-        panY = popupRect.top - safeTop;
-      } else if (popupRect.bottom > safeBottom) {
-        // 下方超出：正值，讓卡片往上回到畫面內。
-        panY = popupRect.bottom - safeBottom;
-      }
-
-      if (panX !== 0 || panY !== 0) {
-        map.panBy([panX, panY], {
-          animate: true,
-          duration: 0.22
-        });
-      }
+        if (panX !== 0 || panY !== 0) {
+          map.panBy([panX, panY], {
+            animate: true,
+            duration: 0.22
+          });
+        }
+      });
     });
-  });
-}
+  }
 
   function openCard(latlng, html) {
     const popupWidth = getHeatPopupWidth();
-
-    map
-      .getContainer()
-      .style.setProperty("--hr-popup-width", `${popupWidth}px`);
+    map.getContainer().style.setProperty(
+      "--hr-popup-width",
+      `${popupWidth}px`
+    );
 
     if (!popup) {
       popup = L.popup({
@@ -1324,14 +1524,13 @@ function keepHeatPopupInView() {
     keepHeatPopupInView();
   }
 
-function closeCard() {
-  document.body.classList.remove("heat-risk-card-open");
-
-  if (popup) map.closePopup(popup);
-
-  removeMarker();
-  removeSourceAnnotation();
-}
+  function closeCard() {
+    window.__haidianCurrentAssessmentToken = null;
+    document.body.classList.remove("heat-risk-card-open");
+    if (popup) map.closePopup(popup);
+    removeMarker();
+    removeSourceAnnotation();
+  }
 
   function updateButton() {
     if (!button) return;
@@ -1376,6 +1575,43 @@ function closeCard() {
       : "熱風險服務暫時無法使用";
   }
 
+  function cwaGridErrorMessage(payload, status) {
+    const code = String(payload?.error?.code || "");
+    const message = String(payload?.error?.message || payload?.message || "").trim();
+    if (code === "CWA_GRID_OUTSIDE_COVERAGE") {
+      return "此點位不在 CWA 目前小時溫度格點的涵蓋範圍內。";
+    }
+    if (code === "CWA_GRID_VALUE_UNAVAILABLE") {
+      return "此點位的 CWA 格點目前沒有可用數值。";
+    }
+    if (message) return message;
+    return status ? `官方格點暫時無法取得（HTTP ${status}）` : "官方格點暫時無法取得。";
+  }
+
+  async function fetchCwaGridPoint(latlng, signal) {
+    try {
+      const url = new URL("/temperature-point", API_BASE);
+      url.searchParams.set("lat", latlng.lat.toFixed(6));
+      url.searchParams.set("lon", latlng.lng.toFixed(6));
+
+      const response = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        headers: { Accept: "application/json" },
+        signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.ok) {
+        return { available: false, message: cwaGridErrorMessage(payload, response.status) };
+      }
+      return { available: true, analysis: payload.analysis || {} };
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      return { available: false, message: "中央氣象署格點分析暫時無法取得。" };
+    }
+  }
+
   async function assess(latlng) {
     if (!API_BASE.startsWith("https://") || API_BASE.includes("REPLACE-WITH")) {
       openCard(latlng, errorCard("尚未設定熱風險服務網址"));
@@ -1383,11 +1619,13 @@ function closeCard() {
     }
 
     if (controller) controller.abort();
-
     const request = new AbortController();
     controller = request;
+    const assessmentToken = Symbol("assessment");
+    window.__haidianCurrentAssessmentToken = assessmentToken;
 
     const timeout = window.setTimeout(() => request.abort(), TIMEOUT_MS);
+    const cwaGridPromise = fetchCwaGridPoint(latlng, request.signal);
 
     try {
       const url = new URL("/risk", API_BASE);
@@ -1399,17 +1637,31 @@ function closeCard() {
         mode: "cors",
         credentials: "omit",
         headers: { Accept: "application/json" },
-        signal: request.signal
+        signal: request.signal,
       });
 
       const payload = await response.json().catch(() => null);
-
       if (!response.ok || !payload?.ok) {
         throw new Error(friendlyError(payload, response.status));
       }
 
-openCard(latlng, resultCard(payload));
-showMicroSourceAnnotation(latlng, payload.source);
+      // Do not delay the existing heat-risk card for CWA grid cache misses.
+      // The card clearly marks the official analysis as loading, then updates in place.
+      openCard(latlng, resultCard(payload, { state: "loading" }));
+      showMicroSourceAnnotation(latlng, payload.source);
+
+      try {
+        const cwaGrid = await cwaGridPromise;
+        if (window.__haidianCurrentAssessmentToken !== assessmentToken) return;
+        openCard(latlng, resultCard(payload, cwaGrid));
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        if (window.__haidianCurrentAssessmentToken !== assessmentToken) return;
+        openCard(latlng, resultCard(payload, {
+          available: false,
+          message: "中央氣象署格點分析暫時無法取得。",
+        }));
+      }
     } catch (error) {
       const message =
         error?.name === "AbortError"
@@ -1419,7 +1671,6 @@ showMicroSourceAnnotation(latlng, payload.source);
       openCard(latlng, errorCard(message));
     } finally {
       window.clearTimeout(timeout);
-
       if (controller === request) {
         controller = null;
       }
@@ -1449,11 +1700,9 @@ showMicroSourceAnnotation(latlng, payload.source);
 
     // 視覺順序：耳機 → 熱風險 → 圖層 → 展開的圖層面板
     const layerButton = menu.previousElementSibling;
-
     if (layerButton && layerButton.parentElement === wrapper) {
       wrapper.insertBefore(button, layerButton);
     } else {
-      // 若圖層按鈕的結構改變，仍放在圖層面板前。
       wrapper.insertBefore(button, menu);
     }
 
@@ -1463,28 +1712,20 @@ showMicroSourceAnnotation(latlng, payload.source);
   addStyles();
   addButton();
 
-function positionLeafletAttribution() {
-  if (!map.attributionControl) return;
-
-  const mobile = window.matchMedia("(max-width: 760px)").matches;
-  const position = mobile ? "bottomleft" : "bottomright";
-
-  if (map.attributionControl.getPosition() !== position) {
-    map.attributionControl.setPosition(position);
+  function positionLeafletAttribution() {
+    if (!map.attributionControl) return;
+    const mobile = window.matchMedia("(max-width: 760px)").matches;
+    const position = mobile ? "bottomleft" : "bottomright";
+    if (map.attributionControl.getPosition() !== position) {
+      map.attributionControl.setPosition(position);
+    }
   }
-}
 
-positionLeafletAttribution();
-
-window.addEventListener(
-  "resize",
-  positionLeafletAttribution,
-  { passive: true }
-);
+  positionLeafletAttribution();
+  window.addEventListener("resize", positionLeafletAttribution, { passive: true });
 
   document.addEventListener("click", (event) => {
     const sourceTarget = event.target.closest("[data-hr-focus-source]");
-
     if (sourceTarget) {
       event.preventDefault();
       event.stopPropagation();
@@ -1501,10 +1742,8 @@ window.addEventListener(
 
   document.addEventListener("keydown", (event) => {
     const sourceTarget = event.target?.closest?.("[data-hr-focus-source]");
-
     if (!sourceTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
-
     event.preventDefault();
     focusSourceStation(sourceTarget);
   });
@@ -1518,11 +1757,12 @@ window.addEventListener(
     assess(event.latlng);
   });
 
-map.on("popupclose", (event) => {
-  if (event.popup === popup) {
-    document.body.classList.remove("heat-risk-card-open");
-    removeMarker();
-    removeSourceAnnotation();
-  }
-});
+  map.on("popupclose", (event) => {
+    if (event.popup === popup) {
+      window.__haidianCurrentAssessmentToken = null;
+      document.body.classList.remove("heat-risk-card-open");
+      removeMarker();
+      removeSourceAnnotation();
+    }
+  });
 })();
