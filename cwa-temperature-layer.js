@@ -13,7 +13,7 @@
   const CONFIG = Object.assign(
     {
       endpoint: "https://haidian-heat-risk-api.yhzkiki.workers.dev/temperature-kmz",
-      title: "中央氣象署全臺溫度分布（實驗）",
+      title: "中央氣象署全臺溫度分布",
       initialOpacity: 0.64,
       zIndex: 420,
       maxAgeMinutes: 150,
@@ -48,6 +48,7 @@
   let details;
   let refreshButton;
   let fitButton;
+  let pointQueryButton;
 
   function clamp(value, min, max, fallback) {
     const number = Number(value);
@@ -84,6 +85,16 @@
       #${CONTROL_ID} button { flex: 1; min-height: 30px; padding: 5px 7px; border: 1px solid #fdba74; border-radius: 7px; background: #fff; color: #9a3412; font-size: 11px; font-weight: 800; cursor: pointer; }
       #${CONTROL_ID} button:disabled { opacity: .55; cursor: not-allowed; }
       #${CONTROL_ID} .cwa-temp-details { margin-top: 8px; color: #7c2d12; font-size: 10px; line-height: 1.48; }
+      #${CONTROL_ID} .cwa-temp-legend { margin-top: 10px; padding: 9px; border: 1px solid #fed7aa; border-radius: 10px; background: rgba(255,255,255,.72); }
+      #${CONTROL_ID} .cwa-temp-legend-head { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; color: #7c2d12; font-size: 10px; font-weight: 800; }
+      #${CONTROL_ID} .cwa-temp-legend-head em { color: #9a3412; font-style: normal; font-weight: 700; }
+      #${CONTROL_ID} .cwa-temp-legend-body { display: flex; gap: 8px; align-items: stretch; height: 130px; margin-top: 7px; }
+      #${CONTROL_ID} .cwa-temp-legend-scale { width: 16px; flex: 0 0 16px; border-radius: 3px; border: 1px solid rgba(15,23,42,.15); background: linear-gradient(to top, #27758b 0%, #4fadc4 16%, #9bd7dc 27%, #15965d 43%, #a5d475 55%, #f4f08a 65%, #f5af31 76%, #ef6a25 84%, #df2851 91%, #b31679 96%, #8b3aa5 100%); }
+      #${CONTROL_ID} .cwa-temp-legend-ticks { display: flex; flex: 1; flex-direction: column; justify-content: space-between; color: #7c2d12; font-size: 10px; font-weight: 750; line-height: 1; }
+      #${CONTROL_ID} .cwa-temp-legend-note { margin: 7px 0 0; color: #9a3412; font-size: 9.5px; line-height: 1.4; font-weight: 650; }
+      #${CONTROL_ID} .cwa-temp-query { width: 100%; margin-top: 8px; border-color: #fb923c; background: #fff7ed; color: #9a3412; }
+      #${CONTROL_ID} .cwa-temp-query:hover { background: #ffedd5; }
+      #${CONTROL_ID} .cwa-temp-query-note { margin: 6px 0 0; color: #7c2d12; font-size: 9.5px; line-height: 1.42; font-weight: 650; }
     `;
     document.head.appendChild(style);
   }
@@ -112,6 +123,18 @@
           <button type="button" class="cwa-temp-refresh">重新載入圖層</button>
           <button type="button" class="cwa-temp-fit">查看全臺</button>
         </div>
+        <section class="cwa-temp-legend" aria-label="中央氣象署溫度色階圖例">
+          <div class="cwa-temp-legend-head"><span>溫度色階（攝氏）</span><em>冷 → 熱</em></div>
+          <div class="cwa-temp-legend-body">
+            <div class="cwa-temp-legend-scale" aria-hidden="true"></div>
+            <div class="cwa-temp-legend-ticks" aria-hidden="true">
+              <span>38°C 以上</span><span>35°C</span><span>30°C</span><span>25°C</span><span>20°C</span><span>15°C</span><span>10°C</span><span>5°C</span><span>0°C</span><span>−1°C 以下</span>
+            </div>
+          </div>
+          <p class="cwa-temp-legend-note">色彩為連續變化；目前圖層透明度較低時，顏色會與底圖混合。想看某一位置的數字，請用下方查詢。</p>
+        </section>
+        <button type="button" class="cwa-temp-query">點選地圖查詢溫濕度</button>
+        <p class="cwa-temp-query-note">會顯示氣溫、相對濕度、熱指數、PM2.5、資料時間與採用測點；結果是附近合格測點資料，並非點位的直接實測。</p>
         <div class="cwa-temp-details"></div>
       </div>
     `;
@@ -124,6 +147,7 @@
     details = panel.querySelector(".cwa-temp-details");
     refreshButton = panel.querySelector(".cwa-temp-refresh");
     fitButton = panel.querySelector(".cwa-temp-fit");
+    pointQueryButton = panel.querySelector(".cwa-temp-query");
 
     opacityInput.value = String(state.opacity);
     renderOpacity();
@@ -145,6 +169,17 @@
 
     fitButton.addEventListener("click", () => {
       if (state.overlay) map.fitBounds(state.overlay.getBounds(), { padding: [22, 22] });
+    });
+
+    pointQueryButton.addEventListener("click", () => {
+      const heatRiskButton = document.querySelector("#rightToolsWrapper .heat-risk-tool");
+      if (!heatRiskButton) {
+        setStatus("找不到地圖選點工具；請確認 heat-risk.js 仍在此檔案之前載入。", true);
+        return;
+      }
+
+      if (!heatRiskButton.classList.contains("is-on")) heatRiskButton.click();
+      setStatus("已進入查詢模式：請點選地圖任一位置。", false);
     });
 
     try {
@@ -460,7 +495,7 @@
       panel.classList.add("ready");
       const timeDescription = observedAt ? `${taipeiTime(observedAt)}（${ageText(observedAt)}）` : "官方圖資時間未提供";
       setStatus(`已顯示官方溫度分布圖；資料時間：${timeDescription}`, false);
-      details.innerHTML = "資料來源：中央氣象署 O-A0038-002 去背景 1 小時溫度分布圖。此圖層為官方分析產品，並非本站自行內插。";
+      details.innerHTML = "資料來源：中央氣象署 O-A0038-002 去背景 1 小時溫度分布圖。色階對照採用中央氣象署溫度圖的 −1°C 至 38°C 範圍；本圖層為官方分析產品，並非本站自行內插。";
     } catch (error) {
       if (error?.name === "AbortError") return;
       if (toggle) toggle.checked = Boolean(state.overlay);
