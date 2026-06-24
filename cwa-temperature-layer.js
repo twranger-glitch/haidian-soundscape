@@ -101,8 +101,8 @@
         ${escapeHtml(CONFIG.title)}
       </div>
       <div class="cwa-temp-row">
-        <input class="cwa-temp-toggle" type="checkbox" aria-label="顯示中央氣象署官方溫度分布圖">
-        <label for="">顯示全臺官方溫度分布</label>
+        <input id="haidian-cwa-temperature-toggle" class="cwa-temp-toggle" type="checkbox" aria-label="顯示中央氣象署官方溫度分布圖">
+        <label for="haidian-cwa-temperature-toggle">顯示全臺官方溫度分布</label>
       </div>
       <div class="cwa-temp-status" aria-live="polite">關閉時不下載資料。</div>
       <div class="cwa-temp-controls">
@@ -221,43 +221,157 @@
     return text;
   }
 
-  function firstKmlPath(zip) {
-    const names = Object.keys(zip.files);
-    return names.find((name) => name.toLowerCase() === "doc.kml") ||
-      names.find((name) => /\.kml$/i.test(name));
+  function kmlPaths(zip) {
+    const names = Object.keys(zip.files)
+      .filter((name) => !zip.files[name].dir && /\.kml$/i.test(name));
+
+    // doc.kml is normally the entry point, but CWA KMZ files can place the
+    // actual GroundOverlay in a linked/sub-folder KML.  Keep doc.kml first,
+    // then inspect every other KML in the archive.
+    return names.sort((a, b) => {
+      const aIsDoc = /(^|\/)doc\.kml$/i.test(a);
+      const bIsDoc = /(^|\/)doc\.kml$/i.test(b);
+      if (aIsDoc !== bIsDoc) return aIsDoc ? -1 : 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  function localNameOf(element) {
+    return String(element?.localName || element?.nodeName || "")
+      .split(":")
+      .pop();
+  }
+
+  function firstDescendantByLocalName(parent, name) {
+    const expected = String(name || "").toLowerCase();
+    const elements = parent?.getElementsByTagName?.("*") || [];
+    for (const element of elements) {
+      if (localNameOf(element).toLowerCase() === expected) return element;
+    }
+    return null;
   }
 
   function textFromElement(parent, name) {
-    const element = parent.getElementsByTagName(name)[0];
+    const element = firstDescendantByLocalName(parent, name);
     return element ? String(element.textContent || "").trim() : "";
   }
 
-  function parseGroundOverlay(kmlText) {
-    const xml = new DOMParser().parseFromString(kmlText, "application/xml");
-    if (xml.querySelector("parsererror")) throw new Error("KMZ 的 KML 資料無法解析");
+  function validTaiwanBounds(north, south, east, west) {
+    if (![north, south, east, west].every(Number.isFinite)) return false;
+    if (south >= north || west >= east) return false;
 
-    const overlays = Array.from(xml.getElementsByTagName("GroundOverlay"));
-    for (const overlay of overlays) {
-      const href = textFromElement(overlay, "href");
-      const boxes = overlay.getElementsByTagName("LatLonBox");
-      const box = boxes[0];
-      if (!href || !box) continue;
-
-      const north = Number(textFromElement(box, "north"));
-      const south = Number(textFromElement(box, "south"));
-      const east = Number(textFromElement(box, "east"));
-      const west = Number(textFromElement(box, "west"));
-      if (![north, south, east, west].every(Number.isFinite)) continue;
-      if (south >= north || west >= east) continue;
-      if (south < 15 || north > 30 || west < 110 || east > 130) continue;
-
-      return { href, bounds: [[south, west], [north, east]] };
-    }
-
-    throw new Error("KMZ 中找不到可用的全臺溫度圖層範圍");
+    // Accept a Taiwan-wide layer plus a modest buffer. This deliberately
+    // rejects legends/world-base overlays that sometimes coexist in KMZs.
+    return north > 20 && south < 27.5 && east > 117 && west < 124.5;
   }
 
-  async function imageBlobFromKmz(zip, href) {
+  function boundsFromLatLonBox(overlay) {
+    const box = firstDescendantByLocalName(overlay, "LatLonBox") ||
+      firstDescendantByLocalName(overlay, "LatLonAltBox");
+    if (!box) return null;
+
+    const north = Number(textFromElement(box, "north"));
+    const south = Number(textFromElement(box, "south"));
+    const east = Number(textFromElement(box, "east"));
+    const west = Number(textFromElement(box, "west"));
+    if (!validTaiwanBounds(north, south, east, west)) return null;
+
+    return [[south, west], [north, east]];
+  }
+
+  function boundsFromLatLonQuad(overlay) {
+    const quad = firstDescendantByLocalName(overlay, "LatLonQuad");
+    const coordinatesText = textFromElement(quad, "coordinates");
+    if (!coordinatesText) return null;
+
+    const points = coordinatesText
+      .trim()
+      .split(/\s+/)
+      .map((token) => token.split(",").map(Number))
+      .filter((parts) => Number.isFinite(parts[0]) && Number.isFinite(parts[1]));
+
+    if (points.length < 4) return null;
+    const longitudes = points.map((point) => point[0]);
+    const latitudes = points.map((point) => point[1]);
+    const north = Math.max(...latitudes);
+    const south = Math.min(...latitudes);
+    const east = Math.max(...longitudes);
+    const west = Math.min(...longitudes);
+    if (!validTaiwanBounds(north, south, east, west)) return null;
+
+    return [[south, west], [north, east]];
+  }
+
+  function resolveZipPath(kmlPath, href) {
+    const raw = String(href || "").trim().replaceAll("\\", "/");
+    if (!raw || raw.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+      throw new Error("KMZ 內的影像檔路徑不正確");
+    }
+
+    const base = String(kmlPath || "").split("/").slice(0, -1);
+    const output = [...base];
+    for (const part of raw.split("/")) {
+      if (!part || part === ".") continue;
+      if (part === "..") {
+        if (!output.length) throw new Error("KMZ 內的影像檔路徑超出封包範圍");
+        output.pop();
+        continue;
+      }
+      output.push(part);
+    }
+
+    const resolved = output.join("/");
+    if (!resolved) throw new Error("KMZ 內的影像檔路徑不正確");
+    return resolved;
+  }
+
+  function groundOverlayCandidate(overlay, kmlPath) {
+    const href = textFromElement(overlay, "href");
+    if (!href) return null;
+
+    const bounds = boundsFromLatLonBox(overlay) || boundsFromLatLonQuad(overlay);
+    if (!bounds) return null;
+
+    const name = textFromElement(overlay, "name");
+    const haystack = `${name} ${href}`.toLowerCase();
+    const score =
+      (/(temp|temperature|溫度|o-a0038)/i.test(haystack) ? 100 : 0) +
+      (/\.(png|jpe?g|webp)(?:[?#].*)?$/i.test(href) ? 10 : 0) +
+      // Prefer a genuinely Taiwan-wide layer over a small inset/legend.
+      ((bounds[1][0] - bounds[0][0]) * (bounds[1][1] - bounds[0][1]));
+
+    return { href, bounds, kmlPath, score };
+  }
+
+  async function parseGroundOverlay(zip) {
+    const paths = kmlPaths(zip);
+    if (!paths.length) throw new Error("KMZ 中找不到 KML 描述檔");
+
+    const candidates = [];
+    for (const kmlPath of paths) {
+      const file = zip.file(kmlPath);
+      if (!file) continue;
+
+      const kmlText = await file.async("string");
+      const xml = new DOMParser().parseFromString(kmlText, "application/xml");
+      if (xml.querySelector("parsererror")) continue;
+
+      const overlays = Array.from(xml.getElementsByTagName("GroundOverlay"));
+      for (const overlay of overlays) {
+        const candidate = groundOverlayCandidate(overlay, kmlPath);
+        if (candidate) candidates.push(candidate);
+      }
+    }
+
+    if (!candidates.length) {
+      throw new Error(`KMZ 中找不到可用的全臺溫度圖層範圍（已檢查 ${paths.length} 個 KML 檔）`);
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0];
+  }
+
+  async function imageBlobFromKmz(zip, href, kmlPath) {
     const imageRef = String(href || "").trim();
     if (/^https:\/\//i.test(imageRef)) {
       const response = await fetch(imageRef, { mode: "cors" });
@@ -265,9 +379,9 @@
       return response.blob();
     }
 
-    const normalized = normalizedZipPath(imageRef);
-    const imageFile = zip.file(normalized) || zip.file(normalized.split("/").pop());
-    if (!imageFile) throw new Error("KMZ 中找不到溫度分布圖檔");
+    const normalized = resolveZipPath(kmlPath, imageRef);
+    const imageFile = zip.file(normalized);
+    if (!imageFile) throw new Error(`KMZ 中找不到溫度分布圖檔：${normalized}`);
     return imageFile.async("blob");
   }
 
@@ -319,11 +433,8 @@
       const observedAt = response.headers.get("X-Haidian-Temperature-Observed-At") || "";
       const kmzBytes = await response.arrayBuffer();
       const zip = await JSZip.loadAsync(kmzBytes);
-      const kmlPath = firstKmlPath(zip);
-      if (!kmlPath) throw new Error("KMZ 中找不到 KML 描述檔");
-      const kmlText = await zip.file(kmlPath).async("string");
-      const { href, bounds } = parseGroundOverlay(kmlText);
-      const imageBlob = await imageBlobFromKmz(zip, href);
+      const { href, bounds, kmlPath } = await parseGroundOverlay(zip);
+      const imageBlob = await imageBlobFromKmz(zip, href, kmlPath);
       if (!imageBlob || imageBlob.size < 64) throw new Error("KMZ 內的溫度圖檔大小異常");
 
       const nextObjectUrl = URL.createObjectURL(imageBlob);
