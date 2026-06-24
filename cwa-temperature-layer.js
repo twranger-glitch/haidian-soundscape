@@ -133,7 +133,7 @@
           </div>
           <p class="cwa-temp-legend-note">色彩為連續變化；目前圖層透明度較低時，顏色會與底圖混合。想看某一位置的數字，請用下方查詢。</p>
         </section>
-        <button type="button" class="cwa-temp-query">點選地圖查詢雙來源資料</button>
+        <button type="button" class="cwa-temp-query">點選地圖查詢溫濕度與熱風險</button>
         <p class="cwa-temp-query-note">卡片會並列中央氣象署區域溫度格點，以及附近即時溫濕度、熱指數與 PM2.5；兩者資料時間與方法不同，會分開標示。</p>
         <div class="cwa-temp-details"></div>
       </div>
