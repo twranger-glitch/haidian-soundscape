@@ -119,7 +119,7 @@
         .drawer-panel:not(.collapsed) { pointer-events: auto; }
         /* ===== [FIX START] 收合時仍允許 toggle-btn 被點擊 ===== */
 .drawer-panel.collapsed {
-    transform: translateX(calc(-100% - var(--panel-offset) - 10px));
+    transform: translateX(calc(-100% - var(--panel-offset) + 36px));
     pointer-events: auto;
 }
 
@@ -1615,7 +1615,7 @@ body.haidian-v4-mode-listen #routePanel,
 body.haidian-v4-mode-walk #sidePanel,
 body.haidian-v4-mode-data #sidePanel,
 body.haidian-v4-mode-data #routePanel {
-  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  transform: translateX(calc(-100% - var(--panel-offset) + 36px)) !important;
 }
 body.haidian-v4-mode-data #rightToolsWrapper {
   z-index: 4500 !important;
@@ -1710,7 +1710,7 @@ body.haidian-v4-mode-data #rightToolsWrapper a {
 */
 body.haidian-v4 #sidePanel.collapsed,
 body.haidian-v4 #routePanel.collapsed {
-  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  transform: translateX(calc(-100% - var(--panel-offset) + 36px)) !important;
   pointer-events: auto !important;
 }
 
@@ -1769,7 +1769,7 @@ body.haidian-v4 #routePanel:not(.collapsed) .drawer-content {
 
 body.haidian-v4 #sidePanel.collapsed,
 body.haidian-v4 #routePanel.collapsed {
-  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  transform: translateX(calc(-100% - var(--panel-offset) + 36px)) !important;
   pointer-events: auto !important;
 }
 
@@ -1788,7 +1788,7 @@ body.haidian-v4 #routePanel.collapsed .drawer-content {
 */
 body.haidian-v4-mode-idle #sidePanel,
 body.haidian-v4-mode-idle #routePanel {
-  transform: translateX(calc(-100% - var(--panel-offset) - 10px)) !important;
+  transform: translateX(calc(-100% - var(--panel-offset) + 36px)) !important;
   pointer-events: auto !important;
 }
 
@@ -8259,6 +8259,50 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 })();
 </script>
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_END -->
+
+<!-- MAP_VIEWPORT_REFLOW_FIX_START -->
+<script>
+(function () {
+    "use strict";
+
+    var mapResizeTimer = null;
+
+    function getLeafletMap() {
+        return (typeof window.map !== "undefined" && window.map) ? window.map : null;
+    }
+
+    function refreshLeafletViewport() {
+        var leafletMap = getLeafletMap();
+        if (!leafletMap || typeof leafletMap.invalidateSize !== "function") return;
+        leafletMap.invalidateSize({ pan: false, animate: false });
+    }
+
+    function scheduleLeafletViewportRefresh() {
+        window.clearTimeout(mapResizeTimer);
+        mapResizeTimer = window.setTimeout(refreshLeafletViewport, 120);
+    }
+
+    function refreshAfterStartup() {
+        [0, 180, 600, 1200].forEach(function (delay) {
+            window.setTimeout(refreshLeafletViewport, delay);
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", refreshAfterStartup, { once: true });
+    } else {
+        refreshAfterStartup();
+    }
+
+    window.addEventListener("load", refreshAfterStartup, { once: true });
+    window.addEventListener("resize", scheduleLeafletViewportRefresh);
+    window.addEventListener("orientationchange", scheduleLeafletViewportRefresh);
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) scheduleLeafletViewportRefresh();
+    });
+})();
+</script>
+<!-- MAP_VIEWPORT_REFLOW_FIX_END -->
 
 <script src="./heat-risk.js"></script>
 <script src="./cwa-temperature-layer.js"></script>
