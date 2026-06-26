@@ -2385,13 +2385,27 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
                         <span style="color:#64748b;">等待連線中...</span>
                     </div>
 
-                    <div style="border-top:1px dashed #fca5a5; padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:#7f1d1d; font-weight:700;">
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>正常 (0 cm)</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;"></span>> 0 cm</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316;"></span>>= 10 cm</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>>= 30 cm</div>
-                    </div>
-                </div>
+                    <div style="border-top:1px dashed #cbd5e1; padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:#334155; font-weight:700;">
+    <div style="display:flex;align-items:center;gap:5px;">
+        <span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;background:#475569;color:#fff;font-size:9px;">✓</span>
+        無積水
+    </div>
+
+    <div style="display:flex;align-items:center;gap:5px;">
+        <span style="display:inline-grid;place-items:center;width:14px;height:14px;transform:rotate(45deg);background:#0072B2;color:#fff;font-size:9px;"><span style="transform:rotate(-45deg);">≈</span></span>
+        有積水
+    </div>
+
+    <div style="display:flex;align-items:center;gap:5px;">
+        <span style="display:inline-grid;place-items:center;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #E69F00;color:#fff;font-size:8px;"></span>
+        注意積淹
+    </div>
+
+    <div style="display:flex;align-items:center;gap:5px;">
+        <span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:3px;background:#CC79A7;color:#fff;font-size:10px;">!</span>
+        高度警戒
+    </div>
+</div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (快取圖資)</div>
