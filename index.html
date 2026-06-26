@@ -1834,6 +1834,148 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
+    <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
+
+<style id="haidian-right-tools-scroll-fix">
+/* ===== START: RIGHT TOOLS REAL SCROLL FIX ===== */
+
+/* 外層只負責定位、開關動畫；不再自己承擔捲動。 */
+#rightToolsWrapper .tools-menu-container {
+  display: block !important;
+  align-self: flex-end;
+  width: min(300px, calc(100vw - 24px));
+  min-height: 0 !important;
+  max-height: none !important;
+  margin-top: 10px;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+/* 真正的捲動容器：內容再長也可滑到底。 */
+#rightToolsWrapper .custom-layer-control {
+  width: 100% !important;
+  box-sizing: border-box !important;
+
+  max-height: var(
+    --right-tools-scroll-max-height,
+    calc(100dvh - 180px)
+  ) !important;
+
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+
+  padding-bottom: calc(28px + env(safe-area-inset-bottom)) !important;
+  margin-bottom: 0 !important;
+
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+  scrollbar-gutter: stable;
+}
+
+#rightToolsWrapper .custom-layer-control::-webkit-scrollbar {
+  width: 6px;
+}
+
+#rightToolsWrapper .custom-layer-control::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+/* 手機版避免圖資卡片貼齊螢幕邊緣。 */
+@media (max-width: 600px) {
+  #rightToolsWrapper .tools-menu-container {
+    width: min(280px, calc(100vw - 24px));
+  }
+
+  #rightToolsWrapper .custom-layer-control {
+    border-radius: 16px;
+  }
+}
+
+/* 淹水目錄：把潛勢圖與即時感測器收進同一個可展開區塊。 */
+.layer-folder {
+  margin: 12px 0;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fffaf5;
+  overflow: hidden;
+}
+
+.layer-folder > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  padding: 10px 11px;
+  cursor: pointer;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 900;
+  user-select: none;
+}
+
+.layer-folder > summary::-webkit-details-marker {
+  display: none;
+}
+
+.layer-folder > summary::after {
+  content: "⌄";
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.layer-folder[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.layer-folder > summary small {
+  color: #c2410c;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.layer-folder-content {
+  padding: 0 10px 10px;
+}
+
+.layer-subsection {
+  padding-top: 10px;
+}
+
+.layer-subsection + .layer-subsection {
+  margin-top: 10px;
+  border-top: 1px dashed #fdba74;
+}
+
+.layer-subsection-title {
+  margin-bottom: 8px;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.layer-subsection-title small {
+  margin-left: 4px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* ===== END: RIGHT TOOLS REAL SCROLL FIX ===== */
+</style>
+
+</head><body>
+    
 </head><body>
 
     <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
@@ -2334,15 +2476,43 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">淹水潛勢圖 (快取圖資)</div>
-                <label>
-                    <input type="checkbox" id="floodToggle" onchange="toggleFloodLayer(this.checked)" style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;">
-                    顯示淹水潛勢圖
-                </label>
+                <!-- ===== START: FLOOD POTENTIAL + REALTIME FOLDER ===== -->
+<details class="layer-folder layer-folder-flood">
+    <summary>
+        <span>淹水圖資與即時監測</span>
+        <small>潛勢圖・感測器</small>
+    </summary>
 
-                <div id="floodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
-                    <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">降雨情境</div>
-<select id="floodScenario" onchange="changeFloodScenario(this.value)" style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;">
+    <div class="layer-folder-content">
+
+        <section class="layer-subsection">
+            <div class="layer-subsection-title">
+                淹水潛勢圖 <small>快取圖資</small>
+            </div>
+
+            <label>
+                <input
+                    type="checkbox"
+                    id="floodToggle"
+                    onchange="toggleFloodLayer(this.checked)"
+                    style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;"
+                >
+                顯示淹水潛勢圖
+            </label>
+
+            <div
+                id="floodControlPanel"
+                style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;"
+            >
+                <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">
+                    降雨情境
+                </div>
+
+                <select
+                    id="floodScenario"
+                    onchange="changeFloodScenario(this.value)"
+                    style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;"
+                >
                     <option value="flood_200mm_24hr" selected>24 小時 200 mm</option>
                     <option value="flood_350mm_24hr">24 小時 350 mm</option>
                     <option value="flood_500mm_24hr">24 小時 500 mm</option>
@@ -2359,40 +2529,100 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
                     <span>透明度</span>
                     <span id="floodOpacityValue">55%</span>
                 </div>
-                <input type="range" id="floodOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#2563eb; margin:0;" oninput="updateFloodOpacity(this.value)">
+
+                <input
+                    type="range"
+                    id="floodOpacity"
+                    min="0.1"
+                    max="1"
+                    step="0.05"
+                    value="0.55"
+                    style="width:100%; accent-color:#2563eb; margin:0;"
+                    oninput="updateFloodOpacity(this.value)"
+                >
 
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
-                    <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">24 小時 200 mm</span>
-                    <a href="#" onclick="openFloodLegend(); return false;" style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;">查看圖例</a>
+                    <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">
+                        24 小時 200 mm
+                    </span>
+
+                    <a
+                        href="#"
+                        onclick="openFloodLegend(); return false;"
+                        style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;"
+                    >
+                        查看圖例
+                    </a>
                 </div>
+            </div>
+        </section>
+
+        <section class="layer-subsection">
+            <div class="layer-subsection-title">
+                即時淹水感測器 <small>API</small>
+            </div>
+
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input
+                    type="checkbox"
+                    id="realtimeFloodToggle"
+                    onchange="toggleRealtimeFlood(this.checked)"
+                    style="accent-color:#ef4444; width:17px; height:17px; margin:0; flex-shrink:0;"
+                >
+                <span style="color:#b91c1c; font-weight:800;">啟動即時淹水感測器</span>
+            </label>
+
+            <div
+                id="realtimeFloodControlPanel"
+                style="display:none; margin-top:10px; padding:10px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px;"
+            >
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:11px; color:#991b1b; font-weight:800;">
+                        全台感測器即時狀態
+                    </span>
+
+                    <button
+                        type="button"
+                        onclick="updateRealtimeFlood()"
+                        style="border:none; background:#ef4444; color:#fff; border-radius:6px; padding:4px 8px; font-size:10px; font-weight:800; cursor:pointer;"
+                    >
+                        手動更新
+                    </button>
                 </div>
 
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+                <div id="realtimeFloodStatus" style="font-size:12px; margin-bottom:10px;">
+                    <span style="color:#64748b;">等待連線中...</span>
+                </div>
 
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">即時災害監控 (API)</div>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                    <input type="checkbox" id="realtimeFloodToggle" onchange="toggleRealtimeFlood(this.checked)" style="accent-color:#ef4444; width:17px; height:17px; margin:0; flex-shrink:0;">
-                    <span style="color:#b91c1c; font-weight:800;">啟動即時淹水感測器</span>
-                </label>
-
-                <div id="realtimeFloodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-size:11px; color:#991b1b; font-weight:800;">全台感測器即時狀態</span>
-                        <button type="button" onclick="updateRealtimeFlood()" style="border:none; background:#ef4444; color:#fff; border-radius:6px; padding:4px 8px; font-size:10px; font-weight:800; cursor:pointer;">手動更新</button>
-                    </div>
-                    
-                    <div id="realtimeFloodStatus" style="font-size:12px; margin-bottom:10px;">
-                        <span style="color:#64748b;">等待連線中...</span>
+                <div style="border-top:1px dashed #fca5a5; padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:#7f1d1d; font-weight:700;">
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>
+                        正常 (0 cm)
                     </div>
 
-                    <div style="border-top:1px dashed #fca5a5; padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:#7f1d1d; font-weight:700;">
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>正常 (0 cm)</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;"></span>> 0 cm</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316;"></span>>= 10 cm</div>
-                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>>= 30 cm</div>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;"></span>
+                        &gt; 0 cm
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316;"></span>
+                        &gt;= 10 cm
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>
+                        &gt;= 30 cm
                     </div>
                 </div>
-                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+            </div>
+        </section>
+
+    </div>
+</details>
+
+<hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+<!-- ===== END: FLOOD POTENTIAL + REALTIME FOLDER ===== -->
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (快取圖資)</div>
                 <label>
@@ -8051,4 +8281,98 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
 <script src="./heat-risk.js"></script>
 <script src="./cwa-temperature-layer.js"></script>
+
+<script id="haidian-right-tools-scroll-guard">
+(function () {
+  function setupRightToolsScrollGuard() {
+    const wrapper = document.getElementById("rightToolsWrapper");
+    const menu = wrapper && wrapper.querySelector(".tools-menu-container");
+    const panel = wrapper && wrapper.querySelector(".custom-layer-control");
+
+    if (!wrapper || !menu || !panel) return;
+
+    let frameId = 0;
+
+    function refreshScrollableHeight() {
+      const viewportHeight = window.visualViewport
+        ? window.visualViewport.height
+        : window.innerHeight;
+
+      const menuTop = Math.max(0, menu.getBoundingClientRect().top);
+
+      const availableHeight = Math.max(
+        160,
+        Math.floor(viewportHeight - menuTop - 12)
+      );
+
+      panel.style.setProperty(
+        "--right-tools-scroll-max-height",
+        `${availableHeight}px`
+      );
+    }
+
+    function scheduleRefresh() {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(refreshScrollableHeight);
+    }
+
+    if (panel.dataset.scrollGuardBound !== "true") {
+      panel.dataset.scrollGuardBound = "true";
+
+      /*
+       * 不使用 preventDefault：
+       * 保留面板捲動、checkbox、select、range slider、button 的正常行為。
+       */
+      ["wheel", "touchstart", "touchmove", "pointerdown"].forEach(function (type) {
+        panel.addEventListener(type, function (event) {
+          event.stopPropagation();
+        }, { passive: true });
+      });
+
+      if (window.L && L.DomEvent) {
+        L.DomEvent.disableScrollPropagation(panel);
+        L.DomEvent.disableClickPropagation(panel);
+      }
+    }
+
+    if (!wrapper.dataset.scrollGuardObserverBound) {
+      wrapper.dataset.scrollGuardObserverBound = "true";
+
+      const observer = new MutationObserver(scheduleRefresh);
+
+      observer.observe(wrapper, {
+        attributes: true,
+        attributeFilter: ["class", "style"]
+      });
+
+      if (window.ResizeObserver) {
+        new ResizeObserver(scheduleRefresh).observe(menu);
+      }
+
+      window.addEventListener("resize", scheduleRefresh, {
+        passive: true
+      });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", scheduleRefresh, {
+          passive: true
+        });
+      }
+    }
+
+    scheduleRefresh();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      setupRightToolsScrollGuard,
+      { once: true }
+    );
+  } else {
+    setupRightToolsScrollGuard();
+  }
+})();
+</script>
+
 </body></html>
