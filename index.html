@@ -8370,7 +8370,7 @@ function getFloodMarkerIcon(visual) {
     return FLOOD_RENDER_ICON_CACHE.get(visual.key);
 }
 
-function makeFloodPopupHtml(record, visual) {
+function makeFloodPopupHtml(record, visual, historyContainerId = "") {
     const time = new Date(record.observedAt);
 
     const timeDisplay = Number.isFinite(time.getTime())
@@ -8385,6 +8385,24 @@ function makeFloodPopupHtml(record, visual) {
         record.source === "sfpn"
             ? "臺南 SFPN / WMap"
             : "全台物聯網資料";
+
+    const historyHtml = historyContainerId
+        ? `
+            <div
+                id="${historyContainerId}"
+                style="
+                    margin-top:14px;
+                    padding:11px 12px;
+                    border-top:1px dashed #cbd5e1;
+                    color:#64748b;
+                    font-size:11px;
+                    font-weight:800;
+                "
+            >
+                正在載入近 24 小時水深趨勢…
+            </div>
+        `
+        : "";
 
     return `
         <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
@@ -8413,6 +8431,8 @@ function makeFloodPopupHtml(record, visual) {
             <div style="margin-top:7px;font-size:10px;color:#94a3b8;">
                 資料來源：${sourceDisplay}
             </div>
+
+            ${historyHtml}
         </div>
     `;
 }
@@ -8454,6 +8474,14 @@ function renderRealtimeFloodMap() {
 
         const visual = getFloodMarkerVisual(record, isFlooded);
 
+        const showFloodHistory =
+            isSfpnHistoryStation(record);
+
+        const historyContainerId =
+            showFloodHistory
+                ? getFloodHistoryContainerId(record.stationId)
+                : "";
+
         const marker = L.marker(
             [record.lat, record.lon],
             {
@@ -8464,69 +8492,17 @@ function renderRealtimeFloodMap() {
             }
         );
 
-        // 點擊測站時才建立 popup HTML，不在啟動時一次建立 2,000 多份。
-                const showFloodHistory =
-            isSfpnHistoryStation(record);
-
-        const historyContainerId =
-            showFloodHistory
-                ? getFloodHistoryContainerId(
-                    record.stationId
-                )
-                : "";
-
-        marker.bindPopup(`
-            <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
-                    ${svgIcon}
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
-                        <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">
-                            ${escapeGISHtml(record.stationName)}
-                        </div>
-                    </div>
-                </div>
-
-                <div style="display:flex;justify-content:space-between;align-items:end;background:#f8fafc;border-radius:12px;padding:12px 13px;">
-                    <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
-                    <span style="font-size:29px;font-weight:900;line-height:1;color:${color};font-family:ui-monospace,monospace;">
-                        ${depthDisplay}<small style="font-size:12px;">${record.hasObservation ? " cm" : ""}</small>
-                    </span>
-                </div>
-
-                <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;gap:10px;font-size:11px;">
-                    <span style="color:#64748b;font-weight:800;">${statusText}</span>
-                    <span style="color:#475569;text-align:right;">${timeDisplay}</span>
-                </div>
-
-                <div style="margin-top:7px;font-size:10px;color:#94a3b8;">
-                    資料來源：${sourceDisplay}
-                </div>
-
-                ${
-                    showFloodHistory
-                        ? `
-                            <div
-                                id="${historyContainerId}"
-                                style="
-                                    margin-top:14px;
-                                    padding:11px 12px;
-                                    border-top:1px dashed #cbd5e1;
-                                    color:#64748b;
-                                    font-size:11px;
-                                    font-weight:800;
-                                "
-                            >
-                                正在載入近 24 小時水深趨勢…
-                            </div>
-                        `
-                        : ""
-                }
-            </div>
-        `, {
-            className: "flood-popup",
-            closeButton: true
-        });
+        marker.bindPopup(
+            () => makeFloodPopupHtml(
+                record,
+                visual,
+                historyContainerId
+            ),
+            {
+                className: "flood-popup",
+                closeButton: true
+            }
+        );
 
         if (showFloodHistory) {
             marker.on("popupopen", () => {
@@ -8541,7 +8517,14 @@ function renderRealtimeFloodMap() {
             });
         }
 
-        realtimeFloodLayer.addLayer(marker);
+        markers.push(marker);
+    });
+
+    // markerClusterGroup 會分段加入，避免一次卡住主執行緒。
+    if (typeof realtimeFloodLayer.addLayers === "function") {
+        realtimeFloodLayer.addLayers(markers);
+    } else {
+        markers.forEach(marker => realtimeFloodLayer.addLayer(marker));
     }
 
     const statusEl = document.getElementById(
