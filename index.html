@@ -7470,6 +7470,534 @@ async function fetchSfpnRealtimeRows() {
         }));
 }
 
+// ===== START: SFPN 單站近 24 小時水深趨勢 =====
+const TAINAN_SFPN_HISTORY_BASE_URL =
+    "https://wrbweb2.tainan.gov.tw/TainanApi/FloodWater/Infos/Last24Hours/";
+
+const FLOOD_HISTORY_CACHE_TTL_MS = 5 * 60 * 1000;
+const floodHistoryCache = new Map();
+
+function isSfpnHistoryStation(record) {
+    return (
+        record?.source === "sfpn" &&
+        TNWRB_STATION_PATTERN.test(
+            String(record?.stationId ?? "")
+        )
+    );
+}
+
+function getFloodHistoryContainerId(stationId) {
+    return `flood-history-${String(stationId)
+        .replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
+function formatFloodHistoryTime(value, withDate = false) {
+    const timeInfo = parseFloodObservationTime(value);
+
+    if (!timeInfo.isValid) return "—";
+
+    return new Intl.DateTimeFormat("zh-TW", {
+        timeZone: "Asia/Taipei",
+        month: withDate ? "2-digit" : undefined,
+        day: withDate ? "2-digit" : undefined,
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+    }).format(new Date(timeInfo.observedAtMs));
+}
+
+async function fetchSfpnFloodHistory(stationId) {
+    const normalizedStationId =
+        normaliseFloodStationId(stationId);
+
+    if (!TNWRB_STATION_PATTERN.test(normalizedStationId)) {
+        throw new Error("不是可查詢歷史資料的 TNWRB 測站");
+    }
+
+    const cached =
+        floodHistoryCache.get(normalizedStationId);
+
+    if (
+        cached?.rows &&
+        cached.expiresAt > Date.now()
+    ) {
+        return cached.rows;
+    }
+
+    if (cached?.promise) {
+        return cached.promise;
+    }
+
+    const promise = (async () => {
+        const response = await fetch(
+            TAINAN_SFPN_HISTORY_BASE_URL +
+            encodeURIComponent(normalizedStationId),
+            {
+                cache: "no-store",
+                credentials: "omit",
+                headers: {
+                    Accept: "application/json, text/plain, */*"
+                }
+            }
+        );
+
+        const text = await response.text();
+
+        if (!response.ok) {
+            throw new Error(
+                `SFPN 歷史資料 HTTP ${response.status}`
+            );
+        }
+
+        let payload = JSON.parse(
+            text.replace(/^\uFEFF/, "").trim()
+        );
+
+        if (payload?.d !== undefined) {
+            payload =
+                typeof payload.d === "string"
+                    ? JSON.parse(payload.d)
+                    : payload.d;
+        }
+
+        const sourceRows =
+            Array.isArray(payload)
+                ? payload
+                : payload?.data ??
+                  payload?.Data ??
+                  payload?.value ??
+                  payload?.Value ??
+                  [];
+
+        if (!Array.isArray(sourceRows)) {
+            throw new Error("SFPN 歷史資料沒有陣列格式");
+        }
+
+        const rowsByTime = new Map();
+
+        sourceRows.forEach(row => {
+            const timeInfo = parseFloodObservationTime(
+                row?.InfoTime
+            );
+
+            const rawDepth = Number(
+                row?.WaterDepth ??
+                row?.waterDepth ??
+                row?.WaterInner ??
+                row?.waterInner
+            );
+
+            if (
+                !timeInfo.isValid ||
+                !Number.isFinite(rawDepth)
+            ) {
+                return;
+            }
+
+            rowsByTime.set(timeInfo.observedAtMs, {
+                stationId: normaliseFloodStationId(
+                    row?.StationID || normalizedStationId
+                ),
+
+                observedAt: timeInfo.observedAt,
+                observedAtMs: timeInfo.observedAtMs,
+
+                depthCm: Math.max(
+                    0,
+                    Math.round(rawDepth * 10) / 10
+                ),
+
+                batteryVoltage: Number(row?.BatteryVoltage),
+                rssi: Number(row?.RSSI),
+                snr: Number(row?.SNR),
+                change: Number(row?.Change)
+            });
+        });
+
+        const rows = [...rowsByTime.values()]
+            .sort((a, b) =>
+                a.observedAtMs - b.observedAtMs
+            );
+
+        if (!rows.length) {
+            throw new Error("SFPN 歷史資料沒有有效水深紀錄");
+        }
+
+        return rows;
+    })();
+
+    floodHistoryCache.set(normalizedStationId, {
+        promise
+    });
+
+    try {
+        const rows = await promise;
+
+        floodHistoryCache.set(normalizedStationId, {
+            rows,
+            expiresAt:
+                Date.now() + FLOOD_HISTORY_CACHE_TTL_MS
+        });
+
+        return rows;
+    } catch (error) {
+        floodHistoryCache.delete(normalizedStationId);
+        throw error;
+    }
+}
+
+function buildFloodHistoryChartHtml(rows) {
+    const chartRows = rows.length > 300
+        ? rows.filter((_, index) =>
+            index % Math.ceil(rows.length / 300) === 0
+        )
+        : rows;
+
+    const values = chartRows.map(row => row.depthCm);
+
+    const latest =
+        chartRows[chartRows.length - 1];
+
+    const peak = chartRows.reduce(
+        (best, row) =>
+            row.depthCm > best.depthCm ? row : best,
+        chartRows[0]
+    );
+
+    const width = 292;
+    const height = 132;
+
+    const padLeft = 32;
+    const padRight = 8;
+    const padTop = 10;
+    const padBottom = 24;
+
+    const chartWidth =
+        width - padLeft - padRight;
+
+    const chartHeight =
+        height - padTop - padBottom;
+
+    const maxDepth = Math.max(...values, 0);
+
+    const yMax = Math.max(
+        10,
+        Math.ceil((maxDepth + 5) / 10) * 10
+    );
+
+    const toX = index =>
+        padLeft +
+        (
+            chartRows.length <= 1
+                ? chartWidth / 2
+                : (index / (chartRows.length - 1)) *
+                  chartWidth
+        );
+
+    const toY = depth =>
+        padTop +
+        (
+            1 - depth / yMax
+        ) * chartHeight;
+
+    const points = chartRows.map((row, index) => ({
+        x: toX(index),
+        y: toY(row.depthCm)
+    }));
+
+    const linePath = points
+        .map((point, index) =>
+            `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
+        )
+        .join(" ");
+
+    const areaPath = `
+        M ${points[0].x.toFixed(2)} ${(padTop + chartHeight).toFixed(2)}
+        L ${points
+            .map(point =>
+                `${point.x.toFixed(2)} ${point.y.toFixed(2)}`
+            )
+            .join(" L ")}
+        L ${points[points.length - 1].x.toFixed(2)} ${(padTop + chartHeight).toFixed(2)}
+        Z
+    `;
+
+    const midDepth =
+        Math.round((yMax / 2) * 10) / 10;
+
+    const latestPoint =
+        points[points.length - 1];
+
+    const firstTime =
+        formatFloodHistoryTime(
+            chartRows[0].observedAt,
+            true
+        );
+
+    const lastTime =
+        formatFloodHistoryTime(
+            latest.observedAt,
+            true
+        );
+
+    const latestChangeText =
+        Number.isFinite(latest.change)
+            ? `${latest.change > 0 ? "+" : ""}${latest.change.toFixed(1)} cm`
+            : "—";
+
+    return `
+        <section style="
+            margin-top:14px;
+            padding-top:13px;
+            border-top:1px dashed #cbd5e1;
+        ">
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                align-items:flex-start;
+                gap:10px;
+                margin-bottom:8px;
+            ">
+                <div>
+                    <div style="
+                        font-size:11px;
+                        font-weight:900;
+                        color:#0f766e;
+                        letter-spacing:.04em;
+                    ">
+                        近 24 小時水深趨勢
+                    </div>
+
+                    <div style="
+                        margin-top:3px;
+                        font-size:10px;
+                        color:#64748b;
+                    ">
+                        ${chartRows.length} 筆紀錄・約每 5 分鐘更新
+                    </div>
+                </div>
+
+                <div style="
+                    text-align:right;
+                    white-space:nowrap;
+                ">
+                    <div style="
+                        font-size:16px;
+                        font-weight:950;
+                        color:#0f172a;
+                        font-family:ui-monospace,monospace;
+                    ">
+                        ${latest.depthCm.toFixed(1)} cm
+                    </div>
+
+                    <div style="
+                        margin-top:2px;
+                        font-size:10px;
+                        color:${latest.change > 0 ? "#b45309" : latest.change < 0 ? "#0369a1" : "#64748b"};
+                        font-weight:800;
+                    ">
+                        最新變化 ${latestChangeText}
+                    </div>
+                </div>
+            </div>
+
+            <svg
+                viewBox="0 0 ${width} ${height}"
+                width="100%"
+                height="${height}"
+                role="img"
+                aria-label="近 24 小時水深趨勢圖"
+                style="
+                    display:block;
+                    overflow:visible;
+                    border-radius:10px;
+                    background:#f8fafc;
+                    border:1px solid #e2e8f0;
+                "
+            >
+                <line
+                    x1="${padLeft}"
+                    x2="${width - padRight}"
+                    y1="${padTop}"
+                    y2="${padTop}"
+                    stroke="#e2e8f0"
+                    stroke-width="1"
+                />
+
+                <line
+                    x1="${padLeft}"
+                    x2="${width - padRight}"
+                    y1="${toY(midDepth)}"
+                    y2="${toY(midDepth)}"
+                    stroke="#e2e8f0"
+                    stroke-width="1"
+                    stroke-dasharray="3 3"
+                />
+
+                <line
+                    x1="${padLeft}"
+                    x2="${width - padRight}"
+                    y1="${padTop + chartHeight}"
+                    y2="${padTop + chartHeight}"
+                    stroke="#cbd5e1"
+                    stroke-width="1"
+                />
+
+                <text
+                    x="${padLeft - 5}"
+                    y="${padTop + 4}"
+                    text-anchor="end"
+                    font-size="9"
+                    font-weight="800"
+                    fill="#64748b"
+                >${yMax}</text>
+
+                <text
+                    x="${padLeft - 5}"
+                    y="${toY(midDepth) + 4}"
+                    text-anchor="end"
+                    font-size="9"
+                    font-weight="800"
+                    fill="#94a3b8"
+                >${midDepth}</text>
+
+                <text
+                    x="${padLeft - 5}"
+                    y="${padTop + chartHeight + 4}"
+                    text-anchor="end"
+                    font-size="9"
+                    font-weight="800"
+                    fill="#94a3b8"
+                >0</text>
+
+                <path
+                    d="${areaPath}"
+                    fill="rgba(14, 116, 144, 0.14)"
+                />
+
+                <path
+                    d="${linePath}"
+                    fill="none"
+                    stroke="#0f766e"
+                    stroke-width="2.25"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+
+                <circle
+                    cx="${latestPoint.x}"
+                    cy="${latestPoint.y}"
+                    r="3.8"
+                    fill="#0f766e"
+                    stroke="#ffffff"
+                    stroke-width="2"
+                />
+
+                <text
+                    x="${padLeft}"
+                    y="${height - 6}"
+                    text-anchor="start"
+                    font-size="9"
+                    font-weight="800"
+                    fill="#64748b"
+                >${firstTime}</text>
+
+                <text
+                    x="${width - padRight}"
+                    y="${height - 6}"
+                    text-anchor="end"
+                    font-size="9"
+                    font-weight="800"
+                    fill="#64748b"
+                >${lastTime}</text>
+            </svg>
+
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                gap:8px;
+                margin-top:8px;
+                font-size:10px;
+                color:#64748b;
+            ">
+                <span>
+                    最高：
+                    <b style="color:#7c2d12;">
+                        ${peak.depthCm.toFixed(1)} cm
+                    </b>
+                </span>
+
+                <span>
+                    峰值時間：
+                    <b style="color:#475569;">
+                        ${formatFloodHistoryTime(
+                            peak.observedAt,
+                            true
+                        )}
+                    </b>
+                </span>
+            </div>
+        </section>
+    `;
+}
+
+async function loadFloodHistoryIntoPopup(record) {
+    if (!isSfpnHistoryStation(record)) return;
+
+    const containerId =
+        getFloodHistoryContainerId(record.stationId);
+
+    const container =
+        document.getElementById(containerId);
+
+    if (
+        !container ||
+        container.dataset.loading === "true" ||
+        container.dataset.loaded === "true"
+    ) {
+        return;
+    }
+
+    container.dataset.loading = "true";
+
+    try {
+        const rows =
+            await fetchSfpnFloodHistory(record.stationId);
+
+        if (!container.isConnected) return;
+
+        container.dataset.loading = "false";
+        container.dataset.loaded = "true";
+        container.innerHTML =
+            buildFloodHistoryChartHtml(rows);
+
+    } catch (error) {
+        console.warn(
+            "SFPN 單站歷史資料讀取失敗",
+            record.stationId,
+            error
+        );
+
+        if (!container.isConnected) return;
+
+        container.dataset.loading = "false";
+        container.innerHTML = `
+            <div style="
+                margin-top:14px;
+                padding:11px 12px;
+                border-top:1px dashed #cbd5e1;
+                color:#64748b;
+                font-size:11px;
+                font-weight:800;
+                line-height:1.5;
+            ">
+                近 24 小時趨勢暫時無法取得。
+            </div>
+        `;
+    }
+}
+// ===== END: SFPN 單站近 24 小時水深趨勢 =====
+        
 function makeWorkerFloodCandidate(ds) {
     const thing = ds?.Thing;
     const coords =
@@ -7937,22 +8465,83 @@ function renderRealtimeFloodMap() {
         );
 
         // 點擊測站時才建立 popup HTML，不在啟動時一次建立 2,000 多份。
-        marker.bindPopup(
-            () => makeFloodPopupHtml(record, visual),
-            {
-                className: "flood-popup",
-                closeButton: true
-            }
-        );
+                const showFloodHistory =
+            isSfpnHistoryStation(record);
 
-        markers.push(marker);
-    });
+        const historyContainerId =
+            showFloodHistory
+                ? getFloodHistoryContainerId(
+                    record.stationId
+                )
+                : "";
 
-    // markerClusterGroup 會分段處理，避免一次卡住主執行緒。
-    if (typeof realtimeFloodLayer.addLayers === "function") {
-        realtimeFloodLayer.addLayers(markers);
-    } else {
-        markers.forEach(marker => realtimeFloodLayer.addLayer(marker));
+        marker.bindPopup(`
+            <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
+                    ${svgIcon}
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
+                        <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">
+                            ${escapeGISHtml(record.stationName)}
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:end;background:#f8fafc;border-radius:12px;padding:12px 13px;">
+                    <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
+                    <span style="font-size:29px;font-weight:900;line-height:1;color:${color};font-family:ui-monospace,monospace;">
+                        ${depthDisplay}<small style="font-size:12px;">${record.hasObservation ? " cm" : ""}</small>
+                    </span>
+                </div>
+
+                <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;gap:10px;font-size:11px;">
+                    <span style="color:#64748b;font-weight:800;">${statusText}</span>
+                    <span style="color:#475569;text-align:right;">${timeDisplay}</span>
+                </div>
+
+                <div style="margin-top:7px;font-size:10px;color:#94a3b8;">
+                    資料來源：${sourceDisplay}
+                </div>
+
+                ${
+                    showFloodHistory
+                        ? `
+                            <div
+                                id="${historyContainerId}"
+                                style="
+                                    margin-top:14px;
+                                    padding:11px 12px;
+                                    border-top:1px dashed #cbd5e1;
+                                    color:#64748b;
+                                    font-size:11px;
+                                    font-weight:800;
+                                "
+                            >
+                                正在載入近 24 小時水深趨勢…
+                            </div>
+                        `
+                        : ""
+                }
+            </div>
+        `, {
+            className: "flood-popup",
+            closeButton: true
+        });
+
+        if (showFloodHistory) {
+            marker.on("popupopen", () => {
+                const startLoad = () =>
+                    loadFloodHistoryIntoPopup(record);
+
+                if (typeof window.requestAnimationFrame === "function") {
+                    window.requestAnimationFrame(startLoad);
+                } else {
+                    setTimeout(startLoad, 0);
+                }
+            });
+        }
+
+        realtimeFloodLayer.addLayer(marker);
     }
 
     const statusEl = document.getElementById(
