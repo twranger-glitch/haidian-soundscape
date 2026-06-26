@@ -1996,6 +1996,16 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
         .listening-hint { position: fixed; left: 50%; top: 25px; transform: translateX(-50%) translateY(-20px); z-index: 3000; background: rgba(15, 23, 42, 0.85); color: #fff; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 800; letter-spacing: 1px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 32px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: 0.5s ease; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1);}
         body.listening-mode .listening-hint { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; cursor: pointer; }
         .listening-hint:hover { background: #e74c3c; border-color: #fca5a5; }
+
+        /* 🚨 淹水感測器：紅色警戒呼吸燈特效 */
+        @keyframes pulseFloodDanger {
+            0% { fill-opacity: 0.8; stroke-opacity: 1; stroke-width: 1px; }
+            50% { fill-opacity: 0.3; stroke-opacity: 0.5; stroke-width: 5px; }
+            100% { fill-opacity: 0.8; stroke-opacity: 1; stroke-width: 1px; }
+        }
+        .pulse-flood-danger {
+            animation: pulseFloodDanger 1.2s infinite;
+        }
     </style>
 
     <div id="splashScreen">
@@ -2314,6 +2324,31 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
                 </div>
                 </div>
 
+                <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
+
+                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">即時災害監控 (API)</div>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="realtimeFloodToggle" onchange="toggleRealtimeFlood(this.checked)" style="accent-color:#ef4444; width:17px; height:17px; margin:0; flex-shrink:0;">
+                    <span style="color:#b91c1c; font-weight:800;">啟動即時淹水感測器</span>
+                </label>
+
+                <div id="realtimeFloodControlPanel" style="display:none; margin-top:10px; padding:10px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:11px; color:#991b1b; font-weight:800;">全台感測器即時狀態</span>
+                        <button type="button" onclick="updateRealtimeFlood()" style="border:none; background:#ef4444; color:#fff; border-radius:6px; padding:4px 8px; font-size:10px; font-weight:800; cursor:pointer;">手動更新</button>
+                    </div>
+                    
+                    <div id="realtimeFloodStatus" style="font-size:12px; margin-bottom:10px;">
+                        <span style="color:#64748b;">等待連線中...</span>
+                    </div>
+
+                    <div style="border-top:1px dashed #fca5a5; padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:#7f1d1d; font-weight:700;">
+                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>正常 (0 cm)</div>
+                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;"></span>> 0 cm</div>
+                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316;"></span>>= 10 cm</div>
+                        <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>>= 30 cm</div>
+                    </div>
+                </div>
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
                 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">水文專區 (快取圖資)</div>
@@ -6827,6 +6862,133 @@ function mountGlobalPlayerIntoPopup_(retry) {
                 }
             }
         };
+
+        // ==========================================
+        // 🌊 新增模組：即時淹水感測器戰情室 (串接民生公共物聯網)
+        // ==========================================
+        let realtimeFloodLayer = null;
+        let realtimeFloodInterval = null;
+
+        async function toggleRealtimeFlood(checked) {
+            const panel = document.getElementById('realtimeFloodControlPanel');
+            const statusEl = document.getElementById('realtimeFloodStatus');
+            
+            if (panel) panel.style.display = checked ? 'block' : 'none';
+
+            if (!checked) {
+                if (realtimeFloodLayer && map.hasLayer(realtimeFloodLayer)) {
+                    map.removeLayer(realtimeFloodLayer);
+                }
+                clearInterval(realtimeFloodInterval);
+                return;
+            }
+
+            if (statusEl) statusEl.innerHTML = '<span style="color:#b91c1c;">📡 連線水利署 API 中...</span>';
+
+            if (!realtimeFloodLayer) realtimeFloodLayer = L.layerGroup();
+            if (!map.hasLayer(realtimeFloodLayer)) map.addLayer(realtimeFloodLayer);
+
+            await updateRealtimeFlood(); 
+            realtimeFloodInterval = setInterval(updateRealtimeFlood, 5 * 60 * 1000);
+        }
+
+        async function updateRealtimeFlood() {
+            if (!realtimeFloodLayer) return;
+
+            const statusEl = document.getElementById('realtimeFloodStatus');
+            if (statusEl) statusEl.innerHTML = '<span style="color:#b91c1c;">📡 下載與分析全台數據中...</span>';
+
+            try {
+                // 🎯 呼叫政府開放標準 API
+                const url = "https://sta.ci.taiwan.gov.tw/STA_WaterResource_v2/v1.0/Datastreams?$expand=Thing,Thing/Locations,Observations($top=1)&$filter=name%20eq%20'淹水深度'&$top=2000";
+                
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("API 連線失敗");
+                const data = await res.json();
+                
+                realtimeFloodLayer.clearLayers();
+
+                let floodedCount = 0;
+                let normalCount = 0;
+                let offlineCount = 0;
+
+                const sensors = data.value || [];
+                
+                sensors.forEach(ds => {
+                    if (!ds.Thing || !ds.Thing.Locations || ds.Thing.Locations.length === 0) return;
+                    
+                    const thing = ds.Thing;
+                    const coords = thing.Locations[0].location.coordinates; 
+                    const lon = coords[0], lat = coords[1];
+                    const stationName = thing.properties.stationName || thing.name || '未命名測站';
+                    
+                    let depth = 0, obsTimeStr = "無最新資料", isOffline = true;
+
+                    if (ds.Observations && ds.Observations.length > 0) {
+                        const obs = ds.Observations[0];
+                        depth = parseFloat(obs.result) || 0;
+                        const obsDate = new Date(obs.phenomenonTime);
+                        obsTimeStr = obsDate.toLocaleString('zh-TW');
+                        
+                        const hoursAgo = (new Date() - obsDate) / (1000 * 60 * 60);
+                        if (hoursAgo < 6) isOffline = false;
+                    }
+
+                    if (isOffline) { offlineCount++; return; }
+
+                    let color, fillColor, radius, className = '';
+                    if (depth >= 30) {
+                        color = '#7f1d1d'; fillColor = '#ef4444'; radius = 10; floodedCount++; className = 'pulse-flood-danger';
+                    } else if (depth >= 10) {
+                        color = '#9a3412'; fillColor = '#f97316'; radius = 8; floodedCount++; className = 'pulse-flood-danger';
+                    } else if (depth > 0) {
+                        color = '#1e3a8a'; fillColor = '#3b82f6'; radius = 7; floodedCount++; className = 'pulse-flood-danger';
+                    } else {
+                        color = '#14532d'; fillColor = '#22c55e'; radius = 5; normalCount++;
+                    }
+
+                    const marker = L.circleMarker([lat, lon], {
+                        radius: radius, color: color, weight: 1.5, fillColor: fillColor, fillOpacity: 0.85, className: className
+                    });
+
+                    const popupHtml = `
+                        <div style="min-width:180px; font-family:'Helvetica Neue', Arial, sans-serif;">
+                            <div style="font-weight:900; font-size:14px; color:${color}; margin-bottom:8px; border-bottom:1px solid ${fillColor}; padding-bottom:4px;">
+                                💧 ${escapeGISHtml(stationName)}
+                            </div>
+                            <div style="font-size:13px; color:#475569; line-height:1.6;">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                    <span>即時水深：</span>
+                                    <strong style="color:${depth > 0 ? '#ef4444' : '#22c55e'}; font-size:15px;">${depth} cm</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8;">
+                                    <span>時間：</span><span>${obsTimeStr}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    marker.bindPopup(popupHtml, { className: 'glass-popup' });
+                    realtimeFloodLayer.addLayer(marker);
+                });
+
+                if(statusEl) {
+                    statusEl.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="color:#16a34a; font-weight:900; font-size:13px;">🟢 正常：${normalCount}</span>
+                            <span style="color:#ef4444; font-weight:900; font-size:13px;">🚨 積淹水：${floodedCount}</span>
+                        </div>
+                        <div style="font-size:10px; color:#94a3b8; display:flex; justify-content:space-between;">
+                            <span>休眠/離線：${offlineCount} 處</span><span>每 5 分鐘自動刷新</span>
+                        </div>
+                    `;
+                }
+
+            } catch(err) {
+                console.error("淹水感測器抓取失敗", err);
+                const statusEl = document.getElementById('realtimeFloodStatus');
+                if(statusEl) statusEl.innerHTML = '<span style="color:#ef4444; font-weight:800;">⚠️ 讀取失敗，請稍後重試。</span>';
+            }
+        }
     </script>
 
 
