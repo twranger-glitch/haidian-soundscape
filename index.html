@@ -2557,6 +2557,86 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
             </div>
         </section>
 
+                <section class="layer-subsection">
+            <div class="layer-subsection-title">
+                臺南歷年淹水災情 <small>官方實際紀錄</small>
+            </div>
+
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input
+                    type="checkbox"
+                    id="tainanHistoryFloodToggle"
+                    onchange="toggleTainanHistoryFloodLayer(this.checked)"
+                    style="accent-color:#c2410c; width:17px; height:17px; margin:0; flex-shrink:0;"
+                >
+                <span style="color:#9a3412; font-weight:800;">
+                    顯示臺南歷年淹水災情
+                </span>
+            </label>
+
+            <div
+                id="tainanHistoryFloodControlPanel"
+                style="display:none; margin-top:10px; padding:10px; background:#fff7ed; border:1px solid #fed7aa; border-radius:10px;"
+            >
+                <div style="font-size:11px; color:#9a3412; margin-bottom:6px; font-weight:800;">
+                    官方資料集
+                </div>
+
+                <select
+                    id="tainanHistoryFloodDataset"
+                    onchange="changeTainanHistoryFloodDataset()"
+                    style="width:100%; box-sizing:border-box; border:1px solid #fdba74; border-radius:8px; padding:8px 10px; background:#fff; color:#431407; font-size:13px; font-weight:700; margin-bottom:10px;"
+                >
+                    <option value="history_all" selected>
+                        歷年淹水災情
+                    </option>
+                    <option value="history_stormwater">
+                        歷年淹水災情（雨水科）
+                    </option>
+                    <option value="history_planning">
+                        歷年淹水災情（綜企科）
+                    </option>
+                </select>
+
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#9a3412; margin-bottom:5px; font-weight:700;">
+                    <span>透明度</span>
+                    <span id="tainanHistoryFloodOpacityValue">65%</span>
+                </div>
+
+                <input
+                    type="range"
+                    id="tainanHistoryFloodOpacity"
+                    min="0.1"
+                    max="1"
+                    step="0.05"
+                    value="0.65"
+                    style="width:100%; accent-color:#c2410c; margin:0;"
+                    oninput="updateTainanHistoryFloodOpacity(this.value)"
+                >
+
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+                    <span
+                        id="tainanHistoryFloodLayerTitle"
+                        style="font-size:11px; color:#9a3412; font-weight:800;"
+                    >
+                        歷年淹水災情
+                    </span>
+
+                    <a
+                        href="#"
+                        onclick="openTainanHistoryFloodInfo(); return false;"
+                        style="font-size:11px; color:#c2410c; font-weight:800; text-decoration:none; white-space:nowrap;"
+                    >
+                        資料說明
+                    </a>
+                </div>
+
+                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #fdba74; color:#9a3412; font-size:10px; line-height:1.55;">
+                    過去實際災情紀錄，不代表目前正在淹水，也不是淹水潛勢模擬。縮放至 9 級以上才載入。
+                </div>
+            </div>
+        </section>
+
         <section class="layer-subsection">
             <div class="layer-subsection-title">
                 即時淹水感測器 <small>API</small>
@@ -3237,7 +3317,7 @@ async function searchPlaceName() {
     'flood_650mm_24hr': {
         label: '24 小時 650 mm',
         path: 'flood/Flood_650mm_24HR.json',
-        pmtilesPath: 'flood-pmtiles/Flood_650mm_24HR_v2.pmtiles?v=1',
+        pmtilesPath: 'flood-pmtiles/Flood_650mm_24HR_v2.pmtiles',
         pmtilesDataLayer: 'flood'
     },
 
@@ -3378,9 +3458,420 @@ async function searchPlaceName() {
         map.getPane('hydrologyPane').style.zIndex = 340;
         map.getPane('hydrologyPane').style.pointerEvents = 'none';
 
-        map.createPane('floodPane');
+                map.createPane('floodPane');
         map.getPane('floodPane').style.zIndex = 350;
         map.getPane('floodPane').style.pointerEvents = 'auto';
+
+        map.createPane('tainanHistoryFloodPane');
+        map.getPane('tainanHistoryFloodPane').style.zIndex = 355;
+        map.getPane('tainanHistoryFloodPane').style.pointerEvents = 'none';
+
+        var TAINAN_HISTORY_FLOOD_MAPSERVER_URL =
+            "https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer";
+
+        var tainanHistoryFloodMeta = {
+            history_all: {
+                label: "歷年淹水災情",
+                layerId: 2
+            },
+            history_stormwater: {
+                label: "歷年淹水災情（雨水科）",
+                layerId: 0
+            },
+            history_planning: {
+                label: "歷年淹水災情（綜企科）",
+                layerId: 1
+            }
+        };
+
+        var tainanHistoryFloodLayer = null;
+        var tainanHistoryFloodLayerId = null;
+
+        var ArcGisDynamicImageLayer = L.Layer.extend({
+            initialize: function(options) {
+                L.setOptions(this, options || {});
+                this._map = null;
+                this._image = null;
+                this._refreshTimer = null;
+                this._lastRequestKey = "";
+            },
+
+            onAdd: function(map) {
+                this._map = map;
+
+                map.on("moveend", this._scheduleRefresh, this);
+                map.on("zoomend", this._scheduleRefresh, this);
+                map.on("resize", this._scheduleRefresh, this);
+
+                this._refresh(true);
+            },
+
+            onRemove: function(map) {
+                map.off("moveend", this._scheduleRefresh, this);
+                map.off("zoomend", this._scheduleRefresh, this);
+                map.off("resize", this._scheduleRefresh, this);
+
+                if (this._refreshTimer) {
+                    clearTimeout(this._refreshTimer);
+                    this._refreshTimer = null;
+                }
+
+                this._removeImage();
+                this._map = null;
+            },
+
+            setOpacity: function(opacity) {
+                this.options.opacity = Math.max(
+                    0,
+                    Math.min(1, Number(opacity))
+                );
+
+                if (this._image) {
+                    this._image.setOpacity(this.options.opacity);
+                }
+
+                return this;
+            },
+
+            setLayerIds: function(layerIds) {
+                this.options.layerIds = (layerIds || [])
+                    .map(Number)
+                    .filter(function(layerId) {
+                        return (
+                            Number.isInteger(layerId) &&
+                            layerId >= 0
+                        );
+                    });
+
+                this._lastRequestKey = "";
+                this._scheduleRefresh();
+
+                return this;
+            },
+
+            _scheduleRefresh: function() {
+                var self = this;
+
+                if (self._refreshTimer) {
+                    clearTimeout(self._refreshTimer);
+                }
+
+                self._refreshTimer = setTimeout(function() {
+                    self._refreshTimer = null;
+                    self._refresh(false);
+                }, 180);
+            },
+
+            _removeImage: function() {
+                if (
+                    this._image &&
+                    this._map &&
+                    this._map.hasLayer(this._image)
+                ) {
+                    this._map.removeLayer(this._image);
+                }
+
+                this._image = null;
+            },
+
+            _refresh: function(force) {
+                var map = this._map;
+
+                if (!map) return;
+
+                if (
+                    map.getZoom() <
+                    (this.options.minZoom || 0)
+                ) {
+                    this._lastRequestKey = "";
+                    this._removeImage();
+                    return;
+                }
+
+                var layerIds = this.options.layerIds || [];
+
+                if (!layerIds.length) return;
+
+                var size = map.getSize();
+                var bounds = map.getBounds();
+
+                if (
+                    !size.x ||
+                    !size.y ||
+                    !bounds.isValid()
+                ) {
+                    return;
+                }
+
+                var southWest = map.options.crs.project(
+                    bounds.getSouthWest()
+                );
+
+                var northEast = map.options.crs.project(
+                    bounds.getNorthEast()
+                );
+
+                var maxImageSize =
+                    this.options.maxImageSize || 1600;
+
+                var scale = Math.min(
+                    1,
+                    maxImageSize / Math.max(size.x, size.y)
+                );
+
+                var imageWidth = Math.max(
+                    1,
+                    Math.round(size.x * scale)
+                );
+
+                var imageHeight = Math.max(
+                    1,
+                    Math.round(size.y * scale)
+                );
+
+                var bbox = [
+                    southWest.x.toFixed(2),
+                    southWest.y.toFixed(2),
+                    northEast.x.toFixed(2),
+                    northEast.y.toFixed(2)
+                ].join(",");
+
+                var requestKey = [
+                    bbox,
+                    imageWidth,
+                    imageHeight,
+                    layerIds.join(",")
+                ].join("|");
+
+                if (
+                    !force &&
+                    requestKey === this._lastRequestKey &&
+                    this._image
+                ) {
+                    return;
+                }
+
+                this._lastRequestKey = requestKey;
+
+                var exportUrl = new URL(
+                    String(this.options.serviceUrl)
+                        .replace(/\/+$/, "") +
+                    "/export"
+                );
+
+                exportUrl.searchParams.set("bbox", bbox);
+                exportUrl.searchParams.set("bboxSR", "3857");
+                exportUrl.searchParams.set("imageSR", "3857");
+                exportUrl.searchParams.set(
+                    "size",
+                    imageWidth + "," + imageHeight
+                );
+
+                exportUrl.searchParams.set(
+                    "layers",
+                    "show:" + layerIds.join(",")
+                );
+
+                exportUrl.searchParams.set("format", "png32");
+                exportUrl.searchParams.set("transparent", "true");
+                exportUrl.searchParams.set("dpi", "96");
+                exportUrl.searchParams.set("f", "image");
+
+                if (!this._image) {
+                    this._image = L.imageOverlay(
+                        exportUrl.toString(),
+                        bounds,
+                        {
+                            pane: this.options.pane,
+                            opacity: this.options.opacity,
+                            interactive: false
+                        }
+                    );
+
+                    this._image.addTo(map);
+                    return;
+                }
+
+                this._image.setBounds(bounds);
+                this._image.setUrl(exportUrl.toString());
+                this._image.setOpacity(this.options.opacity);
+            }
+        });
+
+        function getTainanHistoryFloodSelectedId() {
+            var selectEl = document.getElementById(
+                "tainanHistoryFloodDataset"
+            );
+
+            return selectEl
+                ? selectEl.value
+                : "history_all";
+        }
+
+        function getTainanHistoryFloodOpacityValue() {
+            var opacityEl = document.getElementById(
+                "tainanHistoryFloodOpacity"
+            );
+
+            return opacityEl
+                ? parseFloat(opacityEl.value)
+                : 0.65;
+        }
+
+        function updateTainanHistoryFloodLabels() {
+            var selectedId =
+                getTainanHistoryFloodSelectedId();
+
+            var meta =
+                tainanHistoryFloodMeta[selectedId];
+
+            var labelEl = document.getElementById(
+                "tainanHistoryFloodLayerTitle"
+            );
+
+            if (labelEl && meta) {
+                labelEl.innerText = meta.label;
+            }
+        }
+
+        function ensureTainanHistoryFloodLayer() {
+            var selectedId =
+                getTainanHistoryFloodSelectedId();
+
+            var meta =
+                tainanHistoryFloodMeta[selectedId] ||
+                tainanHistoryFloodMeta.history_all;
+
+            if (!tainanHistoryFloodLayer) {
+                tainanHistoryFloodLayer =
+                    new ArcGisDynamicImageLayer({
+                        serviceUrl:
+                            TAINAN_HISTORY_FLOOD_MAPSERVER_URL,
+
+                        layerIds: [meta.layerId],
+                        pane: "tainanHistoryFloodPane",
+
+                        opacity:
+                            getTainanHistoryFloodOpacityValue(),
+
+                        minZoom: 9,
+                        maxImageSize: 1600
+                    });
+            } else {
+                tainanHistoryFloodLayer.setLayerIds([
+                    meta.layerId
+                ]);
+            }
+
+            tainanHistoryFloodLayerId = selectedId;
+
+            return tainanHistoryFloodLayer;
+        }
+
+        function toggleTainanHistoryFloodLayer(checked) {
+            var panel = document.getElementById(
+                "tainanHistoryFloodControlPanel"
+            );
+
+            if (panel) {
+                panel.style.display =
+                    checked ? "block" : "none";
+            }
+
+            updateTainanHistoryFloodLabels();
+
+            if (!checked) {
+                if (
+                    tainanHistoryFloodLayer &&
+                    map.hasLayer(tainanHistoryFloodLayer)
+                ) {
+                    map.removeLayer(tainanHistoryFloodLayer);
+                }
+
+                return;
+            }
+
+            var layer = ensureTainanHistoryFloodLayer();
+
+            layer.setOpacity(
+                getTainanHistoryFloodOpacityValue()
+            );
+
+            if (!map.hasLayer(layer)) {
+                map.addLayer(layer);
+            }
+        }
+
+        function changeTainanHistoryFloodDataset() {
+            updateTainanHistoryFloodLabels();
+
+            var toggleEl = document.getElementById(
+                "tainanHistoryFloodToggle"
+            );
+
+            if (!toggleEl || !toggleEl.checked) {
+                return;
+            }
+
+            var layer = ensureTainanHistoryFloodLayer();
+
+            layer.setOpacity(
+                getTainanHistoryFloodOpacityValue()
+            );
+        }
+
+        function updateTainanHistoryFloodOpacity(value) {
+            var opacity = parseFloat(value);
+
+            var valueEl = document.getElementById(
+                "tainanHistoryFloodOpacityValue"
+            );
+
+            if (valueEl) {
+                valueEl.innerText =
+                    Math.round(opacity * 100) + "%";
+            }
+
+            if (tainanHistoryFloodLayer) {
+                tainanHistoryFloodLayer.setOpacity(opacity);
+            }
+        }
+
+        function openTainanHistoryFloodInfo() {
+            var selectedId =
+                getTainanHistoryFloodSelectedId();
+
+            var meta =
+                tainanHistoryFloodMeta[selectedId] ||
+                tainanHistoryFloodMeta.history_all;
+
+            L.popup({
+                closeButton: true,
+                autoClose: true,
+                className: "glass-popup"
+            })
+                .setLatLng(map.getCenter())
+                .setContent(`
+                    <div style="font-size:12px; line-height:1.65; min-width:220px;">
+                        <div style="font-weight:900; color:#7c2d12; margin-bottom:6px;">
+                            ${meta.label}
+                        </div>
+
+                        <div style="color:#475569;">
+                            顯示臺南市水利局公開的過去實際淹水災情資料。
+                        </div>
+
+                        <div style="margin-top:7px; color:#9a3412; font-weight:800;">
+                            此圖層不代表目前正在淹水，也不是淹水潛勢模擬。
+                        </div>
+
+                        <div style="margin-top:7px; color:#64748b; font-size:11px;">
+                            圖面顏色與分類由官方 MapServer 原始服務繪製；縮放至 9 級以上才載入。
+                        </div>
+                    </div>
+                `)
+                .openOn(map);
+        }
 
         function getGeoJsonUrls(path) {
             if (path.startsWith('./') || path.startsWith('http')) {
@@ -3723,16 +4214,62 @@ async function searchPlaceName() {
             return null;
         }
 
-        function getFloodColorByDepth(depthInfo) {
-            var d = depthInfo && typeof depthInfo.avg === 'number' ? depthInfo.avg : 0;
+                var FLOOD_DEPTH_STYLE_STOPS = [
+            {
+                min: 3,
+                color: "#991b1b",
+                label: "3 公尺以上"
+            },
+            {
+                min: 2,
+                color: "#dc2626",
+                label: "2 至未滿 3 公尺"
+            },
+            {
+                min: 1,
+                color: "#f97316",
+                label: "1 至未滿 2 公尺"
+            },
+            {
+                min: 0.5,
+                color: "#f59e0b",
+                label: "0.5 至未滿 1 公尺"
+            },
+            {
+                min: 0.3,
+                color: "#facc15",
+                label: "0.3 至未滿 0.5 公尺"
+            },
+            {
+                min: 0,
+                color: "#fef08a",
+                label: "0 至未滿 0.3 公尺"
+            }
+        ];
 
-            // 盡量接近原本水利署潛勢圖：淺黃 → 黃 → 橘 → 紅
-            if (d >= 3.0) return '#991b1b';
-            if (d >= 2.0) return '#dc2626';
-            if (d >= 1.0) return '#f97316';
-            if (d >= 0.5) return '#f59e0b';
-            if (d >= 0.3) return '#facc15';
-            return '#fef08a';
+        function getFloodColorByDepth(depthInfo) {
+            var depth =
+                depthInfo &&
+                Number.isFinite(depthInfo.avg)
+                    ? depthInfo.avg
+                    : 0;
+
+            for (
+                var i = 0;
+                i < FLOOD_DEPTH_STYLE_STOPS.length;
+                i++
+            ) {
+                if (
+                    depth >=
+                    FLOOD_DEPTH_STYLE_STOPS[i].min
+                ) {
+                    return FLOOD_DEPTH_STYLE_STOPS[i].color;
+                }
+            }
+
+            return FLOOD_DEPTH_STYLE_STOPS[
+                FLOOD_DEPTH_STYLE_STOPS.length - 1
+            ].color;
         }
 
         function getFloodFeatureStyle(feature, opacityValue) {
@@ -3757,7 +4294,15 @@ async function searchPlaceName() {
             // 🌟 終極神級優化：PMTiles 直接向 Hugging Face (AWS 全球 CDN) 請求，不經過 Cloudflare 代購員！
             // 這樣可以避免代購員因為發送太多 Range Request 而被 Hugging Face 判定為攻擊 (403 Forbidden)
             // 加上 ?v=3 強制破除瀏覽器之前記住的錯誤快取
-            var pmtilesUrl = gisHfBaseUrl + meta.pmtilesPath + "?v=3";
+            var pmtilesUrlObject = new URL(
+                meta.pmtilesPath,
+                gisHfBaseUrl
+            );
+
+            pmtilesUrlObject.searchParams.set("v", "3");
+
+            var pmtilesUrl = pmtilesUrlObject.toString();
+
             var dataLayer = meta.pmtilesDataLayer || 'flood';
 
             return protomapsL.leafletLayer({
@@ -4014,31 +4559,46 @@ function getPmtilesGeomCenter(geom) {
     }
 }
 
-        function openFloodLegend() {
+                function openFloodLegend() {
             var selectedId = getFloodSelectedId();
             var meta = floodScenarioMeta[selectedId] || {};
-            var title = meta.label || '淹水潛勢圖';
+            var title = meta.label || "淹水潛勢圖";
+
+            var rowsHtml = FLOOD_DEPTH_STYLE_STOPS
+                .slice()
+                .reverse()
+                .map(function(stop) {
+                    return `
+                        <div style="display:flex; align-items:center; gap:7px; margin:3px 0;">
+                            <span style="display:inline-block;width:18px;height:10px;background:${stop.color};border:1px solid rgba(71,85,105,.2);border-radius:2px;"></span>
+                            <span>${stop.label}</span>
+                        </div>
+                    `;
+                })
+                .join("");
 
             var html = `
-                <div style="font-size:12px; line-height:1.6; min-width:180px;">
-                    <div style="font-weight:900; color:#1e3a8a; margin-bottom:6px;">${escapeGISHtml(title)} 圖例</div>
-                    <div><span style="display:inline-block;width:18px;height:10px;background:#bfdbfe;margin-right:6px;"></span>較低潛勢 / 低水深</div>
-                    <div><span style="display:inline-block;width:18px;height:10px;background:#60a5fa;margin-right:6px;"></span>約 0.5 m 以上</div>
-                    <div><span style="display:inline-block;width:18px;height:10px;background:#2563eb;margin-right:6px;"></span>約 1 m 以上</div>
-                    <div><span style="display:inline-block;width:18px;height:10px;background:#1d4ed8;margin-right:6px;"></span>約 2 m 以上</div>
-                    <div><span style="display:inline-block;width:18px;height:10px;background:#1e3a8a;margin-right:6px;"></span>約 3 m 以上</div>
-                    <div style="margin-top:6px; color:#64748b;">實際分級會依原始 GeoJSON 欄位而定。</div>
+                <div style="font-size:12px; line-height:1.6; min-width:205px;">
+                    <div style="font-weight:900; color:#92400e; margin-bottom:6px;">
+                        ${escapeGISHtml(title)} 圖例
+                    </div>
+
+                    ${rowsHtml}
+
+                    <div style="margin-top:7px; color:#64748b; font-size:11px;">
+                        色階與目前 PMTiles 圖層的實際繪製規則一致；此圖為降雨情境下的淹水潛勢，非即時災情。
+                    </div>
                 </div>
             `;
 
             L.popup({
                 closeButton: true,
                 autoClose: true,
-                className: 'glass-popup'
+                className: "glass-popup"
             })
-            .setLatLng(map.getCenter())
-            .setContent(html)
-            .openOn(map);
+                .setLatLng(map.getCenter())
+                .setContent(html)
+                .openOn(map);
         }
 
         function getHydrologyOpacityValue() {
