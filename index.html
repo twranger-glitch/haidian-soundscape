@@ -6896,47 +6896,21 @@ function mountGlobalPlayerIntoPopup_(retry) {
             }, 600);
         }
 
-        // 🌟 聆聽模式：移到最外層，確保不論資料庫狀態如何都能正常運作
-        window.toggleListeningMode = function() {
-            document.body.classList.toggle('listening-mode');
-            if (document.body.classList.contains('listening-mode')) {
-                if (typeof closeAllDrawers === "function") {
-                    closeAllDrawers();
-                }
-            }
-        };
-
-       // ==========================================
         // ==========================================
-// 🌊 即時淹水感測器：資料流品質與通用單位正規化
+// 🌊 新增模組：即時淹水感測器戰情室（通用單位判讀＋色弱友善圖示）
 // ==========================================
 let realtimeFloodLayer = null;
 let realtimeFloodInterval = null;
+let realtimeFloodRecords = [];
+let realtimeFloodOnlyFlooded = false;
 
-window.currentFloodData = [];
-window.showOnlyFlooded = false;
+const FLOOD_API_URL = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
+const FLOOD_REFRESH_MS = 5 * 60 * 1000;
+const FLOOD_STALE_HOURS = 36;
+const FLOOD_FLOODED_CM = 0.1;
+const FLOOD_MAX_ROAD_DEPTH_CM = 300;
 
-const FLOOD_POLICY = {
-staleHours: 36,
-floodThresholdCm: 1,
-
-```
-// 路面淹水感測器超過此值時，不直接視為可信公分值。
-// 例如 610 cm 會嘗試驗證是否為 61 cm 的十倍編碼。
-maxReasonableRoadDepthCm: 300,
-
-// 只在原始值明顯不合理時，才嘗試縮放；不會亂放大 2 cm、6 cm 等正常數值。
-fallbackScales: [0.1, 0.01]
-```
-
-};
-
-window.toggleShowOnlyFlooded = function(checked) {
-window.showOnlyFlooded = Boolean(checked);
-renderRealtimeFloodMap();
-};
-
-function escapeFloodHtml(value) {
+function floodEscapeHtml(value) {
 return String(value ?? "")
 .replace(/&/g, "&")
 .replace(/</g, "<")
@@ -6945,337 +6919,309 @@ return String(value ?? "")
 .replace(/'/g, "'");
 }
 
-function getUnitMultiplierToCm(unit) {
+function floodGetSamples(datastream) {
+return (datastream?.Observations || [])
+.map(observation => {
+const value = Number(observation?.result);
+const time = observation?.phenomenonTime || "";
+const timeMs = new Date(time).getTime();
+
+```
+        return { value, time, timeMs };
+    })
+    .filter(sample => Number.isFinite(sample.value) && Number.isFinite(sample.timeMs))
+    .sort((a, b) => b.timeMs - a.timeMs);
+```
+
+}
+
+function floodUnitMultiplierToCm(unit) {
 const normalized = String(unit || "cm").trim().toLowerCase();
 
 ```
 if (["m", "meter", "metre", "公尺"].includes(normalized)) return 100;
 if (["mm", "毫米"].includes(normalized)) return 0.1;
 
-return 1; // cm、未知單位，預設先維持原值
+return 1;
 ```
 
 }
 
-function isRawOrTestStream(ds) {
-const text = `${ds?.description || ""} ${ds?.name || ""}`.toLowerCase();
+function floodIsRawOrTestStream(datastream) {
+const text = `${datastream?.name || ""} ${datastream?.description || ""}`.toLowerCase();
+return /raw\s*data|\btest\b|測試資料/.test(text);
+}
+
+function floodIsOfficialDepthStream(datastream) {
+const name = String(datastream?.name || "").trim();
+const description = String(datastream?.description || "");
 
 ```
 return (
-    /raw data/.test(text) ||
-    /datastream_fullname=\s*observation/.test(text) ||
-    /datastream_fullname=\s*水位\(o\)/.test(text)
+    name === "淹水深度" ||
+    description.includes("Datastream_Category=淹水深度")
 );
 ```
 
 }
 
-function isVerifiedFloodStream(ds) {
-const text = String(ds?.description || "");
-
-```
-return (
-    text.includes("Datastream_Category_type=淹水感測器") &&
-    text.includes("Datastream_Category=淹水深度")
-);
-```
-
-}
-
-function getFloodSamples(ds) {
-return (ds?.Observations || [])
-.map(obs => ({
-value: Number(obs?.result),
-time: obs?.phenomenonTime || ""
-}))
-.filter(item => Number.isFinite(item.value))
-.sort((a, b) => new Date(b.time) - new Date(a.time));
-}
-
-function normalizeFloodDepth(ds) {
-const samples = getFloodSamples(ds);
+function floodNormalizeDepth(datastream) {
+const samples = floodGetSamples(datastream);
 
 ```
 if (!samples.length) {
     return {
         depthCm: null,
         rawDepthCm: null,
-        scale: 1,
+        sourceUnit: "未知",
         quality: "missing",
         note: "沒有有效觀測值"
     };
 }
 
 const sourceUnit =
-    ds?.unitOfMeasurement?.symbol ||
-    ds?.unitOfMeasurement?.name ||
+    datastream?.unitOfMeasurement?.symbol ||
+    datastream?.unitOfMeasurement?.name ||
     "cm";
 
-const unitMultiplier = getUnitMultiplierToCm(sourceUnit);
+const multiplier = floodUnitMultiplierToCm(sourceUnit);
+const directValuesCm = samples.map(sample => sample.value * multiplier);
+const directCurrentCm = directValuesCm[0];
 
-const directSamplesCm = samples.map(item => item.value * unitMultiplier);
-const directCurrentCm = directSamplesCm[0];
-
-if (directCurrentCm < 0) {
+if (directValuesCm.some(value => value < 0)) {
     return {
         depthCm: null,
         rawDepthCm: directCurrentCm,
-        scale: 1,
+        sourceUnit,
         quality: "suspect",
-        note: "出現負值"
+        note: "觀測值含負數"
     };
 }
 
-// API 單位與數值都合理：直接採用。
-if (
-    directCurrentCm <= FLOOD_POLICY.maxReasonableRoadDepthCm &&
-    directSamplesCm.every(value => value >= 0)
-) {
+// API 宣告的單位與數值皆合理時，直接採用。
+if (directValuesCm.every(value => value <= FLOOD_MAX_ROAD_DEPTH_CM)) {
     return {
         depthCm: Math.round(directCurrentCm * 10) / 10,
         rawDepthCm: directCurrentCm,
-        scale: 1,
+        sourceUnit,
         quality: "source",
         note: `來源單位：${sourceUnit}`
     };
 }
 
-// 只有原始值明顯不合理，才測試 ×0.1、×0.01。
-for (const scale of FLOOD_POLICY.fallbackScales) {
-    const scaledSamples = directSamplesCm.map(value => value * scale);
+// 僅在路面淹水深度明顯不合理時，才自動測試縮放。
+// 例如 610 cm → 61 cm；不需要為永康或任何單一測站寫特例。
+for (const scale of [0.1, 0.01]) {
+    const scaledValuesCm = directValuesCm.map(value => value * scale);
 
-    const allPlausible = scaledSamples.every(value =>
-        value >= 0 &&
-        value <= FLOOD_POLICY.maxReasonableRoadDepthCm
+    const allPlausible = scaledValuesCm.every(value =>
+        value >= 0 && value <= FLOOD_MAX_ROAD_DEPTH_CM
     );
 
     if (allPlausible) {
         return {
-            depthCm: Math.round(scaledSamples[0] * 10) / 10,
+            depthCm: Math.round(scaledValuesCm[0] * 10) / 10,
             rawDepthCm: directCurrentCm,
-            scale,
+            sourceUnit,
             quality: "estimated",
-            note: `原始資料超出路面淹水合理範圍，系統推定 ×${scale}`
+            note: `原始資料超過 ${FLOOD_MAX_ROAD_DEPTH_CM} cm，系統推定 ×${scale}`
         };
     }
 }
 
-// 無法安全判斷時，不偽造數字。
 return {
     depthCm: null,
     rawDepthCm: directCurrentCm,
-    scale: 1,
+    sourceUnit,
     quality: "suspect",
-    note: "原始值異常，未自動換算"
+    note: "原始資料異常，未自動換算"
 };
 ```
 
 }
 
-function createFloodCandidate(ds) {
-const thing = ds?.Thing;
-const coords = thing?.Locations?.[0]?.location?.coordinates;
+function floodMakeCandidate(datastream) {
+const thing = datastream?.Thing;
+const coordinates = thing?.Locations?.[0]?.location?.coordinates;
 
 ```
-if (!thing || !Array.isArray(coords) || coords.length < 2) return null;
+if (!thing || !Array.isArray(coordinates) || coordinates.length < 2) {
+    return null;
+}
 
-const lon = Number(coords[0]);
-const lat = Number(coords[1]);
+const lon = Number(coordinates[0]);
+const lat = Number(coordinates[1]);
 
 if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
 
-// 已知海上佔位座標
+// 排除上游已知的海上佔位座標。
 if (Math.abs(lon - 120) < 0.000001 && Math.abs(lat - 23) < 0.000001) {
     return null;
 }
 
+// 排除明顯錯誤座標。
 if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) {
     return null;
 }
 
-const observations = getFloodSamples(ds);
-const observedAt = observations[0]?.time || "";
-const observedAtMs = new Date(observedAt).getTime();
+const samples = floodGetSamples(datastream);
+const latest = samples[0];
 
-if (!Number.isFinite(observedAtMs)) return null;
+if (!latest) return null;
 
-const hoursAgo = (Date.now() - observedAtMs) / 3600000;
-const depth = normalizeFloodDepth(ds);
+const normalized = floodNormalizeDepth(datastream);
+if (normalized.depthCm === null) return null;
+
+const stationName =
+    thing?.properties?.stationName ||
+    thing?.name ||
+    "未命名測站";
+
+const stationId =
+    thing?.properties?.stationID ||
+    thing?.properties?.stationId ||
+    thing?.["@iot.id"] ||
+    thing?.name ||
+    `${lat},${lon}`;
+
+const ageHours = (Date.now() - latest.timeMs) / 3600000;
 
 return {
-    stationId:
-        thing?.properties?.stationID ||
-        thing?.name ||
-        `${lat},${lon}`,
-
-    stationName:
-        thing?.properties?.stationName ||
-        thing?.name ||
-        "未命名測站",
-
-    streamId: ds?.["@iot.id"] || "",
-    description: ds?.description || "",
+    stationId: String(stationId),
+    stationName,
     lat,
     lon,
-    observedAt,
-    observedAtMs,
-    isOffline: hoursAgo > FLOOD_POLICY.staleHours,
-    isRaw: isRawOrTestStream(ds),
-    isVerified: isVerifiedFloodStream(ds),
-    ...depth
+    observedAt: latest.time,
+    observedAtMs: latest.timeMs,
+    isStale: ageHours > FLOOD_STALE_HOURS,
+    isRaw: floodIsRawOrTestStream(datastream),
+    isOfficial: floodIsOfficialDepthStream(datastream),
+    streamId: datastream?.["@iot.id"] || "",
+    ...normalized
 };
 ```
 
 }
 
-function getCandidatePriority(candidate) {
+function floodCandidatePriority(candidate) {
 let score = 0;
 
 ```
 if (!candidate.isRaw) score += 1000;
-if (candidate.isVerified) score += 100;
-
-if (candidate.quality === "source") score += 20;
-if (candidate.quality === "estimated") score += 10;
-
-if (!candidate.isOffline) score += 5;
+if (candidate.isOfficial) score += 100;
+if (!candidate.isStale) score += 20;
+if (candidate.quality === "source") score += 3;
+if (candidate.quality === "estimated") score += 2;
 
 return score;
 ```
 
 }
 
-function consolidateFloodStations(candidates) {
-const groups = {};
+function floodConsolidateStations(candidates) {
+const groups = new Map();
 
 ```
 candidates.forEach(candidate => {
-    if (!candidate) return;
-
-    if (!groups[candidate.stationId]) {
-        groups[candidate.stationId] = [];
-    }
-
-    groups[candidate.stationId].push(candidate);
+    if (!groups.has(candidate.stationId)) groups.set(candidate.stationId, []);
+    groups.get(candidate.stationId).push(candidate);
 });
 
-return Object.values(groups)
+return [...groups.values()]
     .map(group => {
-        const usable = group.filter(item =>
-            !item.isOffline &&
+        group.sort((a, b) => {
+            const priorityDifference = floodCandidatePriority(b) - floodCandidatePriority(a);
+            if (priorityDifference !== 0) return priorityDifference;
+
+            const aFlooded = a.depthCm >= FLOOD_FLOODED_CM;
+            const bFlooded = b.depthCm >= FLOOD_FLOODED_CM;
+            if (aFlooded !== bFlooded) return bFlooded ? 1 : -1;
+
+            if (a.observedAtMs !== b.observedAtMs) return b.observedAtMs - a.observedAtMs;
+            return b.depthCm - a.depthCm;
+        });
+
+        const selected = group[0];
+
+        const comparable = group.filter(item =>
             !item.isRaw &&
-            item.depthCm !== null
+            item.isOfficial &&
+            item.quality !== "suspect"
         );
 
-        if (!usable.length) return null;
-
-        const bestScore = Math.max(...usable.map(getCandidatePriority));
-
-        const bestCandidates = usable.filter(
-            item => getCandidatePriority(item) === bestScore
-        );
-
-        // 同站有多個有效資料流且彼此不同時：
-        // 防災介面採較高讀值，但會在卡片標示「資料流差異」。
-        bestCandidates.sort((a, b) =>
-            b.depthCm - a.depthCm ||
-            b.observedAtMs - a.observedAtMs
-        );
-
-        const selected = bestCandidates[0];
-        const values = bestCandidates.map(item => item.depthCm);
-        const hasConflict =
-            values.length > 1 &&
-            Math.max(...values) - Math.min(...values) >= 2;
+        const values = comparable.map(item => item.depthCm);
+        const minDepth = values.length ? Math.min(...values) : selected.depthCm;
+        const maxDepth = values.length ? Math.max(...values) : selected.depthCm;
 
         return {
             ...selected,
-            hasConflict
+            hasConflict: values.length > 1 && (maxDepth - minDepth >= 2),
+            streamCount: group.length
         };
     })
-    .filter(Boolean);
+    .sort((a, b) => {
+        const aFlooded = a.depthCm >= FLOOD_FLOODED_CM;
+        const bFlooded = b.depthCm >= FLOOD_FLOODED_CM;
+
+        if (aFlooded !== bFlooded) return bFlooded ? 1 : -1;
+        return b.depthCm - a.depthCm;
+    });
 ```
 
 }
 
-function getFloodLevel(depthCm) {
+function floodGetLevel(depthCm) {
 if (depthCm >= 30) {
-return {
-key: "danger",
-label: "高度警戒",
-color: "#CC79A7",
-shape: "square"
-};
+return { key: "danger", label: "高度警戒", color: "#CC79A7", shape: "square" };
 }
 
 ```
 if (depthCm >= 10) {
-    return {
-        key: "warning",
-        label: "注意積淹",
-        color: "#E69F00",
-        shape: "triangle"
-    };
+    return { key: "warning", label: "注意積淹", color: "#E69F00", shape: "triangle" };
 }
 
-if (depthCm >= FLOOD_POLICY.floodThresholdCm) {
-    return {
-        key: "light",
-        label: "輕微積水",
-        color: "#0072B2",
-        shape: "diamond"
-    };
+if (depthCm >= FLOOD_FLOODED_CM) {
+    return { key: "light", label: "有積水", color: "#0072B2", shape: "diamond" };
 }
 
-return {
-    key: "normal",
-    label: "無積水",
-    color: "#475569",
-    shape: "circle"
-};
+return { key: "normal", label: "無積水", color: "#475569", shape: "circle" };
 ```
 
 }
 
-function createFloodIcon(level) {
-let svg;
+function floodCreateIcon(level, isStale) {
+const opacity = isStale ? 0.58 : 1;
+let svg = "";
 
 ```
 if (level.shape === "square") {
     svg = `
-        <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="18" rx="4"
-                fill="${level.color}" stroke="#fff" stroke-width="2.4"/>
+        <svg width="31" height="31" viewBox="0 0 24 24" aria-hidden="true" style="opacity:${opacity}">
+            <rect x="3" y="3" width="18" height="18" rx="4" fill="${level.color}" stroke="#fff" stroke-width="2.4"/>
             <path d="M12 7v5.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
             <circle cx="12" cy="16.4" r="1.2" fill="#fff"/>
         </svg>
     `;
 } else if (level.shape === "triangle") {
     svg = `
-        <svg width="31" height="31" viewBox="0 0 24 24" aria-hidden="true">
-            <polygon points="12 2 22 20 2 20"
-                fill="${level.color}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+        <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true" style="opacity:${opacity}">
+            <polygon points="12 2 22 20 2 20" fill="${level.color}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
             <path d="M12 8v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
             <circle cx="12" cy="16.5" r="1.15" fill="#fff"/>
         </svg>
     `;
 } else if (level.shape === "diamond") {
     svg = `
-        <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
-            <polygon points="12 2 22 12 12 22 2 12"
-                fill="${level.color}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
-            <path d="M7 13c1.5-1.2 3-1.2 4.5 0 1.5 1.2 3 1.2 4.5 0"
-                fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+        <svg width="31" height="31" viewBox="0 0 24 24" aria-hidden="true" style="opacity:${opacity}">
+            <polygon points="12 2 22 12 12 22 2 12" fill="${level.color}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+            <path d="M7 13c1.5-1.2 3-1.2 4.5 0 1.5 1.2 3 1.2 4.5 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
         </svg>
     `;
 } else {
     svg = `
-        <svg width="27" height="27" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9"
-                fill="${level.color}" stroke="#fff" stroke-width="2.4"/>
-            <path d="M8 12.2l2.5 2.5 5-5.2"
-                fill="none" stroke="#fff" stroke-width="2.1"
-                stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" style="opacity:${opacity}">
+            <circle cx="12" cy="12" r="9" fill="${level.color}" stroke="#fff" stroke-width="2.4"/>
+            <path d="M8 12.2l2.5 2.5 5-5.2" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     `;
 }
@@ -7283,34 +7229,37 @@ if (level.shape === "square") {
 return L.divIcon({
     className: `flood-marker-icon flood-marker-icon--${level.key}`,
     html: svg,
-    iconSize: [31, 31],
-    iconAnchor: [15, 15],
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
     popupAnchor: [0, -14]
 });
 ```
 
 }
 
-function formatFloodDepth(depthCm) {
+function floodFormatDepth(depthCm) {
 return Number.isInteger(depthCm) ? String(depthCm) : depthCm.toFixed(1);
 }
 
-function formatFloodTime(isoText) {
-const date = new Date(isoText);
-
-```
+function floodFormatTime(isoTime) {
+const date = new Date(isoTime);
 if (!Number.isFinite(date.getTime())) return "無資料";
 
+```
 const pad = value => String(value).padStart(2, "0");
-
 return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 ```
 
 }
 
+window.toggleShowOnlyFlooded = function(checked) {
+realtimeFloodOnlyFlooded = Boolean(checked);
+renderRealtimeFloodMap();
+};
+
 async function toggleRealtimeFlood(checked) {
 const panel = document.getElementById("realtimeFloodControlPanel");
-const statusEl = document.getElementById("realtimeFloodStatus");
+const status = document.getElementById("realtimeFloodStatus");
 
 ```
 if (panel) panel.style.display = checked ? "block" : "none";
@@ -7321,12 +7270,8 @@ realtimeFloodInterval = null;
 if (!checked) {
     if (realtimeFloodLayer) {
         realtimeFloodLayer.clearLayers();
-
-        if (map.hasLayer(realtimeFloodLayer)) {
-            map.removeLayer(realtimeFloodLayer);
-        }
+        if (map.hasLayer(realtimeFloodLayer)) map.removeLayer(realtimeFloodLayer);
     }
-
     return;
 }
 
@@ -7338,13 +7283,12 @@ if (!map.hasLayer(realtimeFloodLayer)) {
     map.addLayer(realtimeFloodLayer);
 }
 
-if (statusEl) {
-    statusEl.innerHTML =
-        '<span style="color:#0072B2;font-weight:800;">正在讀取即時淹水資料…</span>';
+if (status) {
+    status.innerHTML = '<span style="color:#0072B2;font-weight:800;">正在讀取即時淹水資料…</span>';
 }
 
 await updateRealtimeFlood();
-realtimeFloodInterval = setInterval(updateRealtimeFlood, 5 * 60 * 1000);
+realtimeFloodInterval = setInterval(updateRealtimeFlood, FLOOD_REFRESH_MS);
 ```
 
 }
@@ -7353,11 +7297,10 @@ async function updateRealtimeFlood() {
 if (!realtimeFloodLayer) return;
 
 ```
+const status = document.getElementById("realtimeFloodStatus");
+
 try {
-    const response = await fetch(
-        "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood",
-        { cache: "no-store" }
-    );
+    const response = await fetch(FLOOD_API_URL, { cache: "no-store" });
 
     if (!response.ok) {
         throw new Error(`API HTTP ${response.status}`);
@@ -7366,21 +7309,17 @@ try {
     const data = await response.json();
 
     const candidates = (data.value || [])
-        .map(createFloodCandidate)
+        .map(floodMakeCandidate)
         .filter(Boolean);
 
-    window.currentFloodData = consolidateFloodStations(candidates);
-
+    realtimeFloodRecords = floodConsolidateStations(candidates);
     renderRealtimeFloodMap();
 
 } catch (error) {
     console.error("淹水感測器抓取失敗", error);
 
-    const statusEl = document.getElementById("realtimeFloodStatus");
-
-    if (statusEl) {
-        statusEl.innerHTML =
-            '<span style="color:#9f1239;font-weight:800;">讀取失敗，請稍後再試。</span>';
+    if (status) {
+        status.innerHTML = '<span style="color:#b91c1c;font-weight:800;">讀取失敗，請稍後再試。</span>';
     }
 }
 ```
@@ -7395,106 +7334,110 @@ realtimeFloodLayer.clearLayers();
 
 let floodedCount = 0;
 let normalCount = 0;
+let staleCount = 0;
 let estimatedCount = 0;
-let visibleCount = 0;
+let shownCount = 0;
 
-window.currentFloodData.forEach(record => {
-    const isFlooded = record.depthCm >= FLOOD_POLICY.floodThresholdCm;
+realtimeFloodRecords.forEach(record => {
+    const isFlooded = record.depthCm >= FLOOD_FLOODED_CM;
 
     if (isFlooded) floodedCount++;
     else normalCount++;
 
+    if (record.isStale) staleCount++;
     if (record.quality === "estimated") estimatedCount++;
 
-    if (window.showOnlyFlooded && !isFlooded) {
-        return;
-    }
+    if (realtimeFloodOnlyFlooded && !isFlooded) return;
 
-    visibleCount++;
+    shownCount++;
 
-    const level = getFloodLevel(record.depthCm);
-    const icon = createFloodIcon(level);
+    const level = floodGetLevel(record.depthCm);
+    const icon = floodCreateIcon(level, record.isStale);
 
     const marker = L.marker([record.lat, record.lon], {
         icon,
         keyboard: true,
         riseOnHover: true,
-        title: `${record.stationName}：${formatFloodDepth(record.depthCm)} cm`
+        title: `${record.stationName}：${floodFormatDepth(record.depthCm)} cm`
     });
 
-    let qualityText = "來源值";
+    const qualityText = record.quality === "estimated"
+        ? `推定換算：原始 ${floodFormatDepth(record.rawDepthCm)} cm → ${floodFormatDepth(record.depthCm)} cm`
+        : `來源單位：${record.sourceUnit}`;
 
-    if (record.quality === "estimated") {
-        qualityText = `推定值：原始 ${formatFloodDepth(record.rawDepthCm)} cm，${record.note}`;
-    }
-
-    if (record.hasConflict) {
-        qualityText += "；同站多資料流不一致，暫採較高讀值";
-    }
+    const staleText = record.isStale ? "・資料逾時" : "";
+    const conflictText = record.hasConflict ? "・同站資料流讀值不同" : "";
 
     marker.bindPopup(`
-        <article style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
+        <article style="padding:16px;font-family:system-ui,-apple-system,'Noto Sans TC',sans-serif;">
             <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:13px;">
                 <div style="flex:0 0 auto;">${icon.options.html}</div>
 
                 <div style="min-width:0;flex:1;">
-                    <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">
-                        即時淹水感測站
-                    </div>
-
-                    <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">
-                        ${escapeFloodHtml(record.stationName)}
-                    </div>
+                    <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
+                    <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">${floodEscapeHtml(record.stationName)}</div>
                 </div>
 
-                <span style="font-size:10px;font-weight:900;color:${level.color};white-space:nowrap;">
-                    ${level.label}
-                </span>
+                <span style="font-size:10px;font-weight:900;color:${level.color};white-space:nowrap;">${level.label}</span>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:end;padding:13px 14px;border-radius:13px;background:#f8fafc;">
                 <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
+
                 <strong style="color:${level.color};font-family:ui-monospace,monospace;font-size:30px;line-height:1;">
-                    ${formatFloodDepth(record.depthCm)}<small style="font-size:12px;"> cm</small>
+                    ${floodFormatDepth(record.depthCm)}<small style="font-size:12px;"> cm</small>
                 </strong>
             </div>
 
-            <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;font-size:10px;color:#64748b;line-height:1.5;">
-                <div>最後觀測：${formatFloodTime(record.observedAt)}</div>
-                <div>${escapeFloodHtml(qualityText)}</div>
+            <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;font-size:10px;color:#64748b;line-height:1.55;">
+                <div>最後觀測：${floodFormatTime(record.observedAt)}${staleText}</div>
+                <div>${floodEscapeHtml(qualityText)}${conflictText}</div>
             </div>
         </article>
     `, {
-        className: "flood-popup",
-        closeButton: true
+        className: "aesthetic-popup",
+        closeButton: true,
+        autoPanPadding: [24, 24]
     });
+
+    marker.bindTooltip(
+        `${record.stationName}｜${floodFormatDepth(record.depthCm)} cm`,
+        {
+            direction: "top",
+            offset: [0, -18],
+            className: "flood-depth-tooltip",
+            sticky: true
+        }
+    );
 
     realtimeFloodLayer.addLayer(marker);
 });
 
-const statusEl = document.getElementById("realtimeFloodStatus");
+const status = document.getElementById("realtimeFloodStatus");
 
-if (statusEl) {
-    statusEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:900;">
+if (status) {
+    const filterText = realtimeFloodOnlyFlooded
+        ? `目前只顯示有積水測站：${shownCount} 處`
+        : `目前顯示測站：${shownCount} 處`;
+
+    status.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;font-weight:900;">
             <span style="color:#475569;">無積水：${normalCount}</span>
-            <span style="color:#9a3412;">有積水：${floodedCount}</span>
+            <span style="color:#0072B2;">有積水：${floodedCount}</span>
         </div>
 
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:9px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:9px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;">
             <input
                 type="checkbox"
                 onchange="toggleShowOnlyFlooded(this.checked)"
-                ${window.showOnlyFlooded ? "checked" : ""}
-                style="width:16px;height:16px;margin:0;accent-color:#E69F00;"
+                ${realtimeFloodOnlyFlooded ? "checked" : ""}
+                style="width:16px;height:16px;margin:0;accent-color:#0072B2;"
             >
-            <span style="font-size:12px;font-weight:900;color:#9a3412;">
-                只顯示有積淹水的測站
-            </span>
+            <span style="font-size:12px;font-weight:900;color:#0f3d63;">只顯示有積水的測站</span>
         </label>
 
         <div style="margin-top:8px;font-size:10px;color:#64748b;line-height:1.5;">
-            顯示：${visibleCount} 處；推定換算：${estimatedCount} 處
+            ${filterText}・推定換算：${estimatedCount} 處・逾時資料：${staleCount} 處
         </div>
     `;
 }
