@@ -7474,7 +7474,13 @@ async function fetchSfpnRealtimeRows() {
 const TAINAN_SFPN_HISTORY_BASE_URL =
     "https://wrbweb2.tainan.gov.tw/TainanApi/FloodWater/Infos/Last24Hours/";
 
+const COLIFE_WATER_RESOURCE_BASE_URL =
+    "https://sta.colife.org.tw/STA_WaterResource_v2/v1.0/";
+
 const FLOOD_HISTORY_CACHE_TTL_MS = 5 * 60 * 1000;
+const FLOOD_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const COLIFE_HISTORY_MAX_PAGES = 16;
+
 const floodHistoryCache = new Map();
 
 function isSfpnHistoryStation(record) {
@@ -7486,8 +7492,35 @@ function isSfpnHistoryStation(record) {
     );
 }
 
-function getFloodHistoryContainerId(stationId) {
-    return `flood-history-${String(stationId)
+function isColifeHistoryStation(record) {
+    const datastreamId = Number(record?.datastreamId);
+
+    return (
+        record?.source === "worker" &&
+        Number.isInteger(datastreamId) &&
+        datastreamId > 0
+    );
+}
+
+function canLoadFloodHistory(record) {
+    return (
+        isSfpnHistoryStation(record) ||
+        isColifeHistoryStation(record)
+    );
+}
+
+function getFloodHistoryContainerId(record) {
+    const isSfpn = isSfpnHistoryStation(record);
+
+    const sourceKey = isSfpn
+        ? "sfpn"
+        : "colife";
+
+    const idKey = isSfpn
+        ? record?.stationId
+        : record?.datastreamId;
+
+    return `flood-history-${sourceKey}-${String(idKey ?? "unknown")
         .replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
@@ -7644,6 +7677,252 @@ async function fetchSfpnFloodHistory(stationId) {
         floodHistoryCache.delete(normalizedStationId);
         throw error;
     }
+}
+
+function normaliseColifeHistoryDepthCm(rawValue, record) {
+    const value = Number(rawValue);
+
+    if (!Number.isFinite(value)) return null;
+
+    const unit = String(record?.unitSymbol || "cm")
+        .trim()
+        .toLowerCase();
+
+    let depthCm = value;
+
+    if (
+        unit === "m" ||
+        unit === "meter" ||
+        unit === "metre" ||
+        unit === "公尺"
+    ) {
+        depthCm = value * 100;
+    } else if (unit === "mm" || unit === "毫米") {
+        depthCm = value / 10;
+    }
+
+    const scale =
+        FLOOD_STATION_SCALE_OVERRIDES[
+            record?.stationName
+        ];
+
+    if (scale) depthCm *= scale;
+
+    return Math.max(
+        0,
+        Math.round(depthCm * 10) / 10
+    );
+}
+
+async function fetchColifeFloodHistory(record) {
+    const rawDatastreamId = Number(record?.datastreamId);
+
+    if (
+        !Number.isInteger(rawDatastreamId) ||
+        rawDatastreamId <= 0
+    ) {
+        throw new Error("缺少 Colife Datastream ID");
+    }
+
+    const cacheKey = `colife:${rawDatastreamId}`;
+
+    const cached =
+        floodHistoryCache.get(cacheKey);
+
+    if (
+        cached?.rows &&
+        cached.expiresAt > Date.now()
+    ) {
+        return cached.rows;
+    }
+
+    if (cached?.promise) {
+        return cached.promise;
+    }
+
+    const promise = (async () => {
+        const firstUrl = new URL(
+            `Datastreams(${rawDatastreamId})/Observations`,
+            COLIFE_WATER_RESOURCE_BASE_URL
+        );
+
+        firstUrl.searchParams.set(
+            "$select",
+            "result,phenomenonTime"
+        );
+
+        firstUrl.searchParams.set(
+            "$orderby",
+            "phenomenonTime desc"
+        );
+
+        firstUrl.searchParams.set("$top", "100");
+
+        let nextUrl = firstUrl.toString();
+
+        const cutoffMs =
+            Date.now() - FLOOD_HISTORY_WINDOW_MS;
+
+        const rowsByTime = new Map();
+        const requestedUrls = new Set();
+
+        for (
+            let page = 0;
+            nextUrl && page < COLIFE_HISTORY_MAX_PAGES;
+            page++
+        ) {
+            if (requestedUrls.has(nextUrl)) break;
+
+            requestedUrls.add(nextUrl);
+
+            const response = await fetch(nextUrl, {
+                cache: "no-store",
+                credentials: "omit",
+                headers: {
+                    Accept: "application/json, text/plain, */*"
+                }
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                throw new Error(
+                    `Colife 歷史資料 HTTP ${response.status}`
+                );
+            }
+
+            const payload = JSON.parse(
+                text.replace(/^\uFEFF/, "").trim()
+            );
+
+            const sourceRows = Array.isArray(payload?.value)
+                ? payload.value
+                : [];
+
+            let oldestPageTimeMs =
+                Number.POSITIVE_INFINITY;
+
+            sourceRows.forEach(row => {
+                const timeInfo =
+                    parseFloodObservationTime(
+                        row?.phenomenonTime
+                    );
+
+                const depthCm =
+                    normaliseColifeHistoryDepthCm(
+                        row?.result,
+                        record
+                    );
+
+                if (
+                    !timeInfo.isValid ||
+                    depthCm === null
+                ) {
+                    return;
+                }
+
+                oldestPageTimeMs = Math.min(
+                    oldestPageTimeMs,
+                    timeInfo.observedAtMs
+                );
+
+                if (
+                    timeInfo.observedAtMs <
+                    cutoffMs
+                ) {
+                    return;
+                }
+
+                rowsByTime.set(
+                    timeInfo.observedAtMs,
+                    {
+                        stationId: record.stationId,
+                        datastreamId: rawDatastreamId,
+
+                        observedAt:
+                            timeInfo.observedAt,
+
+                        observedAtMs:
+                            timeInfo.observedAtMs,
+
+                        depthCm,
+                        batteryVoltage: null,
+                        rssi: null,
+                        snr: null,
+                        change: null
+                    }
+                );
+            });
+
+            if (
+                Number.isFinite(oldestPageTimeMs) &&
+                oldestPageTimeMs <= cutoffMs
+            ) {
+                break;
+            }
+
+            nextUrl = String(
+                payload?.["@iot.nextLink"] || ""
+            ).trim();
+        }
+
+        const rows = [...rowsByTime.values()]
+            .sort((a, b) =>
+                a.observedAtMs - b.observedAtMs
+            );
+
+        rows.forEach((row, index) => {
+            if (index === 0) return;
+
+            row.change = Math.round(
+                (
+                    row.depthCm -
+                    rows[index - 1].depthCm
+                ) * 10
+            ) / 10;
+        });
+
+        if (!rows.length) {
+            throw new Error(
+                "Colife 近 24 小時沒有有效水深紀錄"
+            );
+        }
+
+        return rows;
+    })();
+
+    floodHistoryCache.set(cacheKey, {
+        promise
+    });
+
+    try {
+        const rows = await promise;
+
+        floodHistoryCache.set(cacheKey, {
+            rows,
+            expiresAt:
+                Date.now() +
+                FLOOD_HISTORY_CACHE_TTL_MS
+        });
+
+        return rows;
+
+    } catch (error) {
+        floodHistoryCache.delete(cacheKey);
+        throw error;
+    }
+}
+
+async function fetchFloodHistory(record) {
+    if (isSfpnHistoryStation(record)) {
+        return fetchSfpnFloodHistory(record.stationId);
+    }
+
+    if (isColifeHistoryStation(record)) {
+        return fetchColifeFloodHistory(record);
+    }
+
+    throw new Error("此測站尚未提供歷史資料");
 }
 
 function buildFloodHistoryChartHtml(rows) {
@@ -7942,10 +8221,10 @@ function buildFloodHistoryChartHtml(rows) {
 }
 
 async function loadFloodHistoryIntoPopup(record) {
-    if (!isSfpnHistoryStation(record)) return;
+    if (!canLoadFloodHistory(record)) return;
 
     const containerId =
-        getFloodHistoryContainerId(record.stationId);
+        getFloodHistoryContainerId(record);
 
     const container =
         document.getElementById(containerId);
@@ -7962,7 +8241,7 @@ async function loadFloodHistoryIntoPopup(record) {
 
     try {
         const rows =
-            await fetchSfpnFloodHistory(record.stationId);
+            await fetchFloodHistory(record);
 
         if (!container.isConnected) return;
 
@@ -7972,8 +8251,13 @@ async function loadFloodHistoryIntoPopup(record) {
             buildFloodHistoryChartHtml(rows);
 
     } catch (error) {
+        const sourceName =
+            isSfpnHistoryStation(record)
+                ? "SFPN"
+                : "Colife";
+
         console.warn(
-            "SFPN 單站歷史資料讀取失敗",
+            `${sourceName} 單站歷史資料讀取失敗`,
             record.stationId,
             error
         );
@@ -8037,8 +8321,22 @@ function makeWorkerFloodCandidate(ds) {
         stationName
     );
 
-    const observation = ds?.Observations?.[0] || null;
+        const observation = ds?.Observations?.[0] || null;
     const rawResult = observation?.result;
+
+    const rawDatastreamId = Number(ds?.["@iot.id"]);
+
+    const datastreamId =
+        Number.isInteger(rawDatastreamId) &&
+        rawDatastreamId > 0
+            ? rawDatastreamId
+            : null;
+
+    const unitSymbol = String(
+        ds?.unitOfMeasurement?.symbol ||
+        ds?.unitOfMeasurement?.name ||
+        "cm"
+    ).trim();
 
     const hasObservation =
         rawResult !== null &&
@@ -8065,8 +8363,12 @@ function makeWorkerFloodCandidate(ds) {
             ? getFloodDepthCm(ds, stationName)
             : null,
 
-        observedAt: timeInfo.observedAt,
+                observedAt: timeInfo.observedAt,
         observedAtMs: timeInfo.observedAtMs,
+
+        // Colife 歷史查詢所需資訊
+        datastreamId,
+        unitSymbol,
 
         hasObservation,
         isStale:
@@ -8381,10 +8683,12 @@ function makeFloodPopupHtml(record, visual, historyContainerId = "") {
         ? record.depthCm
         : "—";
 
-    const sourceDisplay =
+        const sourceDisplay =
         record.source === "sfpn"
             ? "臺南 SFPN / WMap"
-            : "全台物聯網資料";
+            : isColifeHistoryStation(record)
+                ? "全台 Colife 水資源感測資料"
+                : "全台物聯網資料";
 
     const historyHtml = historyContainerId
         ? `
@@ -8472,14 +8776,14 @@ function renderRealtimeFloodMap() {
             return;
         }
 
-        const visual = getFloodMarkerVisual(record, isFlooded);
+                const visual = getFloodMarkerVisual(record, isFlooded);
 
         const showFloodHistory =
-            isSfpnHistoryStation(record);
+            canLoadFloodHistory(record);
 
         const historyContainerId =
             showFloodHistory
-                ? getFloodHistoryContainerId(record.stationId)
+                ? getFloodHistoryContainerId(record)
                 : "";
 
         const marker = L.marker(
