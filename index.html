@@ -6943,322 +6943,285 @@ function mountGlobalPlayerIntoPopup_(retry) {
             realtimeFloodInterval = setInterval(updateRealtimeFlood, 5 * 60 * 1000);
         }
 
-        async function updateRealtimeFlood() {
-            if (!realtimeFloodLayer) return;
-            try {
-                const url = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
-                const res = await fetch(url);
-                if (!res.ok) throw new Error("API 連線失敗");
-                const data = await res.json();
-                
-                const sensors = data.value || [];
-                const latestRecords = {};
+        const FLOOD_DISPLAY_THRESHOLD_CM = 1;
 
-                sensors.forEach(ds => {
-                    if (!ds.Thing || !ds.Thing.Locations || ds.Thing.Locations.length === 0) return;
-                    const stId = ds.Thing.name || ds.Thing.properties.stationName;
-                    if (!stId) return;
+// API 有些同站資料流會包含 Raw Data；這筆永康站已確認需 ×10 才是實際 61 cm。
+const FLOOD_STATION_SCALE_OVERRIDES = {
+    "永康區-永明街與中山南路4巷165弄路口": 10
+};
 
-                    if (!latestRecords[stId]) {
-                         latestRecords[stId] = ds;
-                    } else {
-                         const currentDataTime = new Date(ds.Observations?.[0]?.phenomenonTime || 0).getTime();
-                         const recordedDataTime = new Date(latestRecords[stId].Observations?.[0]?.phenomenonTime || 0).getTime();
-                         if (currentDataTime > recordedDataTime) {
-                             latestRecords[stId] = ds;
-                         }
-                    }
-                });
+function getFloodDepthCm(ds, stationName) {
+    const rawValue = Number(ds?.Observations?.[0]?.result || 0);
 
-                window.currentFloodData = latestRecords; 
-                renderRealtimeFloodMap(); 
+    if (!Number.isFinite(rawValue)) {
+        return 0;
+    }
 
-            } catch(err) {
-                console.error("淹水感測器抓取失敗", err);
-                const statusEl = document.getElementById('realtimeFloodStatus');
-                if(statusEl) statusEl.innerHTML = '<span style="color:#ef4444; font-weight:800;">⚠️ 讀取失敗，請確認雲端代購服務。</span>';
-            }
+    const unit = String(
+        ds?.unitOfMeasurement?.symbol ||
+        ds?.unitOfMeasurement?.name ||
+        "cm"
+    ).trim().toLowerCase();
+
+    let depthCm = rawValue;
+
+    if (unit === "m" || unit === "meter" || unit === "metre" || unit === "公尺") {
+        depthCm = rawValue * 100;
+    } else if (unit === "mm" || unit === "毫米") {
+        depthCm = rawValue / 10;
+    }
+
+    const scale = FLOOD_STATION_SCALE_OVERRIDES[stationName];
+    if (scale) {
+        depthCm *= scale;
+    }
+
+    return Math.max(0, Math.round(depthCm * 10) / 10);
+}
+
+function isFloodRecordBetter(candidate, current) {
+    if (!current) return true;
+
+    // 不要讓 Raw Data 覆蓋正常淹水資料流
+    const candidateIsRaw = /raw data/i.test(candidate.description || "");
+    const currentIsRaw = /raw data/i.test(current.description || "");
+
+    if (candidateIsRaw !== currentIsRaw) {
+        return !candidateIsRaw;
+    }
+
+    // 同一測站中，有積水的資料優先保留，避免最新的 0 把積水站蓋掉
+    const candidateFlooded = candidate.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
+    const currentFlooded = current.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
+
+    if (candidateFlooded !== currentFlooded) {
+        return candidateFlooded;
+    }
+
+    // 狀態相同時才用最新時間決定
+    return candidate.observedAtMs > current.observedAtMs;
+}
+
+async function updateRealtimeFlood() {
+    if (!realtimeFloodLayer) return;
+
+    const statusEl = document.getElementById("realtimeFloodStatus");
+
+    try {
+        const url = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
+        const res = await fetch(url, { cache: "no-store" });
+
+        if (!res.ok) {
+            throw new Error(`API HTTP ${res.status}`);
         }
 
-        function renderRealtimeFloodMap() {
-            if (!realtimeFloodLayer) return;
-            realtimeFloodLayer.clearLayers();
+        const data = await res.json();
+        const stationRecords = {};
 
-            let floodedCount = 0;
-            let normalCount = 0;
-            let offlineCount = 0;
+        (data.value || []).forEach(ds => {
+            const thing = ds?.Thing;
+            const coords = thing?.Locations?.[0]?.location?.coordinates;
+            const observation = ds?.Observations?.[0];
 
-            Object.values(window.currentFloodData).forEach(ds => {
-                const thing = ds.Thing;
-                const coords = thing.Locations[0].location.coordinates; 
-                const lon = coords[0], lat = coords[1];
-                
-                if (isNaN(lon) || isNaN(lat)) return;
-                if (Math.abs(lon - 120) < 0.000001 && Math.abs(lat - 23) < 0.000001) return;
-                if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) return;
-
-                let stationName = thing.properties.stationName || thing.name || '未命名測站';
-                let obsVal = 0;
-                let obsTimeStr = null;
-                let isOffline = true;
-
-                if (ds.Observations && ds.Observations.length > 0) {
-                    obsVal = parseFloat(ds.Observations[0].result) || 0;
-                    obsTimeStr = ds.Observations[0].phenomenonTime;
-                    const obsDate = new Date(obsTimeStr);
-                    const hoursAgo = (new Date() - obsDate) / (1000 * 60 * 60);
-                    if (hoursAgo < 36) isOffline = false; // 考慮到部分偏遠測站回報週期放寬至36小時
-                }
-
-                if (isOffline) { offlineCount++; return; }
-
-                // 🎯 核心修復：精準單位換算 (0.73m ➜ 73cm)
-                let depthCm = obsVal;
-                if (obsVal > 0 && obsVal < 6) { 
-                    depthCm = obsVal * 100; 
-                }
-                depthCm = Math.max(0, Math.round(depthCm * 10) / 10);
-                if (depthCm < 1.5) depthCm = 0; // 排除微小地表反光雜訊
-
-                if (depthCm > 0) floodedCount++;
-                else normalCount++;
-
-                // 🎯 篩選功能：只顯示有淹水站點
-                if (window.showOnlyFlooded && depthCm === 0) return;
-
-                let color, fillColor, className = '';
-                let statusText = '', panelBg = '', svgIcon = '';
-
-                // 🎯 通用設計：形狀(Shape) + 顏色(Color) 雙重高對比編碼，且完全防禦文字溢出
-                if (depthCm >= 30) {
-                    color = '#7f1d1d'; fillColor = '#ef4444'; className = 'pulse-flood-danger-ud';
-                    statusText = '高度警戒'; panelBg = 'linear-gradient(135deg, #fef2f2, #fee2e2)';
-                    svgIcon = `<svg width="22" height="22" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5"/></svg>`;
-                } else if (depthCm >= 10) {
-                    color = '#9a3412'; fillColor = '#f97316'; className = 'pulse-flood-danger-ud';
-                    statusText = '注意積淹'; panelBg = 'linear-gradient(135deg, #fff7ed, #ffedd5)';
-                    svgIcon = `<svg width="24" height="24" viewBox="0 0 24 24"><polygon points="12 2 22 20 2 20" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
-                } else if (depthCm > 0) {
-                    color = '#1e3a8a'; fillColor = '#3b82f6'; className = 'pulse-flood-danger-ud';
-                    statusText = '輕微積水'; panelBg = 'linear-gradient(135deg, #eff6ff, #dbeafe)';
-                    svgIcon = `<svg width="22" height="22" viewBox="0 0 24 24"><polygon points="12 2 22 12 12 22 2 12" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
-                } else {
-                    color = '#14532d'; fillColor = '#22c55e';
-                    statusText = '狀態正常'; panelBg = 'linear-gradient(135deg, #f0fdf4, #dcfce7)';
-                    svgIcon = `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5"/></svg>`;
-                }
-
-                const icon = L.divIcon({
-                    className: `flood-marker-icon ${className}`,
-                    html: svgIcon,
-                    iconSize: [26, 26],
-                    iconAnchor: [13, 13]
-                });
-
-                const marker = L.marker([lat, lon], { icon: icon });
-
-                let timeDisplay = "無資料";
-                if (obsTimeStr) {
-                    let d = new Date(obsTimeStr);
-                    let pad = n => n < 10 ? '0' + n : n;
-                    timeDisplay = `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                }
-
-                const popupHtml = `
-                    <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px 16px 14px 16px; font-family: system-ui, -apple-system, sans-serif;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <div style="flex-shrink: 0; display:flex; align-items:center; justify-content:center;">${svgIcon}</div>
-                            <div style="font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.35; word-break: break-all; flex: 1; padding-right: 15px;">${escapeGISHtml(stationName)}</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 12px 14px; border-radius: 12px; background: ${panelBg}; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
-                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-size: 11px; font-weight: 800; color: ${color}; opacity: 0.8;">目前狀態</span>
-                                <span style="font-size: 13px; font-weight: 900; color: ${color};">${statusText}</span>
-                            </div>
-                            <div style="display: flex; align-items: baseline; gap: 2px;">
-                                <span style="font-size: 30px; font-weight: 900; color: ${color}; line-height: 1; font-family: ui-monospace, monospace;">${depthCm.toFixed(depthCm % 1 === 0 ? 0 : 1)}</span>
-                                <span style="font-size: 13px; font-weight: 800; color: ${color}; margin-bottom: 2px;">cm</span>
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px dashed #e2e8f0;">
-                            <span style="font-size: 11px; font-weight: 800; color: #94a3b8; display:flex; align-items:center; gap:4px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                最後觀測
-                            </span>
-                            <span style="font-size: 11px; font-weight: 700; color: #475569;">${timeDisplay}</span>
-                        </div>
-                    </div>
-                `;
-                
-                marker.bindPopup(popupHtml, { className: 'flood-popup', offset: [0, -6] });
-                realtimeFloodLayer.addLayer(marker);
-            });
-
-            const statusEl = document.getElementById('realtimeFloodStatus');
-            if(statusEl) {
-                statusEl.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="color:#16a34a; font-weight:900; font-size:13px; display:flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#22c55e" stroke="#ffffff" stroke-width="2"/></svg> 正常：${normalCount}</span>
-                        <span style="color:#ef4444; font-weight:900; font-size:13px; display:flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24"><polygon points="12 2 22 20 2 20" fill="#f97316" stroke="#ffffff" stroke-width="2"/></svg> 積淹水：${floodedCount}</span>
-                    </div>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:8px; padding:10px; background:#fff; border-radius:10px; border:1px solid #fca5a5; transition:0.2s; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
-                        <input type="checkbox" onchange="toggleShowOnlyFlooded(this.checked)" ${window.showOnlyFlooded ? 'checked' : ''} style="accent-color:#ef4444; width:17px; height:17px; margin:0; cursor:pointer;">
-                        <span style="font-size:13px; font-weight:800; color:#991b1b; cursor:pointer;">只顯示有積淹水的測站</span>
-                    </label>
-                    <div style="font-size:10px; color:#94a3b8; display:flex; justify-content:space-between; margin-top:8px; font-weight:600;">
-                        <span>未回報：${offlineCount} 處</span><span>每 5 分鐘自動整理</span>
-                    </div>
-                `;
+            if (!thing || !Array.isArray(coords) || coords.length < 2 || !observation) {
+                return;
             }
+
+            const lon = Number(coords[0]);
+            const lat = Number(coords[1]);
+
+            if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+            // 排除海上的已知佔位座標
+            if (Math.abs(lon - 120) < 0.000001 && Math.abs(lat - 23) < 0.000001) return;
+
+            // 台灣大略範圍
+            if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) return;
+
+            const stationName =
+                thing?.properties?.stationName ||
+                thing?.name ||
+                "未命名測站";
+
+            const observedAt = observation.phenomenonTime || "";
+            const observedAtMs = new Date(observedAt).getTime();
+
+            if (!Number.isFinite(observedAtMs)) return;
+
+            const hoursAgo = (Date.now() - observedAtMs) / 3600000;
+            if (hoursAgo > 24) return;
+
+            const depthCm = getFloodDepthCm(ds, stationName);
+
+            const stationId =
+                thing?.properties?.stationID ||
+                thing?.name ||
+                stationName;
+
+            const candidate = {
+                stationId,
+                stationName,
+                lon,
+                lat,
+                depthCm,
+                observedAt,
+                observedAtMs,
+                description: ds?.description || ""
+            };
+
+            if (isFloodRecordBetter(candidate, stationRecords[stationId])) {
+                stationRecords[stationId] = candidate;
+            }
+        });
+
+        window.currentFloodData = stationRecords;
+        renderRealtimeFloodMap();
+
+    } catch (err) {
+        console.error("淹水感測器抓取失敗", err);
+
+        if (statusEl) {
+            statusEl.innerHTML =
+                '<span style="color:#ef4444;font-weight:800;">⚠️ 讀取失敗，請稍後再試。</span>';
+        }
+    }
+}
+
+function renderRealtimeFloodMap() {
+    if (!realtimeFloodLayer) return;
+
+    realtimeFloodLayer.clearLayers();
+
+    let floodedCount = 0;
+    let normalCount = 0;
+
+    Object.values(window.currentFloodData || {}).forEach(record => {
+        const isFlooded = record.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
+
+        if (isFlooded) floodedCount++;
+        else normalCount++;
+
+        if (window.showOnlyFlooded && !isFlooded) {
+            return;
         }
 
-        // 🌟 獨立抽出來的渲染函式，方便隨時 Filter 不用重抓資料
-        function renderRealtimeFloodMap() {
-            if (!realtimeFloodLayer) return;
-            realtimeFloodLayer.clearLayers();
+        let color;
+        let statusText;
+        let svgIcon;
 
-            let floodedCount = 0;
-            let normalCount = 0;
-            let offlineCount = 0;
-
-            Object.values(window.currentFloodData).forEach(ds => {
-                const thing = ds.Thing;
-                const coords = thing.Locations[0].location.coordinates; 
-                const lon = coords[0], lat = coords[1];
-                
-                // 🛡️ 防呆 1：過濾無效座標與水利署幽靈測站 [120, 23]
-                if (isNaN(lon) || isNaN(lat)) return;
-                if (Math.abs(lon - 120) < 0.000001 && Math.abs(lat - 23) < 0.000001) return;
-                if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) return;
-
-                let stationName = thing.properties.stationName || thing.name || '未命名測站';
-                let obsVal = 0;
-                let obsTimeStr = "無最新資料";
-                let isOffline = true;
-
-                if (ds.Observations && ds.Observations.length > 0) {
-                    const obs = ds.Observations[0];
-                    obsVal = parseFloat(obs.result) || 0;
-                    obsTimeStr = obs.phenomenonTime;
-                    const obsDate = new Date(obsTimeStr);
-                    const hoursAgo = (new Date() - obsDate) / (1000 * 60 * 60);
-                    if (hoursAgo < 24) isOffline = false;
-                }
-
-                if (isOffline) { offlineCount++; return; }
-
-                // 🛡️ 單位處理：新版 API 直接回傳公分，移除舊版的乘以 100 的錯誤邏輯
-                let depthCm = Math.max(0, Math.round(obsVal * 10) / 10);
-                if (depthCm < 2) depthCm = 0; // 小於 2cm 視為正常無積水
-
-                // 統計數量
-                if (depthCm > 0) floodedCount++;
-                else normalCount++;
-
-                // 🎯 核心 Filter 功能：如果打勾了「只顯示積淹水」，且此站為 0，就跳過不畫在地圖上！
-                if (window.showOnlyFlooded && depthCm === 0) return;
-
-                let color, fillColor, className = '';
-                let statusText = '', panelBg = '', svgIcon = '';
-
-                // 🎨 判定狀態、顏色與【通用設計形狀 Icon】
-                if (depthCm >= 30) {
-                    color = '#991b1b'; fillColor = '#ef4444'; className = 'pulse-flood-danger-ud';
-                    statusText = '高度警戒'; panelBg = 'linear-gradient(135deg, #fef2f2, #fee2e2)';
-                    // 紅色正方形
-                    svgIcon = `<svg width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5"/></svg>`;
-                } else if (depthCm >= 10) {
-                    color = '#9a3412'; fillColor = '#f97316'; className = 'pulse-flood-danger-ud';
-                    statusText = '注意積淹'; panelBg = 'linear-gradient(135deg, #fff7ed, #ffedd5)';
-                    // 橘色三角形
-                    svgIcon = `<svg width="26" height="26" viewBox="0 0 24 24"><polygon points="12 2 22 20 2 20" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
-                } else if (depthCm > 0) {
-                    color = '#1e3a8a'; fillColor = '#3b82f6'; className = 'pulse-flood-danger-ud';
-                    statusText = '輕微積水'; panelBg = 'linear-gradient(135deg, #eff6ff, #dbeafe)';
-                    // 藍色菱形
-                    svgIcon = `<svg width="24" height="24" viewBox="0 0 24 24"><polygon points="12 2 22 12 12 22 2 12" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
-                } else {
-                    color = '#14532d'; fillColor = '#22c55e';
-                    statusText = '狀態正常'; panelBg = 'linear-gradient(135deg, #f0fdf4, #dcfce7)';
-                    // 綠色圓形
-                    svgIcon = `<svg width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="${fillColor}" stroke="#ffffff" stroke-width="2.5"/></svg>`;
-                }
-
-                // 替換原本的 CircleMarker，改用能塞入 HTML 的 DivIcon
-                const icon = L.divIcon({
-                    className: `flood-marker-icon ${className}`,
-                    html: svgIcon,
-                    iconSize: [26, 26],
-                    iconAnchor: [13, 13]
-                });
-
-                const marker = L.marker([lat, lon], { icon: icon });
-
-                // ⏰ 日期格式化 (MM/DD HH:mm)
-                let timeDisplay = "無";
-                if (obsTimeStr !== "無最新資料") {
-                    let d = new Date(obsTimeStr);
-                    let pad = n => n < 10 ? '0' + n : n;
-                    timeDisplay = `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                }
-
-                // ✨ 極致美學 HTML 資訊卡
-                const popupHtml = `
-                    <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px 16px 14px 16px; font-family: system-ui, -apple-system, sans-serif;">
-                        
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <div style="flex-shrink: 0; display:flex; align-items:center; justify-content:center;">${svgIcon}</div>
-                            <div style="font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.3; word-break: break-all; flex: 1; padding-right: 15px;">${escapeGISHtml(stationName)}</div>
-                        </div>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 14px 16px; border-radius: 14px; background: ${panelBg}; box-shadow: inset 0 2px 4px rgba(255,255,255,0.5);">
-                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-size: 11px; font-weight: 800; color: ${color}; opacity: 0.8;">目前狀態</span>
-                                <span style="font-size: 13px; font-weight: 900; color: ${color};">${statusText}</span>
-                            </div>
-                            <div style="display: flex; align-items: baseline; gap: 2px;">
-                                <span style="font-size: 32px; font-weight: 900; color: ${color}; line-height: 1; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;">${depthCm}</span>
-                                <span style="font-size: 13px; font-weight: 800; color: ${color}; margin-bottom: 2px;">cm</span>
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px dashed #e2e8f0;">
-                            <span style="font-size: 11px; font-weight: 800; color: #94a3b8; display:flex; align-items:center; gap:4px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                最後觀測
-                            </span>
-                            <span style="font-size: 11px; font-weight: 700; color: #475569;">${timeDisplay}</span>
-                        </div>
-                    </div>
-                `;
-                
-                marker.bindPopup(popupHtml, { 
-                    className: 'aesthetic-popup',
-                    closeButton: true,
-                    offset: [0, -10]
-                });
-                
-                realtimeFloodLayer.addLayer(marker);
-            });
-
-            // 更新側邊欄的戰情室面板 UI
-            const statusEl = document.getElementById('realtimeFloodStatus');
-            if(statusEl) {
-                statusEl.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="color:#16a34a; font-weight:900; font-size:13px; display:flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#22c55e" stroke="#ffffff" stroke-width="2"/></svg> 正常：${normalCount}</span>
-                        <span style="color:#ef4444; font-weight:900; font-size:13px; display:flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24"><polygon points="12 2 22 20 2 20" fill="#f97316" stroke="#ffffff" stroke-width="2"/></svg> 積淹水：${floodedCount}</span>
-                    </div>
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:8px; padding:8px 10px; background:#fff; border-radius:8px; border:1px solid #fca5a5; transition:0.2s;">
-                        <input type="checkbox" onchange="toggleShowOnlyFlooded(this.checked)" ${window.showOnlyFlooded ? 'checked' : ''} style="accent-color:#ef4444; width:16px; height:16px; margin:0;">
-                        <span style="font-size:12px; font-weight:800; color:#991b1b;">只顯示有積淹水的測站</span>
-                    </label>
-                    <div style="font-size:10px; color:#94a3b8; display:flex; justify-content:space-between; margin-top:8px;">
-                        <span>離線：${offlineCount} 處</span><span>每 5 分鐘自動刷新</span>
-                    </div>
-                `;
-            }
+        if (record.depthCm >= 30) {
+            color = "#CC79A7";
+            statusText = "高度警戒";
+            svgIcon = `
+                <svg width="28" height="28" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="4" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+                    <path d="M12 7v6" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+                    <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
+                </svg>
+            `;
+        } else if (record.depthCm >= 10) {
+            color = "#E69F00";
+            statusText = "注意積淹";
+            svgIcon = `
+                <svg width="30" height="30" viewBox="0 0 24 24">
+                    <polygon points="12 2 22 20 2 20" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+                    <path d="M12 8v5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+                    <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
+                </svg>
+            `;
+        } else if (isFlooded) {
+            color = "#0072B2";
+            statusText = "輕微積水";
+            svgIcon = `
+                <svg width="28" height="28" viewBox="0 0 24 24">
+                    <polygon points="12 2 22 12 12 22 2 12" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+                    <path d="M7 13c1.5-1.3 3-1.3 4.5 0 1.5 1.3 3 1.3 4.5 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+                </svg>
+            `;
+        } else {
+            color = "#475569";
+            statusText = "無積水";
+            svgIcon = `
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+                    <path d="M8 12.2l2.5 2.5 5-5.2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
         }
+
+        const icon = L.divIcon({
+            className: "flood-marker-icon",
+            html: svgIcon,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -12]
+        });
+
+        const marker = L.marker([record.lat, record.lon], {
+            icon,
+            title: `${record.stationName}：${record.depthCm} cm`
+        });
+
+        const time = new Date(record.observedAt);
+        const timeDisplay = Number.isFinite(time.getTime())
+            ? `${String(time.getMonth() + 1).padStart(2, "0")}/${String(time.getDate()).padStart(2, "0")} ${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`
+            : "無資料";
+
+        marker.bindPopup(`
+            <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
+                    ${svgIcon}
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
+                        <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">${escapeGISHtml(record.stationName)}</div>
+                    </div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:end;background:#f8fafc;border-radius:12px;padding:12px 13px;">
+                    <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
+                    <span style="font-size:29px;font-weight:900;line-height:1;color:${color};font-family:ui-monospace,monospace;">
+                        ${record.depthCm}<small style="font-size:12px;"> cm</small>
+                    </span>
+                </div>
+
+                <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;font-size:11px;">
+                    <span style="color:#64748b;font-weight:800;">${statusText}</span>
+                    <span style="color:#475569;">${timeDisplay}</span>
+                </div>
+            </div>
+        `, {
+            className: "flood-popup",
+            closeButton: true
+        });
+
+        realtimeFloodLayer.addLayer(marker);
+    });
+
+    const statusEl = document.getElementById("realtimeFloodStatus");
+
+    if (statusEl) {
+        statusEl.innerHTML = `
+            <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:900;">
+                <span style="color:#475569;">無積水：${normalCount}</span>
+                <span style="color:#b45309;">有積水：${floodedCount}</span>
+            </div>
+
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:9px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;">
+                <input
+                    type="checkbox"
+                    onchange="toggleShowOnlyFlooded(this.checked)"
+                    ${window.showOnlyFlooded ? "checked" : ""}
+                    style="width:16px;height:16px;margin:0;accent-color:#E69F00;"
+                >
+                <span style="font-size:12px;font-weight:900;color:#9a3412;">只顯示有積淹水的測站</span>
+            </label>
+
+            <div style="margin-top:8px;color:#64748b;font-size:10px;">
+                每 5 分鐘更新；篩選門檻為 ${FLOOD_DISPLAY_THRESHOLD_CM} cm
+            </div>
+        `;
+    }
+}
     </script>
 
 
