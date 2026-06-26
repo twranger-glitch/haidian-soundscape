@@ -6911,12 +6911,12 @@ const FLOOD_FLOODED_CM = 0.1;
 const FLOOD_MAX_ROAD_DEPTH_CM = 300;
 
 function floodEscapeHtml(value) {
-return String(value ?? "")
-.replace(/&/g, "&")
-.replace(/</g, "<")
-.replace(/>/g, ">")
-.replace(/"/g, """)
-.replace(/'/g, "'");
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
 
 function floodGetSamples(datastream) {
@@ -6926,24 +6926,20 @@ const value = Number(observation?.result);
 const time = observation?.phenomenonTime || "";
 const timeMs = new Date(time).getTime();
 
-```
         return { value, time, timeMs };
     })
     .filter(sample => Number.isFinite(sample.value) && Number.isFinite(sample.timeMs))
     .sort((a, b) => b.timeMs - a.timeMs);
-```
 
 }
 
 function floodUnitMultiplierToCm(unit) {
 const normalized = String(unit || "cm").trim().toLowerCase();
 
-```
 if (["m", "meter", "metre", "公尺"].includes(normalized)) return 100;
 if (["mm", "毫米"].includes(normalized)) return 0.1;
 
 return 1;
-```
 
 }
 
@@ -6956,19 +6952,16 @@ function floodIsOfficialDepthStream(datastream) {
 const name = String(datastream?.name || "").trim();
 const description = String(datastream?.description || "");
 
-```
 return (
     name === "淹水深度" ||
     description.includes("Datastream_Category=淹水深度")
 );
-```
 
 }
 
 function floodNormalizeDepth(datastream) {
 const samples = floodGetSamples(datastream);
 
-```
 if (!samples.length) {
     return {
         depthCm: null,
@@ -7036,7 +7029,6 @@ return {
     quality: "suspect",
     note: "原始資料異常，未自動換算"
 };
-```
 
 }
 
@@ -7044,7 +7036,6 @@ function floodMakeCandidate(datastream) {
 const thing = datastream?.Thing;
 const coordinates = thing?.Locations?.[0]?.location?.coordinates;
 
-```
 if (!thing || !Array.isArray(coordinates) || coordinates.length < 2) {
     return null;
 }
@@ -7099,14 +7090,12 @@ return {
     streamId: datastream?.["@iot.id"] || "",
     ...normalized
 };
-```
 
 }
 
 function floodCandidatePriority(candidate) {
 let score = 0;
 
-```
 if (!candidate.isRaw) score += 1000;
 if (candidate.isOfficial) score += 100;
 if (!candidate.isStale) score += 20;
@@ -7114,14 +7103,12 @@ if (candidate.quality === "source") score += 3;
 if (candidate.quality === "estimated") score += 2;
 
 return score;
-```
 
 }
 
 function floodConsolidateStations(candidates) {
 const groups = new Map();
 
-```
 candidates.forEach(candidate => {
     if (!groups.has(candidate.stationId)) groups.set(candidate.stationId, []);
     groups.get(candidate.stationId).push(candidate);
@@ -7166,7 +7153,6 @@ return [...groups.values()]
         if (aFlooded !== bFlooded) return bFlooded ? 1 : -1;
         return b.depthCm - a.depthCm;
     });
-```
 
 }
 
@@ -7175,7 +7161,6 @@ if (depthCm >= 30) {
 return { key: "danger", label: "高度警戒", color: "#CC79A7", shape: "square" };
 }
 
-```
 if (depthCm >= 10) {
     return { key: "warning", label: "注意積淹", color: "#E69F00", shape: "triangle" };
 }
@@ -7185,7 +7170,6 @@ if (depthCm >= FLOOD_FLOODED_CM) {
 }
 
 return { key: "normal", label: "無積水", color: "#475569", shape: "circle" };
-```
 
 }
 
@@ -7193,7 +7177,6 @@ function floodCreateIcon(level, isStale) {
 const opacity = isStale ? 0.58 : 1;
 let svg = "";
 
-```
 if (level.shape === "square") {
     svg = `
         <svg width="31" height="31" viewBox="0 0 24 24" aria-hidden="true" style="opacity:${opacity}">
@@ -7233,7 +7216,6 @@ return L.divIcon({
     iconAnchor: [16, 16],
     popupAnchor: [0, -14]
 });
-```
 
 }
 
@@ -7245,10 +7227,8 @@ function floodFormatTime(isoTime) {
 const date = new Date(isoTime);
 if (!Number.isFinite(date.getTime())) return "無資料";
 
-```
 const pad = value => String(value).padStart(2, "0");
 return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-```
 
 }
 
@@ -7261,7 +7241,6 @@ async function toggleRealtimeFlood(checked) {
 const panel = document.getElementById("realtimeFloodControlPanel");
 const status = document.getElementById("realtimeFloodStatus");
 
-```
 if (panel) panel.style.display = checked ? "block" : "none";
 
 clearInterval(realtimeFloodInterval);
@@ -7289,14 +7268,12 @@ if (status) {
 
 await updateRealtimeFlood();
 realtimeFloodInterval = setInterval(updateRealtimeFlood, FLOOD_REFRESH_MS);
-```
 
 }
 
 async function updateRealtimeFlood() {
 if (!realtimeFloodLayer) return;
 
-```
 const status = document.getElementById("realtimeFloodStatus");
 
 try {
@@ -7322,14 +7299,12 @@ try {
         status.innerHTML = '<span style="color:#b91c1c;font-weight:800;">讀取失敗，請稍後再試。</span>';
     }
 }
-```
 
 }
 
 function renderRealtimeFloodMap() {
 if (!realtimeFloodLayer) return;
 
-```
 realtimeFloodLayer.clearLayers();
 
 let floodedCount = 0;
@@ -7441,7 +7416,6 @@ if (status) {
         </div>
     `;
 }
-```
 
 }
 
