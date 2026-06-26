@@ -6903,8 +6903,18 @@ function mountGlobalPlayerIntoPopup_(retry) {
                 const url = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
                 
                 const res = await fetch(url);
-                if (!res.ok) throw new Error("API 連線失敗");
-                const data = await res.json();
+
+if (!res.ok) {
+    let detail = "";
+    try {
+        const errorData = await res.json();
+        detail = errorData.message ? `：${errorData.message}` : "";
+    } catch (_) {}
+
+    throw new Error(`API HTTP ${res.status}${detail}`);
+}
+
+const data = await res.json();
                 
                 realtimeFloodLayer.clearLayers();
 
