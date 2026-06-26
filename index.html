@@ -6899,22 +6899,11 @@ function mountGlobalPlayerIntoPopup_(retry) {
             if (statusEl) statusEl.innerHTML = '<span style="color:#b91c1c;">📡 下載與分析全台數據中...</span>';
 
             try {
-                // 🎯 呼叫您自己的 Cloudflare 代理 API，徹底破解 CORS 阻擋！
+                // 🎯 呼叫 Cloudflare Worker
                 const url = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
-                
                 const res = await fetch(url);
-
-if (!res.ok) {
-    let detail = "";
-    try {
-        const errorData = await res.json();
-        detail = errorData.message ? `：${errorData.message}` : "";
-    } catch (_) {}
-
-    throw new Error(`API HTTP ${res.status}${detail}`);
-}
-
-const data = await res.json();
+                if (!res.ok) throw new Error("API 連線失敗");
+                const data = await res.json();
                 
                 realtimeFloodLayer.clearLayers();
 
@@ -6938,7 +6927,10 @@ const data = await res.json();
                         const obs = ds.Observations[0];
                         depth = parseFloat(obs.result) || 0;
                         const obsDate = new Date(obs.phenomenonTime);
-                        obsTimeStr = obsDate.toLocaleString('zh-TW');
+                        
+                        // 將時間格式化為 2026/06/26 14:05 這種好看的格式
+                        const pad = n => n < 10 ? '0' + n : n;
+                        obsTimeStr = `${obsDate.getFullYear()}/${pad(obsDate.getMonth()+1)}/${pad(obsDate.getDate())} ${pad(obsDate.getHours())}:${pad(obsDate.getMinutes())}`;
                         
                         const hoursAgo = (new Date() - obsDate) / (1000 * 60 * 60);
                         if (hoursAgo < 6) isOffline = false;
@@ -6961,18 +6953,29 @@ const data = await res.json();
                         radius: radius, color: color, weight: 1.5, fillColor: fillColor, fillOpacity: 0.85, className: className
                     });
 
+                    // ✨ 高顏值卡片排版：加入玻璃擬態背景、清晰的數字排版與 SVG Icon
                     const popupHtml = `
-                        <div style="min-width:180px; font-family:'Helvetica Neue', Arial, sans-serif;">
-                            <div style="font-weight:900; font-size:14px; color:${color}; margin-bottom:8px; border-bottom:1px solid ${fillColor}; padding-bottom:4px;">
-                                💧 ${escapeGISHtml(stationName)}
+                        <div style="min-width: 200px; font-family: 'Helvetica Neue', Arial, sans-serif;">
+                            <div style="display:flex; align-items:center; gap:8px; padding-bottom:10px; border-bottom: 1px solid rgba(0,0,0,0.06); margin-bottom:10px;">
+                                <div style="width:10px; height:10px; border-radius:50%; background:${fillColor}; box-shadow: 0 0 0 2px rgba(255,255,255,0.9), 0 0 6px ${color};"></div>
+                                <div style="font-size:15px; font-weight:900; color:#0f172a; letter-spacing:0.5px;">${escapeGISHtml(stationName)}</div>
                             </div>
-                            <div style="font-size:13px; color:#475569; line-height:1.6;">
-                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                                    <span>即時水深：</span>
-                                    <strong style="color:${depth > 0 ? '#ef4444' : '#22c55e'}; font-size:15px;">${depth} cm</strong>
+                            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px; margin-bottom:4px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <span style="font-size:12px; font-weight:800; color:#64748b; display:flex; align-items:center; gap:4px;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
+                                        即時水深
+                                    </span>
+                                    <span style="font-size:18px; font-weight:900; color:${depth > 0 ? '#ef4444' : '#059669'}; font-family:'Courier New', monospace;">
+                                        ${depth} <span style="font-size:12px; font-weight:700;">cm</span>
+                                    </span>
                                 </div>
-                                <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8;">
-                                    <span>時間：</span><span>${obsTimeStr}</span>
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-size:11px; font-weight:800; color:#94a3b8; display:flex; align-items:center; gap:4px;">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                        更新時間
+                                    </span>
+                                    <span style="font-size:11px; font-weight:700; color:#64748b;">${obsTimeStr}</span>
                                 </div>
                             </div>
                         </div>
@@ -6988,7 +6991,7 @@ const data = await res.json();
                             <span style="color:#ef4444; font-weight:900; font-size:13px;">🚨 積淹水：${floodedCount}</span>
                         </div>
                         <div style="font-size:10px; color:#94a3b8; display:flex; justify-content:space-between;">
-                            <span>休眠/離線：${offlineCount} 處</span><span>每 5 分鐘自動刷新</span>
+                            <span>休眠/離線：${offlineCount} 處</span><span>每 5 分鐘自動更新</span>
                         </div>
                     `;
                 }
