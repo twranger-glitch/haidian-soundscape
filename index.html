@@ -7139,318 +7139,430 @@ function mountGlobalPlayerIntoPopup_(retry) {
        // ==========================================
         // 🌊 新增模組：即時淹水感測器戰情室 (通用設計形狀分級與直覺篩選)
         // ==========================================
-        let realtimeFloodLayer = null;
-        let realtimeFloodInterval = null;
-        window.currentFloodData = {};
-        window.showOnlyFlooded = false;
+        // ==========================================
+// 🌊 即時淹水感測器：不漏站版
+// ==========================================
+let realtimeFloodLayer = null;
+let realtimeFloodInterval = null;
+window.currentFloodData = {};
+window.showOnlyFlooded = false;
 
-        // 🎯 點擊開關動態切換：只顯示淹水測站
-        window.toggleShowOnlyFlooded = function(checked) {
-            window.showOnlyFlooded = checked;
-            renderRealtimeFloodMap(); 
-        };
-
-        async function toggleRealtimeFlood(checked) {
-            const panel = document.getElementById('realtimeFloodControlPanel');
-            const statusEl = document.getElementById('realtimeFloodStatus');
-            
-            if (panel) panel.style.display = checked ? 'block' : 'none';
-
-            if (!checked) {
-                if (realtimeFloodLayer && map.hasLayer(realtimeFloodLayer)) {
-                    map.removeLayer(realtimeFloodLayer);
-                }
-                clearInterval(realtimeFloodInterval);
-                return;
-            }
-
-            if (statusEl) statusEl.innerHTML = '<span style="color:#b91c1c;">📡 連線物聯網大數據中心...</span>';
-
-            if (!realtimeFloodLayer) realtimeFloodLayer = L.layerGroup();
-            if (!map.hasLayer(realtimeFloodLayer)) map.addLayer(realtimeFloodLayer);
-
-            await updateRealtimeFlood(); 
-            realtimeFloodInterval = setInterval(updateRealtimeFlood, 5 * 60 * 1000);
-        }
-
-        const FLOOD_DISPLAY_THRESHOLD_CM = 1;
+const FLOOD_DISPLAY_THRESHOLD_CM = 1;
+const FLOOD_STALE_AFTER_HOURS = 24;
 
 // API 有些同站資料流會包含 Raw Data；這筆永康站已確認需 ×10 才是實際 61 cm。
 const FLOOD_STATION_SCALE_OVERRIDES = {
-    "永康區-永明街與中山南路4巷165弄路口": 10
+  "永康區-永明街與中山南路4巷165弄路口": 10
 };
 
+window.toggleShowOnlyFlooded = function(checked) {
+  window.showOnlyFlooded = checked;
+  renderRealtimeFloodMap();
+};
+
+async function toggleRealtimeFlood(checked) {
+  const panel = document.getElementById("realtimeFloodControlPanel");
+  const statusEl = document.getElementById("realtimeFloodStatus");
+
+  if (panel) panel.style.display = checked ? "block" : "none";
+
+  clearInterval(realtimeFloodInterval);
+  realtimeFloodInterval = null;
+
+  if (!checked) {
+    if (realtimeFloodLayer && map.hasLayer(realtimeFloodLayer)) {
+      map.removeLayer(realtimeFloodLayer);
+    }
+    return;
+  }
+
+  if (statusEl) {
+    statusEl.innerHTML =
+      '<span style="color:#b91c1c;">📡 連線物聯網大數據中心...</span>';
+  }
+
+  if (!realtimeFloodLayer) realtimeFloodLayer = L.layerGroup();
+  if (!map.hasLayer(realtimeFloodLayer)) map.addLayer(realtimeFloodLayer);
+
+  await updateRealtimeFlood();
+  realtimeFloodInterval = setInterval(updateRealtimeFlood, 5 * 60 * 1000);
+}
+
 function getFloodDepthCm(ds, stationName) {
-    const rawValue = Number(ds?.Observations?.[0]?.result || 0);
+  const rawResult = ds?.Observations?.[0]?.result;
 
-    if (!Number.isFinite(rawValue)) {
-        return 0;
-    }
+  // 沒有即時值不等於 0 cm。
+  if (
+    rawResult === null ||
+    rawResult === undefined ||
+    String(rawResult).trim() === ""
+  ) {
+    return null;
+  }
 
-    const unit = String(
-        ds?.unitOfMeasurement?.symbol ||
-        ds?.unitOfMeasurement?.name ||
-        "cm"
-    ).trim().toLowerCase();
+  const rawValue = Number(rawResult);
+  if (!Number.isFinite(rawValue)) return null;
 
-    let depthCm = rawValue;
+  const unit = String(
+    ds?.unitOfMeasurement?.symbol ||
+    ds?.unitOfMeasurement?.name ||
+    "cm"
+  ).trim().toLowerCase();
 
-    if (unit === "m" || unit === "meter" || unit === "metre" || unit === "公尺") {
-        depthCm = rawValue * 100;
-    } else if (unit === "mm" || unit === "毫米") {
-        depthCm = rawValue / 10;
-    }
+  let depthCm = rawValue;
 
-    const scale = FLOOD_STATION_SCALE_OVERRIDES[stationName];
-    if (scale) {
-        depthCm *= scale;
-    }
+  if (
+    unit === "m" ||
+    unit === "meter" ||
+    unit === "metre" ||
+    unit === "公尺"
+  ) {
+    depthCm = rawValue * 100;
+  } else if (unit === "mm" || unit === "毫米") {
+    depthCm = rawValue / 10;
+  }
 
-    return Math.max(0, Math.round(depthCm * 10) / 10);
+  const scale = FLOOD_STATION_SCALE_OVERRIDES[stationName];
+  if (scale) depthCm *= scale;
+
+  return Math.max(0, Math.round(depthCm * 10) / 10);
+}
+
+function floodRecordState(ds, depthCm, observedAtMs) {
+  const declaredStatus = String(
+    ds?.Thing?.properties?.realtimeStatus || ""
+  ).trim().toLowerCase();
+
+  const hasObservation =
+    depthCm !== null &&
+    declaredStatus !== "metadata_only";
+
+  const hasValidTimestamp = Number.isFinite(observedAtMs);
+
+  const hoursAgo = hasValidTimestamp
+    ? (Date.now() - observedAtMs) / 3600000
+    : Number.POSITIVE_INFINITY;
+
+  return {
+    hasObservation,
+    hasValidTimestamp,
+    hoursAgo,
+    isStale:
+      hasObservation &&
+      (
+        !hasValidTimestamp ||
+        hoursAgo > FLOOD_STALE_AFTER_HOURS ||
+        hoursAgo < -1
+      )
+  };
 }
 
 function isFloodRecordBetter(candidate, current) {
-    if (!current) return true;
+  if (!current) return true;
 
-    // 不要讓 Raw Data 覆蓋正常淹水資料流
-    const candidateIsRaw = /raw data/i.test(candidate.description || "");
-    const currentIsRaw = /raw data/i.test(current.description || "");
+  if (candidate.hasObservation !== current.hasObservation) {
+    return candidate.hasObservation;
+  }
 
-    if (candidateIsRaw !== currentIsRaw) {
-        return !candidateIsRaw;
-    }
+  if (candidate.isStale !== current.isStale) {
+    return !candidate.isStale;
+  }
 
-    // 同一測站中，有積水的資料優先保留，避免最新的 0 把積水站蓋掉
-    const candidateFlooded = candidate.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
-    const currentFlooded = current.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
+  const candidateIsRaw = /raw data/i.test(candidate.description || "");
+  const currentIsRaw = /raw data/i.test(current.description || "");
 
-    if (candidateFlooded !== currentFlooded) {
-        return candidateFlooded;
-    }
+  if (candidateIsRaw !== currentIsRaw) {
+    return !candidateIsRaw;
+  }
 
-    // 狀態相同時才用最新時間決定
-    return candidate.observedAtMs > current.observedAtMs;
+  // 較新的 0 cm 應可覆蓋較舊的積水值。
+  return candidate.observedAtMs > current.observedAtMs;
 }
 
 async function updateRealtimeFlood() {
-    if (!realtimeFloodLayer) return;
+  if (!realtimeFloodLayer) return;
 
-    const statusEl = document.getElementById("realtimeFloodStatus");
+  const statusEl = document.getElementById("realtimeFloodStatus");
 
-    try {
-        const url = "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
-        const res = await fetch(url, { cache: "no-store" });
+  try {
+    const url =
+      "https://haidian-gis-cache.yhzkiki.workers.dev/api/realtime-flood";
 
-        if (!res.ok) {
-            throw new Error(`API HTTP ${res.status}`);
-        }
+    const res = await fetch(url, { cache: "no-store" });
 
-        const data = await res.json();
-        const stationRecords = {};
-
-        (data.value || []).forEach(ds => {
-            const thing = ds?.Thing;
-            const coords = thing?.Locations?.[0]?.location?.coordinates;
-            const observation = ds?.Observations?.[0];
-
-            if (!thing || !Array.isArray(coords) || coords.length < 2 || !observation) {
-                return;
-            }
-
-            const lon = Number(coords[0]);
-            const lat = Number(coords[1]);
-
-            if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-
-            // 排除海上的已知佔位座標
-            if (Math.abs(lon - 120) < 0.000001 && Math.abs(lat - 23) < 0.000001) return;
-
-            // 台灣大略範圍
-            if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) return;
-
-            const stationName =
-                thing?.properties?.stationName ||
-                thing?.name ||
-                "未命名測站";
-
-            const observedAt = observation.phenomenonTime || "";
-            const observedAtMs = new Date(observedAt).getTime();
-
-            if (!Number.isFinite(observedAtMs)) return;
-
-            const hoursAgo = (Date.now() - observedAtMs) / 3600000;
-            if (hoursAgo > 24) return;
-
-            const depthCm = getFloodDepthCm(ds, stationName);
-
-            const stationId =
-                thing?.properties?.stationID ||
-                thing?.name ||
-                stationName;
-
-            const candidate = {
-                stationId,
-                stationName,
-                lon,
-                lat,
-                depthCm,
-                observedAt,
-                observedAtMs,
-                description: ds?.description || ""
-            };
-
-            if (isFloodRecordBetter(candidate, stationRecords[stationId])) {
-                stationRecords[stationId] = candidate;
-            }
-        });
-
-        window.currentFloodData = stationRecords;
-        renderRealtimeFloodMap();
-
-    } catch (err) {
-        console.error("淹水感測器抓取失敗", err);
-
-        if (statusEl) {
-            statusEl.innerHTML =
-                '<span style="color:#ef4444;font-weight:800;">⚠️ 讀取失敗，請稍後再試。</span>';
-        }
+    if (!res.ok) {
+      throw new Error(`API HTTP ${res.status}`);
     }
+
+    const data = await res.json();
+    const stationRecords = {};
+
+    (data.value || []).forEach(ds => {
+      const thing = ds?.Thing;
+      const coords = thing?.Locations?.[0]?.location?.coordinates;
+
+      if (!thing || !Array.isArray(coords) || coords.length < 2) {
+        return;
+      }
+
+      const lon = Number(coords[0]);
+      const lat = Number(coords[1]);
+
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+      if (
+        Math.abs(lon - 120) < 0.000001 &&
+        Math.abs(lat - 23) < 0.000001
+      ) {
+        return;
+      }
+
+      if (lon < 118 || lon > 123 || lat < 21 || lat > 26.5) {
+        return;
+      }
+
+      const stationName =
+        thing?.properties?.stationName ||
+        thing?.name ||
+        "未命名測站";
+
+      const stationId =
+        thing?.properties?.stationID ||
+        thing?.properties?.stationCode ||
+        thing?.name ||
+        stationName;
+
+      const observation = ds?.Observations?.[0] || null;
+
+      const observedAt =
+        observation?.phenomenonTime ||
+        ds?.phenomenonTime ||
+        "";
+
+      const parsedObservedAtMs = observedAt
+        ? new Date(observedAt).getTime()
+        : Number.NaN;
+
+      const observedAtMs = Number.isFinite(parsedObservedAtMs)
+        ? parsedObservedAtMs
+        : 0;
+
+      const depthCm = getFloodDepthCm(ds, stationName);
+      const state = floodRecordState(ds, depthCm, parsedObservedAtMs);
+
+      const candidate = {
+        stationId: String(stationId).trim().toUpperCase(),
+        stationName,
+        lon,
+        lat,
+        depthCm,
+        observedAt,
+        observedAtMs,
+        description: ds?.description || "",
+        ...state
+      };
+
+      if (!candidate.stationId) return;
+
+      if (
+        isFloodRecordBetter(
+          candidate,
+          stationRecords[candidate.stationId]
+        )
+      ) {
+        stationRecords[candidate.stationId] = candidate;
+      }
+    });
+
+    window.currentFloodData = stationRecords;
+    renderRealtimeFloodMap();
+  } catch (err) {
+    console.error("淹水感測器抓取失敗", err);
+
+    if (statusEl) {
+      statusEl.innerHTML =
+        '<span style="color:#ef4444;font-weight:800;">⚠️ 讀取失敗，請稍後再試。</span>';
+    }
+  }
 }
 
 function renderRealtimeFloodMap() {
-    if (!realtimeFloodLayer) return;
+  if (!realtimeFloodLayer) return;
 
-    realtimeFloodLayer.clearLayers();
+  realtimeFloodLayer.clearLayers();
 
-    let floodedCount = 0;
-    let normalCount = 0;
+  let floodedCount = 0;
+  let normalCount = 0;
+  let staleCount = 0;
+  let noObservationCount = 0;
 
-    Object.values(window.currentFloodData || {}).forEach(record => {
-        const isFlooded = record.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
+  Object.values(window.currentFloodData || {}).forEach(record => {
+    const isCurrent =
+      record.hasObservation &&
+      !record.isStale;
 
-        if (isFlooded) floodedCount++;
-        else normalCount++;
+    const isFlooded =
+      isCurrent &&
+      record.depthCm >= FLOOD_DISPLAY_THRESHOLD_CM;
 
-        if (window.showOnlyFlooded && !isFlooded) {
-            return;
-        }
+    if (!record.hasObservation) {
+      noObservationCount++;
+    } else if (record.isStale) {
+      staleCount++;
+    } else if (isFlooded) {
+      floodedCount++;
+    } else {
+      normalCount++;
+    }
 
-        let color;
-        let statusText;
-        let svgIcon;
+    if (window.showOnlyFlooded && !isFlooded) {
+      return;
+    }
 
-        if (record.depthCm >= 30) {
-            color = "#CC79A7";
-            statusText = "高度警戒";
-            svgIcon = `
-                <svg width="28" height="28" viewBox="0 0 24 24">
-                    <rect x="3" y="3" width="18" height="18" rx="4" fill="${color}" stroke="#fff" stroke-width="2.5"/>
-                    <path d="M12 7v6" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
-                    <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
-                </svg>
-            `;
-        } else if (record.depthCm >= 10) {
-            color = "#E69F00";
-            statusText = "注意積淹";
-            svgIcon = `
-                <svg width="30" height="30" viewBox="0 0 24 24">
-                    <polygon points="12 2 22 20 2 20" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
-                    <path d="M12 8v5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
-                    <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
-                </svg>
-            `;
-        } else if (isFlooded) {
-            color = "#0072B2";
-            statusText = "輕微積水";
-            svgIcon = `
-                <svg width="28" height="28" viewBox="0 0 24 24">
-                    <polygon points="12 2 22 12 12 22 2 12" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
-                    <path d="M7 13c1.5-1.3 3-1.3 4.5 0 1.5 1.3 3 1.3 4.5 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
-                </svg>
-            `;
-        } else {
-            color = "#475569";
-            statusText = "無積水";
-            svgIcon = `
-                <svg width="24" height="24" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
-                    <path d="M8 12.2l2.5 2.5 5-5.2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            `;
-        }
+    let color;
+    let statusText;
+    let svgIcon;
 
-        const icon = L.divIcon({
-            className: "flood-marker-icon",
-            html: svgIcon,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15],
-            popupAnchor: [0, -12]
-        });
+    if (!record.hasObservation) {
+      color = "#64748b";
+      statusText = "尚無即時讀值";
+      svgIcon = `
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+          <path d="M12 7v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.1" fill="#fff"/>
+        </svg>
+      `;
+    } else if (record.isStale) {
+      color = "#94a3b8";
+      statusText = "資料逾 24 小時";
+      svgIcon = `
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+          <path d="M12 7v5l3 2" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+    } else if (record.depthCm >= 30) {
+      color = "#CC79A7";
+      statusText = "高度警戒";
+      svgIcon = `
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="4" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+          <path d="M12 7v6" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
+        </svg>
+      `;
+    } else if (record.depthCm >= 10) {
+      color = "#E69F00";
+      statusText = "注意積淹";
+      svgIcon = `
+        <svg width="30" height="30" viewBox="0 0 24 24">
+          <polygon points="12 2 22 20 2 20" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+          <path d="M12 8v5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.2" fill="#fff"/>
+        </svg>
+      `;
+    } else if (isFlooded) {
+      color = "#0072B2";
+      statusText = "輕微積水";
+      svgIcon = `
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <polygon points="12 2 22 12 12 22 2 12" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+          <path d="M7 13c1.5-1.3 3-1.3 4.5 0 1.5 1.3 3 1.3 4.5 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+        </svg>
+      `;
+    } else {
+      color = "#475569";
+      statusText = "無積水";
+      svgIcon = `
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+          <path d="M8 12.2l2.5 2.5 5-5.2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+    }
 
-        const marker = L.marker([record.lat, record.lon], {
-            icon,
-            title: `${record.stationName}：${record.depthCm} cm`
-        });
-
-        const time = new Date(record.observedAt);
-        const timeDisplay = Number.isFinite(time.getTime())
-            ? `${String(time.getMonth() + 1).padStart(2, "0")}/${String(time.getDate()).padStart(2, "0")} ${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`
-            : "無資料";
-
-        marker.bindPopup(`
-            <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
-                    ${svgIcon}
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
-                        <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">${escapeGISHtml(record.stationName)}</div>
-                    </div>
-                </div>
-
-                <div style="display:flex;justify-content:space-between;align-items:end;background:#f8fafc;border-radius:12px;padding:12px 13px;">
-                    <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
-                    <span style="font-size:29px;font-weight:900;line-height:1;color:${color};font-family:ui-monospace,monospace;">
-                        ${record.depthCm}<small style="font-size:12px;"> cm</small>
-                    </span>
-                </div>
-
-                <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;font-size:11px;">
-                    <span style="color:#64748b;font-weight:800;">${statusText}</span>
-                    <span style="color:#475569;">${timeDisplay}</span>
-                </div>
-            </div>
-        `, {
-            className: "flood-popup",
-            closeButton: true
-        });
-
-        realtimeFloodLayer.addLayer(marker);
+    const icon = L.divIcon({
+      className: "flood-marker-icon",
+      html: svgIcon,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -12]
     });
 
-    const statusEl = document.getElementById("realtimeFloodStatus");
+    const marker = L.marker([record.lat, record.lon], {
+      icon,
+      title: `${record.stationName}：${record.depthCm ?? "—"} cm`
+    });
 
-    if (statusEl) {
-        statusEl.innerHTML = `
-            <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:900;">
-                <span style="color:#475569;">無積水：${normalCount}</span>
-                <span style="color:#b45309;">有積水：${floodedCount}</span>
-            </div>
+    const time = record.hasValidTimestamp
+      ? new Date(record.observedAt)
+      : null;
 
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:9px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;">
-                <input
-                    type="checkbox"
-                    onchange="toggleShowOnlyFlooded(this.checked)"
-                    ${window.showOnlyFlooded ? "checked" : ""}
-                    style="width:16px;height:16px;margin:0;accent-color:#E69F00;"
-                >
-                <span style="font-size:12px;font-weight:900;color:#9a3412;">只顯示有積淹水的測站</span>
-            </label>
+    const timeDisplay = time
+      ? `${String(time.getMonth() + 1).padStart(2, "0")}/${String(time.getDate()).padStart(2, "0")} ${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`
+      : "無有效觀測時間";
 
-            <div style="margin-top:8px;color:#64748b;font-size:10px;">
-                每 5 分鐘更新；篩選門檻為 ${FLOOD_DISPLAY_THRESHOLD_CM} cm
-            </div>
-        `;
-    }
+    const depthDisplay = record.hasObservation
+      ? record.depthCm
+      : "—";
+
+    marker.bindPopup(`
+      <div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;">
+          ${svgIcon}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:10px;font-weight:900;color:#64748b;letter-spacing:.08em;">即時淹水感測站</div>
+            <div style="font-size:15px;font-weight:900;color:#0f172a;line-height:1.4;">${escapeGISHtml(record.stationName)}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:end;background:#f8fafc;border-radius:12px;padding:12px 13px;">
+          <span style="font-size:12px;font-weight:800;color:#475569;">目前淹水深度</span>
+          <span style="font-size:29px;font-weight:900;line-height:1;color:${color};font-family:ui-monospace,monospace;">
+            ${depthDisplay}<small style="font-size:12px;">${record.hasObservation ? " cm" : ""}</small>
+          </span>
+        </div>
+
+        <div style="margin-top:11px;padding-top:10px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;gap:10px;font-size:11px;">
+          <span style="color:#64748b;font-weight:800;">${statusText}</span>
+          <span style="color:#475569;text-align:right;">${timeDisplay}</span>
+        </div>
+      </div>
+    `, {
+      className: "flood-popup",
+      closeButton: true
+    });
+
+    realtimeFloodLayer.addLayer(marker);
+  });
+
+  const statusEl = document.getElementById("realtimeFloodStatus");
+
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;font-weight:900;">
+        <span style="color:#475569;">無積水：${normalCount}</span>
+        <span style="color:#b45309;">有積水：${floodedCount}</span>
+        <span style="color:#64748b;">過期資料：${staleCount}</span>
+        <span style="color:#64748b;">無讀值：${noObservationCount}</span>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:9px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;">
+        <input
+          type="checkbox"
+          onchange="toggleShowOnlyFlooded(this.checked)"
+          ${window.showOnlyFlooded ? "checked" : ""}
+          style="width:16px;height:16px;margin:0;accent-color:#E69F00;"
+        >
+        <span style="font-size:12px;font-weight:900;color:#9a3412;">只顯示有積淹水的測站</span>
+      </label>
+
+      <div style="margin-top:8px;color:#64748b;font-size:10px;line-height:1.5;">
+        每 5 分鐘更新；超過 ${FLOOD_STALE_AFTER_HOURS} 小時的資料仍會顯示為灰色，且不納入即時統計。
+      </div>
+    `;
+  }
 }
     </script>
 
