@@ -4525,9 +4525,31 @@ map.on('zoomend', function() {
     syncTainanHistoryFloodState();
 });
 
-window.setTimeout(function() {
-    loadTainanHistoryFloodEvents();
-}, 80);
+/* ===== START: HISTORY_FLOOD_IDLE_PREFETCH ===== */
+function prefetchTainanHistoryFloodWhenIdle() {
+    var loadHistoryEvents = function() {
+        loadTainanHistoryFloodEvents();
+    };
+
+    if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(loadHistoryEvents, {
+            timeout: 8000
+        });
+    } else {
+        window.setTimeout(loadHistoryEvents, 3500);
+    }
+}
+
+if (document.readyState === 'complete') {
+    prefetchTainanHistoryFloodWhenIdle();
+} else {
+    window.addEventListener(
+        'load',
+        prefetchTainanHistoryFloodWhenIdle,
+        { once: true }
+    );
+}
+/* ===== END: HISTORY_FLOOD_IDLE_PREFETCH ===== */
 /* ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
 
         function getGeoJsonUrls(path) {
