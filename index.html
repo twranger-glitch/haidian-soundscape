@@ -2484,8 +2484,217 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
     </summary>
 
     <div class="layer-folder-content">
+<!-- ===== START: ORIGINAL_FLOOD_POTENTIAL_UI ===== -->
+<section class="layer-subsection">
+    <div class="layer-subsection-title">
+        淹水潛勢圖 <small>快取圖資</small>
+    </div>
 
-                       
+    <label>
+        <input
+            type="checkbox"
+            id="floodToggle"
+            onchange="toggleFloodLayer(this.checked)"
+            style="accent-color:#2563eb; width:17px; height:17px; margin:0; flex-shrink:0;"
+        >
+        顯示淹水潛勢圖
+    </label>
+
+    <div
+        id="floodControlPanel"
+        style="display:none; margin-top:10px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;"
+    >
+        <div style="font-size:11px; color:#1e3a8a; margin-bottom:6px; font-weight:800;">
+            降雨情境
+        </div>
+
+        <select
+            id="floodScenario"
+            onchange="changeFloodScenario(this.value)"
+            style="width:100%; box-sizing:border-box; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; background:#fff; color:#1f2937; font-size:13px; font-weight:700; margin-bottom:10px;"
+        >
+            <option value="flood_200mm_24hr" selected>24 小時 200 mm</option>
+            <option value="flood_350mm_24hr">24 小時 350 mm</option>
+            <option value="flood_500mm_24hr">24 小時 500 mm</option>
+            <option value="flood_650mm_24hr">24 小時 650 mm</option>
+            <option value="flood_200mm_12hr">12 小時 200 mm</option>
+            <option value="flood_300mm_12hr">12 小時 300 mm</option>
+            <option value="flood_400mm_12hr">12 小時 400 mm</option>
+            <option value="flood_150mm_6hr">6 小時 150 mm</option>
+            <option value="flood_250mm_6hr">6 小時 250 mm</option>
+            <option value="flood_350mm_6hr">6 小時 350 mm</option>
+        </select>
+
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#1e40af; margin-bottom:5px; font-weight:700;">
+            <span>透明度</span>
+            <span id="floodOpacityValue">55%</span>
+        </div>
+
+        <input
+            type="range"
+            id="floodOpacity"
+            min="0.1"
+            max="1"
+            step="0.05"
+            value="0.55"
+            style="width:100%; accent-color:#2563eb; margin:0;"
+            oninput="updateFloodOpacity(this.value)"
+        >
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+            <span id="floodLayerTitle" style="font-size:11px; color:#1d4ed8; font-weight:800;">
+                24 小時 200 mm
+            </span>
+
+            <a
+                href="#"
+                onclick="openFloodLegend(); return false;"
+                style="font-size:11px; color:#2563eb; font-weight:800; text-decoration:none; white-space:nowrap;"
+            >
+                查看圖例
+            </a>
+        </div>
+    </div>
+</section>
+<!-- ===== END: ORIGINAL_FLOOD_POTENTIAL_UI ===== -->
+        
+<!-- ===== START: TAINAN_HISTORY_FLOOD_V5_UI ===== -->
+<style>
+.history-flood-panel{margin:14px 0;padding:14px;background:#fff;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 5px 16px rgba(15,23,42,.08);color:#0f172a}
+.history-flood-panel *{box-sizing:border-box;font-family:inherit}
+.history-flood-panel .hf-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.history-flood-panel .hf-title{margin:0!important;color:#0f172a!important;font-size:16px!important;font-weight:800!important}
+.history-flood-panel .hf-title small{margin-left:4px;color:#475569!important;font-size:12px!important;font-weight:700!important}
+.history-flood-panel .hf-intro{margin:5px 0 0;color:#475569;font-size:13px;line-height:1.5;font-weight:600}
+.history-flood-panel .hf-badge{flex:0 0 auto;padding:5px 7px;color:#0f172a;background:#f8fafc;border:1px solid #94a3b8;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em}
+.history-flood-panel .hf-main-toggle{display:flex;align-items:center;gap:10px;margin:0;padding:11px 12px;background:#f8fafc;border:1px solid #94a3b8;border-radius:11px;cursor:pointer}
+.history-flood-panel .hf-main-toggle input{width:19px!important;height:19px!important;margin:0!important;accent-color:#0f172a;cursor:pointer}
+.history-flood-panel .hf-toggle-copy{display:grid;gap:2px;min-width:0}
+.history-flood-panel .hf-toggle-copy strong{color:#0f172a;font-size:14px;font-weight:800}
+.history-flood-panel .hf-toggle-copy small{color:#475569;font-size:12px;font-weight:650}
+.history-flood-panel .hf-main-toggle:focus-within,.history-flood-panel .hf-event-row:focus-within{outline:3px solid rgba(37,99,235,.3);outline-offset:2px}
+.history-flood-panel .hf-controls{margin-top:10px;padding:12px;background:#fff;border:1px solid #cbd5e1;border-radius:12px}
+.history-flood-panel .hf-controls[hidden]{display:none!important}
+.history-flood-panel .hf-topline,.history-flood-panel .hf-opacity-title,.history-flood-panel .hf-events-head,.history-flood-panel .hf-events-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.history-flood-panel .hf-kicker{color:#334155;font-size:12px;font-weight:800}
+.history-flood-panel .hf-state{padding:4px 7px;color:#0f172a;background:#f8fafc;border:1px solid #94a3b8;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.history-flood-panel .hf-state.is-warning{color:#991b1b;background:#fef2f2;border-color:#fca5a5}
+.history-flood-panel .hf-field{display:grid;gap:6px;margin:12px 0;color:#1e293b;font-size:13px;font-weight:800}
+.history-flood-panel .hf-field select{width:100%;min-height:40px;padding:8px 10px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:9px;outline:none;font:inherit;font-size:14px;font-weight:700}
+.history-flood-panel .hf-field select:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.22)}
+.history-flood-panel .hf-opacity-title{color:#334155;font-size:13px;font-weight:750}
+.history-flood-panel .hf-opacity-title output{color:#0f172a;font-variant-numeric:tabular-nums;font-weight:800}
+.history-flood-panel .hf-range{width:100%;min-height:28px;margin:4px 0 12px;accent-color:#2563eb;cursor:pointer}
+.history-flood-panel .hf-events-head{align-items:flex-start;margin:5px 0 8px}
+.history-flood-panel .hf-events-head strong{display:block;color:#0f172a;font-size:14px;font-weight:800}
+.history-flood-panel .hf-events-head span{display:block;margin-top:3px;color:#475569;font-size:12px;line-height:1.45;font-weight:600}
+.history-flood-panel .hf-events-actions{margin:9px 0 8px}
+.history-flood-panel .hf-event-count{color:#334155;font-size:12px;font-weight:750}
+.history-flood-panel .hf-action-group{display:flex;gap:6px}
+.history-flood-panel .hf-action{min-height:30px;padding:5px 8px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer}
+.history-flood-panel .hf-action:hover{border-color:#2563eb;background:#eff6ff}
+.history-flood-panel .hf-action:disabled{opacity:.5;cursor:not-allowed}
+.history-flood-panel .hf-events{display:grid;gap:7px;max-height:320px;overflow:auto;padding:2px;scrollbar-width:thin;scrollbar-color:#94a3b8 transparent}
+.history-flood-panel .hf-event-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:45px;padding:8px 9px;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:9px;cursor:pointer}
+.history-flood-panel .hf-event-row:hover{border-color:#64748b;background:#f8fafc}
+.history-flood-panel .hf-event-row input{width:18px;height:18px;margin:0;accent-color:#0f172a;cursor:pointer}
+.history-flood-panel .hf-swatch{width:22px;height:16px;overflow:hidden;background:#fff;border:1px solid #94a3b8;border-radius:3px}
+.history-flood-panel .hf-swatch img{display:block;width:100%;height:100%;object-fit:contain}
+.history-flood-panel .hf-event-name{overflow-wrap:anywhere;color:inherit;font-size:13px;line-height:1.35;font-weight:750}
+.history-flood-panel .hf-event-status{min-width:44px;padding:4px 6px;color:#334155;background:#fff;border:1px solid #94a3b8;border-radius:6px;font-size:11px;font-weight:800;text-align:center;white-space:nowrap}
+.history-flood-panel .hf-event-row.is-visible .hf-event-status{color:#fff;background:#0f172a;border-color:#0f172a}
+.history-flood-panel .hf-events-loading,.history-flood-panel .hf-events-fallback{padding:10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}
+.history-flood-panel .hf-facts{margin-top:12px;padding-top:10px;border-top:1px dashed #94a3b8}
+.history-flood-panel .hf-facts summary{color:#0f172a;cursor:pointer;font-size:13px;font-weight:800}
+.history-flood-panel .hf-facts p{margin:8px 0 7px;color:#334155;font-size:12px;line-height:1.6;font-weight:600}
+.history-flood-panel .hf-facts a{color:#1d4ed8;font-size:12px;font-weight:800;text-decoration:none}
+.history-flood-panel .hf-facts a:hover{text-decoration:underline}
+</style>
+
+<section class="layer-subsection history-flood-panel" id="tainanHistoryFloodModule">
+  <div class="hf-heading">
+    <div>
+      <div class="layer-subsection-title hf-title">
+        臺南歷年淹水災情 <small>官方實際紀錄</small>
+      </div>
+      <p class="hf-intro">
+        地圖保留官方原始配色；事件狀態以勾選與文字呈現，不只靠顏色判讀。
+      </p>
+    </div>
+    <span class="hf-badge">HISTORY</span>
+  </div>
+
+  <label class="hf-main-toggle">
+    <input
+      type="checkbox"
+      id="tainanHistoryFloodToggle"
+      onchange="toggleTainanHistoryFloodLayer(this.checked)"
+    >
+    <span class="hf-toggle-copy">
+      <strong>顯示臺南歷年淹水災情</strong>
+      <small id="tainanHistoryFloodZoomHint">需放大至 z 9</small>
+    </span>
+  </label>
+
+  <div class="hf-controls" id="tainanHistoryFloodControlPanel" hidden>
+    <div class="hf-topline">
+      <span class="hf-kicker">官方資料集</span>
+      <span class="hf-state" id="tainanHistoryFloodState" aria-live="polite">圖層未啟用</span>
+    </div>
+
+    <label class="hf-field">
+      <span>資料圖層</span>
+      <select id="tainanHistoryFloodDataset" onchange="changeTainanHistoryFloodDataset()">
+        <option value="history_all" selected>歷年淹水災情</option>
+        <option value="history_stormwater">歷年淹水災情（雨水科）</option>
+        <option value="history_planning">歷年淹水災情（綜企科）</option>
+      </select>
+    </label>
+
+    <div class="hf-opacity-title">
+      <span>透明度</span>
+      <output id="tainanHistoryFloodOpacityValue" for="tainanHistoryFloodOpacity">65%</output>
+    </div>
+
+    <input
+      class="hf-range"
+      type="range"
+      id="tainanHistoryFloodOpacity"
+      min="0.1"
+      max="1"
+      step="0.05"
+      value="0.65"
+      oninput="updateTainanHistoryFloodOpacity(this.value)"
+    >
+
+    <div class="hf-events-head">
+      <div>
+        <strong>官方事件色標與篩選</strong>
+        <span>每一列都能切換顯示或隱藏；水災名稱會完整換行顯示。</span>
+      </div>
+    </div>
+
+    <div class="hf-events-actions">
+      <span class="hf-event-count" id="tainanHistoryFloodEventCount">正在預載官方事件…</span>
+      <span class="hf-action-group">
+        <button type="button" class="hf-action" id="tainanHistoryFloodShowAll" disabled>全部顯示</button>
+        <button type="button" class="hf-action" id="tainanHistoryFloodHideAll" disabled>全部隱藏</button>
+      </span>
+    </div>
+
+    <div class="hf-events" id="tainanHistoryFloodEvents" aria-live="polite">
+      <div class="hf-events-loading">正在背景載入官方事件清單；不必等到開啟圖層才開始載入。</div>
+    </div>
+
+    <details class="hf-facts">
+      <summary>資料說明</summary>
+      <p>這是臺南市水利局公開的過去實際淹水災情紀錄；不代表目前正在淹水，也不是淹水潛勢模擬。</p>
+      <a href="https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer" target="_blank" rel="noopener noreferrer">開啟官方 MapServer ↗</a>
+    </details>
+  </div>
+</section>
+<!-- ===== END: TAINAN_HISTORY_FLOOD_V5_UI ===== -->
+        
         <section class="layer-subsection">
             <div class="layer-subsection-title">
                 即時淹水感測器 <small>API</small>
@@ -3311,7 +3520,1016 @@ async function searchPlaceName() {
         map.getPane('floodPane').style.zIndex = 350;
         map.getPane('floodPane').style.pointerEvents = 'auto';
 
-        
+        /* ===== START: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
+if (!map.getPane('tainanHistoryFloodPane')) {
+    map.createPane('tainanHistoryFloodPane');
+}
+
+map.getPane('tainanHistoryFloodPane').style.zIndex = 355;
+map.getPane('tainanHistoryFloodPane').style.pointerEvents = 'none';
+
+var TAINAN_HISTORY_FLOOD_MAPSERVER_URL =
+    'https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer';
+
+var TAINAN_HISTORY_FLOOD_MIN_ZOOM = 9;
+var TAINAN_HISTORY_FLOOD_BUFFER_PX = 560;
+var TAINAN_HISTORY_FLOOD_MAX_IMAGE_SIZE = 1600;
+
+var tainanHistoryFloodMeta = {
+    history_all: {
+        label: '歷年淹水災情',
+        layerId: 2
+    },
+    history_stormwater: {
+        label: '歷年淹水災情（雨水科）',
+        layerId: 0
+    },
+    history_planning: {
+        label: '歷年淹水災情（綜企科）',
+        layerId: 1
+    }
+};
+
+var tainanHistoryFloodLayer = null;
+var tainanHistoryFloodLayerId = null;
+var tainanHistoryFloodEvents = [];
+var tainanHistoryFloodSelectedValues = new Set();
+var tainanHistoryFloodFilterField = null;
+var tainanHistoryFloodEventCache = {};
+var tainanHistoryFloodEventRequests = {};
+
+var StableArcGisExportLayer = L.Layer.extend({
+    initialize: function(options) {
+        L.setOptions(this, options || {});
+        this._activeImage = null;
+        this._pendingImage = null;
+        this._refreshTimer = null;
+        this._requestId = 0;
+        this._enabled = false;
+        this._map = null;
+    },
+
+    onAdd: function(attachedMap) {
+        this._map = attachedMap;
+        this._onMapChange = this._schedule.bind(this, false);
+        attachedMap.on('moveend zoomend resize', this._onMapChange);
+    },
+
+    onRemove: function(attachedMap) {
+        attachedMap.off('moveend zoomend resize', this._onMapChange);
+        window.clearTimeout(this._refreshTimer);
+        this._removeImage(this._activeImage);
+        this._removeImage(this._pendingImage);
+        this._activeImage = null;
+        this._pendingImage = null;
+        this._map = null;
+    },
+
+    setEnabled: function(enabled) {
+        this._enabled = !!enabled;
+
+        if (!this._shouldRender()) {
+            this._cancelPendingRequest();
+            this._setVisible(false);
+            return this;
+        }
+
+        this._setVisible(true);
+        this._schedule(true);
+        return this;
+    },
+
+    setLayerId: function(layerId) {
+        this.options.layerId = Number(layerId);
+        if (this._enabled) this._schedule(true);
+        return this;
+    },
+
+    setOpacity: function(opacity) {
+        this.options.opacity = Number(opacity);
+        if (this._activeImage) {
+            this._activeImage.setOpacity(this.options.opacity);
+        }
+        return this;
+    },
+
+    setEventFilter: function(fieldName, values, allSelected) {
+        this.options.filterField = fieldName || null;
+        this.options.filterValues = Array.isArray(values) ? values.slice() : [];
+        this.options.allSelected = !!allSelected;
+
+        if (!this._shouldRender()) {
+            this._cancelPendingRequest();
+            this._setVisible(false);
+            return this;
+        }
+
+        this._setVisible(true);
+        this._schedule(true);
+        return this;
+    },
+
+    _shouldRender: function() {
+        if (!this._map || !this._enabled) return false;
+        if (this._map.getZoom() < this.options.minZoom) return false;
+        if (this.options.allSelected) return true;
+
+        return Array.isArray(this.options.filterValues) &&
+            this.options.filterValues.length > 0;
+    },
+
+    _setVisible: function(visible) {
+        if (this._activeImage) {
+            this._activeImage.setOpacity(
+                visible ? this.options.opacity : 0
+            );
+        }
+
+        if (this._pendingImage) {
+            this._pendingImage.setOpacity(0);
+        }
+    },
+
+    _removeImage: function(image) {
+        if (image && this._map && this._map.hasLayer(image)) {
+            this._map.removeLayer(image);
+        }
+    },
+
+    _cancelPendingRequest: function() {
+        this._requestId += 1;
+        this._removeImage(this._pendingImage);
+        this._pendingImage = null;
+    },
+
+    _schedule: function(immediate) {
+        var self = this;
+
+        window.clearTimeout(this._refreshTimer);
+
+        this._refreshTimer = window.setTimeout(function() {
+            self._refresh();
+        }, immediate ? 0 : 130);
+    },
+
+    _refresh: function() {
+        if (!this._shouldRender()) return;
+
+        var request = this._buildExportRequest();
+        var requestId = ++this._requestId;
+        var self = this;
+
+        if (typeof this.options.onLoadStart === 'function') {
+            this.options.onLoadStart();
+        }
+
+        this._removeImage(this._pendingImage);
+
+        var nextImage = L.imageOverlay(request.url, request.bounds, {
+            pane: this.options.pane,
+            opacity: 0,
+            interactive: false,
+            className: 'tainan-history-flood-export-image'
+        });
+
+        this._pendingImage = nextImage;
+
+        nextImage.once('load', function() {
+            if (
+                !self._map ||
+                requestId !== self._requestId ||
+                self._pendingImage !== nextImage
+            ) {
+                return;
+            }
+
+            var previousImage = self._activeImage;
+
+            self._activeImage = nextImage;
+            self._pendingImage = null;
+
+            window.requestAnimationFrame(function() {
+                nextImage.setOpacity(self.options.opacity);
+            });
+
+            window.setTimeout(function() {
+                self._removeImage(previousImage);
+            }, 180);
+
+            if (typeof self.options.onLoadEnd === 'function') {
+                self.options.onLoadEnd();
+            }
+        });
+
+        nextImage.once('error', function() {
+            if (self._pendingImage === nextImage) {
+                self._pendingImage = null;
+            }
+
+            self._removeImage(nextImage);
+
+            if (typeof self.options.onLoadError === 'function') {
+                self.options.onLoadError();
+            }
+        });
+
+        nextImage.addTo(this._map);
+    },
+
+    _buildExportRequest: function() {
+        var zoom = this._map.getZoom();
+        var pixelBounds = this._map.getPixelBounds();
+
+        var min = pixelBounds.min.subtract([
+            TAINAN_HISTORY_FLOOD_BUFFER_PX,
+            TAINAN_HISTORY_FLOOD_BUFFER_PX
+        ]);
+
+        var max = pixelBounds.max.add([
+            TAINAN_HISTORY_FLOOD_BUFFER_PX,
+            TAINAN_HISTORY_FLOOD_BUFFER_PX
+        ]);
+
+        var paddedSouthWest = this._map.unproject(
+            L.point(min.x, max.y),
+            zoom
+        );
+
+        var paddedNorthEast = this._map.unproject(
+            L.point(max.x, min.y),
+            zoom
+        );
+
+        var projectedSouthWest =
+            this._map.options.crs.project(paddedSouthWest);
+
+        var projectedNorthEast =
+            this._map.options.crs.project(paddedNorthEast);
+
+        var size = this._map.getSize().add([
+            TAINAN_HISTORY_FLOOD_BUFFER_PX * 2,
+            TAINAN_HISTORY_FLOOD_BUFFER_PX * 2
+        ]);
+
+        var scale = Math.min(
+            1,
+            TAINAN_HISTORY_FLOOD_MAX_IMAGE_SIZE /
+                Math.max(size.x, size.y)
+        );
+
+        var imageWidth = Math.max(1, Math.round(size.x * scale));
+        var imageHeight = Math.max(1, Math.round(size.y * scale));
+
+        var params = new URLSearchParams({
+            bbox: [
+                projectedSouthWest.x,
+                projectedSouthWest.y,
+                projectedNorthEast.x,
+                projectedNorthEast.y
+            ].join(','),
+
+            bboxSR: '3857',
+            imageSR: '3857',
+            size: imageWidth + ',' + imageHeight,
+            dpi: '96',
+            format: 'png32',
+            transparent: 'true',
+            layers: 'show:' + this.options.layerId,
+            f: 'image'
+        });
+
+        if (
+            !this.options.allSelected &&
+            this.options.filterField &&
+            Array.isArray(this.options.filterValues) &&
+            this.options.filterValues.length
+        ) {
+            var where = this.options.filterField + ' IN (' +
+                this.options.filterValues.map(function(value) {
+                    return "'" +
+                        String(value).replace(/'/g, "''") +
+                        "'";
+                }).join(',') +
+                ')';
+
+            var layerDefinitions = {};
+            layerDefinitions[this.options.layerId] = where;
+
+            params.set(
+                'layerDefs',
+                JSON.stringify(layerDefinitions)
+            );
+        }
+
+        return {
+            url: TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
+                '/export?' +
+                params.toString(),
+
+            bounds: L.latLngBounds(
+                paddedSouthWest,
+                paddedNorthEast
+            )
+        };
+    }
+});
+
+function getTainanHistoryFloodSelectedId() {
+    var selectEl = document.getElementById(
+        'tainanHistoryFloodDataset'
+    );
+
+    return selectEl ? selectEl.value : 'history_all';
+}
+
+function getTainanHistoryFloodOpacityValue() {
+    var opacityEl = document.getElementById(
+        'tainanHistoryFloodOpacity'
+    );
+
+    return opacityEl ? parseFloat(opacityEl.value) : 0.65;
+}
+
+function setTainanHistoryFloodState(message, isWarning) {
+    var stateEl = document.getElementById(
+        'tainanHistoryFloodState'
+    );
+
+    if (!stateEl) return;
+
+    stateEl.textContent = message;
+    stateEl.classList.toggle('is-warning', !!isWarning);
+}
+
+function syncTainanHistoryFloodState() {
+    var toggleEl = document.getElementById(
+        'tainanHistoryFloodToggle'
+    );
+
+    var zoomHintEl = document.getElementById(
+        'tainanHistoryFloodZoomHint'
+    );
+
+    var isEnabled = !!(toggleEl && toggleEl.checked);
+    var zoom = map.getZoom();
+
+    if (!isEnabled) {
+        setTainanHistoryFloodState('圖層未啟用', false);
+
+        if (zoomHintEl) {
+            zoomHintEl.textContent =
+                '需放大至 z ' +
+                TAINAN_HISTORY_FLOOD_MIN_ZOOM;
+        }
+
+        return;
+    }
+
+    if (zoom < TAINAN_HISTORY_FLOOD_MIN_ZOOM) {
+        setTainanHistoryFloodState(
+            '請放大至 z ' +
+                TAINAN_HISTORY_FLOOD_MIN_ZOOM,
+            true
+        );
+
+        if (zoomHintEl) {
+            zoomHintEl.textContent =
+                '目前 z ' +
+                Math.round(zoom) +
+                '，尚未載入';
+        }
+
+        return;
+    }
+
+    if (
+        tainanHistoryFloodEvents.length &&
+        tainanHistoryFloodSelectedValues.size === 0
+    ) {
+        setTainanHistoryFloodState('所有事件均已隱藏', true);
+
+        if (zoomHintEl) {
+            zoomHintEl.textContent =
+                '目前 z ' +
+                Math.round(zoom) +
+                '，未顯示事件';
+        }
+
+        return;
+    }
+
+    setTainanHistoryFloodState('已顯示官方圖資', false);
+
+    if (zoomHintEl) {
+        zoomHintEl.textContent =
+            '目前 z ' +
+            Math.round(zoom) +
+            '，已載入';
+    }
+}
+
+function createTainanHistoryFloodLayer() {
+    var selectedId = getTainanHistoryFloodSelectedId();
+
+    var meta =
+        tainanHistoryFloodMeta[selectedId] ||
+        tainanHistoryFloodMeta.history_all;
+
+    if (!tainanHistoryFloodLayer) {
+        tainanHistoryFloodLayer =
+            new StableArcGisExportLayer({
+                layerId: meta.layerId,
+                pane: 'tainanHistoryFloodPane',
+                opacity: getTainanHistoryFloodOpacityValue(),
+                minZoom: TAINAN_HISTORY_FLOOD_MIN_ZOOM,
+                filterField: null,
+                filterValues: [],
+                allSelected: true,
+
+                onLoadStart: function() {
+                    var toggleEl = document.getElementById(
+                        'tainanHistoryFloodToggle'
+                    );
+
+                    if (
+                        toggleEl &&
+                        toggleEl.checked &&
+                        map.getZoom() >=
+                            TAINAN_HISTORY_FLOOD_MIN_ZOOM
+                    ) {
+                        setTainanHistoryFloodState(
+                            '正在更新地圖…',
+                            false
+                        );
+                    }
+                },
+
+                onLoadEnd: syncTainanHistoryFloodState,
+
+                onLoadError: function() {
+                    setTainanHistoryFloodState(
+                        '官方服務暫時無回應',
+                        true
+                    );
+                }
+            });
+    } else {
+        tainanHistoryFloodLayer.setLayerId(meta.layerId);
+    }
+
+    tainanHistoryFloodLayerId = selectedId;
+
+    return tainanHistoryFloodLayer;
+}
+
+function getTainanHistoryFloodStorageKey(layerId) {
+    return 'tainanHistoryFloodEventsV5:' + String(layerId);
+}
+
+function getTainanHistoryFloodCachedEvents(layerId) {
+    var key = String(layerId);
+
+    if (tainanHistoryFloodEventCache[key]) {
+        return tainanHistoryFloodEventCache[key];
+    }
+
+    try {
+        var raw = sessionStorage.getItem(
+            getTainanHistoryFloodStorageKey(layerId)
+        );
+
+        var saved = raw ? JSON.parse(raw) : null;
+
+        if (
+            !saved ||
+            !Array.isArray(saved.events) ||
+            Date.now() - saved.savedAt > 86400000
+        ) {
+            return null;
+        }
+
+        tainanHistoryFloodEventCache[key] = saved;
+
+        return saved;
+    } catch (error) {
+        return null;
+    }
+}
+
+function saveTainanHistoryFloodCachedEvents(layerId, payload) {
+    var key = String(layerId);
+
+    tainanHistoryFloodEventCache[key] = payload;
+
+    try {
+        sessionStorage.setItem(
+            getTainanHistoryFloodStorageKey(layerId),
+            JSON.stringify(payload)
+        );
+    } catch (error) {
+        /* sessionStorage 不可用時仍保留本頁記憶體快取 */
+    }
+}
+
+function getTainanHistoryFloodLayerEvents(layerId) {
+    var cached = getTainanHistoryFloodCachedEvents(layerId);
+
+    if (cached) {
+        return Promise.resolve(cached);
+    }
+
+    var requestKey = String(layerId);
+
+    if (tainanHistoryFloodEventRequests[requestKey]) {
+        return tainanHistoryFloodEventRequests[requestKey];
+    }
+
+    var legendUrl =
+        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
+        '/legend?f=pjson';
+
+    var metadataUrl =
+        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
+        '/' +
+        layerId +
+        '?f=pjson';
+
+    var request = Promise.all([
+        fetch(legendUrl, { cache: 'force-cache' })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error(
+                        'LEGEND_HTTP_' +
+                        response.status
+                    );
+                }
+
+                return response.json();
+            }),
+
+        fetch(metadataUrl, { cache: 'force-cache' })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error(
+                        'METADATA_HTTP_' +
+                        response.status
+                    );
+                }
+
+                return response.json();
+            })
+    ])
+        .then(function(results) {
+            var legendPayload = results[0];
+            var metadata = results[1];
+
+            var legendLayer =
+                (legendPayload.layers || []).find(
+                    function(item) {
+                        return Number(item.layerId) ===
+                            Number(layerId);
+                    }
+                );
+
+            var renderer =
+                metadata && metadata.drawingInfo ?
+                    metadata.drawingInfo.renderer :
+                    null;
+
+            var fieldName =
+                renderer &&
+                (renderer.field1 || renderer.field) ?
+                    (renderer.field1 || renderer.field) :
+                    'NAME';
+
+            var uniqueValueInfos =
+                renderer &&
+                Array.isArray(renderer.uniqueValueInfos) ?
+                    renderer.uniqueValueInfos :
+                    [];
+
+            var legendEntries =
+                legendLayer &&
+                Array.isArray(legendLayer.legend) ?
+                    legendLayer.legend :
+                    [];
+
+            var events = legendEntries
+                .filter(function(entry) {
+                    return entry &&
+                        String(entry.label || '').trim();
+                })
+                .map(function(entry, index) {
+                    var label = String(entry.label).trim();
+
+                    var uniqueValue = uniqueValueInfos.find(
+                        function(info) {
+                            return String(
+                                info.label || ''
+                            ).trim() === label;
+                        }
+                    ) ||
+                    uniqueValueInfos[index] ||
+                    null;
+
+                    return {
+                        label: label,
+                        value:
+                            uniqueValue &&
+                            uniqueValue.value !== undefined &&
+                            uniqueValue.value !== null ?
+                                uniqueValue.value :
+                                label,
+
+                        imageData: entry.imageData || ''
+                    };
+                });
+
+            if (!events.length) {
+                throw new Error('NO_LEGEND_EVENTS');
+            }
+
+            var payload = {
+                savedAt: Date.now(),
+                fieldName: fieldName,
+                events: events
+            };
+
+            saveTainanHistoryFloodCachedEvents(
+                layerId,
+                payload
+            );
+
+            return payload;
+        })
+        .finally(function() {
+            delete tainanHistoryFloodEventRequests[requestKey];
+        });
+
+    tainanHistoryFloodEventRequests[requestKey] = request;
+
+    return request;
+}
+
+function getTainanHistoryFloodSwatch(entry) {
+    if (entry.imageData) {
+        return 'data:image/png;base64,' + entry.imageData;
+    }
+
+    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="22" height="16"%3E%3Crect width="22" height="16" fill="%23e2e8f0"/%3E%3C/svg%3E';
+}
+
+function escapeTainanHistoryFloodHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/[&<>'"]/g, function(character) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#039;',
+                '"': '&quot;'
+            }[character];
+        });
+}
+
+function renderTainanHistoryFloodEvents() {
+    var root = document.getElementById(
+        'tainanHistoryFloodEvents'
+    );
+
+    var countEl = document.getElementById(
+        'tainanHistoryFloodEventCount'
+    );
+
+    var showAllButton = document.getElementById(
+        'tainanHistoryFloodShowAll'
+    );
+
+    var hideAllButton = document.getElementById(
+        'tainanHistoryFloodHideAll'
+    );
+
+    if (!root || !countEl || !showAllButton || !hideAllButton) {
+        return;
+    }
+
+    if (!tainanHistoryFloodEvents.length) {
+        showAllButton.disabled = true;
+        hideAllButton.disabled = true;
+
+        countEl.textContent = '正在預載官方事件…';
+
+        root.innerHTML =
+            '<div class="hf-events-loading">' +
+            '正在背景載入官方事件清單；不必等到開啟圖層才開始載入。' +
+            '</div>';
+
+        return;
+    }
+
+    showAllButton.disabled = false;
+    hideAllButton.disabled = false;
+
+    countEl.textContent =
+        '顯示 ' +
+        tainanHistoryFloodSelectedValues.size +
+        ' / ' +
+        tainanHistoryFloodEvents.length +
+        ' 個事件';
+
+    root.innerHTML = tainanHistoryFloodEvents
+        .map(function(entry, index) {
+            var visible =
+                tainanHistoryFloodSelectedValues.has(
+                    String(entry.value)
+                );
+
+            var name =
+                escapeTainanHistoryFloodHtml(entry.label);
+
+            var status = visible ? '顯示' : '隱藏';
+
+            return '<label class="hf-event-row' +
+                (visible ? ' is-visible' : '') +
+                '" title="' +
+                name +
+                '">' +
+
+                '<input type="checkbox" class="tainan-history-event-toggle" data-event-index="' +
+                index +
+                '"' +
+                (visible ? ' checked' : '') +
+                '>' +
+
+                '<span class="hf-swatch" aria-hidden="true">' +
+                '<img alt="" src="' +
+                getTainanHistoryFloodSwatch(entry) +
+                '">' +
+                '</span>' +
+
+                '<span class="hf-event-name">' +
+                name +
+                '</span>' +
+
+                '<span class="hf-event-status">' +
+                status +
+                '</span>' +
+
+                '</label>';
+        })
+        .join('');
+}
+
+function applyTainanHistoryFloodEventFilter() {
+    if (!tainanHistoryFloodLayer) return;
+
+    var allSelected =
+        tainanHistoryFloodEvents.length > 0 &&
+        tainanHistoryFloodSelectedValues.size ===
+            tainanHistoryFloodEvents.length;
+
+    tainanHistoryFloodLayer.setEventFilter(
+        tainanHistoryFloodFilterField,
+        Array.from(tainanHistoryFloodSelectedValues),
+        allSelected
+    );
+
+    renderTainanHistoryFloodEvents();
+    syncTainanHistoryFloodState();
+}
+
+function loadTainanHistoryFloodEvents() {
+    var selectedId = getTainanHistoryFloodSelectedId();
+
+    var meta =
+        tainanHistoryFloodMeta[selectedId] ||
+        tainanHistoryFloodMeta.history_all;
+
+    var activeLayerId = meta.layerId;
+
+    var cached =
+        getTainanHistoryFloodCachedEvents(activeLayerId);
+
+    if (cached) {
+        tainanHistoryFloodEvents = cached.events;
+        tainanHistoryFloodFilterField = cached.fieldName;
+
+        tainanHistoryFloodSelectedValues = new Set(
+            cached.events.map(function(entry) {
+                return String(entry.value);
+            })
+        );
+
+        renderTainanHistoryFloodEvents();
+
+        if (tainanHistoryFloodLayer) {
+            applyTainanHistoryFloodEventFilter();
+        }
+
+        return Promise.resolve();
+    }
+
+    tainanHistoryFloodEvents = [];
+    tainanHistoryFloodSelectedValues = new Set();
+    tainanHistoryFloodFilterField = null;
+
+    renderTainanHistoryFloodEvents();
+
+    return getTainanHistoryFloodLayerEvents(activeLayerId)
+        .then(function(payload) {
+            var currentMeta =
+                tainanHistoryFloodMeta[
+                    getTainanHistoryFloodSelectedId()
+                ] ||
+                tainanHistoryFloodMeta.history_all;
+
+            if (activeLayerId !== currentMeta.layerId) {
+                return;
+            }
+
+            tainanHistoryFloodEvents = payload.events;
+            tainanHistoryFloodFilterField = payload.fieldName;
+
+            tainanHistoryFloodSelectedValues = new Set(
+                payload.events.map(function(entry) {
+                    return String(entry.value);
+                })
+            );
+
+            renderTainanHistoryFloodEvents();
+
+            if (tainanHistoryFloodLayer) {
+                applyTainanHistoryFloodEventFilter();
+            }
+        })
+        .catch(function() {
+            var root = document.getElementById(
+                'tainanHistoryFloodEvents'
+            );
+
+            var countEl = document.getElementById(
+                'tainanHistoryFloodEventCount'
+            );
+
+            var showAllButton = document.getElementById(
+                'tainanHistoryFloodShowAll'
+            );
+
+            var hideAllButton = document.getElementById(
+                'tainanHistoryFloodHideAll'
+            );
+
+            if (root) {
+                root.innerHTML =
+                    '<div class="hf-events-fallback">' +
+                    '官方事件清單暫時無法取得；地圖仍維持官方原始配色，請稍後重新整理再試。' +
+                    '</div>';
+            }
+
+            if (countEl) {
+                countEl.textContent =
+                    '官方事件清單暫時無法取得';
+            }
+
+            if (showAllButton) {
+                showAllButton.disabled = true;
+            }
+
+            if (hideAllButton) {
+                hideAllButton.disabled = true;
+            }
+        });
+}
+
+function toggleTainanHistoryFloodLayer(checked) {
+    var panel = document.getElementById(
+        'tainanHistoryFloodControlPanel'
+    );
+
+    if (panel) {
+        panel.hidden = !checked;
+    }
+
+    if (!checked) {
+        if (tainanHistoryFloodLayer) {
+            tainanHistoryFloodLayer.setEnabled(false);
+
+            if (map.hasLayer(tainanHistoryFloodLayer)) {
+                map.removeLayer(tainanHistoryFloodLayer);
+            }
+        }
+
+        syncTainanHistoryFloodState();
+        return;
+    }
+
+    var layer = createTainanHistoryFloodLayer();
+
+    layer.setOpacity(
+        getTainanHistoryFloodOpacityValue()
+    );
+
+    if (!map.hasLayer(layer)) {
+        map.addLayer(layer);
+    }
+
+    layer.setEnabled(true);
+
+    syncTainanHistoryFloodState();
+}
+
+function changeTainanHistoryFloodDataset() {
+    var layer = createTainanHistoryFloodLayer();
+
+    var toggleEl = document.getElementById(
+        'tainanHistoryFloodToggle'
+    );
+
+    var isEnabled = !!(toggleEl && toggleEl.checked);
+
+    layer.setEnabled(false);
+
+    loadTainanHistoryFloodEvents()
+        .then(function() {
+            layer.setEnabled(isEnabled);
+            syncTainanHistoryFloodState();
+        });
+}
+
+function updateTainanHistoryFloodOpacity(value) {
+    var opacity = parseFloat(value);
+
+    var valueEl = document.getElementById(
+        'tainanHistoryFloodOpacityValue'
+    );
+
+    if (valueEl) {
+        valueEl.textContent =
+            Math.round(opacity * 100) + '%';
+    }
+
+    if (tainanHistoryFloodLayer) {
+        tainanHistoryFloodLayer.setOpacity(opacity);
+    }
+}
+
+document.addEventListener('change', function(event) {
+    var input = event.target;
+
+    if (
+        !input ||
+        !input.classList.contains(
+            'tainan-history-event-toggle'
+        )
+    ) {
+        return;
+    }
+
+    var index = Number(input.dataset.eventIndex);
+    var entry = tainanHistoryFloodEvents[index];
+
+    if (!entry) return;
+
+    var value = String(entry.value);
+
+    if (input.checked) {
+        tainanHistoryFloodSelectedValues.add(value);
+    } else {
+        tainanHistoryFloodSelectedValues.delete(value);
+    }
+
+    applyTainanHistoryFloodEventFilter();
+});
+
+document.getElementById(
+    'tainanHistoryFloodShowAll'
+).addEventListener('click', function() {
+    tainanHistoryFloodSelectedValues = new Set(
+        tainanHistoryFloodEvents.map(function(entry) {
+            return String(entry.value);
+        })
+    );
+
+    applyTainanHistoryFloodEventFilter();
+});
+
+document.getElementById(
+    'tainanHistoryFloodHideAll'
+).addEventListener('click', function() {
+    tainanHistoryFloodSelectedValues.clear();
+
+    applyTainanHistoryFloodEventFilter();
+});
+
+map.on('zoomend', function() {
+    syncTainanHistoryFloodState();
+});
+
+window.setTimeout(function() {
+    loadTainanHistoryFloodEvents();
+}, 80);
+/* ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
+
         function getGeoJsonUrls(path) {
             if (path.startsWith('./') || path.startsWith('http')) {
                 return [path];
@@ -9790,834 +11008,4 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 })();
 </script>
 
-<!-- ===== START: HISTORICAL_FLOOD_V3 ===== -->
-<style id="historical-flood-v3-styles">
-  .flood-history-module {
-    margin: 14px 0;
-    padding: 13px;
-    border: 1px solid rgba(180, 83, 9, .22);
-    border-radius: 16px;
-    background: linear-gradient(145deg, rgba(255, 251, 235, .97), rgba(255, 247, 237, .92));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92), 0 10px 22px rgba(120, 53, 15, .06);
-  }
-
-  .flood-history-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .flood-history-title {
-    margin: 0 !important;
-    color: #7c2d12 !important;
-  }
-
-  .flood-history-title small {
-    color: #b45309 !important;
-  }
-
-  .flood-history-subtitle {
-    margin: 4px 0 0;
-    color: #9a3412;
-    font-size: 10.5px;
-    line-height: 1.45;
-    font-weight: 650;
-  }
-
-  .flood-history-badge {
-    margin-top: 1px;
-    padding: 4px 7px;
-    border: 1px solid rgba(180, 83, 9, .2);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, .68);
-    color: #9a3412;
-    font: 900 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: .1em;
-  }
-
-  .flood-history-toggle-row {
-    display: flex !important;
-    align-items: center !important;
-    gap: 9px !important;
-    margin: 0 !important;
-    padding: 10px 11px;
-    border: 1px solid rgba(217, 119, 6, .18);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, .74);
-    cursor: pointer;
-  }
-
-  .flood-history-toggle-row input {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .flood-history-toggle-copy {
-    display: grid;
-    gap: 2px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .flood-history-toggle-copy strong {
-    color: #7c2d12;
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  .flood-history-toggle-copy small {
-    color: #a16207;
-    font-size: 10px;
-    font-weight: 750;
-  }
-
-  .flood-history-switch {
-    position: relative;
-    flex: 0 0 auto;
-    width: 36px;
-    height: 22px;
-    border-radius: 999px;
-    background: #fed7aa;
-    box-shadow: inset 0 1px 3px rgba(124, 45, 18, .16);
-    transition: background .18s ease;
-  }
-
-  .flood-history-switch::after {
-    content: "";
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 2px 5px rgba(124, 45, 18, .25);
-    transition: transform .18s ease;
-  }
-
-  .flood-history-toggle-row input:checked + .flood-history-toggle-copy + .flood-history-switch {
-    background: #c2410c;
-  }
-
-  .flood-history-toggle-row input:checked + .flood-history-toggle-copy + .flood-history-switch::after {
-    transform: translateX(14px);
-  }
-
-  .flood-history-toggle-row:focus-within {
-    outline: 3px solid rgba(251, 146, 60, .35);
-    outline-offset: 2px;
-  }
-
-  .flood-history-card {
-    margin-top: 9px;
-    padding: 12px;
-    border: 1px solid rgba(251, 146, 60, .28);
-    border-radius: 13px;
-    background: rgba(255, 255, 255, .76);
-  }
-
-  .flood-history-card[hidden] {
-    display: none !important;
-  }
-
-  .flood-history-card-topline,
-  .flood-history-opacity-row,
-  .flood-history-legend-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .flood-history-kicker {
-    color: #b45309;
-    font-size: 9px;
-    font-weight: 950;
-    letter-spacing: .12em;
-  }
-
-  .flood-history-state {
-    padding: 3px 7px;
-    border: 1px solid rgba(180, 83, 9, .17);
-    border-radius: 999px;
-    background: #fffbeb;
-    color: #92400e;
-    font-size: 9px;
-    font-weight: 900;
-    white-space: nowrap;
-  }
-
-  .flood-history-state.is-blocked {
-    border-color: rgba(225, 29, 72, .18);
-    background: #fff1f2;
-    color: #9f1239;
-  }
-
-  .flood-history-field {
-    display: grid !important;
-    gap: 5px !important;
-    margin: 10px 0 !important;
-    color: #92400e !important;
-    font-size: 10px !important;
-    font-weight: 850 !important;
-  }
-
-  .flood-history-field select {
-    width: 100%;
-    padding: 8px 9px;
-    border: 1px solid #fed7aa;
-    border-radius: 9px;
-    outline: none;
-    background: #fff;
-    color: #7c2d12;
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  .flood-history-field select:focus {
-    border-color: #ea580c;
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, .14);
-  }
-
-  .flood-history-opacity-row {
-    color: #9a3412;
-    font-size: 10px;
-    font-weight: 850;
-  }
-
-  .flood-history-opacity-row output {
-    color: #c2410c;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-
-  .flood-history-range {
-    width: 100%;
-    margin: 6px 0 12px;
-    accent-color: #c2410c;
-  }
-
-  .flood-history-legend-head {
-    align-items: flex-start;
-    margin-bottom: 8px;
-  }
-
-  .flood-history-legend-head strong {
-    display: block;
-    color: #7c2d12;
-    font-size: 11px;
-    font-weight: 950;
-  }
-
-  .flood-history-legend-head span {
-    display: block;
-    margin-top: 2px;
-    color: #a16207;
-    font-size: 9.5px;
-    line-height: 1.35;
-    font-weight: 700;
-  }
-
-  .flood-history-icon-button {
-    width: 26px;
-    height: 26px;
-    border: 1px solid #fed7aa;
-    border-radius: 8px;
-    background: #fff;
-    color: #c2410c;
-    cursor: pointer;
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .flood-history-icon-button:hover {
-    border-color: #fb923c;
-    background: #fff7ed;
-  }
-
-  .flood-history-legend {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    max-height: 168px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .flood-history-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding: 6px;
-    border: 1px solid rgba(251, 146, 60, .22);
-    border-radius: 9px;
-    background: rgba(255, 255, 255, .86);
-  }
-
-  .flood-history-legend-item img {
-    width: 20px;
-    height: 14px;
-    flex: 0 0 auto;
-    border: 1px solid rgba(15, 23, 42, .08);
-    border-radius: 3px;
-    background: #fff;
-    object-fit: contain;
-  }
-
-  .flood-history-legend-item span {
-    min-width: 0;
-    overflow: hidden;
-    color: #78350f;
-    font-size: 9.5px;
-    font-weight: 750;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .flood-history-legend-loading,
-  .flood-history-legend-fallback {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 9px;
-    border-radius: 9px;
-    background: rgba(255, 251, 235, .88);
-    color: #92400e;
-    font-size: 10px;
-    font-weight: 750;
-  }
-
-  .flood-history-legend-loading span {
-    width: 12px;
-    height: 12px;
-    border: 2px solid #fed7aa;
-    border-top-color: #c2410c;
-    border-radius: 50%;
-    animation: floodLegendSpin .72s linear infinite;
-  }
-
-  @keyframes floodLegendSpin {
-    to { transform: rotate(360deg); }
-  }
-
-  .flood-history-facts {
-    margin-top: 10px;
-    padding-top: 9px;
-    border-top: 1px dashed rgba(217, 119, 6, .28);
-  }
-
-  .flood-history-facts summary {
-    cursor: pointer;
-    color: #9a3412;
-    font-size: 10px;
-    font-weight: 900;
-  }
-
-  .flood-history-facts p {
-    margin: 7px 0 6px;
-    color: #7c2d12;
-    font-size: 10px;
-    line-height: 1.55;
-    font-weight: 650;
-  }
-
-  .flood-history-facts a {
-    color: #c2410c;
-    font-size: 10px;
-    font-weight: 900;
-    text-decoration: none;
-  }
-
-  .flood-history-facts a:hover {
-    text-decoration: underline;
-  }
-
-  @media (max-width: 600px) {
-    .flood-history-legend {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
-
-<script id="historical-flood-v3-script">
-(function () {
-  'use strict';
-
-  const SERVICE = 'https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer';
-  const MIN_ZOOM = 9;
-  const BUFFER_PX = 512;
-  const PANE = 'historicalFloodPane';
-
-  function onReady(callback) {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', callback, { once: true });
-    } else {
-      callback();
-    }
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? '' : value).replace(/[&<>'"]/g, function (character) {
-      return ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        "'": '&#039;',
-        '"': '&quot;'
-      })[character];
-    });
-  }
-
-  function insertControlCard() {
-    if (document.getElementById('historicalFloodModule')) return true;
-
-    const realtimeToggle = document.getElementById('realtimeFloodToggle');
-    const anchor = realtimeToggle && realtimeToggle.closest('.layer-subsection');
-
-    if (!anchor || !anchor.parentNode) return false;
-
-    const module = document.createElement('section');
-    module.className = 'layer-subsection flood-history-module';
-    module.id = 'historicalFloodModule';
-
-    module.innerHTML = `
-      <div class="flood-history-heading">
-        <div>
-          <div class="layer-subsection-title flood-history-title">
-            臺南歷年淹水災情 <small>官方實測紀錄</small>
-          </div>
-          <p class="flood-history-subtitle">以原始 MapServer 繪製，色標直接對應官方歷史災害事件。</p>
-        </div>
-        <span class="flood-history-badge">HISTORY</span>
-      </div>
-
-      <label class="flood-history-toggle-row">
-        <input type="checkbox" id="historicalFloodToggle">
-        <span class="flood-history-toggle-copy">
-          <strong>顯示歷年淹水災情</strong>
-          <small id="historicalFloodZoomHint">需放大至 z 9</small>
-        </span>
-        <span class="flood-history-switch" aria-hidden="true"></span>
-      </label>
-
-      <div class="flood-history-card" id="historicalFloodCard" hidden>
-        <div class="flood-history-card-topline">
-          <span class="flood-history-kicker">官方資料集</span>
-          <span class="flood-history-state" id="historicalFloodState" aria-live="polite">圖層未啟用</span>
-        </div>
-
-        <label class="flood-history-field">
-          <span>資料圖層</span>
-          <select id="historicalFloodDataset">
-            <option value="2">歷年淹水災情</option>
-            <option value="0">歷年淹水災情（雨水科）</option>
-            <option value="1">歷年淹水災情（綜企科）</option>
-          </select>
-        </label>
-
-        <div class="flood-history-opacity-row">
-          <span>透明度</span>
-          <output id="historicalFloodOpacityValue" for="historicalFloodOpacity">65%</output>
-        </div>
-
-        <input
-          id="historicalFloodOpacity"
-          class="flood-history-range"
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.05"
-          value="0.65"
-        >
-
-        <div class="flood-history-legend-head">
-          <div>
-            <strong>官方事件色標</strong>
-            <span>顏色與事件名稱由原始服務提供</span>
-          </div>
-
-          <button
-            type="button"
-            id="historicalFloodLegendReload"
-            class="flood-history-icon-button"
-            aria-label="重新載入圖例"
-            title="重新載入圖例"
-          >↻</button>
-        </div>
-
-        <div class="flood-history-legend" id="historicalFloodLegend" aria-live="polite">
-          <div class="flood-history-legend-loading">
-            <span></span>開啟圖層後載入官方圖例
-          </div>
-        </div>
-
-        <details class="flood-history-facts">
-          <summary>資料說明</summary>
-          <p>這是臺南市水利局公開的過去實際淹水災情紀錄；不表示目前積淹水，也不是降雨情境的淹水潛勢模擬。</p>
-          <a
-            href="https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer"
-            target="_blank"
-            rel="noopener noreferrer"
-          >開啟官方 MapServer ↗</a>
-        </details>
-      </div>
-    `;
-
-    anchor.parentNode.insertBefore(module, anchor);
-    return true;
-  }
-
-  onReady(function () {
-    if (!window.L || typeof window.map === 'undefined') return;
-    if (!insertControlCard()) return;
-
-    const leafletMap = window.map;
-    const toggle = document.getElementById('historicalFloodToggle');
-    const card = document.getElementById('historicalFloodCard');
-    const select = document.getElementById('historicalFloodDataset');
-    const opacityInput = document.getElementById('historicalFloodOpacity');
-    const opacityValue = document.getElementById('historicalFloodOpacityValue');
-    const legend = document.getElementById('historicalFloodLegend');
-    const legendReload = document.getElementById('historicalFloodLegendReload');
-    const state = document.getElementById('historicalFloodState');
-    const zoomHint = document.getElementById('historicalFloodZoomHint');
-
-    if (
-      !toggle ||
-      !card ||
-      !select ||
-      !opacityInput ||
-      !opacityValue ||
-      !legend ||
-      !state ||
-      !zoomHint
-    ) return;
-
-    if (!leafletMap.getPane(PANE)) leafletMap.createPane(PANE);
-
-    const pane = leafletMap.getPane(PANE);
-    pane.style.zIndex = '352';
-    pane.style.pointerEvents = 'none';
-
-    const StableMapServerExportLayer = L.Layer.extend({
-      initialize: function (serviceUrl, options) {
-        L.setOptions(this, options || {});
-        this._serviceUrl = serviceUrl.replace(/\/$/, '');
-        this._activeOverlay = null;
-        this._pendingOverlay = null;
-        this._requestId = 0;
-        this._enabled = false;
-        this._timer = null;
-      },
-
-      onAdd: function (attachedMap) {
-        this._map = attachedMap;
-        this._onMapChange = this._schedule.bind(this);
-        attachedMap.on('moveend zoomend resize', this._onMapChange);
-      },
-
-      onRemove: function (attachedMap) {
-        attachedMap.off('moveend zoomend resize', this._onMapChange);
-        window.clearTimeout(this._timer);
-
-        [this._activeOverlay, this._pendingOverlay].forEach(function (overlay) {
-          if (overlay && attachedMap.hasLayer(overlay)) {
-            attachedMap.removeLayer(overlay);
-          }
-        });
-
-        this._activeOverlay = null;
-        this._pendingOverlay = null;
-        this._map = null;
-      },
-
-      setEnabled: function (enabled) {
-        this._enabled = !!enabled;
-
-        if (!this._enabled || this._map.getZoom() < this.options.minZoom) {
-          this._setVisible(false);
-          return this;
-        }
-
-        this._setVisible(true);
-        this._schedule(true);
-        return this;
-      },
-
-      setLayerId: function (layerId) {
-        this.options.layerId = Number(layerId);
-
-        if (this._enabled) this._schedule(true);
-        return this;
-      },
-
-      setOpacity: function (opacity) {
-        this.options.opacity = Number(opacity);
-
-        if (this._activeOverlay) {
-          this._activeOverlay.setOpacity(this.options.opacity);
-        }
-
-        return this;
-      },
-
-      _setVisible: function (visible) {
-        const opacity = visible ? this.options.opacity : 0;
-
-        if (this._activeOverlay) {
-          this._activeOverlay.setOpacity(opacity);
-        }
-
-        if (this._pendingOverlay) {
-          this._pendingOverlay.setOpacity(0);
-        }
-      },
-
-      _schedule: function (immediate) {
-        const self = this;
-
-        window.clearTimeout(this._timer);
-
-        this._timer = window.setTimeout(function () {
-          self._refresh();
-        }, immediate ? 0 : 110);
-      },
-
-      _refresh: function () {
-        if (!this._map || !this._enabled) return;
-
-        if (this._map.getZoom() < this.options.minZoom) {
-          this._setVisible(false);
-          return;
-        }
-
-        const request = this._buildExportRequest();
-        const requestId = ++this._requestId;
-
-        if (this._pendingOverlay && this._map.hasLayer(this._pendingOverlay)) {
-          this._map.removeLayer(this._pendingOverlay);
-        }
-
-        const nextOverlay = L.imageOverlay(request.url, request.bounds, {
-          pane: this.options.pane,
-          opacity: 0,
-          interactive: false,
-          className: 'historical-flood-map-image'
-        });
-
-        this._pendingOverlay = nextOverlay;
-
-        nextOverlay.once('load', function () {
-          if (
-            !this._map ||
-            requestId !== this._requestId ||
-            this._pendingOverlay !== nextOverlay
-          ) return;
-
-          const oldOverlay = this._activeOverlay;
-
-          this._activeOverlay = nextOverlay;
-          this._pendingOverlay = null;
-
-          window.requestAnimationFrame(function () {
-            nextOverlay.setOpacity(this.options.opacity);
-          }.bind(this));
-
-          window.setTimeout(function () {
-            if (oldOverlay && this._map && this._map.hasLayer(oldOverlay)) {
-              this._map.removeLayer(oldOverlay);
-            }
-          }.bind(this), 180);
-        }, this);
-
-        nextOverlay.once('error', function () {
-          if (this._pendingOverlay === nextOverlay) {
-            this._pendingOverlay = null;
-          }
-
-          if (this._map && this._map.hasLayer(nextOverlay)) {
-            this._map.removeLayer(nextOverlay);
-          }
-
-          state.textContent = '官方服務暫時無回應';
-          state.classList.add('is-blocked');
-        }, this);
-
-        nextOverlay.addTo(this._map);
-      },
-
-      _buildExportRequest: function () {
-        const zoom = this._map.getZoom();
-        const pixelBounds = this._map.getPixelBounds();
-
-        const min = pixelBounds.min.subtract([BUFFER_PX, BUFFER_PX]);
-        const max = pixelBounds.max.add([BUFFER_PX, BUFFER_PX]);
-
-        const paddedSouthWest = this._map.unproject(L.point(min.x, max.y), zoom);
-        const paddedNorthEast = this._map.unproject(L.point(max.x, min.y), zoom);
-
-        const projectedSW = this._map.options.crs.project(paddedSouthWest);
-        const projectedNE = this._map.options.crs.project(paddedNorthEast);
-
-        const size = this._map.getSize().add([BUFFER_PX * 2, BUFFER_PX * 2]);
-const MAX_EXPORT_SIZE = 1600;
-const scale = Math.min(
-  1,
-  MAX_EXPORT_SIZE / Math.max(size.x, size.y)
-);
-
-const imageWidth = Math.max(1, Math.round(size.x * scale));
-const imageHeight = Math.max(1, Math.round(size.y * scale));
-
-const parameters = new URLSearchParams({
-  bbox: [projectedSW.x, projectedSW.y, projectedNE.x, projectedNE.y].join(','),
-  bboxSR: '3857',
-  imageSR: '3857',
-  size: [imageWidth, imageHeight].join(','),
-  dpi: '96',
-  format: 'png32',
-  transparent: 'true',
-  layers: 'show:' + this.options.layerId,
-  f: 'image'
-});
-
-        return {
-          url: this._serviceUrl + '/export?' + parameters.toString(),
-          bounds: L.latLngBounds(paddedSouthWest, paddedNorthEast)
-        };
-      }
-    });
-
-    const historyLayer = new StableMapServerExportLayer(SERVICE, {
-      pane: PANE,
-      minZoom: MIN_ZOOM,
-      layerId: Number(select.value),
-      opacity: Number(opacityInput.value)
-    });
-
-    historyLayer.addTo(leafletMap);
-    window.historicalFloodLayer = historyLayer;
-
-    function syncZoomState() {
-      const enabled = toggle.checked;
-      const ready = leafletMap.getZoom() >= MIN_ZOOM;
-
-      if (!enabled) {
-        state.textContent = '圖層未啟用';
-        state.classList.remove('is-blocked');
-        zoomHint.textContent = '需放大至 z ' + MIN_ZOOM;
-      } else if (!ready) {
-        state.textContent = '請放大至 z ' + MIN_ZOOM;
-        state.classList.add('is-blocked');
-        zoomHint.textContent = '目前 z ' + leafletMap.getZoom().toFixed(0) + '，尚未載入';
-      } else {
-        state.textContent = '已顯示官方圖資';
-        state.classList.remove('is-blocked');
-        zoomHint.textContent = '目前 z ' + leafletMap.getZoom().toFixed(0) + '，已載入';
-      }
-    }
-
-    function renderLegendLoading() {
-      legend.innerHTML = `
-        <div class="flood-history-legend-loading">
-          <span></span>載入官方圖例…
-        </div>
-      `;
-    }
-
-    async function loadOfficialLegend() {
-      renderLegendLoading();
-
-      const requestedLayerId = Number(select.value);
-
-      try {
-        const response = await fetch(SERVICE + '/legend?f=pjson', {
-          cache: 'force-cache'
-        });
-
-        if (!response.ok) {
-          throw new Error('HTTP ' + response.status);
-        }
-
-        const payload = await response.json();
-
-        const matchedLayer = (payload.layers || []).find(function (item) {
-          return Number(item.layerId) === requestedLayerId;
-        });
-
-        const entries = matchedLayer && Array.isArray(matchedLayer.legend)
-          ? matchedLayer.legend
-          : [];
-
-        if (!entries.length) {
-          throw new Error('EMPTY_LEGEND');
-        }
-
-        legend.innerHTML = entries.map(function (entry) {
-          const icon = entry.imageData
-            ? 'data:image/png;base64,' + entry.imageData
-            : '';
-
-          const fallback = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="20" height="14"%3E%3Crect width="20" height="14" fill="%23fdba74"/%3E%3C/svg%3E';
-
-          return `
-            <div class="flood-history-legend-item" title="${escapeHtml(entry.label || '未命名事件')}">
-              <img alt="" src="${icon || fallback}">
-              <span>${escapeHtml(entry.label || '未命名事件')}</span>
-            </div>
-          `;
-        }).join('');
-
-      } catch (error) {
-        legend.innerHTML = `
-          <div class="flood-history-legend-fallback">
-            官方圖例暫時無法取得；地圖仍保留 MapServer 原始配色。
-          </div>
-        `;
-      }
-    }
-
-    toggle.addEventListener('change', function () {
-      card.hidden = !toggle.checked;
-      historyLayer.setEnabled(toggle.checked);
-      syncZoomState();
-
-      if (toggle.checked) {
-        loadOfficialLegend();
-      }
-    });
-
-    select.addEventListener('change', function () {
-      historyLayer.setLayerId(select.value);
-
-      if (toggle.checked) {
-        loadOfficialLegend();
-      }
-    });
-
-    opacityInput.addEventListener('input', function () {
-      const value = Number(opacityInput.value);
-      const label = Math.round(value * 100) + '%';
-
-      opacityValue.value = label;
-      opacityValue.textContent = label;
-
-      historyLayer.setOpacity(value);
-    });
-
-    legendReload.addEventListener('click', loadOfficialLegend);
-    leafletMap.on('zoomend', syncZoomState);
-
-    syncZoomState();
-  });
-})();
-</script>
-<!-- ===== END: HISTORICAL_FLOOD_V3 ===== -->
-    
 </body></html>
