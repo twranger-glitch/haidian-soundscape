@@ -512,12 +512,26 @@
         cursor: crosshair;
       }
 
-      @media (max-width: 600px) {
+            @media (max-width: 600px) {
+        /*
+         * 熱風險卡片開啟時：
+         * 隱藏右側工具列、左側耳朵、定位、縮放控制，
+         * 避免任何按鈕遮住卡片閱讀。
+         */
         body.heat-risk-card-open #rightToolsWrapper,
         body.heat-risk-card-open .drawer-panel .toggle-btn,
-        body.heat-risk-card-open .header-pull-tab {
+        body.heat-risk-card-open .header-pull-tab,
+        body.heat-risk-card-open .locate-me-wrapper,
+        body.heat-risk-card-open .leaflet-control-zoom,
+        body.heat-risk-card-open #floatingClearRouteBtn,
+        body.heat-risk-card-open #nanshanCategoryMenu {
           opacity: 0 !important;
+          visibility: hidden !important;
           pointer-events: none !important;
+        }
+
+        #rightToolsWrapper .heat-risk-tool::after {
+          display: none;
         }
       }
 
