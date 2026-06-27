@@ -13,7 +13,7 @@
   const CONFIG = Object.assign(
     {
       endpoint: "https://haidian-heat-risk-api.yhzkiki.workers.dev/temperature-kmz",
-      title: "中央氣象署全臺溫度分布",
+      title: "熱風險分布圖",
       initialOpacity: 0.64,
       zIndex: 420,
       maxAgeMinutes: 150,
@@ -69,32 +69,307 @@
 
     const style = document.createElement("style");
     style.id = `${CONTROL_ID}-styles`;
-    style.textContent = `
-      #${CONTROL_ID} { margin: 12px 0; padding: 12px 0; border-top: 1px solid rgba(148,163,184,.35); border-bottom: 1px solid rgba(148,163,184,.35); }
-      #${CONTROL_ID} .cwa-temp-title { color: var(--text-muted, #64748b); font-size: 11px; margin-bottom: 8px; font-weight: 800; display: flex; align-items: center; gap: 5px; }
-      #${CONTROL_ID} .cwa-temp-row { display: flex; align-items: center; gap: 8px; }
-      #${CONTROL_ID} .cwa-temp-row label { margin: 0; cursor: pointer; }
-      #${CONTROL_ID} input[type="checkbox"] { width: 17px; height: 17px; margin: 0; accent-color: #f97316; flex: 0 0 auto; }
-      #${CONTROL_ID} .cwa-temp-status { min-height: 17px; margin-top: 7px; color: #64748b; font-size: 11px; line-height: 1.45; font-weight: 650; }
-      #${CONTROL_ID} .cwa-temp-status.error { color: #b91c1c; }
-      #${CONTROL_ID} .cwa-temp-controls { display: none; margin-top: 8px; padding: 9px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; }
-      #${CONTROL_ID}.ready .cwa-temp-controls { display: block; }
-      #${CONTROL_ID} .cwa-temp-label { display: flex; justify-content: space-between; gap: 8px; color: #9a3412; font-size: 11px; font-weight: 800; margin-bottom: 4px; }
-      #${CONTROL_ID} input[type="range"] { width: 100%; margin: 0; accent-color: #f97316; }
-      #${CONTROL_ID} .cwa-temp-actions { display: flex; gap: 6px; margin-top: 8px; }
-      #${CONTROL_ID} button { flex: 1; min-height: 30px; padding: 5px 7px; border: 1px solid #fdba74; border-radius: 7px; background: #fff; color: #9a3412; font-size: 11px; font-weight: 800; cursor: pointer; }
-      #${CONTROL_ID} button:disabled { opacity: .55; cursor: not-allowed; }
-      #${CONTROL_ID} .cwa-temp-details { margin-top: 8px; color: #7c2d12; font-size: 10px; line-height: 1.48; }
-      #${CONTROL_ID} .cwa-temp-legend { margin-top: 10px; padding: 9px; border: 1px solid #fed7aa; border-radius: 10px; background: rgba(255,255,255,.72); }
-      #${CONTROL_ID} .cwa-temp-legend-head { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; color: #7c2d12; font-size: 10px; font-weight: 800; }
-      #${CONTROL_ID} .cwa-temp-legend-head em { color: #9a3412; font-style: normal; font-weight: 700; }
-      #${CONTROL_ID} .cwa-temp-legend-body { display: flex; gap: 8px; align-items: stretch; height: 130px; margin-top: 7px; }
-      #${CONTROL_ID} .cwa-temp-legend-scale { width: 16px; flex: 0 0 16px; border-radius: 3px; border: 1px solid rgba(15,23,42,.15); background: linear-gradient(to top, #27758b 0%, #4fadc4 16%, #9bd7dc 27%, #15965d 43%, #a5d475 55%, #f4f08a 65%, #f5af31 76%, #ef6a25 84%, #df2851 91%, #b31679 96%, #8b3aa5 100%); }
-      #${CONTROL_ID} .cwa-temp-legend-ticks { display: flex; flex: 1; flex-direction: column; justify-content: space-between; color: #7c2d12; font-size: 10px; font-weight: 750; line-height: 1; }
-      #${CONTROL_ID} .cwa-temp-legend-note { margin: 7px 0 0; color: #9a3412; font-size: 9.5px; line-height: 1.4; font-weight: 650; }
-      #${CONTROL_ID} .cwa-temp-query { width: 100%; margin-top: 8px; border-color: #fb923c; background: #fff7ed; color: #9a3412; }
-      #${CONTROL_ID} .cwa-temp-query:hover { background: #ffedd5; }
-      #${CONTROL_ID} .cwa-temp-query-note { margin: 6px 0 0; color: #7c2d12; font-size: 9.5px; line-height: 1.42; font-weight: 650; }
+        style.textContent = `
+      /*
+       * 熱風險分布圖控制：
+       * 僅改這個元件外觀，不改圖層下載、透明度、全臺檢視或地圖查詢邏輯。
+       */
+      #${CONTROL_ID} {
+        margin: 14px 0 18px;
+        padding: 14px;
+        color: #173b45;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,.97), rgba(241,250,250,.92));
+        border: 1px solid rgba(11, 123, 127, .22);
+        border-radius: 18px;
+        box-shadow:
+          0 10px 24px rgba(13,47,53,.08),
+          inset 0 1px 0 rgba(255,255,255,.88);
+      }
+
+      #${CONTROL_ID} .cwa-temp-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 13px;
+        padding: 0 0 12px;
+        border-bottom: 1px solid rgba(11,123,127,.16);
+      }
+
+      #${CONTROL_ID} .cwa-temp-title-icon {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        display: grid;
+        place-items: center;
+        color: #c85a17;
+        background: linear-gradient(145deg, #fff8ed, #ffedd5);
+        border: 1px solid rgba(249,115,22,.24);
+        border-radius: 11px;
+      }
+
+      #${CONTROL_ID} .cwa-temp-title-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      #${CONTROL_ID} .cwa-temp-kicker {
+        display: block;
+        margin-bottom: 2px;
+        color: #0f766e;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: .07em;
+      }
+
+      #${CONTROL_ID} .cwa-temp-title {
+        display: block;
+        color: #153d47;
+        font-size: 15px;
+        line-height: 1.2;
+        font-weight: 900;
+        letter-spacing: .02em;
+      }
+
+      #${CONTROL_ID} .cwa-temp-toggle-card {
+        display: flex !important;
+        align-items: center;
+        gap: 10px;
+        margin: 0 !important;
+        padding: 11px 12px;
+        color: #174650;
+        background: rgba(231,246,245,.86);
+        border: 1px solid rgba(11,123,127,.20);
+        border-radius: 13px;
+        cursor: pointer;
+      }
+
+      #${CONTROL_ID} input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
+        margin: 0;
+        accent-color: #087f86;
+        cursor: pointer;
+      }
+
+      #${CONTROL_ID} .cwa-temp-toggle-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      #${CONTROL_ID} .cwa-temp-toggle-copy strong {
+        color: #174650;
+        font-size: 13px;
+        line-height: 1.25;
+        font-weight: 900;
+      }
+
+      #${CONTROL_ID} .cwa-temp-toggle-copy small {
+        color: #607887;
+        font-size: 10.5px;
+        line-height: 1.35;
+        font-weight: 700;
+      }
+
+      #${CONTROL_ID} .cwa-temp-status {
+        margin: 9px 2px 0;
+        color: #5d7582;
+        font-size: 11px;
+        line-height: 1.5;
+        font-weight: 700;
+      }
+
+      #${CONTROL_ID} .cwa-temp-status:empty {
+        display: none;
+      }
+
+      #${CONTROL_ID} .cwa-temp-status.error {
+        color: #b42318;
+      }
+
+      #${CONTROL_ID} .cwa-temp-controls {
+        display: none;
+        margin-top: 12px;
+        padding: 12px;
+        background: rgba(255,255,255,.75);
+        border: 1px solid rgba(11,123,127,.18);
+        border-radius: 14px;
+      }
+
+      #${CONTROL_ID}.ready .cwa-temp-controls {
+        display: block;
+      }
+
+      #${CONTROL_ID} .cwa-temp-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        color: #235460;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      #${CONTROL_ID} .cwa-temp-opacity-value {
+        padding: 3px 7px;
+        color: #0f766e;
+        background: #e8f7f5;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #${CONTROL_ID} input[type="range"] {
+        width: 100%;
+        min-height: 28px;
+        margin: 6px 0 8px;
+        accent-color: #087f86;
+        cursor: pointer;
+      }
+
+      #${CONTROL_ID} .cwa-temp-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      #${CONTROL_ID} button {
+        min-height: 38px;
+        padding: 8px 10px;
+        color: #17616a;
+        background: #fff;
+        border: 1px solid rgba(11,123,127,.38);
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 850;
+        cursor: pointer;
+        transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+      }
+
+      #${CONTROL_ID} button:hover:not(:disabled),
+      #${CONTROL_ID} button:focus-visible:not(:disabled) {
+        color: #fff;
+        background: #087f86;
+        border-color: #087f86;
+        outline: 3px solid rgba(8,127,134,.20);
+        outline-offset: 2px;
+      }
+
+      #${CONTROL_ID} button:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+
+      #${CONTROL_ID} button:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend {
+        margin-top: 12px;
+        padding: 11px;
+        border: 1px solid rgba(249,115,22,.26);
+        border-radius: 13px;
+        background: linear-gradient(145deg, #fffdfa, #fff7ed);
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        color: #8c3c13;
+        font-size: 10.5px;
+        font-weight: 900;
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-head em {
+        color: #c85a17;
+        font-size: 10px;
+        font-style: normal;
+        font-weight: 850;
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-body {
+        display: flex;
+        align-items: stretch;
+        gap: 9px;
+        height: 132px;
+        margin-top: 9px;
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-scale {
+        width: 16px;
+        flex: 0 0 16px;
+        border: 1px solid rgba(15,23,42,.14);
+        border-radius: 5px;
+        background: linear-gradient(to top, #27758b 0%, #4fadc4 16%, #9bd7dc 27%, #15965d 43%, #a5d475 55%, #f4f08a 65%, #f5af31 76%, #ef6a25 84%, #df2851 91%, #b31679 96%, #8b3aa5 100%);
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-ticks {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: space-between;
+        color: #7c2d12;
+        font-size: 10px;
+        font-weight: 750;
+        line-height: 1;
+      }
+
+      #${CONTROL_ID} .cwa-temp-legend-note {
+        margin: 8px 0 0;
+        color: #9a4a1d;
+        font-size: 9.5px;
+        line-height: 1.45;
+        font-weight: 650;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query {
+        width: 100%;
+        margin-top: 12px;
+        color: #fff;
+        background: linear-gradient(135deg, #0c8a8e, #08757b);
+        border-color: #08757b;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query:hover:not(:disabled),
+      #${CONTROL_ID} .cwa-temp-query:focus-visible:not(:disabled) {
+        color: #fff;
+        background: #07656b;
+        border-color: #07656b;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-note {
+        margin: 7px 0 0;
+        color: #5c7480;
+        font-size: 9.5px;
+        line-height: 1.48;
+        font-weight: 650;
+      }
+
+      #${CONTROL_ID} .cwa-temp-details {
+        margin-top: 11px;
+        padding-top: 10px;
+        border-top: 1px dashed rgba(11,123,127,.23);
+        color: #647a83;
+        font-size: 9.5px;
+        line-height: 1.48;
+        font-weight: 650;
+      }
+
+      @media (max-width: 600px) {
+        #${CONTROL_ID} {
+          margin: 12px 0 16px;
+          padding: 12px;
+          border-radius: 16px;
+        }
+
+        #${CONTROL_ID} .cwa-temp-actions {
+          grid-template-columns: 1fr;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -106,35 +381,58 @@
     panel = document.createElement("section");
     panel.id = CONTROL_ID;
     panel.setAttribute("aria-label", "中央氣象署官方溫度分布圖層");
-    panel.innerHTML = `
-      <div class="cwa-temp-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path><path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path></svg>
-        ${escapeHtml(CONFIG.title)}
-      </div>
-      <div class="cwa-temp-row">
-        <input id="haidian-cwa-temperature-toggle" class="cwa-temp-toggle" type="checkbox" aria-label="顯示中央氣象署官方溫度分布圖">
-        <label for="haidian-cwa-temperature-toggle">顯示全臺官方溫度分布</label>
-      </div>
-      <div class="cwa-temp-status" aria-live="polite">關閉時不下載資料。</div>
+        panel.innerHTML = `
+      <header class="cwa-temp-head">
+        <div class="cwa-temp-title-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path><path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path></svg>
+        </div>
+        <div>
+          <span class="cwa-temp-kicker">官方圖資 · 中央氣象署</span>
+          <strong class="cwa-temp-title">${escapeHtml(CONFIG.title)}</strong>
+        </div>
+      </header>
+
+      <label class="cwa-temp-toggle-card" for="haidian-cwa-temperature-toggle">
+        <input id="haidian-cwa-temperature-toggle" class="cwa-temp-toggle" type="checkbox" aria-label="顯示熱風險分布圖">
+        <span class="cwa-temp-toggle-copy">
+          <strong>顯示熱風險分布圖</strong>
+          <small>官方小時溫度分析圖層</small>
+        </span>
+      </label>
+
+      <div class="cwa-temp-status" aria-live="polite"></div>
+
       <div class="cwa-temp-controls">
-        <div class="cwa-temp-label"><span>圖層透明度</span><output class="cwa-temp-opacity-value"></output></div>
-        <input class="cwa-temp-opacity" type="range" min="0.1" max="1" step="0.05" aria-label="溫度圖透明度">
+        <div class="cwa-temp-label">
+          <span>圖層透明度</span>
+          <output class="cwa-temp-opacity-value"></output>
+        </div>
+
+        <input class="cwa-temp-opacity" type="range" min="0.1" max="1" step="0.05" aria-label="調整熱風險分布圖透明度">
+
         <div class="cwa-temp-actions">
           <button type="button" class="cwa-temp-refresh">重新載入圖層</button>
           <button type="button" class="cwa-temp-fit">查看全臺</button>
         </div>
-        <section class="cwa-temp-legend" aria-label="中央氣象署溫度色階圖例">
-          <div class="cwa-temp-legend-head"><span>溫度色階（攝氏）</span><em>冷 → 熱</em></div>
+
+        <section class="cwa-temp-legend" aria-label="熱風險分布圖溫度色階">
+          <div class="cwa-temp-legend-head">
+            <span>溫度色階（攝氏）</span>
+            <em>冷 → 熱</em>
+          </div>
+
           <div class="cwa-temp-legend-body">
             <div class="cwa-temp-legend-scale" aria-hidden="true"></div>
             <div class="cwa-temp-legend-ticks" aria-hidden="true">
               <span>38°C 以上</span><span>35°C</span><span>30°C</span><span>25°C</span><span>20°C</span><span>15°C</span><span>10°C</span><span>5°C</span><span>0°C</span><span>−1°C 以下</span>
             </div>
           </div>
-          <p class="cwa-temp-legend-note">色彩為連續變化；目前圖層透明度較低時，顏色會與底圖混合。想看某一位置的數字，請用下方查詢。</p>
+
+          <p class="cwa-temp-legend-note">色彩為連續變化；調低透明度時會與底圖混合。欲查詢特定位置數值，請使用下方功能。</p>
         </section>
+
         <button type="button" class="cwa-temp-query">點選地圖查詢溫濕度與熱風險</button>
-        <p class="cwa-temp-query-note">卡片會並列中央氣象署區域溫度格點，以及附近即時溫濕度、熱指數與 PM2.5；兩者資料時間與方法不同，會分開標示。</p>
+        <p class="cwa-temp-query-note">查詢結果會分別呈現官方區域分析與附近即時觀測，方便對照閱讀。</p>
         <div class="cwa-temp-details"></div>
       </div>
     `;
@@ -433,8 +731,9 @@
       URL.revokeObjectURL(state.objectUrl);
       state.objectUrl = null;
     }
-    panel?.classList.remove("ready");
-    setStatus("已關閉；不會繼續下載資料。", false);
+        panel?.classList.remove("ready");
+    if (details) details.textContent = "";
+    setStatus("", false);
   }
 
   async function loadTemperatureLayer(options = {}) {
