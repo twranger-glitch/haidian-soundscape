@@ -10389,18 +10389,44 @@ function renderRealtimeFloodMap() {
             }
         );
 
-                /*
-         * Popup 開啟後再移動地圖。
-         * 不再手動第二次 marker.openPopup()，
-         * 避免首次點擊時重建卡片 DOM，造成趨勢資料寫入失敗。
+                        /*
+         * Popup 開啟後，將地圖中心放在測站北側。
+         * 這會讓測站與 Popup 整體往下移，避開上方 Banner。
          */
         marker.on("popupopen", function () {
             var stationLatLng = marker.getLatLng();
             var targetZoom = Math.max(map.getZoom(), 16);
 
+            /*
+             * 桌機卡片較高，預留較多 Banner 安全距離；
+             * 手機保留較多下方畫面，避免卡片過低。
+             */
+            var popupClearance =
+                window.matchMedia("(max-width: 600px)").matches
+                    ? 96
+                    : 140;
+
+            /*
+             * 將地圖中心移到測站北側：
+             * 測站會在畫面中央偏下，
+             * 往上展開的 Popup 就不會被 Banner 遮住。
+             */
+            var projectedStation = map.project(
+                stationLatLng,
+                targetZoom
+            );
+
+            var targetCenter = map.unproject(
+                L.point(
+                    projectedStation.x,
+                    projectedStation.y - popupClearance
+                ),
+                targetZoom
+            );
+
             var shouldMove =
                 map.getZoom() !== targetZoom ||
-                map.getCenter().distanceTo(stationLatLng) > 25;
+                map.getCenter().distanceTo(targetCenter) > 10;
 
             var loadPopupData = function () {
                 if (
@@ -10436,7 +10462,7 @@ function renderRealtimeFloodMap() {
                 map.once("moveend", loadPopupData);
 
                 map.flyTo(
-                    stationLatLng,
+                    targetCenter,
                     targetZoom,
                     {
                         animate: true,
