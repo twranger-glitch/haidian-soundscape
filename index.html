@@ -11394,20 +11394,25 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
 <!-- ===== START: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
 <style id="urgent-right-tools-and-focus-fix">
-    /*
+      /*
    * 右側圖資收合耳朵：
-   * 放在捲動容器外，固定貼在右側面板左緣。
+   * 桌機保留在面板左緣；手機底部抽屜則收在面板內側，避免跑出螢幕。
    */
   #rightToolsWrapper .tools-menu-container {
-    position: relative !important;
     overflow: visible !important;
+  }
+
+  @media (min-width: 601px) {
+    #rightToolsWrapper .tools-menu-container {
+      position: relative !important;
+    }
   }
 
   #rightToolsCollapseEar {
     position: absolute;
     top: 104px;
     left: -44px;
-    z-index: 90;
+    z-index: 9999 !important;
 
     width: 44px;
     height: 78px;
@@ -11456,12 +11461,43 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
   }
 
   @media (max-width: 600px) {
+    /*
+     * 不要設定 position: relative；
+     * 否則會覆蓋既有的 position: fixed 底部抽屜。
+     */
+    #rightToolsWrapper .tools-menu-container {
+      overflow: visible !important;
+    }
+
+    /*
+     * 手機抽屜左右只留 10px，外掛左耳會落到螢幕外；
+     * 改為面板內側固定的收合耳朵。
+     */
     #rightToolsCollapseEar {
-      top: 96px;
-      left: -46px;
-      width: 46px;
-      height: 84px;
-      border-radius: 15px 0 0 15px;
+      top: 12px;
+      left: 12px;
+      z-index: 9999 !important;
+
+      width: auto;
+      height: 42px;
+      min-width: 88px;
+      padding: 8px 13px;
+
+      flex-direction: row;
+      gap: 6px;
+
+      border: 1px solid #9bcfc9;
+      border-radius: 999px;
+      box-shadow: 0 5px 14px rgba(13, 47, 53, 0.16);
+    }
+
+    #rightToolsCollapseEar span {
+      writing-mode: horizontal-tb;
+      letter-spacing: 0.04em;
+    }
+
+    #rightToolsWrapper .custom-layer-control {
+      padding-top: 66px !important;
     }
   }
 
