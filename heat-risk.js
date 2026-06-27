@@ -407,39 +407,49 @@
     style.id = STYLE_ID;
 
     style.textContent = `
-      #rightToolsWrapper .heat-risk-tool {
+            #rightToolsWrapper .heat-risk-tool {
         pointer-events: auto;
         position: relative;
+
         width: 48px;
         height: 48px;
+        min-width: 48px;
+        min-height: 48px;
+        flex: 0 0 48px;
+        box-sizing: border-box;
+
         margin: 0 0 12px;
         padding: 0;
+
         display: grid;
         place-items: center;
-        border: 1px solid rgba(234, 88, 12, 0.2);
-        border-radius: 16px;
-        cursor: pointer;
+
+        /*
+         * 外框完全比照耳機與圖層按鈕；
+         * 只保留小太陽本身的橘色。
+         */
         color: #ea580c;
-        background:
-          radial-gradient(circle at 28% 20%, rgba(255,255,255,.98) 0 15%, transparent 16%),
-          linear-gradient(145deg, #fffaf2, #ffead3);
-        box-shadow:
-          0 10px 24px rgba(194,65,12,.16),
-          inset 0 1px 0 rgba(255,255,255,.9);
-        transition:
-          transform .2s ease,
-          box-shadow .2s ease,
-          background .2s ease,
-          color .2s ease;
+        background: linear-gradient(
+          180deg,
+          rgba(255,255,255,0.9),
+          rgba(255,255,255,0.5)
+        );
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow: var(--glass-shadow);
+
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         -webkit-tap-highlight-color: transparent;
       }
 
       #rightToolsWrapper .heat-risk-tool:hover {
-        transform: translateY(-2px) scale(1.03);
+        transform: translateY(-2px) scale(1.02);
         color: #c2410c;
-        box-shadow:
-          0 15px 30px rgba(194,65,12,.24),
-          inset 0 1px 0 #fff;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
       }
 
       #rightToolsWrapper .heat-risk-tool:focus-visible {
@@ -448,8 +458,8 @@
       }
 
       #rightToolsWrapper .heat-risk-tool svg {
-        width: 22px;
-        height: 22px;
+        width: 20px;
+        height: 20px;
         fill: none;
         stroke: currentColor;
         stroke-width: 2.15;
@@ -1698,8 +1708,26 @@
       setSelecting(!selecting);
     });
 
-    // 視覺順序：耳機 → 熱風險 → 圖層 → 展開的圖層面板
-    const layerButton = menu.previousElementSibling;
+        /*
+     * 固定順序：
+     * 耳機 → 熱風險小太陽 → 圖層 → 圖資面板。
+     *
+     * 不使用 menu.previousElementSibling，
+     * 避免收合耳朵介入後抓錯按鈕。
+     */
+    const layerButton = Array.from(
+      wrapper.querySelectorAll(".tools-toggle-btn")
+    ).find((candidate) => {
+      const action = candidate.getAttribute("onclick") || "";
+      const title = candidate.getAttribute("title") || "";
+      const label = candidate.getAttribute("aria-label") || "";
+
+      return (
+        action.includes("toggleRightToolsPanel") ||
+        /圖層|圖資/.test(`${title} ${label}`)
+      );
+    });
+
     if (layerButton && layerButton.parentElement === wrapper) {
       wrapper.insertBefore(button, layerButton);
     } else {
