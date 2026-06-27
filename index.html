@@ -11888,6 +11888,33 @@ body.listening-mode .glass-header,
 </script>
 <!-- ===== END: FOCUS_MODE_CLOSE_NONWORK_POPUPS ===== -->
 
+<!-- ===== START: MOBILE_RIGHT_CONTROL_STACK_FIX ===== -->
+<style id="mobile-right-control-stack-fix">
+  /*
+   * 手機右側控制列：
+   * 耳機 → 小太陽 → 圖層 → 我的位置 → 放大。
+   *
+   * 右側工具組往上移；
+   * 定位按鈕往下落到圖層與放大鍵之間，
+   * 不再遮住小太陽。
+   */
+  @media (max-width: 600px) {
+    #rightToolsWrapper {
+      top: auto !important;
+      right: 12px !important;
+      bottom: calc(216px + env(safe-area-inset-bottom)) !important;
+      z-index: 4500 !important;
+    }
+
+    .locate-me-wrapper {
+      right: 12px !important;
+      bottom: calc(160px + env(safe-area-inset-bottom)) !important;
+      z-index: 3600 !important;
+    }
+  }
+</style>
+<!-- ===== END: MOBILE_RIGHT_CONTROL_STACK_FIX ===== -->
+
 <script id="haidian-right-tools-scroll-guard">
 (function () {
   function setupRightToolsScrollGuard() {
