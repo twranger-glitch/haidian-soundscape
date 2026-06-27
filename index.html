@@ -11556,10 +11556,10 @@ window.toggleRightToolsPanel = function (event) {
 <!-- ===== START: MOBILE_LAYER_BUTTON_CLEARANCE_FIX ===== -->
 <style id="mobile-layer-button-clearance-fix">
   /*
-   * 手機版：
-   * 右側工具列原本 bottom: 146px，
-   * 會與 bottom: 145px 的定位按鈕重疊。
-   * 將右側工具列上移，讓圖層按鈕完整落在定位按鈕上方。
+   * 手機版右側控制排列：
+   * 1. 耳機、圖層：上移，避開定位按鈕。
+   * 2. 熱風險太陽：維持原位置。
+   * 3. 我的定位：放在太陽與放大按鈕之間。
    */
   @media (max-width: 600px) {
     #rightToolsWrapper {
@@ -11567,6 +11567,12 @@ window.toggleRightToolsPanel = function (event) {
       right: 12px !important;
       bottom: calc(216px + env(safe-area-inset-bottom)) !important;
       z-index: 4500 !important;
+    }
+
+    .locate-me-wrapper {
+      right: 12px !important;
+      bottom: calc(144px + env(safe-area-inset-bottom)) !important;
+      z-index: 3600 !important;
     }
   }
 </style>
