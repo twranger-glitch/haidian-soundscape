@@ -181,12 +181,8 @@
 } 
 
         /* 🌟 桌機版：播放器併入作品卡片，不再浮在地圖上遮擋內容 */
-        @media (min-width: 601px) {
-            body.player-embedded .leaflet-popup .btn-play-main {
-                display: none !important;
-            }
-
-            .leaflet-popup .global-player.embedded-player {
+@media (min-width: 601px) {
+    .leaflet-popup .global-player.embedded-player {
                 position: relative !important;
                 left: auto !important;
                 right: auto !important;
@@ -1699,9 +1695,6 @@ body.haidian-v4-mode-data #rightToolsWrapper a {
 }
 }
 
-/* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_START ===== */
-
-
 /* ===== HAIDIAN_V4_MANUAL_COLLAPSE_FIX_START =====
    修正項目：
    1) 左側/走讀面板在 V4 模式下，點擊小耳朵可以真正收合。
@@ -1833,8 +1826,6 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
 </style>
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
-
-    <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
 
 <style id="haidian-right-tools-scroll-fix">
 /* ===== START: RIGHT TOOLS REAL SCROLL FIX ===== */
