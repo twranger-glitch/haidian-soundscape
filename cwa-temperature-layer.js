@@ -49,6 +49,7 @@
   let refreshButton;
   let fitButton;
   let pointQueryButton;
+  let queryStatus;
 
   function clamp(value, min, max, fallback) {
     const number = Number(value);
@@ -326,6 +327,81 @@
         font-weight: 650;
       }
 
+      /*
+       * 獨立的即時地點查詢：
+       * 不依賴「顯示全臺官方溫度分布圖」是否開啟。
+       */
+      #${CONTROL_ID} .cwa-temp-query-card {
+        display: grid;
+        gap: 10px;
+        margin: 10px 0 0;
+        padding: 11px;
+        background: #f0fdfa;
+        border: 1px solid rgba(13, 148, 136, .24);
+        border-radius: 12px;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-card .cwa-temp-query {
+        margin-top: 0;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-copy {
+        min-width: 0;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-copy span {
+        display: block;
+        color: #0f766e;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: .06em;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-copy strong {
+        display: block;
+        margin-top: 2px;
+        color: #134e4a;
+        font-size: 12px;
+        line-height: 1.3;
+        font-weight: 900;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-copy p {
+        margin: 3px 0 0;
+        color: #64748b;
+        font-size: 9.5px;
+        line-height: 1.4;
+        font-weight: 650;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-source,
+      #${CONTROL_ID} .cwa-temp-query-status {
+        margin: 7px 2px 0;
+        color: #64748b;
+        font-size: 9.5px;
+        line-height: 1.45;
+        font-weight: 650;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-source b {
+        color: #334155;
+        font-weight: 850;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-status:empty {
+        display: none;
+      }
+
+      #${CONTROL_ID} .cwa-temp-query-status.error {
+        color: #b91c1c;
+      }
+
+      #${CONTROL_ID} .cwa-temp-overlay-divider {
+        height: 1px;
+        margin: 13px 0 11px;
+        background: rgba(148, 163, 184, .28);
+      }
+
       #${CONTROL_ID} .cwa-temp-query {
         width: 100%;
         margin-top: 12px;
@@ -381,22 +457,42 @@
     panel = document.createElement("section");
     panel.id = CONTROL_ID;
     panel.setAttribute("aria-label", "中央氣象署官方溫度分布圖層");
-        panel.innerHTML = `
+                panel.innerHTML = `
       <header class="cwa-temp-head">
         <div class="cwa-temp-title-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2.5v2.1M12 19.4v2.1M2.5 12h2.1M19.4 12h2.1"></path><path d="m5.3 5.3 1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"></path></svg>
         </div>
         <div>
-          <span class="cwa-temp-kicker">官方圖資 · 中央氣象署</span>
-          <strong class="cwa-temp-title">${escapeHtml(CONFIG.title)}</strong>
+          <span class="cwa-temp-kicker">即時查詢 × 官方圖層</span>
+<strong class="cwa-temp-title">熱風險與溫度</strong>
         </div>
       </header>
 
+      <!-- 獨立功能：不需要開啟全臺官方溫度分布圖 -->
+      <section class="cwa-temp-query-card" aria-label="即時熱風險地點查詢">
+        <div class="cwa-temp-query-copy">
+          <span>即時熱風險查詢</span>
+          <strong>查詢此位置的熱風險</strong>
+          <p>附近即時溫濕度 × 官方區域溫度對照</p>
+        </div>
+        <button type="button" class="cwa-temp-query">點選地圖查詢</button>
+      </section>
+
+      <p class="cwa-temp-query-source">
+        <b>官方區域溫度</b>：中央氣象署格點分析。<br>
+        <b>即時熱風險</b>：優先採用附近微型感測器；沒有合格資料時，以 CWA 測站備援。
+      </p>
+
+      <div class="cwa-temp-query-status" aria-live="polite"></div>
+
+      <div class="cwa-temp-overlay-divider"></div>
+
+      <!-- 獨立功能：CWA 全臺官方溫度圖層 -->
       <label class="cwa-temp-toggle-card" for="haidian-cwa-temperature-toggle">
-        <input id="haidian-cwa-temperature-toggle" class="cwa-temp-toggle" type="checkbox" aria-label="顯示熱風險分布圖">
+        <input id="haidian-cwa-temperature-toggle" class="cwa-temp-toggle" type="checkbox" aria-label="顯示中央氣象署全臺溫度分布圖">
         <span class="cwa-temp-toggle-copy">
-          <strong>顯示熱風險分布圖</strong>
-          <small>官方小時溫度分析圖層</small>
+          <strong>顯示全臺官方溫度分布</strong>
+          <small>中央氣象署小時溫度分析圖層</small>
         </span>
       </label>
 
@@ -408,14 +504,14 @@
           <output class="cwa-temp-opacity-value"></output>
         </div>
 
-        <input class="cwa-temp-opacity" type="range" min="0.1" max="1" step="0.05" aria-label="調整熱風險分布圖透明度">
+        <input class="cwa-temp-opacity" type="range" min="0.1" max="1" step="0.05" aria-label="調整官方溫度分布圖透明度">
 
         <div class="cwa-temp-actions">
           <button type="button" class="cwa-temp-refresh">重新載入圖層</button>
           <button type="button" class="cwa-temp-fit">查看全臺</button>
         </div>
 
-        <section class="cwa-temp-legend" aria-label="熱風險分布圖溫度色階">
+        <section class="cwa-temp-legend" aria-label="中央氣象署溫度色階圖例">
           <div class="cwa-temp-legend-head">
             <span>溫度色階（攝氏）</span>
             <em>冷 → 熱</em>
@@ -428,11 +524,9 @@
             </div>
           </div>
 
-          <p class="cwa-temp-legend-note">色彩為連續變化；調低透明度時會與底圖混合。欲查詢特定位置數值，請使用下方功能。</p>
+          <p class="cwa-temp-legend-note">色彩為連續變化；調低透明度時會與底圖混合。欲查詢特定位置數值，請使用上方的即時熱風險查詢。</p>
         </section>
 
-        <button type="button" class="cwa-temp-query">點選地圖查詢溫濕度與熱風險</button>
-        <p class="cwa-temp-query-note">查詢結果會分別呈現官方區域分析與附近即時觀測，方便對照閱讀。</p>
         <div class="cwa-temp-details"></div>
       </div>
     `;
@@ -442,6 +536,7 @@
     opacityInput = panel.querySelector(".cwa-temp-opacity");
     opacityValue = panel.querySelector(".cwa-temp-opacity-value");
     status = panel.querySelector(".cwa-temp-status");
+    queryStatus = panel.querySelector(".cwa-temp-query-status");
     details = panel.querySelector(".cwa-temp-details");
     refreshButton = panel.querySelector(".cwa-temp-refresh");
     fitButton = panel.querySelector(".cwa-temp-fit");
@@ -470,15 +565,28 @@
     });
 
     pointQueryButton.addEventListener("click", () => {
-      const heatRiskButton = document.querySelector("#rightToolsWrapper .heat-risk-tool");
+      const heatRiskButton = document.querySelector(
+        "#rightToolsWrapper .heat-risk-tool"
+      );
+
       if (!heatRiskButton) {
-        setStatus("找不到地圖選點工具；請確認 heat-risk.js 仍在此檔案之前載入。", true);
+        setQueryStatus(
+          "找不到即時熱風險工具；請確認 heat-risk.js 已先載入。",
+          true
+        );
         return;
       }
 
-      if (!heatRiskButton.classList.contains("is-on")) heatRiskButton.click();
-      setStatus("已進入查詢模式：請點選地圖任一位置，將並列官方格點與附近即時觀測。", false);
+      if (!heatRiskButton.classList.contains("is-on")) {
+        heatRiskButton.click();
+      }
+
+      setQueryStatus(
+        "已進入查詢模式：請點選地圖任一位置。結果會分別標示官方格點分析與附近即時測站資料。",
+        false
+      );
     });
+
 
     try {
       window.L.DomEvent.disableClickPropagation(panel);
@@ -498,6 +606,14 @@
     status.classList.toggle("error", Boolean(isError));
   }
 
+  function setQueryStatus(message, isError) {
+    if (!queryStatus) return;
+
+    queryStatus.textContent = message;
+    queryStatus.classList.toggle("error", Boolean(isError));
+  }
+
+  
   function setLoading(loading) {
     state.loading = Boolean(loading);
     if (toggle) toggle.disabled = state.loading;
