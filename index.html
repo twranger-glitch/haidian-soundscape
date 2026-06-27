@@ -2622,9 +2622,25 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
         <div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
         </div>
-        <div class="tools-menu-container">
-            <div class="custom-layer-control">
-                <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800; display:flex; align-items:center; gap:4px;">
+     <div class="tools-menu-container">
+    <div class="custom-layer-control">
+        <!-- 右側圖資面板收合耳朵：長內容捲到任何位置都能直接收合 -->
+        <button
+            type="button"
+            id="rightToolsCollapseEar"
+            class="right-tools-collapse-ear"
+            onclick="toggleRightToolsPanel(event)"
+            aria-label="收合圖資工具"
+            title="收合圖資工具"
+        >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+            <span>收合圖資</span>
+        </button>
+
+        <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800; display:flex; align-items:center; gap:4px;">
+
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 搜尋特定地點
                 </div>
                 <div style="display:flex; gap:6px; margin-bottom:4px;">
@@ -8667,15 +8683,31 @@ function mountGlobalPlayerIntoPopup_(retry) {
             }, 600);
         }
 
-        // 🌟 聆聽模式：移到最外層，確保不論資料庫狀態如何都能正常運作
-        window.toggleListeningMode = function() {
-            document.body.classList.toggle('listening-mode');
-            if (document.body.classList.contains('listening-mode')) {
-                if (typeof closeAllDrawers === "function") {
-                    closeAllDrawers();
-                }
-            }
-        };
+ // 🌟 專注模式：只保留作品、作品 Popup、播放器與退出按鈕。
+window.toggleListeningMode = function() {
+    var enteringFocusMode = !document.body.classList.contains('listening-mode');
+
+    document.body.classList.toggle('listening-mode', enteringFocusMode);
+
+    if (!enteringFocusMode) {
+        return false;
+    }
+
+    // 先同步關閉 V4 的聆聽／走讀／圖資狀態，避免退出專注模式後殘留半開面板。
+    if (typeof window.haidianV4CloseAll === "function") {
+        window.haidianV4CloseAll(true);
+    } else if (typeof closeAllDrawers === "function") {
+        closeAllDrawers();
+    }
+
+    // 手繪與路線介面不屬於作品本身，進入專注模式時一併收起。
+    var drawModeHud = document.getElementById('drawModeHUD');
+    if (drawModeHud) {
+        drawModeHud.classList.remove('active');
+    }
+
+    return false;
+};
 
        // ==========================================
         // 🌊 新增模組：即時淹水感測器戰情室 (通用設計形狀分級與直覺篩選)
@@ -11359,7 +11391,84 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 })();
 </script>
 <!-- ===== END: MOVE_CWA_HEAT_RISK_TO_HISTORY ===== -->
-    
+
+<!-- ===== START: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
+<style id="urgent-right-tools-and-focus-fix">
+  /*
+   * 右側圖資收合耳朵：
+   * 放在可捲動的圖資面板內，手機捲到任何位置仍可立即收合。
+   */
+  #rightToolsCollapseEar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    width: 100%;
+    min-height: 38px;
+    margin: 0 0 10px;
+    padding: 7px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #075a63;
+    background: rgba(232, 247, 245, 0.98);
+    border: 1px solid #9bcfc9;
+    border-radius: 11px;
+    box-shadow: 0 5px 14px rgba(13, 47, 53, 0.10);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+  }
+
+  #rightToolsCollapseEar svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  #rightToolsCollapseEar:hover,
+  #rightToolsCollapseEar:focus-visible {
+    color: #fff;
+    background: #006c73;
+    border-color: #006c73;
+    outline: 3px solid rgba(8, 127, 150, 0.32);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 600px) {
+    #rightToolsCollapseEar {
+      min-height: 42px;
+      border-radius: 12px;
+    }
+  }
+
+  /*
+   * 專注模式：
+   * 保留地圖、作品標記、作品 Popup、播放器與頂端「退出專注模式」提示。
+   */
+  body.listening-mode .glass-header,
+  body.listening-mode #headerPullTab,
+  body.listening-mode #sidePanel,
+  body.listening-mode #routePanel,
+  body.listening-mode #rightToolsWrapper,
+  body.listening-mode .locate-me-wrapper,
+  body.listening-mode #drawModeHUD,
+  body.listening-mode .haidian-v4-dock,
+  body.listening-mode #floatingClearRouteBtn,
+  body.listening-mode #nanshanCategoryMenu,
+  body.listening-mode .leaflet-control-container {
+    display: none !important;
+  }
+
+  body.listening-mode .listening-hint {
+    display: inline-flex !important;
+    z-index: 5000 !important;
+  }
+</style>
+<!-- ===== END: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
+   
 <script id="haidian-right-tools-scroll-guard">
 (function () {
   function setupRightToolsScrollGuard() {
