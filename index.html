@@ -4411,6 +4411,96 @@ function escapeTainanHistoryFloodHtml(value) {
         });
 }
 
+```js
+/* ===== START: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
+var TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION = {
+    '88水災': {
+        label: '1999 88 水災',
+        order: 199900
+    },
+    '90納莉颱風': {
+        label: '2001 納莉颱風',
+        order: 200100
+    },
+    '93敏督利颱風': {
+        label: '2004 敏督利颱風',
+        order: 200400
+    },
+    '940612豪雨': {
+        label: '2005 06.12 豪雨',
+        order: 200501
+    },
+    '94海棠颱風': {
+        label: '2005 海棠颱風',
+        order: 200502
+    },
+    '97卡玫基颱風': {
+        label: '2008 卡玫基颱風',
+        order: 200800
+    },
+    '98莫拉克颱風': {
+        label: '2009 莫拉克颱風',
+        order: 200900
+    },
+    '99凡那比颱風': {
+        label: '2010 凡那比颱風',
+        order: 201000
+    },
+    '102康芮颱風': {
+        label: '2013 康芮颱風',
+        order: 201300
+    },
+    '凱特琳颱風': {
+        label: '2014 凱特琳颱風',
+        order: 201400
+    },
+    '碧利斯颱風': {
+        label: '2016 碧利斯颱風',
+        order: 201600
+    }
+};
+
+function getTainanHistoryFloodEventPresentationKey(value) {
+    return String(value == null ? '' : value)
+        .replace(/\s+/g, '')
+        .replace(/[．。．.]/g, '')
+        .replace(/[／/]/g, '');
+}
+
+function presentTainanHistoryFloodEvents(events) {
+    return (Array.isArray(events) ? events : [])
+        .map(function(entry, sourceIndex) {
+            var sourceLabel = String(
+                entry && entry.sourceLabel !== undefined ?
+                    entry.sourceLabel :
+                    (entry && entry.label ? entry.label : '')
+            ).trim();
+
+            var config =
+                TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION[
+                    getTainanHistoryFloodEventPresentationKey(sourceLabel)
+                ];
+
+            return Object.assign({}, entry, {
+                sourceLabel: sourceLabel,
+                label: config ? config.label : sourceLabel,
+                _presentationOrder: config ?
+                    config.order :
+                    999999 + sourceIndex,
+                _sourceIndex: sourceIndex
+            });
+        })
+        .sort(function(a, b) {
+            return (
+                a._presentationOrder - b._presentationOrder ||
+                a._sourceIndex - b._sourceIndex
+            );
+        });
+}
+/* ===== END: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
+```
+
+        
 function renderTainanHistoryFloodEvents() {
     var root = document.getElementById(
         'tainanHistoryFloodEvents'
@@ -4530,7 +4620,8 @@ function loadTainanHistoryFloodEvents() {
         getTainanHistoryFloodCachedEvents(activeLayerId);
 
     if (cached) {
-        tainanHistoryFloodEvents = cached.events;
+        tainanHistoryFloodEvents =
+    presentTainanHistoryFloodEvents(cached.events);
         tainanHistoryFloodFilterField = cached.fieldName;
 
         tainanHistoryFloodSelectedValues = new Set(
@@ -4566,7 +4657,8 @@ function loadTainanHistoryFloodEvents() {
                 return;
             }
 
-            tainanHistoryFloodEvents = payload.events;
+            tainanHistoryFloodEvents =
+    presentTainanHistoryFloodEvents(payload.events);
             tainanHistoryFloodFilterField = payload.fieldName;
 
             tainanHistoryFloodSelectedValues = new Set(
