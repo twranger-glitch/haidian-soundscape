@@ -10389,51 +10389,64 @@ function renderRealtimeFloodMap() {
             }
         );
 
-        /*
-         * 點擊測站後：
-         * 1. 將測站帶到地圖中央。
-         * 2. 至少放大到第 16 級，避免卡片開在過遠尺度。
-         * 3. 地圖移動完成後，再開啟卡片。
+                /*
+         * Popup 開啟後再移動地圖。
+         * 不再手動第二次 marker.openPopup()，
+         * 避免首次點擊時重建卡片 DOM，造成趨勢資料寫入失敗。
          */
-        marker.on("click", () => {
-            const stationLatLng = L.latLng(
-                record.lat,
-                record.lon
-            );
+        marker.on("popupopen", function () {
+            var stationLatLng = marker.getLatLng();
+            var targetZoom = Math.max(map.getZoom(), 16);
 
-            const targetZoom = Math.max(
-                map.getZoom(),
-                16
-            );
+            var shouldMove =
+                map.getZoom() !== targetZoom ||
+                map.getCenter().distanceTo(stationLatLng) > 25;
 
-            map.stop();
-
-            map.flyTo(
-                stationLatLng,
-                targetZoom,
-                {
-                    animate: true,
-                    duration: 0.45
+            var loadPopupData = function () {
+                if (
+                    typeof marker.isPopupOpen === "function" &&
+                    !marker.isPopupOpen()
+                ) {
+                    return;
                 }
-            );
 
-            window.setTimeout(() => {
-                marker.openPopup();
-            }, 480);
-        });
+                var popup = marker.getPopup();
 
-        if (showFloodHistory) {
-            marker.on("popupopen", () => {
-                const startLoad = () =>
+                if (popup && typeof popup.update === "function") {
+                    popup.update();
+                }
+
+                if (!showFloodHistory) {
+                    return;
+                }
+
+                var startLoad = function () {
                     loadFloodHistoryIntoPopup(record);
+                };
 
                 if (typeof window.requestAnimationFrame === "function") {
                     window.requestAnimationFrame(startLoad);
                 } else {
-                    setTimeout(startLoad, 0);
+                    window.setTimeout(startLoad, 0);
                 }
-            });
-        }
+            };
+
+            if (shouldMove) {
+                map.stop();
+                map.once("moveend", loadPopupData);
+
+                map.flyTo(
+                    stationLatLng,
+                    targetZoom,
+                    {
+                        animate: true,
+                        duration: 0.45
+                    }
+                );
+            } else {
+                loadPopupData();
+            }
+        });
 
         markers.push(marker);
     });
