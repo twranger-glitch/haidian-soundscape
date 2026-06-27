@@ -11553,7 +11553,25 @@ window.toggleRightToolsPanel = function (event) {
   }
 </style>
 <!-- ===== END: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
-   
+<!-- ===== START: MOBILE_LAYER_BUTTON_CLEARANCE_FIX ===== -->
+<style id="mobile-layer-button-clearance-fix">
+  /*
+   * 手機版：
+   * 右側工具列原本 bottom: 146px，
+   * 會與 bottom: 145px 的定位按鈕重疊。
+   * 將右側工具列上移，讓圖層按鈕完整落在定位按鈕上方。
+   */
+  @media (max-width: 600px) {
+    #rightToolsWrapper {
+      top: auto !important;
+      right: 12px !important;
+      bottom: calc(216px + env(safe-area-inset-bottom)) !important;
+      z-index: 4500 !important;
+    }
+  }
+</style>
+<!-- ===== END: MOBILE_LAYER_BUTTON_CLEARANCE_FIX ===== -->
+    
 <script id="haidian-right-tools-scroll-guard">
 (function () {
   function setupRightToolsScrollGuard() {
