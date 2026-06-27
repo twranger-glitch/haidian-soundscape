@@ -2619,26 +2619,33 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
         <div class="tools-toggle-btn" onclick="toggleListeningMode()" title="沉浸聆聽模式" style="margin-bottom: 12px; color: #10b981;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-8h3z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-8H3z"></path></svg>
         </div>
-        <div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-        </div>
-     <div class="tools-menu-container">
-    <!-- 固定在右側面板左緣的收合耳朵，不放進捲動內容 -->
-    <button
-        type="button"
-        id="rightToolsCollapseEar"
-        class="right-tools-collapse-ear"
-        onclick="toggleRightToolsPanel(event)"
-        aria-label="收合圖資工具"
-        title="收合圖資工具"
-    >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="9 6 15 12 9 18"></polyline>
-        </svg>
-        <span>收合</span>
-    </button>
 
+<div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+    </svg>
+</div>
+
+<!-- 圖資抽屜的外掛收合耳朵：刻意放在選單容器外面 -->
+<button
+    type="button"
+    id="rightToolsCollapseEar"
+    class="right-tools-collapse-ear"
+    onclick="toggleRightToolsPanel(event)"
+    aria-label="收合圖資工具"
+    aria-controls="rightToolsMenu"
+    title="收合圖資工具"
+>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 6 15 12 9 18"></polyline>
+    </svg>
+</button>
+
+<div id="rightToolsMenu" class="tools-menu-container">
     <div class="custom-layer-control">
+
         <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800; display:flex; align-items:center; gap:4px;">
 
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 搜尋特定地點
@@ -11066,25 +11073,56 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
     return switchMode('idle', { silent: silent !== false, remember: false });
   };
 
-  window.toggleRightToolsPanel = function (event) {
+window.toggleRightToolsPanel = function (event) {
     if (event) {
-      event.preventDefault();
-      event.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
     }
 
     const wrapper = getRightTools();
     if (!wrapper) return false;
-    const isOpen = UI_STATE.rightToolsOpen || (wrapper.classList.contains('open') && !wrapper.classList.contains('haidian-v4-tools-user-hidden'));
+
+    const isOpen =
+        UI_STATE.rightToolsOpen ||
+        (
+            wrapper.classList.contains('open') &&
+            !wrapper.classList.contains('haidian-v4-tools-user-hidden')
+        );
 
     if (isOpen) {
-      applyRightToolsState(wrapper, false, true);
-      if (!isDrawerOpen(getSidePanel()) && !isDrawerOpen(getRoutePanel())) switchMode('idle', { silent: true, remember: false });
-      else recalculateModeFromVisiblePanels();
+        /*
+         * 收合前先把焦點移回原本的圖層開啟按鈕。
+         * 外掛耳朵隨後會被隱藏，因此不能讓焦點停在耳朵上。
+         */
+        const layerTrigger = getLayerToolButtons(wrapper)[0];
+
+        if (layerTrigger) {
+            try {
+                layerTrigger.focus({ preventScroll: true });
+            } catch (_) {
+                layerTrigger.focus();
+            }
+        }
+
+        applyRightToolsState(wrapper, false, true);
+
+        if (
+            !isDrawerOpen(getSidePanel()) &&
+            !isDrawerOpen(getRoutePanel())
+        ) {
+            switchMode('idle', {
+                silent: true,
+                remember: false
+            });
+        } else {
+            recalculateModeFromVisiblePanels();
+        }
     } else {
-      switchMode('data', { silent: false });
+        switchMode('data', { silent: false });
     }
+
     return false;
-  };
+};
 
   function installTogglePanelOverride() {
     if (window.togglePanel && window.togglePanel.__haidian96Stable === true) return;
@@ -11394,115 +11432,105 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
 <!-- ===== START: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
 <style id="urgent-right-tools-and-focus-fix">
-      /*
-   * 右側圖資收合耳朵：
-   * 桌機保留在面板左緣；手機底部抽屜則收在面板內側，避免跑出螢幕。
+
+/*
+ * 右側圖資收合耳朵：
+ * 耳朵與可捲動選單同層，避免被 aria-hidden 的選單內容包住。
+ */
+#rightToolsCollapseEar {
+  position: absolute;
+  top: 116px;
+  left: -46px;
+  z-index: 4510;
+
+  width: 46px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #075a63;
+  background: rgba(232, 247, 245, 0.98);
+  border: 1px solid #9bcfc9;
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  box-shadow: -5px 6px 14px rgba(13, 47, 53, 0.14);
+
+  font-size: 0;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(8px);
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+#rightToolsCollapseEar svg {
+  width: 20px;
+  height: 20px;
+}
+
+#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)
+#rightToolsCollapseEar {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+#rightToolsCollapseEar:hover,
+#rightToolsCollapseEar:focus-visible {
+  color: #fff;
+  background: #006c73;
+  border-color: #006c73;
+  outline: 3px solid rgba(8, 127, 150, 0.32);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  /*
+   * 手機圖資面板保留左側耳朵走道。
+   * 抽屜不再貼滿整個畫面，避免耳朵跑出螢幕。
    */
   #rightToolsWrapper .tools-menu-container {
-    overflow: visible !important;
-  }
-
-  @media (min-width: 601px) {
-    #rightToolsWrapper .tools-menu-container {
-      position: relative !important;
-    }
-  }
-
-  #rightToolsCollapseEar {
-    position: absolute;
-    top: 104px;
-    left: -44px;
-    z-index: 9999 !important;
-
-    width: 44px;
-    height: 78px;
-    margin: 0;
-    padding: 8px 4px;
-
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-
-    color: #075a63;
-    background: rgba(232, 247, 245, 0.98);
-    border: 1px solid #9bcfc9;
-    border-right: 0;
-    border-radius: 14px 0 0 14px;
-    box-shadow: -5px 6px 14px rgba(13, 47, 53, 0.14);
-
-    font: inherit;
-    font-size: 11px;
-    font-weight: 900;
-    cursor: pointer;
-    pointer-events: auto !important;
-  }
-
-  #rightToolsCollapseEar svg {
-    width: 18px;
-    height: 18px;
-    flex: 0 0 auto;
-  }
-
-  #rightToolsCollapseEar span {
-    writing-mode: vertical-rl;
-    letter-spacing: 0.12em;
-    line-height: 1;
-  }
-
-  #rightToolsCollapseEar:hover,
-  #rightToolsCollapseEar:focus-visible {
-    color: #fff;
-    background: #006c73;
-    border-color: #006c73;
-    outline: 3px solid rgba(8, 127, 150, 0.32);
-    outline-offset: 2px;
-  }
-
-  @media (max-width: 600px) {
-    /*
-     * 不要設定 position: relative；
-     * 否則會覆蓋既有的 position: fixed 底部抽屜。
-     */
-    #rightToolsWrapper .tools-menu-container {
-      overflow: visible !important;
-    }
-
-    /*
-     * 手機抽屜左右只留 10px，外掛左耳會落到螢幕外；
-     * 改為面板內側固定的收合耳朵。
-     */
-    #rightToolsCollapseEar {
-      top: 12px;
-      left: 12px;
-      z-index: 9999 !important;
-
-      width: auto;
-      height: 42px;
-      min-width: 88px;
-      padding: 8px 13px;
-
-      flex-direction: row;
-      gap: 6px;
-
-      border: 1px solid #9bcfc9;
-      border-radius: 999px;
-      box-shadow: 0 5px 14px rgba(13, 47, 53, 0.16);
-    }
-
-    #rightToolsCollapseEar span {
-      writing-mode: horizontal-tb;
-      letter-spacing: 0.04em;
-    }
-
-    #rightToolsWrapper .custom-layer-control {
-      padding-top: 66px !important;
-    }
+    left: 56px !important;
   }
 
   /*
-   * 專注模式：
+   * 外掛耳朵接在底部抽屜的左下側。
+   * 抽屜 bottom 為 214px；耳朵略高 22px，避免與左側耳朵重疊。
+   */
+  #rightToolsCollapseEar {
+    position: fixed;
+    top: auto;
+    left: 10px;
+    bottom: calc(236px + env(safe-area-inset-bottom));
+    z-index: 4510;
+
+    width: 46px;
+    height: 72px;
+
+    border-radius: 14px 0 0 14px;
+    transform: translateX(-8px);
+  }
+
+  /*
+   * 圖資抽屜展開時，左側兩個抽屜耳朵暫時隱藏。
+   * 收合圖資後會回到 idle 模式，自動重新顯示。
+   */
+  body.haidian-v4-mode-data #sidePanel .toggle-btn,
+  body.haidian-v4-mode-data #routePanel .toggle-btn {
+    display: none !important;
+  }
+}
+
    * 保留地圖、作品標記、作品 Popup、播放器與頂端「退出專注模式」提示。
    */
   body.listening-mode .glass-header,
