@@ -11931,15 +11931,17 @@ window.toggleRightToolsPanel = function (event) {
    * 圖資抽屜展開時，左側兩個抽屜耳朵暫時隱藏。
    * 收合圖資後會回到 idle 模式，自動重新顯示。
    */
-  body.haidian-v4-mode-data #sidePanel .toggle-btn,
+    body.haidian-v4-mode-data #sidePanel .toggle-btn,
   body.haidian-v4-mode-data #routePanel .toggle-btn {
     display: none !important;
   }
 }
 
-   * 保留地圖、作品標記、作品 Popup、播放器與頂端「退出專注模式」提示。
-   */
-  body.listening-mode .glass-header,
+/*
+ * 專注模式：
+ * 保留地圖、作品標記、作品 Popup、播放器與頂端「退出專注模式」提示。
+ */
+body.listening-mode .glass-header,
   body.listening-mode #headerPullTab,
   body.listening-mode #sidePanel,
   body.listening-mode #routePanel,
