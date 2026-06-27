@@ -411,58 +411,60 @@
   pointer-events: auto;
   position: relative;
 
-  width: 48px !important;
-  height: 48px !important;
-  min-width: 48px !important;
-  flex: 0 0 48px;
+  width: var(--heat-tool-size, 48px);
+  height: var(--heat-tool-size, 48px);
+  min-width: var(--heat-tool-size, 48px);
+  flex: 0 0 var(--heat-tool-size, 48px);
   box-sizing: border-box;
 
-  margin: 0 0 12px !important;
-  padding: 0 !important;
+  margin: 0 0 var(--heat-tool-gap, 12px);
+  padding: 0;
 
   display: grid;
   place-items: center;
 
-  border: 1px solid rgba(234, 88, 12, 0.2);
-  border-radius: 16px;
-  cursor: pointer;
   color: #ea580c;
-  background:
-    radial-gradient(circle at 28% 20%, rgba(255,255,255,.98) 0 15%, transparent 16%),
-    linear-gradient(145deg, #fffaf2, #ffead3);
-  box-shadow:
-    0 10px 24px rgba(194,65,12,.16),
-    inset 0 1px 0 rgba(255,255,255,.9);
+  background: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.90),
+    rgba(255,255,255,0.50)
+  );
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+
+  border: 1px solid var(--glass-border);
+  border-radius: var(--heat-tool-radius, 16px);
+  box-shadow: var(--glass-shadow);
+
+  cursor: pointer;
   transition:
     transform .2s ease,
     box-shadow .2s ease,
-    background .2s ease,
     color .2s ease;
+
   -webkit-tap-highlight-color: transparent;
 }
-        transform: translateY(-2px) scale(1.03);
-        color: #c2410c;
-        box-shadow:
-          0 15px 30px rgba(194,65,12,.24),
-          inset 0 1px 0 #fff;
-      }
 
-      #rightToolsWrapper .heat-risk-tool:focus-visible {
-        outline: 3px solid rgba(251,146,60,.4);
-        outline-offset: 3px;
-      }
+#rightToolsWrapper .heat-risk-tool:hover {
+  transform: translateY(-2px) scale(1.02);
+  color: #c2410c;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.20);
+}
 
-      #rightToolsWrapper .heat-risk-tool svg {
-        width: 20px;
-        height: 20px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 2.15;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
+#rightToolsWrapper .heat-risk-tool:focus-visible {
+  outline: 3px solid rgba(251,146,60,.4);
+  outline-offset: 3px;
+}
 
-      #rightToolsWrapper .heat-risk-tool::after {
+#rightToolsWrapper .heat-risk-tool svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
         content: attr(data-tip);
         position: absolute;
         right: 58px;
@@ -1497,7 +1499,16 @@
     });
   }
 
-  function openCard(latlng, html) {
+    function openCard(latlng, html) {
+    /*
+     * 專注模式只保留作品。
+     * 熱風險請求若在進入專注模式後才完成，
+     * 不得重新把卡片打開。
+     */
+    if (document.body.classList.contains("listening-mode")) {
+      return;
+    }
+
     const popupWidth = getHeatPopupWidth();
     map.getContainer().style.setProperty(
       "--hr-popup-width",
@@ -1682,7 +1693,7 @@
     }
   }
 
-  function addButton() {
+    function addButton() {
     const wrapper = document.getElementById("rightToolsWrapper");
     const menu = wrapper?.querySelector(".tools-menu-container");
 
@@ -1703,37 +1714,71 @@
       setSelecting(!selecting);
     });
 
-        /*
-     * 收合耳朵現在可能位於圖層按鈕與選單中間，
-     * 所以不能再用 menu.previousElementSibling 猜圖層按鈕。
-     */
-    const layerButton = Array.from(
-      wrapper.querySelectorAll(".tools-toggle-btn")
-    ).find((candidate) => {
-      const action = candidate.getAttribute("onclick") || "";
-      const title = candidate.getAttribute("title") || "";
-      const label = candidate.getAttribute("aria-label") || "";
+    function getLayerButton() {
+      return Array.from(
+        wrapper.querySelectorAll(".tools-toggle-btn")
+      ).find((candidate) => {
+        const action = candidate.getAttribute("onclick") || "";
+        const title = candidate.getAttribute("title") || "";
+        const label = candidate.getAttribute("aria-label") || "";
 
-      return (
-        action.includes("toggleRightToolsPanel") ||
-        /圖層|圖資/.test(`${title} ${label}`)
+        return (
+          action.includes("toggleRightToolsPanel") ||
+          /圖層|圖資/.test(`${title} ${label}`)
+        );
+      });
+    }
+
+    function syncHeatButtonGeometry() {
+      const layerButton = getLayerButton();
+
+      if (!layerButton || !button) {
+        return;
+      }
+
+      const rect = layerButton.getBoundingClientRect();
+      const style = window.getComputedStyle(layerButton);
+
+      if (rect.width > 0 && rect.height > 0) {
+        button.style.setProperty(
+          "--heat-tool-size",
+          `${Math.round(Math.min(rect.width, rect.height))}px`
+        );
+      }
+
+      button.style.setProperty(
+        "--heat-tool-radius",
+        style.borderRadius || "16px"
       );
-    });
+
+      button.style.setProperty(
+        "--heat-tool-gap",
+        style.marginBottom || "12px"
+      );
+    }
 
     /*
      * 正確順序：
      * 耳機 → 熱風險小太陽 → 圖層 → 圖資面板
      */
+    const layerButton = getLayerButton();
+
     if (layerButton && layerButton.parentElement === wrapper) {
       wrapper.insertBefore(button, layerButton);
     } else {
       wrapper.insertBefore(button, menu);
     }
 
+    window.requestAnimationFrame(syncHeatButtonGeometry);
+    window.addEventListener(
+      "resize",
+      syncHeatButtonGeometry,
+      { passive: true }
+    );
+
     updateButton();
   }
 
-  addStyles();
   addButton();
 
   function positionLeafletAttribution() {
