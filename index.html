@@ -10376,7 +10376,7 @@ function renderRealtimeFloodMap() {
             }
         );
 
-        marker.bindPopup(
+                marker.bindPopup(
             () => makeFloodPopupHtml(
                 record,
                 visual,
@@ -10384,9 +10384,43 @@ function renderRealtimeFloodMap() {
             ),
             {
                 className: "flood-popup",
-                closeButton: true
+                closeButton: true,
+                autoPan: false
             }
         );
+
+        /*
+         * 點擊測站後：
+         * 1. 將測站帶到地圖中央。
+         * 2. 至少放大到第 16 級，避免卡片開在過遠尺度。
+         * 3. 地圖移動完成後，再開啟卡片。
+         */
+        marker.on("click", () => {
+            const stationLatLng = L.latLng(
+                record.lat,
+                record.lon
+            );
+
+            const targetZoom = Math.max(
+                map.getZoom(),
+                16
+            );
+
+            map.stop();
+
+            map.flyTo(
+                stationLatLng,
+                targetZoom,
+                {
+                    animate: true,
+                    duration: 0.45
+                }
+            );
+
+            window.setTimeout(() => {
+                marker.openPopup();
+            }, 480);
+        });
 
         if (showFloodHistory) {
             marker.on("popupopen", () => {
@@ -11557,9 +11591,8 @@ window.toggleRightToolsPanel = function (event) {
 <style id="mobile-layer-button-clearance-fix">
   /*
    * 手機版右側控制排列：
-   * 1. 耳機、圖層：上移，避開定位按鈕。
-   * 2. 熱風險太陽：維持原位置。
-   * 3. 我的定位：放在太陽與放大按鈕之間。
+   * 圖層工具維持在定位按鈕上方；
+   * 定位按鈕略往上移，避開下方「課程模組」卡片。
    */
   @media (max-width: 600px) {
     #rightToolsWrapper {
@@ -11571,7 +11604,7 @@ window.toggleRightToolsPanel = function (event) {
 
     .locate-me-wrapper {
       right: 12px !important;
-      bottom: calc(144px + env(safe-area-inset-bottom)) !important;
+      bottom: calc(160px + env(safe-area-inset-bottom)) !important;
       z-index: 3600 !important;
     }
   }
