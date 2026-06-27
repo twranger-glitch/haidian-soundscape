@@ -11503,16 +11503,282 @@ window.toggleRightToolsPanel = function (event) {
 </script>
 <!-- ===== END: MOVE_CWA_HEAT_RISK_TO_HISTORY ===== -->
 
+<!-- ===== START: DESKTOP_RIGHT_TOOLS_ALIGNMENT ===== -->
+<script id="desktop-right-tools-alignment">
+(function () {
+  "use strict";
+
+  var desktopQuery = window.matchMedia("(min-width: 601px)");
+  var heatPattern = /heat|temperature|cwa|熱風險|溫度|高溫/i;
+
+  var dockedHeatHost = null;
+  var originalHeatParent = null;
+  var originalHeatNextSibling = null;
+  var frameId = 0;
+
+  function getWrapper() {
+    return document.getElementById("rightToolsWrapper");
+  }
+
+  function describe(element) {
+    if (!element) return "";
+
+    var className =
+      typeof element.className === "string"
+        ? element.className
+        : "";
+
+    return [
+      element.id || "",
+      className,
+      element.getAttribute("title") || "",
+      element.getAttribute("aria-label") || "",
+      element.getAttribute("data-control") || "",
+      element.getAttribute("data-layer") || ""
+    ].join(" ");
+  }
+
+  function getLayerButton(wrapper) {
+    if (!wrapper) return null;
+
+    var buttons = wrapper.querySelectorAll(".tools-toggle-btn");
+
+    for (var i = 0; i < buttons.length; i += 1) {
+      var button = buttons[i];
+      var text = describe(button) + " " + (button.getAttribute("onclick") || "");
+
+      if (/圖層|圖資|toggleRightToolsPanel/i.test(text)) {
+        return button;
+      }
+    }
+
+    return null;
+  }
+
+  function findHeatTrigger() {
+    var all = document.querySelectorAll(
+      "button, a, [role='button'], [title], [aria-label], [id], [class]"
+    );
+
+    for (var i = 0; i < all.length; i += 1) {
+      var element = all[i];
+
+      if (element.closest("#rightToolsWrapper")) {
+        continue;
+      }
+
+      if (!heatPattern.test(describe(element))) {
+        continue;
+      }
+
+      if (
+        element.matches("button, a, [role='button']")
+      ) {
+        return element;
+      }
+
+      var nestedTrigger = element.querySelector(
+        "button, a, [role='button']"
+      );
+
+      if (nestedTrigger) {
+        return nestedTrigger;
+      }
+    }
+
+    return null;
+  }
+
+  function getHeatHost(trigger) {
+    if (!trigger) return null;
+
+    var node = trigger.parentElement;
+
+    while (node && node !== document.body) {
+      if (heatPattern.test(describe(node))) {
+        return node;
+      }
+
+      if (
+        node.classList.contains("leaflet-control") ||
+        node.parentElement &&
+        (
+          node.parentElement.classList.contains("leaflet-top") ||
+          node.parentElement.classList.contains("leaflet-right")
+        )
+      ) {
+        return node;
+      }
+
+      node = node.parentElement;
+    }
+
+    return trigger;
+  }
+
+  function restoreHeatControl() {
+    if (!dockedHeatHost) return;
+
+    if (
+      originalHeatParent &&
+      originalHeatParent.isConnected
+    ) {
+      originalHeatParent.insertBefore(
+        dockedHeatHost,
+        originalHeatNextSibling &&
+        originalHeatNextSibling.parentNode === originalHeatParent
+          ? originalHeatNextSibling
+          : null
+      );
+    }
+
+    dockedHeatHost.classList.remove("haidian-heat-risk-control");
+    dockedHeatHost.removeAttribute("data-haidian-heat-docked");
+
+    dockedHeatHost = null;
+    originalHeatParent = null;
+    originalHeatNextSibling = null;
+  }
+
+  function dockHeatControl() {
+    if (!desktopQuery.matches) {
+      restoreHeatControl();
+      return;
+    }
+
+    var wrapper = getWrapper();
+    var layerButton = getLayerButton(wrapper);
+    var trigger = findHeatTrigger();
+    var host = getHeatHost(trigger);
+
+    if (!wrapper || !layerButton || !host) {
+      return;
+    }
+
+    if (!dockedHeatHost) {
+      originalHeatParent = host.parentNode;
+      originalHeatNextSibling = host.nextSibling;
+      dockedHeatHost = host;
+    }
+
+    host.classList.add("haidian-heat-risk-control");
+    host.setAttribute("data-haidian-heat-docked", "true");
+
+    /*
+     * 排列變成：
+     * 耳機 → 小太陽 → 圖層 → 圖資選單。
+     */
+    if (
+      host.parentNode !== wrapper ||
+      host.nextElementSibling !== layerButton
+    ) {
+      wrapper.insertBefore(host, layerButton);
+    }
+  }
+
+  function alignCollapseEar() {
+    var wrapper = getWrapper();
+    var menu = wrapper && wrapper.querySelector(".tools-menu-container");
+
+    if (!wrapper || !menu) return;
+
+    if (!desktopQuery.matches) {
+      wrapper.style.removeProperty("--right-tools-collapse-ear-top");
+      return;
+    }
+
+    if (!wrapper.classList.contains("open")) {
+      return;
+    }
+
+    var wrapperRect = wrapper.getBoundingClientRect();
+    var menuRect = menu.getBoundingClientRect();
+
+    if (!menuRect.height) {
+      return;
+    }
+
+    /*
+     * 耳朵放在選單左邊，上緣往下 18px。
+     * 因此一定會貼著面板，不會再漂在左上角。
+     */
+    var earTop = Math.round(
+      menuRect.top - wrapperRect.top + 18
+    );
+
+    wrapper.style.setProperty(
+      "--right-tools-collapse-ear-top",
+      earTop + "px"
+    );
+  }
+
+  function scheduleSync() {
+    window.cancelAnimationFrame(frameId);
+
+    frameId = window.requestAnimationFrame(function () {
+      dockHeatControl();
+      alignCollapseEar();
+
+      window.setTimeout(alignCollapseEar, 260);
+    });
+  }
+
+  function init() {
+    var wrapper = getWrapper();
+
+    if (!wrapper) {
+      window.setTimeout(init, 120);
+      return;
+    }
+
+    var documentObserver = new MutationObserver(scheduleSync);
+
+    documentObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    var wrapperObserver = new MutationObserver(scheduleSync);
+
+    wrapperObserver.observe(wrapper, {
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+
+    window.addEventListener("resize", scheduleSync);
+
+    if (desktopQuery.addEventListener) {
+      desktopQuery.addEventListener("change", scheduleSync);
+    } else {
+      desktopQuery.addListener(scheduleSync);
+    }
+
+    scheduleSync();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, {
+      once: true
+    });
+  } else {
+    init();
+  }
+})();
+</script>
+<!-- ===== END: DESKTOP_RIGHT_TOOLS_ALIGNMENT ===== -->
+
 <!-- ===== START: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
 <style id="urgent-right-tools-and-focus-fix">
 
 /*
- * 右側圖資收合耳朵：
- * 耳朵與可捲動選單同層，避免被 aria-hidden 的選單內容包住。
+ * 桌機右側圖資收合耳朵：
+ * 由下方 JavaScript 依選單實際 top 動態定位，
+ * 不再用固定數值，因此會貼在選單左側。
  */
 #rightToolsCollapseEar {
   position: absolute;
-  top: 116px;
+  top: var(--right-tools-collapse-ear-top, 0px);
   left: -46px;
   z-index: 4510;
 
@@ -11565,6 +11831,73 @@ window.toggleRightToolsPanel = function (event) {
   border-color: #006c73;
   outline: 3px solid rgba(8, 127, 150, 0.32);
   outline-offset: 2px;
+}
+
+/*
+ * 桌機：把外部 heat-risk.js 建立的小太陽，
+ * 正規化成和耳機、圖層相同的控制鍵。
+ */
+@media (min-width: 601px) {
+  #rightToolsWrapper .haidian-heat-risk-control {
+    width: 52px !important;
+    height: 52px !important;
+    min-width: 52px !important;
+    margin: 0 0 12px 0 !important;
+    padding: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    color: #12333b !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    border: 1px solid rgba(255, 255, 255, 0.95) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 12px 28px rgba(13, 47, 53, 0.22) !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control > button,
+  #rightToolsWrapper .haidian-heat-risk-control > a,
+  #rightToolsWrapper .haidian-heat-risk-control > [role="button"] {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    color: inherit !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: inherit !important;
+    box-shadow: none !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control svg,
+  #rightToolsWrapper .haidian-heat-risk-control img {
+    width: 24px !important;
+    height: 24px !important;
+    max-width: 24px !important;
+    max-height: 24px !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control:hover,
+  #rightToolsWrapper .haidian-heat-risk-control:focus-within {
+    color: #006c73 !important;
+    background: #fff !important;
+  }
 }
 
 @media (max-width: 600px) {
