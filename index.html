@@ -2623,22 +2623,22 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
         </div>
      <div class="tools-menu-container">
-    <div class="custom-layer-control">
-        <!-- 右側圖資面板收合耳朵：長內容捲到任何位置都能直接收合 -->
-        <button
-            type="button"
-            id="rightToolsCollapseEar"
-            class="right-tools-collapse-ear"
-            onclick="toggleRightToolsPanel(event)"
-            aria-label="收合圖資工具"
-            title="收合圖資工具"
-        >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-            <span>收合圖資</span>
-        </button>
+    <!-- 固定在右側面板左緣的收合耳朵，不放進捲動內容 -->
+    <button
+        type="button"
+        id="rightToolsCollapseEar"
+        class="right-tools-collapse-ear"
+        onclick="toggleRightToolsPanel(event)"
+        aria-label="收合圖資工具"
+        title="收合圖資工具"
+    >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="9 6 15 12 9 18"></polyline>
+        </svg>
+        <span>收合</span>
+    </button>
 
+    <div class="custom-layer-control">
         <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800; display:flex; align-items:center; gap:4px;">
 
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 搜尋特定地點
@@ -11394,38 +11394,56 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
 <!-- ===== START: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
 <style id="urgent-right-tools-and-focus-fix">
-  /*
+    /*
    * 右側圖資收合耳朵：
-   * 放在可捲動的圖資面板內，手機捲到任何位置仍可立即收合。
+   * 放在捲動容器外，固定貼在右側面板左緣。
    */
+  #rightToolsWrapper .tools-menu-container {
+    position: relative !important;
+    overflow: visible !important;
+  }
+
   #rightToolsCollapseEar {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    width: 100%;
-    min-height: 38px;
-    margin: 0 0 10px;
-    padding: 7px 10px;
-    display: inline-flex;
+    position: absolute;
+    top: 104px;
+    left: -44px;
+    z-index: 90;
+
+    width: 44px;
+    height: 78px;
+    margin: 0;
+    padding: 8px 4px;
+
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 5px;
+
     color: #075a63;
     background: rgba(232, 247, 245, 0.98);
     border: 1px solid #9bcfc9;
-    border-radius: 11px;
-    box-shadow: 0 5px 14px rgba(13, 47, 53, 0.10);
+    border-right: 0;
+    border-radius: 14px 0 0 14px;
+    box-shadow: -5px 6px 14px rgba(13, 47, 53, 0.14);
+
     font: inherit;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
-    letter-spacing: 0.03em;
     cursor: pointer;
+    pointer-events: auto !important;
   }
 
   #rightToolsCollapseEar svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     flex: 0 0 auto;
+  }
+
+  #rightToolsCollapseEar span {
+    writing-mode: vertical-rl;
+    letter-spacing: 0.12em;
+    line-height: 1;
   }
 
   #rightToolsCollapseEar:hover,
@@ -11439,8 +11457,11 @@ body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
 
   @media (max-width: 600px) {
     #rightToolsCollapseEar {
-      min-height: 42px;
-      border-radius: 12px;
+      top: 96px;
+      left: -46px;
+      width: 46px;
+      height: 84px;
+      border-radius: 15px 0 0 15px;
     }
   }
 
