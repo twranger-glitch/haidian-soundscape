@@ -13595,97 +13595,134 @@ body.listening-mode .glass-header,
 <!-- ===== START: RIGHT_PANEL_EXPANDED_COMPACT_TOOLS ===== -->
 <style id="right-panel-expanded-compact-tools">
 /*
- * Desktop data mode: turn the three utility controls into a compact, horizontal
- * quick dock above the panel.  The menu therefore starts directly below the
- * header instead of below a tall vertical stack of controls.
- *
- * No handlers, layer state, or external heat-risk control are changed here.
- * The CSS only changes geometry while the data panel is open.
+ * Desktop data mode only:
+ * - Keep the three controls as a small, stable top-right dock.
+ * - Give the data panel the vertical space formerly occupied by the control rail.
+ * - Style the actual heat-risk.js <button class="heat-risk-tool"> directly;
+ *   there is no proxy button and no DOM-moving script involved.
  */
 @media (min-width: 601px) {
   #rightToolsWrapper.open.haidian-v4-data-open {
-    top: 112px !important;
-    right: 20px !important;
-    width: min(390px, calc(100vw - 40px)) !important;
+    top: 92px !important;
+    right: 16px !important;
+    width: min(390px, calc(100vw - 32px)) !important;
+    height: calc(100dvh - 104px) !important;
 
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) repeat(3, 42px) !important;
-    grid-template-rows: 42px auto !important;
-    column-gap: 8px !important;
-    row-gap: 12px !important;
-    align-items: start !important;
+    display: block !important;
+    isolation: isolate;
   }
 
-  /* Compact utility dock: listening → heat risk → layers. */
+  /* Three compact controls live in a single 34px-high dock above the panel. */
   #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn,
-  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool,
-  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control {
-    position: relative !important;
-    inset: auto !important;
-    width: 42px !important;
-    min-width: 42px !important;
-    height: 42px !important;
-    min-height: 42px !important;
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool {
+    position: absolute !important;
+    top: 0 !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: 0 auto auto auto !important;
+
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
     margin: 0 !important;
     padding: 0 !important;
-    border-radius: 14px !important;
     flex: none !important;
-    align-self: center !important;
-    justify-self: end !important;
+
+    border: 1px solid rgba(255, 255, 255, 0.96) !important;
+    border-radius: 11px !important;
+    background: rgba(255, 255, 255, 0.97) !important;
+    box-shadow: 0 7px 18px rgba(13, 47, 53, 0.18) !important;
+
+    line-height: 1 !important;
+    z-index: 4512 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    transform: none !important;
   }
 
+  /* Header docking order: listening → heat-risk → layers. */
   #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleListeningMode"] {
-    grid-column: 2 !important;
-    grid-row: 1 !important;
+    right: 76px !important;
+    color: var(--rt-ink, #12333b) !important;
   }
 
-  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool,
-  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control {
-    grid-column: 3 !important;
-    grid-row: 1 !important;
+  /* heat-risk.js creates this direct button.  Reset its own screen CSS here. */
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool {
+    right: 38px !important;
+    color: #f97316 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    font-size: 0 !important;
+    text-indent: 0 !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool:hover,
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool:focus-visible {
+    color: #ea580c !important;
+    background: #fff7ed !important;
+    outline: 2px solid rgba(249, 115, 22, 0.35) !important;
+    outline-offset: 2px !important;
+    transform: translateY(-1px) !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool svg,
+  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool img {
+    display: block !important;
+    width: 17px !important;
+    height: 17px !important;
+    min-width: 17px !important;
+    min-height: 17px !important;
+    max-width: 17px !important;
+    max-height: 17px !important;
+    margin: 0 !important;
+    flex: 0 0 17px !important;
   }
 
   #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] {
-    grid-column: 4 !important;
-    grid-row: 1 !important;
+    right: 0 !important;
+    color: var(--rt-ink, #12333b) !important;
   }
 
-  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > button,
-  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > a,
-  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > [role="button"],
-  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > button,
-  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > a,
-  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > [role="button"] {
-    width: 100% !important;
-    height: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn svg {
+    width: 17px !important;
+    height: 17px !important;
   }
 
-  /* Use the full right-side width for the expandable selection panel. */
+  /* The panel begins just below the compact dock and uses the remaining height. */
   #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container {
-    grid-column: 1 / -1 !important;
-    grid-row: 2 !important;
+    position: absolute !important;
+    top: 42px !important;
+    right: 0 !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: 42px 0 auto auto !important;
+
+    display: block !important;
     width: 100% !important;
     min-width: 0 !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    align-self: start !important;
-    justify-self: stretch !important;
+    overflow: visible !important;
+
+    align-self: auto !important;
+    justify-self: auto !important;
+    z-index: 4503 !important;
   }
 
-  /* The existing scroll guard calculates this dynamically from the menu top.
-     These values ensure the larger panel is allowed to occupy the new space. */
   #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container > .custom-layer-control {
-    max-height: calc(100dvh - 178px) !important;
+    max-height: calc(100dvh - 150px) !important;
   }
 
-  /* The existing collapse ear stays attached to the left edge of the panel. */
+  /* Existing collapse ear remains tied to the menu's left edge via its script. */
   #rightToolsWrapper.open.haidian-v4-data-open > #rightToolsCollapseEar {
-    grid-column: auto !important;
-    grid-row: auto !important;
+    z-index: 4513 !important;
   }
 }
 </style>
