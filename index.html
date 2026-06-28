@@ -3753,7 +3753,8 @@ async function searchPlaceName() {
         map.getPane('floodPane').style.zIndex = 350;
         map.getPane('floodPane').style.pointerEvents = 'auto';
 
-        /* ===== START: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
+       <!-- ===== START: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== -->
+<script id="tainan-history-flood-v5-script">
 if (!map.getPane('tainanHistoryFloodPane')) {
     map.createPane('tainanHistoryFloodPane');
 }
@@ -3786,7 +3787,11 @@ var tainanHistoryFloodMeta = {
 var tainanHistoryFloodLayer = null;
 var tainanHistoryFloodLayerId = null;
 var tainanHistoryFloodEvents = [];
-var tainanHistoryFloodSelectedValues = new Set();
+
+// 🌟 V5.1 進階升級：跨科室共通事件狀態保留
+var tainanHistoryFloodSelectedEventIds = new Set();
+var tainanHistoryFloodUserTouched = false;
+
 var tainanHistoryFloodFilterField = null;
 var tainanHistoryFloodEventCache = {};
 var tainanHistoryFloodEventRequests = {};
@@ -4135,9 +4140,14 @@ function syncTainanHistoryFloodState() {
         return;
     }
 
+    // 🌟 計算目前正在顯示的跨科室事件數量
+    var activeCount = tainanHistoryFloodEvents.filter(function(e) {
+        return tainanHistoryFloodSelectedEventIds.has(e.eventId);
+    }).length;
+
     if (
         tainanHistoryFloodEvents.length &&
-        tainanHistoryFloodSelectedValues.size === 0
+        activeCount === 0
     ) {
         setTainanHistoryFloodState('所有事件均已隱藏', true);
 
@@ -4425,53 +4435,40 @@ function escapeTainanHistoryFloodHtml(value) {
         });
 }
 
-
 /* ===== START: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
+// 🌟 終極編年史字典：為不同科室的「同一個事件」綁定共通的 eventId
 var TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION = {
-    '88水災': {
-        label: '1999 88 水災',
-        order: 199900
-    },
-    '90納莉颱風': {
-        label: '2001 納莉颱風',
-        order: 200100
-    },
-    '93敏督利颱風': {
-        label: '2004 敏督利颱風',
-        order: 200400
-    },
-    '940612豪雨': {
-        label: '2005 06.12 豪雨',
-        order: 200501
-    },
-    '94海棠颱風': {
-        label: '2005 海棠颱風',
-        order: 200502
-    },
-    '97卡玫基颱風': {
-        label: '2008 卡玫基颱風',
-        order: 200800
-    },
-    '98莫拉克颱風': {
-        label: '2009 莫拉克颱風',
-        order: 200900
-    },
-    '99凡那比颱風': {
-        label: '2010 凡那比颱風',
-        order: 201000
-    },
-    '102康芮颱風': {
-        label: '2013 康芮颱風',
-        order: 201300
-    },
-    '凱特琳颱風': {
-        label: '2014 凱特琳颱風',
-        order: 201400
-    },
-    '碧利斯颱風': {
-        label: '2016 碧利斯颱風',
-        order: 201600
-    }
+    // ===== 1990 年代 =====
+    '88水災': { eventId: '1999_0808', label: '1999 88水災 (豪雨)', order: 199900 },
+
+    // ===== 2000 年代 =====
+    '90納莉颱風': { eventId: '2001_nari', label: '2001 納莉颱風', order: 200100 },
+    '93敏督利颱風': { eventId: '2004_mindulle', label: '2004 敏督利颱風', order: 200400 },
+    '敏督利颱風':   { eventId: '2004_mindulle', label: '2004 敏督利颱風', order: 200401 },
+
+    // 2005 雙胞胎事件
+    '940612豪雨':     { eventId: '2005_0612', label: '2005 06.12 豪雨', order: 200501 },
+    '940612淹水範圍': { eventId: '2005_0612', label: '2005 06.12 豪雨 (綜企科)', order: 200502 },
+    '94海棠颱風':     { eventId: '2005_haitang', label: '2005 海棠颱風', order: 200503 },
+    '海棠淹水':       { eventId: '2005_haitang', label: '2005 海棠颱風 (綜企科)', order: 200504 },
+
+    '碧利斯颱風': { eventId: '2006_bilis', label: '2006 碧利斯颱風', order: 200600 },
+    
+    '97卡玫基颱風': { eventId: '2008_kalmaegi', label: '2008 卡玫基颱風', order: 200800 },
+    '卡玫基颱風':   { eventId: '2008_kalmaegi', label: '2008 卡玫基颱風', order: 200801 },
+
+    // 2009 雙胞胎事件 (莫拉克/八八風災)
+    '98莫拉克颱風':     { eventId: '2009_morakot', label: '2009 莫拉克颱風 (八八風災)', order: 200900 },
+    '98莫拉克淹水範圍': { eventId: '2009_morakot', label: '2009 莫拉克颱風 (綜企科)', order: 200901 },
+
+    // ===== 2010 年代 =====
+    '99凡那比颱風': { eventId: '2010_fanapi', label: '2010 凡那比颱風', order: 201000 },
+    '99凡那比淹水': { eventId: '2010_fanapi', label: '2010 凡那比颱風 (綜企科)', order: 201001 },
+
+    '102康芮颱風': { eventId: '2013_kongrey', label: '2013 康芮颱風', order: 201300 },
+    '康芮淹水範圍': { eventId: '2013_kongrey', label: '2013 康芮颱風 (綜企科)', order: 201301 },
+
+    '凱特琳颱風': { eventId: '2014_kaitak', label: '2014 凱特琳颱風', order: 201400 }
 };
 
 function getTainanHistoryFloodEventPresentationKey(value) {
@@ -4490,17 +4487,17 @@ function presentTainanHistoryFloodEvents(events) {
                     (entry && entry.label ? entry.label : '')
             ).trim();
 
-            var config =
-                TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION[
-                    getTainanHistoryFloodEventPresentationKey(sourceLabel)
-                ];
+            var key = getTainanHistoryFloodEventPresentationKey(sourceLabel);
+            var config = TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION[key];
+
+            // 🌟 將原始事件名稱映射為跨科別的 eventId
+            var eventId = config && config.eventId ? config.eventId : key;
 
             return Object.assign({}, entry, {
                 sourceLabel: sourceLabel,
                 label: config ? config.label : sourceLabel,
-                _presentationOrder: config ?
-                    config.order :
-                    999999 + sourceIndex,
+                eventId: eventId,
+                _presentationOrder: config ? config.order : 999999 + sourceIndex,
                 _sourceIndex: sourceIndex
             });
         })
@@ -4513,8 +4510,6 @@ function presentTainanHistoryFloodEvents(events) {
 }
 /* ===== END: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
 
-
-        
 function renderTainanHistoryFloodEvents() {
     var root = document.getElementById(
         'tainanHistoryFloodEvents'
@@ -4553,19 +4548,22 @@ function renderTainanHistoryFloodEvents() {
     showAllButton.disabled = false;
     hideAllButton.disabled = false;
 
+    // 🌟 計算當前選單中有幾個事件是被啟用的
+    var activeCount = tainanHistoryFloodEvents.filter(function(e) {
+        return tainanHistoryFloodSelectedEventIds.has(e.eventId);
+    }).length;
+
     countEl.textContent =
         '顯示 ' +
-        tainanHistoryFloodSelectedValues.size +
+        activeCount +
         ' / ' +
         tainanHistoryFloodEvents.length +
         ' 個事件';
 
     root.innerHTML = tainanHistoryFloodEvents
         .map(function(entry, index) {
-            var visible =
-                tainanHistoryFloodSelectedValues.has(
-                    String(entry.value)
-                );
+            // 🌟 判斷這個共通 eventId 是否被勾選
+            var visible = tainanHistoryFloodSelectedEventIds.has(entry.eventId);
 
             var name =
                 escapeTainanHistoryFloodHtml(entry.label);
@@ -4606,14 +4604,22 @@ function renderTainanHistoryFloodEvents() {
 function applyTainanHistoryFloodEventFilter() {
     if (!tainanHistoryFloodLayer) return;
 
+    var activeValues = [];
+
+    // 🌟 從目前的事件清單中，挑出 eventId 有在「使用者選取集合」內的，送回它們的原始 value 給 ArcGIS
+    tainanHistoryFloodEvents.forEach(function(entry) {
+        if (tainanHistoryFloodSelectedEventIds.has(entry.eventId)) {
+            activeValues.push(String(entry.value));
+        }
+    });
+
     var allSelected =
         tainanHistoryFloodEvents.length > 0 &&
-        tainanHistoryFloodSelectedValues.size ===
-            tainanHistoryFloodEvents.length;
+        activeValues.length === tainanHistoryFloodEvents.length;
 
     tainanHistoryFloodLayer.setEventFilter(
         tainanHistoryFloodFilterField,
-        Array.from(tainanHistoryFloodSelectedValues),
+        activeValues,
         allSelected
     );
 
@@ -4630,31 +4636,32 @@ function loadTainanHistoryFloodEvents() {
 
     var activeLayerId = meta.layerId;
 
-    var cached =
-        getTainanHistoryFloodCachedEvents(activeLayerId);
+    var processPayload = function(payload) {
+        tainanHistoryFloodEvents = presentTainanHistoryFloodEvents(payload.events);
+        tainanHistoryFloodFilterField = payload.fieldName;
 
-    if (cached) {
-        tainanHistoryFloodEvents =
-    presentTainanHistoryFloodEvents(cached.events);
-        tainanHistoryFloodFilterField = cached.fieldName;
-
-        tainanHistoryFloodSelectedValues = new Set(
-            cached.events.map(function(entry) {
-                return String(entry.value);
-            })
-        );
+        // 🌟 防呆：如果這是使用者第一次載入圖資（且尚未做任何取消勾選的動作），則預設全選
+        if (!tainanHistoryFloodUserTouched) {
+            tainanHistoryFloodEvents.forEach(function(entry) {
+                tainanHistoryFloodSelectedEventIds.add(entry.eventId);
+            });
+        }
 
         renderTainanHistoryFloodEvents();
 
         if (tainanHistoryFloodLayer) {
             applyTainanHistoryFloodEventFilter();
         }
+    };
 
+    var cached = getTainanHistoryFloodCachedEvents(activeLayerId);
+
+    if (cached) {
+        processPayload(cached);
         return Promise.resolve();
     }
 
     tainanHistoryFloodEvents = [];
-    tainanHistoryFloodSelectedValues = new Set();
     tainanHistoryFloodFilterField = null;
 
     renderTainanHistoryFloodEvents();
@@ -4671,21 +4678,7 @@ function loadTainanHistoryFloodEvents() {
                 return;
             }
 
-            tainanHistoryFloodEvents =
-    presentTainanHistoryFloodEvents(payload.events);
-            tainanHistoryFloodFilterField = payload.fieldName;
-
-            tainanHistoryFloodSelectedValues = new Set(
-                payload.events.map(function(entry) {
-                    return String(entry.value);
-                })
-            );
-
-            renderTainanHistoryFloodEvents();
-
-            if (tainanHistoryFloodLayer) {
-                applyTainanHistoryFloodEventFilter();
-            }
+            processPayload(payload);
         })
         .catch(function() {
             var root = document.getElementById(
@@ -4810,17 +4803,18 @@ document.addEventListener('change', function(event) {
         return;
     }
 
+    // 🌟 標記使用者已介入操作，後續切換科室將不會自動全選
+    tainanHistoryFloodUserTouched = true;
+
     var index = Number(input.dataset.eventIndex);
     var entry = tainanHistoryFloodEvents[index];
 
     if (!entry) return;
 
-    var value = String(entry.value);
-
     if (input.checked) {
-        tainanHistoryFloodSelectedValues.add(value);
+        tainanHistoryFloodSelectedEventIds.add(entry.eventId);
     } else {
-        tainanHistoryFloodSelectedValues.delete(value);
+        tainanHistoryFloodSelectedEventIds.delete(entry.eventId);
     }
 
     applyTainanHistoryFloodEventFilter();
@@ -4829,11 +4823,12 @@ document.addEventListener('change', function(event) {
 document.getElementById(
     'tainanHistoryFloodShowAll'
 ).addEventListener('click', function() {
-    tainanHistoryFloodSelectedValues = new Set(
-        tainanHistoryFloodEvents.map(function(entry) {
-            return String(entry.value);
-        })
-    );
+    tainanHistoryFloodUserTouched = true;
+
+    // 將當下資料集內所有事件都加入啟用清單
+    tainanHistoryFloodEvents.forEach(function(entry) {
+        tainanHistoryFloodSelectedEventIds.add(entry.eventId);
+    });
 
     applyTainanHistoryFloodEventFilter();
 });
@@ -4841,7 +4836,12 @@ document.getElementById(
 document.getElementById(
     'tainanHistoryFloodHideAll'
 ).addEventListener('click', function() {
-    tainanHistoryFloodSelectedValues.clear();
+    tainanHistoryFloodUserTouched = true;
+
+    // 將當下資料集內所有事件從啟用清單中移除
+    tainanHistoryFloodEvents.forEach(function(entry) {
+        tainanHistoryFloodSelectedEventIds.delete(entry.eventId);
+    });
 
     applyTainanHistoryFloodEventFilter();
 });
@@ -4875,7 +4875,8 @@ if (document.readyState === 'complete') {
     );
 }
 /* ===== END: HISTORY_FLOOD_IDLE_PREFETCH ===== */
-/* ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
+</script>
+<!-- ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== -->
 
         function getGeoJsonUrls(path) {
             if (path.startsWith('./') || path.startsWith('http')) {
