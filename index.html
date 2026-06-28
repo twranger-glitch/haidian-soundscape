@@ -13430,4 +13430,274 @@ body.listening-mode .glass-header,
 }
 </style>
 <!-- ===== END: STABLE_RIGHT_TOOL_RAIL_NO_FLICKER ===== -->
+
+<!-- ===== START: SINGLE_CLICKABLE_HEAT_SUN_FINAL_FIX ===== -->
+<style id="single-clickable-heat-sun-final-fix">
+/*
+ * 僅保留本站原生的小太陽代理按鈕。外部 heat-risk.js 的實體控制鍵
+ * 會由末端腳本辨識並隱藏，但仍保留在 DOM 中供代理按鈕呼叫其既有事件。
+ */
+[data-haidian-native-heat-risk-target="true"],
+[data-haidian-external-heat-control="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+@media (min-width: 601px) {
+  #rightToolsWrapper > #nativeHeatRiskProxy {
+    display: inline-flex !important;
+    position: relative !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    z-index: 4506 !important;
+  }
+}
+</style>
+
+<script id="single-clickable-heat-sun-final-fix-script">
+(function () {
+  'use strict';
+
+  var PROXY_ID = 'nativeHeatRiskProxy';
+  var TARGET_ATTR = 'data-haidian-native-heat-risk-target';
+  var EXTRA_TARGET_ATTR = 'data-haidian-external-heat-control';
+  var RETRY_DELAYS = [0, 80, 220, 600, 1400, 3000, 6000];
+  var proxyBound = false;
+  var capturedTargets = [];
+
+  function getWrapper() {
+    return document.getElementById('rightToolsWrapper');
+  }
+
+  function getProxy() {
+    return document.getElementById(PROXY_ID);
+  }
+
+  function isVisible(element) {
+    if (!element || !element.isConnected) return false;
+    var style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.pointerEvents === 'none') {
+      return false;
+    }
+    var rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function interactionHost(element) {
+    var current = element;
+    var count = 0;
+
+    while (current && current !== document.body && count < 5) {
+      if (current.matches && current.matches('button, a, input[type="button"], input[type="submit"], [role="button"], [onclick]')) {
+        return current;
+      }
+      current = current.parentElement;
+      count += 1;
+    }
+
+    return element;
+  }
+
+  function textSignature(element) {
+    if (!element) return '';
+    return [
+      element.id || '',
+      element.className || '',
+      element.getAttribute && (element.getAttribute('title') || ''),
+      element.getAttribute && (element.getAttribute('aria-label') || ''),
+      element.getAttribute && (element.getAttribute('data-tooltip') || ''),
+      element.getAttribute && (element.getAttribute('data-control') || ''),
+      element.textContent || ''
+    ].join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function hasSemanticHeatMarker(element) {
+    return /(heat|temperature|thermal|weather|sun|brightness|cwa|risk|高溫|氣溫|溫度|熱風險|熱風險分布|小太陽|太陽)/i.test(textSignature(element));
+  }
+
+  function hasSunIconMarker(element) {
+    if (!element || !element.querySelector) return false;
+
+    if (/☀|\u2600/.test(element.textContent || '')) return true;
+
+    var iconClassText = Array.prototype.map.call(
+      element.querySelectorAll('[class]'),
+      function (node) { return node.className || ''; }
+    ).join(' ');
+
+    if (/(fa-sun|icon-sun|weather-sunny|wb_sunny|sunny|brightness)/i.test(iconClassText)) {
+      return true;
+    }
+
+    var svg = element.querySelector('svg');
+    if (!svg) return false;
+
+    var svgMeta = [
+      svg.getAttribute('aria-label') || '',
+      svg.getAttribute('data-icon') || '',
+      svg.getAttribute('class') || '',
+      svg.innerHTML || ''
+    ].join(' ');
+
+    if (/(sun|brightness|weather|☀)/i.test(svgMeta)) return true;
+
+    /* 常見小太陽 SVG：中心圓加上至少四條放射線。 */
+    var circleCount = svg.querySelectorAll('circle').length;
+    var lineCount = svg.querySelectorAll('line').length;
+    var pathCount = svg.querySelectorAll('path').length;
+    return circleCount >= 1 && (lineCount >= 4 || pathCount >= 5);
+  }
+
+  function isNativeRightRailControl(element) {
+    var wrapper = getWrapper();
+    if (!element || element.id === PROXY_ID) return true;
+    if (wrapper && wrapper.contains(element)) return true;
+    if (element.id === 'rightToolsCollapseEar') return true;
+    return false;
+  }
+
+  function hasRightRailGeometry(element) {
+    if (!isVisible(element)) return false;
+    var rect = element.getBoundingClientRect();
+    var viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    var viewportHeight = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+
+    return rect.width >= 28 && rect.width <= 120 &&
+      rect.height >= 28 && rect.height <= 120 &&
+      rect.right >= viewportWidth - 180 &&
+      rect.left >= viewportWidth * 0.65 &&
+      rect.top >= 45 &&
+      rect.top <= viewportHeight - 20;
+  }
+
+  function looksLikeExternalHeatControl(element) {
+    if (!element || !element.isConnected || isNativeRightRailControl(element)) return false;
+
+    var host = interactionHost(element);
+    if (!host || isNativeRightRailControl(host)) return false;
+
+    var semantic = hasSemanticHeatMarker(host) || hasSemanticHeatMarker(element);
+    var sunLike = hasSunIconMarker(host) || hasSunIconMarker(element);
+
+    /* 語意標記足以辨識；純圖示則只接受右上工具列範圍，避免誤抓地圖標記。 */
+    return semantic || (sunLike && hasRightRailGeometry(host));
+  }
+
+  function collectCandidates() {
+    var selectors = [
+      'button', 'a', 'input[type="button"]', 'input[type="submit"]',
+      '[role="button"]', '[onclick]',
+      '[class*="heat" i]', '[id*="heat" i]',
+      '[class*="temperature" i]', '[id*="temperature" i]',
+      '[class*="sun" i]', '[id*="sun" i]',
+      '[class*="weather" i]', '[id*="weather" i]'
+    ].join(',');
+
+    var unique = new Set();
+    document.querySelectorAll(selectors).forEach(function (node) {
+      var host = interactionHost(node);
+      if (looksLikeExternalHeatControl(host)) unique.add(host);
+    });
+
+    return Array.prototype.slice.call(unique);
+  }
+
+  function hideTarget(target) {
+    if (!target || target.id === PROXY_ID) return null;
+
+    target.setAttribute(TARGET_ATTR, 'true');
+    target.setAttribute(EXTRA_TARGET_ATTR, 'true');
+    target.setAttribute('aria-hidden', 'true');
+    target.style.setProperty('display', 'none', 'important');
+    target.style.setProperty('visibility', 'hidden', 'important');
+    target.style.setProperty('pointer-events', 'none', 'important');
+    return target;
+  }
+
+  function captureExternalHeatControls() {
+    var found = collectCandidates();
+    found.forEach(function (target) {
+      if (capturedTargets.indexOf(target) === -1) capturedTargets.push(target);
+      hideTarget(target);
+    });
+
+    return capturedTargets.filter(function (target) {
+      return target && target.isConnected;
+    });
+  }
+
+  function resolveAction(target) {
+    if (!target) return null;
+    if (target.matches && target.matches('button, a, input[type="button"], input[type="submit"], [role="button"], [onclick]')) {
+      return target;
+    }
+    return target.querySelector && target.querySelector(
+      'button:not([disabled]), a, input[type="button"]:not([disabled]), input[type="submit"]:not([disabled]), [role="button"], [onclick]'
+    ) || target;
+  }
+
+  function dispatchHeatToggle() {
+    var targets = captureExternalHeatControls();
+    var target = targets[0] || document.querySelector('[' + TARGET_ATTR + '="true"]');
+    var action = resolveAction(target);
+    if (!action) return;
+
+    if (typeof action.click === 'function') {
+      action.click();
+      return;
+    }
+
+    action.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    }));
+  }
+
+  function bindProxy() {
+    var proxy = getProxy();
+    if (!proxy || proxyBound) return !!proxy;
+
+    /* Capture phase suppresses the previous proxy listener, ensuring exactly one
+       toggle invocation against the newly captured external source control. */
+    proxy.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      dispatchHeatToggle();
+    }, true);
+
+    proxy.style.setProperty('pointer-events', 'auto', 'important');
+    proxy.style.setProperty('cursor', 'pointer', 'important');
+    proxy.removeAttribute('disabled');
+    proxyBound = true;
+    return true;
+  }
+
+  function repair() {
+    bindProxy();
+    captureExternalHeatControls();
+  }
+
+  function start() {
+    RETRY_DELAYS.forEach(function (delay) {
+      window.setTimeout(repair, delay);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+})();
+</script>
+<!-- ===== END: SINGLE_CLICKABLE_HEAT_SUN_FINAL_FIX ===== -->
+
 </body></html>
