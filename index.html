@@ -2643,6 +2643,20 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
     </svg>
 </button>
 
+<button
+    type="button"
+    id="rightToolsCompactClose"
+    onclick="toggleRightToolsPanel(event)"
+    aria-label="收合圖資工具"
+    aria-controls="rightToolsMenu"
+    title="收合圖資工具"
+>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+</button>
+
 <div id="rightToolsMenu" class="tools-menu-container">
     <div class="custom-layer-control">
 
@@ -12698,270 +12712,17 @@ body.listening-mode .glass-header,
 
 
 <!-- ===== START: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
-<style id="flood-dedupe-and-right-tools-stack-fix">
-  /*
-   * 右上控制列由多個舊版與外掛控制動態組成。強制它們回到同一個
-   * flex column，並取消外掛可能殘留的 absolute/fixed 定位，避免圖示重疊。
-   */
-  #rightToolsWrapper {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-end !important;
-    gap: 12px !important;
-  }
-
-  #rightToolsWrapper > .tools-toggle-btn,
-  #rightToolsWrapper > .haidian-heat-risk-control {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    inset: auto !important;
-    flex: 0 0 auto !important;
-    align-self: flex-end !important;
-    margin: 0 !important;
-  }
-
-  /* 外掛小太陽若以 fixed/absolute 建立，移入工具列後必須回到正常流。 */
-  #rightToolsWrapper .haidian-heat-risk-control {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    inset: auto !important;
-    transform: none !important;
-    z-index: auto !important;
-  }
-
-  /* Desktop menu stays in the same vertical tool stack.  Mobile keeps its
-     pre-existing fixed bottom-sheet behavior untouched. */
-  @media (min-width: 601px) {
-    #rightToolsWrapper > .tools-menu-container {
-      position: relative !important;
-      top: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      left: auto !important;
-      inset: auto !important;
-      flex: 0 0 auto !important;
-      align-self: flex-end !important;
-      margin-top: 0 !important;
-    }
-  }
-
-  @media (max-width: 600px) {
-    #rightToolsWrapper {
-      gap: 8px !important;
-    }
-  }
-</style>
-
-<script id="right-tools-control-stack-normalizer">
-(function () {
-  "use strict";
-
-  function getDirectChild(wrapper, predicate) {
-    return Array.prototype.find.call(
-      wrapper.children,
-      predicate
-    ) || null;
-  }
-
-  function isListeningControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains("tools-toggle-btn")) {
-      return false;
-    }
-
-    return String(node.getAttribute("onclick") || "")
-      .indexOf("toggleListeningMode") >= 0;
-  }
-
-  function isLayerControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains("tools-toggle-btn")) {
-      return false;
-    }
-
-    var onclick = String(node.getAttribute("onclick") || "");
-    var title = String(node.getAttribute("title") || "");
-
-    return onclick.indexOf("toggleRightToolsPanel") >= 0 ||
-      /圖層|圖資/.test(title);
-  }
-
-  function normalizeStack() {
-    var wrapper = document.getElementById("rightToolsWrapper");
-    var menu = document.getElementById("rightToolsMenu");
-
-    if (!wrapper || !menu) return;
-
-    /* Move any late-injected heat-risk key into this one controlled stack. */
-    Array.prototype.forEach.call(
-      document.querySelectorAll(".haidian-heat-risk-control"),
-      function (control) {
-        if (control !== wrapper && !wrapper.contains(control)) {
-          wrapper.insertBefore(control, menu);
-        }
-      }
-    );
-
-    var listening = getDirectChild(wrapper, isListeningControl);
-    var heatRisk = getDirectChild(wrapper, function (node) {
-      return node.classList &&
-        node.classList.contains("haidian-heat-risk-control");
-    });
-    var layers = getDirectChild(wrapper, isLayerControl);
-
-    /*
-     * Stable, non-overlapping order: headphones → heat-risk → layers → menu.
-     * Build it from right to left so an already-correct stack does not cause
-     * DOM mutations (and therefore cannot trigger an observer feedback loop).
-     */
-    var controls = [listening, heatRisk, layers].filter(Boolean);
-
-    for (var index = controls.length - 1; index >= 0; index -= 1) {
-      var control = controls[index];
-      var anchor = index === controls.length - 1 ?
-        menu :
-        controls[index + 1];
-
-      if (control.nextElementSibling !== anchor) {
-        wrapper.insertBefore(control, anchor);
-      }
-    }
-  }
-
-  function install() {
-    var wrapper = document.getElementById("rightToolsWrapper");
-    if (!wrapper) {
-      window.setTimeout(install, 120);
-      return;
-    }
-
-    var frameId = 0;
-    function scheduleNormalize() {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(normalizeStack);
-    }
-
-    /* Only watch this stack continuously.  A separate lightweight observer
-       notices a late-injected heat-risk key elsewhere on the page. */
-    var stackObserver = new MutationObserver(scheduleNormalize);
-    stackObserver.observe(wrapper, { childList: true });
-
-    var externalControlObserver = new MutationObserver(function(records) {
-      var foundHeatRiskControl = records.some(function(record) {
-        return Array.prototype.some.call(
-          record.addedNodes || [],
-          function(node) {
-            if (!node || node.nodeType !== 1) return false;
-            return (node.matches &&
-              node.matches(".haidian-heat-risk-control")) ||
-              (node.querySelector &&
-                node.querySelector(".haidian-heat-risk-control"));
-          }
-        );
-      });
-
-      if (foundHeatRiskControl) {
-        scheduleNormalize();
-      }
-    });
-
-    externalControlObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-
-    window.addEventListener("resize", scheduleNormalize);
-    scheduleNormalize();
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", install, { once: true });
-  } else {
-    install();
-  }
-})();
-</script>
 <!-- ===== END: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
 
 
 <!-- ===== START: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
 <style id="immediate-flood-events-and-solid-right-tool-rail-fix">
-  /*
-   * 水災事件交給外層圖資面板捲動，不再有第二層固定高度的事件清單。
-   * 因此所有事件列會在同一輪 DOM 更新中建立，不會讓末段事件看起來像晚到。
-   */
+  /* Keep only the flood-event list behavior.  Right-control geometry is owned
+     by the final conflict-free panel rule below. */
   #tainanHistoryFloodEvents.hf-events {
     max-height: none !important;
     overflow: visible !important;
     padding-right: 0 !important;
-  }
-
-  /*
-   * 桌機右上控制列：三個主要圖示一律在同一條 flex 軌道中排列。
-   * 外部 heat-risk.js 即使晚注入 style，也會再由下方 JS 以 inline !important 固定幾何。
-   */
-  @media (min-width: 601px) {
-    #rightToolsWrapper {
-      display: flex !important;
-      flex-direction: column !important;
-      flex-wrap: nowrap !important;
-      align-items: flex-end !important;
-      align-content: flex-end !important;
-      gap: 12px !important;
-      isolation: isolate;
-    }
-
-    #rightToolsWrapper > .tools-toggle-btn,
-    #rightToolsWrapper > .haidian-heat-risk-control {
-      position: relative !important;
-      inset: auto !important;
-      top: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      left: auto !important;
-      transform: none !important;
-      float: none !important;
-      clear: both !important;
-      flex: 0 0 52px !important;
-      width: 52px !important;
-      min-width: 52px !important;
-      height: 52px !important;
-      min-height: 52px !important;
-      margin: 0 !important;
-      align-self: flex-end !important;
-      z-index: 4504 !important;
-    }
-
-    #rightToolsWrapper > .tools-menu-container {
-      position: relative !important;
-      inset: auto !important;
-      top: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      left: auto !important;
-      transform-origin: top right !important;
-      flex: 0 0 auto !important;
-      align-self: flex-end !important;
-      margin: 0 !important;
-      z-index: 4503 !important;
-    }
-
-    /* 收合耳朵只會在圖資選單打開時顯示，避免初始化瞬間與主圖示重疊。 */
-    #rightToolsWrapper:not(.open) > #rightToolsCollapseEar,
-    #rightToolsWrapper.haidian-v4-tools-user-hidden > #rightToolsCollapseEar {
-      display: none !important;
-    }
-
-    #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCollapseEar {
-      display: flex !important;
-      z-index: 4510 !important;
-    }
   }
 </style>
 
@@ -13176,204 +12937,7 @@ body.listening-mode .glass-header,
 
   prewarmTainanHistoryFloodSourcesImmediately();
 
-  /* ===== Desktop right-tool rail: hard geometry normalizer ===== */
-  function setImportantStyle(node, property, value) {
-    if (!node || !node.style) return false;
-
-    if (
-      node.style.getPropertyValue(property) === value &&
-      node.style.getPropertyPriority(property) === 'important'
-    ) {
-      return false;
-    }
-
-    node.style.setProperty(property, value, 'important');
-    return true;
-  }
-
-  function isDesktopRightToolRail() {
-    return window.matchMedia &&
-      window.matchMedia('(min-width: 601px)').matches;
-  }
-
-  function isListeningControl(node) {
-    return !!(
-      node && node.classList &&
-      node.classList.contains('tools-toggle-btn') &&
-      String(node.getAttribute('onclick') || '')
-        .indexOf('toggleListeningMode') >= 0
-    );
-  }
-
-  function isLayerControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains('tools-toggle-btn')) {
-      return false;
-    }
-
-    var onclick = String(node.getAttribute('onclick') || '');
-    var title = String(node.getAttribute('title') || '');
-
-    return onclick.indexOf('toggleRightToolsPanel') >= 0 ||
-      /圖層|圖資/.test(title);
-  }
-
-  function getDirectChild(wrapper, predicate) {
-    return Array.prototype.find.call(wrapper.children, predicate) || null;
-  }
-
-  function normalizePrimaryToolGeometry(control) {
-    if (!control || !isDesktopRightToolRail()) return;
-
-    [
-      ['position', 'relative'],
-      ['inset', 'auto'],
-      ['top', 'auto'],
-      ['right', 'auto'],
-      ['bottom', 'auto'],
-      ['left', 'auto'],
-      ['transform', 'none'],
-      ['float', 'none'],
-      ['margin', '0'],
-      ['width', '52px'],
-      ['min-width', '52px'],
-      ['height', '52px'],
-      ['min-height', '52px'],
-      ['flex', '0 0 52px'],
-      ['align-self', 'flex-end'],
-      ['z-index', '4504'],
-      ['display', 'flex'],
-      ['align-items', 'center'],
-      ['justify-content', 'center']
-    ].forEach(function (rule) {
-      setImportantStyle(control, rule[0], rule[1]);
-    });
-
-    Array.prototype.forEach.call(
-      control.querySelectorAll('button, a, [role="button"]'),
-      function (action) {
-        [
-          ['position', 'relative'],
-          ['inset', 'auto'],
-          ['top', 'auto'],
-          ['right', 'auto'],
-          ['bottom', 'auto'],
-          ['left', 'auto'],
-          ['transform', 'none'],
-          ['margin', '0'],
-          ['width', '100%'],
-          ['height', '100%'],
-          ['display', 'flex'],
-          ['align-items', 'center'],
-          ['justify-content', 'center']
-        ].forEach(function (rule) {
-          setImportantStyle(action, rule[0], rule[1]);
-        });
-      }
-    );
-  }
-
-  function normalizeDesktopRightToolRail() {
-    if (!isDesktopRightToolRail()) return;
-
-    var wrapper = document.getElementById('rightToolsWrapper');
-    var menu = document.getElementById('rightToolsMenu');
-
-    if (!wrapper || !menu) return;
-
-    /* 保留唯一一個小太陽控制；晚注入的重複節點一律隱藏，不再疊在右上角。 */
-    var heatControls = Array.prototype.slice.call(
-      document.querySelectorAll('.haidian-heat-risk-control')
-    );
-
-    var heatControl = heatControls.find(function (node) {
-      return node.parentElement === wrapper;
-    }) || heatControls[0] || null;
-
-    if (heatControl && heatControl.parentElement !== wrapper) {
-      wrapper.insertBefore(heatControl, menu);
-    }
-
-    heatControls.forEach(function (node) {
-      if (node === heatControl) return;
-      setImportantStyle(node, 'display', 'none');
-      node.setAttribute('aria-hidden', 'true');
-    });
-
-    var listening = getDirectChild(wrapper, isListeningControl);
-    var layers = getDirectChild(wrapper, isLayerControl);
-
-    /* 明確重排為：耳機 → 小太陽 → 圖層 → 圖資面板。 */
-    [listening, heatControl, layers]
-      .filter(Boolean)
-      .reverse()
-      .forEach(function (control, index, reversedControls) {
-        var anchor = index === 0 ?
-          menu :
-          reversedControls[index - 1];
-
-        if (control.nextElementSibling !== anchor) {
-          wrapper.insertBefore(control, anchor);
-        }
-      });
-
-    [listening, heatControl, layers]
-      .filter(Boolean)
-      .forEach(normalizePrimaryToolGeometry);
-
-    [
-      ['position', 'relative'],
-      ['inset', 'auto'],
-      ['top', 'auto'],
-      ['right', 'auto'],
-      ['bottom', 'auto'],
-      ['left', 'auto'],
-      ['margin', '0'],
-      ['align-self', 'flex-end'],
-      ['z-index', '4503']
-    ].forEach(function (rule) {
-      setImportantStyle(menu, rule[0], rule[1]);
-    });
-  }
-
-  function installRightToolRailNormalizer() {
-    var frameId = 0;
-
-    function schedule() {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(normalizeDesktopRightToolRail);
-    }
-
-    var wrapper = document.getElementById('rightToolsWrapper');
-
-    if (!wrapper) {
-      window.setTimeout(installRightToolRailNormalizer, 80);
-      return;
-    }
-
-    var observer = new MutationObserver(schedule);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'style']
-    });
-
-    window.addEventListener('resize', schedule, { passive: true });
-    [0, 80, 320, 900, 2200].forEach(function (delay) {
-      window.setTimeout(schedule, delay);
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      installRightToolRailNormalizer,
-      { once: true }
-    );
-  } else {
-    installRightToolRailNormalizer();
-  }
+  /* Right-control geometry intentionally lives in the final CSS-only drawer rule. */
 })();
 </script>
 <!-- ===== END: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
@@ -13595,113 +13159,58 @@ body.listening-mode .glass-header,
 <!-- ===== START: RIGHT_PANEL_EXPANDED_COMPACT_TOOLS ===== -->
 <style id="right-panel-expanded-compact-tools">
 /*
- * Desktop data mode only:
- * - Keep the three controls as a small, stable top-right dock.
- * - Give the data panel the vertical space formerly occupied by the control rail.
- * - Style the actual heat-risk.js <button class="heat-risk-tool"> directly;
- *   there is no proxy button and no DOM-moving script involved.
+ * Conflict-free desktop data drawer
+ *
+ * The map utilities retain their normal vertical rail when the drawer is closed.
+ * When the drawer opens, those controls intentionally collapse out of view and a
+ * single native close key appears in the panel corner.  This leaves a continuous
+ * tall scroll region without trying to horizontally reposition an externally
+ * styled control.
  */
+#rightToolsCompactClose {
+  display: none;
+}
+
 @media (min-width: 601px) {
-  #rightToolsWrapper.open.haidian-v4-data-open {
-    top: 92px !important;
-    right: 16px !important;
-    width: min(390px, calc(100vw - 32px)) !important;
-    height: calc(100dvh - 104px) !important;
+  /* Start below the site header, but much higher than the old three-button rail. */
+  #rightToolsWrapper.open {
+    position: absolute !important;
+    top: 116px !important;
+    right: 14px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: min(440px, calc(100vw - 28px)) !important;
+    height: calc(100dvh - 130px) !important;
 
     display: block !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     isolation: isolate;
   }
 
-  /* Three compact controls live in a single 34px-high dock above the panel. */
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn,
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool {
+  /* Do not compete with the expanded drawer.  All three restore on close. */
+  #rightToolsWrapper.open > .tools-toggle-btn,
+  #rightToolsWrapper.open > .heat-risk-tool,
+  #rightToolsWrapper.open > .haidian-heat-risk-control {
+    display: none !important;
+    pointer-events: none !important;
+  }
+
+  /* Protect against a heat button injected outside the wrapper by its own file. */
+  body.haidian-v4-mode-data .heat-risk-tool {
+    display: none !important;
+    pointer-events: none !important;
+  }
+
+  /* The data drawer occupies the full available height from the raised top edge. */
+  #rightToolsWrapper.open > .tools-menu-container {
     position: absolute !important;
     top: 0 !important;
-    bottom: auto !important;
-    left: auto !important;
-    inset: 0 auto auto auto !important;
-
-    box-sizing: border-box !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    width: 34px !important;
-    min-width: 34px !important;
-    height: 34px !important;
-    min-height: 34px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    flex: none !important;
-
-    border: 1px solid rgba(255, 255, 255, 0.96) !important;
-    border-radius: 11px !important;
-    background: rgba(255, 255, 255, 0.97) !important;
-    box-shadow: 0 7px 18px rgba(13, 47, 53, 0.18) !important;
-
-    line-height: 1 !important;
-    z-index: 4512 !important;
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    transform: none !important;
-  }
-
-  /* Header docking order: listening → heat-risk → layers. */
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleListeningMode"] {
-    right: 76px !important;
-    color: var(--rt-ink, #12333b) !important;
-  }
-
-  /* heat-risk.js creates this direct button.  Reset its own screen CSS here. */
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool {
-    right: 38px !important;
-    color: #f97316 !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-    font-size: 0 !important;
-    text-indent: 0 !important;
-  }
-
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool:hover,
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool:focus-visible {
-    color: #ea580c !important;
-    background: #fff7ed !important;
-    outline: 2px solid rgba(249, 115, 22, 0.35) !important;
-    outline-offset: 2px !important;
-    transform: translateY(-1px) !important;
-  }
-
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool svg,
-  #rightToolsWrapper.open.haidian-v4-data-open > button.heat-risk-tool img {
-    display: block !important;
-    width: 17px !important;
-    height: 17px !important;
-    min-width: 17px !important;
-    min-height: 17px !important;
-    max-width: 17px !important;
-    max-height: 17px !important;
-    margin: 0 !important;
-    flex: 0 0 17px !important;
-  }
-
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] {
-    right: 0 !important;
-    color: var(--rt-ink, #12333b) !important;
-  }
-
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn svg {
-    width: 17px !important;
-    height: 17px !important;
-  }
-
-  /* The panel begins just below the compact dock and uses the remaining height. */
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container {
-    position: absolute !important;
-    top: 42px !important;
     right: 0 !important;
     bottom: auto !important;
     left: auto !important;
-    inset: 42px 0 auto auto !important;
+    inset: 0 0 auto auto !important;
 
     display: block !important;
     width: 100% !important;
@@ -13710,19 +13219,67 @@ body.listening-mode .glass-header,
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
-
-    align-self: auto !important;
-    justify-self: auto !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    pointer-events: auto !important;
     z-index: 4503 !important;
   }
 
-  #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container > .custom-layer-control {
-    max-height: calc(100dvh - 150px) !important;
+  #rightToolsWrapper.open > .tools-menu-container > .custom-layer-control {
+    box-sizing: border-box !important;
+    max-height: calc(100dvh - 130px) !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 54px 14px 26px !important;
   }
 
-  /* Existing collapse ear remains tied to the menu's left edge via its script. */
-  #rightToolsWrapper.open.haidian-v4-data-open > #rightToolsCollapseEar {
-    z-index: 4513 !important;
+  /* The old side ear is redundant while the compact corner close key is visible. */
+  #rightToolsWrapper.open > #rightToolsCollapseEar {
+    display: none !important;
+  }
+
+  #rightToolsWrapper.open > #rightToolsCompactClose {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 4515 !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    color: #075a63 !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border: 1px solid #b7d8d4 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 7px 18px rgba(13, 47, 53, 0.16) !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+
+  #rightToolsWrapper.open > #rightToolsCompactClose:hover,
+  #rightToolsWrapper.open > #rightToolsCompactClose:focus-visible {
+    color: #ffffff !important;
+    background: #006c73 !important;
+    border-color: #006c73 !important;
+    outline: 3px solid rgba(8, 127, 150, 0.30) !important;
+    outline-offset: 2px !important;
+  }
+
+  #rightToolsCompactClose svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  #rightToolsCompactClose {
+    display: none !important;
   }
 }
 </style>
