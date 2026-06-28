@@ -4434,8 +4434,8 @@ function escapeTainanHistoryFloodHtml(value) {
 /* ===== START: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
 /*
  * 前端只正名顯示文字；ArcGIS 的原始 value 與官方色票維持不變。
- * 同一 selectionKey 的原始事件會群組成一列：例如 88水災／98莫拉克淹水範圍
- * 都顯示為「2009 莫拉克颱風」，但篩選時仍會送回目前圖層實際存在的原始值。
+ * 同一災害事件若來自雨水科與綜企科，必須維持兩筆獨立清單項目，
+ * 讓使用者能各自切換、比較；每一列只送回該筆原始 value。
  */
 var tainanHistoryFloodUserHasChangedSelection = false;
 
@@ -4644,11 +4644,29 @@ function addUniqueTainanHistoryFloodImageData(list, imageData) {
     }
 }
 
-function presentTainanHistoryFloodEvents(events) {
-    var grouped = {};
+function getTainanHistoryFloodDepartmentLabel(sourceLabel) {
+    var selectedDataset = getTainanHistoryFloodSelectedId();
 
-    (Array.isArray(events) ? events : []).forEach(
-        function(entry, sourceIndex) {
+    if (selectedDataset === 'history_stormwater') {
+        return '雨水科';
+    }
+
+    if (selectedDataset === 'history_planning') {
+        return '綜企科';
+    }
+
+    /*
+     * 「歷年淹水災情」彙整圖層沿用兩單位的官方原始圖例命名：
+     * 「淹水範圍／淹水」為綜企科，其他颱風、豪雨與水災名稱為雨水科。
+     */
+    return /淹水範圍|淹水/.test(sourceLabel) ?
+        '綜企科' :
+        '雨水科';
+}
+
+function presentTainanHistoryFloodEvents(events) {
+    return (Array.isArray(events) ? events : [])
+        .map(function(entry, sourceIndex) {
             var sourceLabel = String(
                 entry &&
                 entry.sourceLabel !== undefined ?
@@ -4662,46 +4680,42 @@ function presentTainanHistoryFloodEvents(events) {
             var config =
                 TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION[sourceKey];
 
-            var selectionKey = config ?
-                config.selectionKey :
-                'source:' + sourceKey;
+            var rawValue = String(
+                entry && entry.value !== undefined &&
+                entry.value !== null ?
+                    entry.value :
+                    sourceLabel
+            ).trim();
 
-            if (!grouped[selectionKey]) {
-                grouped[selectionKey] = {
-                    label: config ? config.label : sourceLabel,
-                    selectionKey: selectionKey,
-                    _presentationOrder: config ?
-                        config.order :
-                        999999 + sourceIndex,
-                    _sourceIndex: sourceIndex,
-                    values: [],
-                    sourceLabels: [],
-                    imageDataList: []
-                };
-            }
+            var department =
+                getTainanHistoryFloodDepartmentLabel(sourceLabel);
 
-            var group = grouped[selectionKey];
+            var event = {
+                label: (config ? config.label : sourceLabel) +
+                    '（' + department + '）',
+                selectionKey: 'source:' + department + ':' +
+                    getTainanHistoryFloodEventPresentationKey(rawValue) +
+                    ':' + sourceIndex,
+                _presentationOrder: config ?
+                    config.order :
+                    999999 + sourceIndex,
+                _sourceIndex: sourceIndex,
+                values: [],
+                sourceLabels: [],
+                imageDataList: []
+            };
 
+            addUniqueTainanHistoryFloodValue(event.values, rawValue);
             addUniqueTainanHistoryFloodValue(
-                group.values,
-                entry && entry.value
-            );
-
-            addUniqueTainanHistoryFloodValue(
-                group.sourceLabels,
+                event.sourceLabels,
                 sourceLabel
             );
-
             addUniqueTainanHistoryFloodImageData(
-                group.imageDataList,
+                event.imageDataList,
                 entry && entry.imageData
             );
-        }
-    );
 
-    return Object.keys(grouped)
-        .map(function(selectionKey) {
-            return grouped[selectionKey];
+            return event;
         })
         .sort(function(a, b) {
             return (
