@@ -5096,8 +5096,11 @@ function renderTainanHistoryFloodEvents() {
     root.innerHTML = tainanHistoryFloodEvents
         .map(function(entry, index) {
             var visible = isTainanHistoryFloodEventSelected(entry);
-            var name = escapeTainanHistoryFloodHtml(
-                entry.baseLabel || entry.label
+            var rawLabel = String(entry.baseLabel || entry.label || '');
+            var labelMatch = rawLabel.match(/^(\d{4})\s+(.+)$/);
+            var eventYear = labelMatch ? labelMatch[1] : '';
+            var eventName = escapeTainanHistoryFloodHtml(
+                labelMatch ? labelMatch[2] : rawLabel
             );
             var department = escapeTainanHistoryFloodHtml(
                 entry.department || ''
@@ -5105,12 +5108,17 @@ function renderTainanHistoryFloodEvents() {
             var sourceNames = escapeTainanHistoryFloodHtml(
                 (entry.sourceLabels || []).join('／')
             );
+            var datasetId = String(entry.sourceDataset || '');
+            var sourceClass = datasetId === 'history_planning' ?
+                ' is-planning' :
+                (datasetId === 'history_stormwater' ?
+                    ' is-stormwater' : ' is-unknown');
             var status = visible ? '顯示' : '隱藏';
 
             return '<label class="hf-event-row' +
                 (visible ? ' is-visible' : '') +
                 '" title="' +
-                name +
+                escapeTainanHistoryFloodHtml(rawLabel) +
                 (sourceNames ? '（官方原始名稱：' + sourceNames + '）' : '') +
                 '">' +
 
@@ -5120,16 +5128,20 @@ function renderTainanHistoryFloodEvents() {
                 (visible ? ' checked' : '') +
                 '>' +
 
-                '<span class="hf-swatch-stack" aria-hidden="true">' +
-                getTainanHistoryFloodSwatchMarkup(entry) +
-                '</span>' +
-
                 '<span class="hf-event-copy">' +
-                '<span class="hf-event-name">' + name + '</span>' +
-                '<span class="hf-event-origin">資料：' + department + '</span>' +
+                    '<span class="hf-event-title-line">' +
+                        (eventYear ? '<span class="hf-event-year">' + eventYear + '</span>' : '') +
+                        '<span class="hf-event-name">' + eventName + '</span>' +
+                    '</span>' +
+                    '<span class="hf-event-meta">' +
+                        '<span class="hf-event-origin">資料來源</span>' +
+                        '<span class="hf-source-chip' + sourceClass + '">' +
+                            department +
+                        '</span>' +
+                    '</span>' +
                 '</span>' +
 
-                '<span class="hf-event-status">' + status + '</span>' +
+                '<span class="hf-event-status" aria-label="目前' + status + '">' + status + '</span>' +
                 '</label>';
         })
         .join('');
@@ -13365,5 +13377,368 @@ body.listening-mode .glass-header,
 })();
 </script>
 <!-- ===== END: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
+
+
+<!-- ===== START: NATIVE_HEAT_PROXY_AND_FLOOD_EVENT_UI_FIX ===== -->
+<style id="native-heat-proxy-and-flood-event-ui-fix">
+/*
+ * Only the historical-flood selector receives this visual refinement.
+ * It removes unreliable remote legend thumbnails from the selection UI while
+ * retaining every existing event, source, state key, and ArcGIS raw-value filter.
+ */
+#tainanHistoryFloodModule .hf-events {
+  display: grid;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+#tainanHistoryFloodModule .hf-event-row {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 62px;
+  padding: 10px 11px;
+  border: 1px solid #d7e1ea;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+#tainanHistoryFloodModule .hf-event-row:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  box-shadow: 0 5px 14px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+#tainanHistoryFloodModule .hf-event-row:has(input:checked) {
+  border-color: #5eead4;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 64%);
+}
+
+#tainanHistoryFloodModule .hf-event-row input.tainan-history-event-toggle {
+  appearance: auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #0f766e;
+}
+
+#tainanHistoryFloodModule .hf-event-copy {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+  min-width: 0;
+}
+
+#tainanHistoryFloodModule .hf-event-title-line,
+#tainanHistoryFloodModule .hf-event-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+#tainanHistoryFloodModule .hf-event-year {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 39px;
+  padding: 3px 5px;
+  color: #0f3d4a;
+  background: #e6fffb;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  font-family: "Courier New", monospace;
+  font-size: 10.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+#tainanHistoryFloodModule .hf-event-name {
+  color: #0f172a;
+  font-size: 13.5px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+#tainanHistoryFloodModule .hf-event-origin {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+#tainanHistoryFloodModule .hf-source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #334155;
+  background: #f8fafc;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#tainanHistoryFloodModule .hf-source-chip.is-stormwater {
+  color: #0f766e;
+  background: #ecfdf5;
+  border-color: #99f6e4;
+}
+
+#tainanHistoryFloodModule .hf-source-chip.is-planning {
+  color: #5b21b6;
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
+#tainanHistoryFloodModule .hf-event-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 27px;
+  padding: 4px 7px;
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  border-radius: 999px;
+  font-size: 10.5px;
+}
+
+#tainanHistoryFloodModule .hf-event-row.is-visible .hf-event-status {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+/* Prevent any broken remote legend thumbnail from occupying the event rows. */
+#tainanHistoryFloodModule .hf-event-row .hf-swatch-stack,
+#tainanHistoryFloodModule .hf-event-row .hf-swatch {
+  display: none !important;
+}
+
+/*
+ * The heat-risk module remains external, but the user sees a native host button.
+ * The original external button is kept as the event target only and never joins
+ * the visual layout, eliminating fixed-position collisions in preview and deploy.
+ */
+#rightToolsWrapper > #nativeHeatRiskProxy {
+  order: 2;
+  margin: 0 !important;
+  color: #ea580c !important;
+}
+
+#rightToolsWrapper > #nativeHeatRiskProxy:hover,
+#rightToolsWrapper > #nativeHeatRiskProxy:focus-visible {
+  color: #c2410c !important;
+}
+
+@media (min-width: 601px) {
+  #rightToolsWrapper > #nativeHeatRiskProxy {
+    position: relative !important;
+    inset: auto !important;
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    align-self: flex-end !important;
+    z-index: 4505 !important;
+    transform: none !important;
+  }
+
+  [data-haidian-native-heat-risk-target="true"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 600px) {
+  #tainanHistoryFloodModule .hf-event-row {
+    min-height: 58px;
+    padding: 9px 10px;
+  }
+
+  #tainanHistoryFloodModule .hf-event-status {
+    min-width: 40px;
+  }
+}
+</style>
+
+<script id="native-heat-proxy-and-flood-event-ui-fix-script">
+(function () {
+  'use strict';
+
+  var PROXY_ID = 'nativeHeatRiskProxy';
+  var TARGET_SELECTOR = '[data-haidian-native-heat-risk-target="true"]';
+  var EXTERNAL_SELECTOR = '.haidian-heat-risk-control';
+
+  function getWrapper() {
+    return document.getElementById('rightToolsWrapper');
+  }
+
+  function getToolsMenu() {
+    return document.getElementById('rightToolsMenu');
+  }
+
+  function isListeningControl(node) {
+    return !!(
+      node && node.classList &&
+      node.classList.contains('tools-toggle-btn') &&
+      String(node.getAttribute('onclick') || '')
+        .indexOf('toggleListeningMode') >= 0
+    );
+  }
+
+  function isLayerControl(node) {
+    return !!(
+      node && node.classList &&
+      node.classList.contains('tools-toggle-btn') &&
+      String(node.getAttribute('onclick') || '')
+        .indexOf('toggleRightToolsPanel') >= 0
+    );
+  }
+
+  function getDirectControl(wrapper, predicate) {
+    return Array.prototype.find.call(wrapper.children, predicate) || null;
+  }
+
+  function createProxyButton() {
+    var proxy = document.getElementById(PROXY_ID);
+
+    if (proxy) return proxy;
+
+    proxy = document.createElement('button');
+    proxy.type = 'button';
+    proxy.id = PROXY_ID;
+    proxy.className = 'tools-toggle-btn native-heat-risk-proxy';
+    proxy.title = '高溫風險圖資';
+    proxy.setAttribute('aria-label', '高溫風險圖資');
+    proxy.innerHTML =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="3.5"></circle>' +
+      '<path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.55 1.55M17.15 17.15l1.55 1.55M18.7 5.3l-1.55 1.55M6.85 17.15L5.3 18.7"></path>' +
+      '</svg>';
+
+    proxy.addEventListener('click', function () {
+      var target = document.querySelector(TARGET_SELECTOR);
+
+      if (!target) return;
+
+      var action = target.querySelector(
+        'button:not([disabled]), a, [role="button"]'
+      ) || target;
+
+      if (typeof action.click === 'function') {
+        action.click();
+        return;
+      }
+
+      action.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+    });
+
+    return proxy;
+  }
+
+  function parkExternalHeatControls() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll(EXTERNAL_SELECTOR),
+      function (control) {
+        if (!control || control.matches(TARGET_SELECTOR)) return;
+
+        /* Keep its listeners intact; only detach the external visual class. */
+        control.classList.remove('haidian-heat-risk-control');
+        control.classList.add('haidian-heat-risk-control-native-target');
+        control.setAttribute('data-haidian-native-heat-risk-target', 'true');
+        control.setAttribute('aria-hidden', 'true');
+        control.style.setProperty('display', 'none', 'important');
+        control.style.setProperty('visibility', 'hidden', 'important');
+        control.style.setProperty('pointer-events', 'none', 'important');
+      }
+    );
+  }
+
+  function positionNativeProxy() {
+    var wrapper = getWrapper();
+    var menu = getToolsMenu();
+
+    if (!wrapper || !menu) return;
+
+    var listening = getDirectControl(wrapper, isListeningControl);
+    var layers = getDirectControl(wrapper, isLayerControl);
+    var proxy = createProxyButton();
+
+    /* Deterministic visual order: earphones → native sun → layers → drawer. */
+    [listening, proxy, layers]
+      .filter(Boolean)
+      .forEach(function (node) {
+        wrapper.insertBefore(node, menu);
+      });
+
+    proxy.style.setProperty('position', 'relative', 'important');
+    proxy.style.setProperty('inset', 'auto', 'important');
+    proxy.style.setProperty('transform', 'none', 'important');
+    proxy.style.setProperty('float', 'none', 'important');
+    proxy.style.setProperty('right', 'auto', 'important');
+    proxy.style.setProperty('top', 'auto', 'important');
+  }
+
+  var scheduled = false;
+  function refresh() {
+    if (scheduled) return;
+    scheduled = true;
+
+    window.requestAnimationFrame(function () {
+      scheduled = false;
+      parkExternalHeatControls();
+      /* Run after earlier rail normalizers in the same visual frame. */
+      window.requestAnimationFrame(function () {
+        positionNativeProxy();
+      });
+    });
+  }
+
+  function install() {
+    if (!getWrapper() || !getToolsMenu()) {
+      window.setTimeout(install, 50);
+      return;
+    }
+
+    refresh();
+
+    var observer = new MutationObserver(function () {
+      refresh();
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+
+    [80, 300, 900, 2200].forEach(function (delay) {
+      window.setTimeout(refresh, delay);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install, { once: true });
+  } else {
+    install();
+  }
+})();
+</script>
+<!-- ===== END: NATIVE_HEAT_PROXY_AND_FLOOD_EVENT_UI_FIX ===== -->
 
 </body></html>
