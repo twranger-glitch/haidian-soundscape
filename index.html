@@ -13591,4 +13591,104 @@ body.listening-mode .glass-header,
 }
 </style>
 <!-- ===== END: SINGLE_REAL_HEAT_RISK_BUTTON_CLEAN_FIX ===== -->
+
+<!-- ===== START: RIGHT_PANEL_EXPANDED_COMPACT_TOOLS ===== -->
+<style id="right-panel-expanded-compact-tools">
+/*
+ * Desktop data mode: turn the three utility controls into a compact, horizontal
+ * quick dock above the panel.  The menu therefore starts directly below the
+ * header instead of below a tall vertical stack of controls.
+ *
+ * No handlers, layer state, or external heat-risk control are changed here.
+ * The CSS only changes geometry while the data panel is open.
+ */
+@media (min-width: 601px) {
+  #rightToolsWrapper.open.haidian-v4-data-open {
+    top: 112px !important;
+    right: 20px !important;
+    width: min(390px, calc(100vw - 40px)) !important;
+
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) repeat(3, 42px) !important;
+    grid-template-rows: 42px auto !important;
+    column-gap: 8px !important;
+    row-gap: 12px !important;
+    align-items: start !important;
+  }
+
+  /* Compact utility dock: listening → heat risk → layers. */
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn,
+  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool,
+  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control {
+    position: relative !important;
+    inset: auto !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 14px !important;
+    flex: none !important;
+    align-self: center !important;
+    justify-self: end !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleListeningMode"] {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool,
+  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] {
+    grid-column: 4 !important;
+    grid-row: 1 !important;
+  }
+
+  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > button,
+  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > a,
+  #rightToolsWrapper.open.haidian-v4-data-open > .heat-risk-tool > [role="button"],
+  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > button,
+  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > a,
+  #rightToolsWrapper.open.haidian-v4-data-open > .haidian-heat-risk-control > [role="button"] {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Use the full right-side width for the expandable selection panel. */
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    align-self: start !important;
+    justify-self: stretch !important;
+  }
+
+  /* The existing scroll guard calculates this dynamically from the menu top.
+     These values ensure the larger panel is allowed to occupy the new space. */
+  #rightToolsWrapper.open.haidian-v4-data-open > .tools-menu-container > .custom-layer-control {
+    max-height: calc(100dvh - 178px) !important;
+  }
+
+  /* The existing collapse ear stays attached to the left edge of the panel. */
+  #rightToolsWrapper.open.haidian-v4-data-open > #rightToolsCollapseEar {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+</style>
+<!-- ===== END: RIGHT_PANEL_EXPANDED_COMPACT_TOOLS ===== -->
+
 </body></html>
