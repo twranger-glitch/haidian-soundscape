@@ -12698,195 +12698,7 @@ body.listening-mode .glass-header,
 
 
 <!-- ===== START: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
-<style id="flood-dedupe-and-right-tools-stack-fix">
-  /*
-   * 右上控制列由多個舊版與外掛控制動態組成。強制它們回到同一個
-   * flex column，並取消外掛可能殘留的 absolute/fixed 定位，避免圖示重疊。
-   */
-  #rightToolsWrapper {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-end !important;
-    gap: 12px !important;
-  }
 
-  #rightToolsWrapper > .tools-toggle-btn,
-  #rightToolsWrapper > .haidian-heat-risk-control {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    inset: auto !important;
-    flex: 0 0 auto !important;
-    align-self: flex-end !important;
-    margin: 0 !important;
-  }
-
-  /* 外掛小太陽若以 fixed/absolute 建立，移入工具列後必須回到正常流。 */
-  #rightToolsWrapper .haidian-heat-risk-control {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    inset: auto !important;
-    transform: none !important;
-    z-index: auto !important;
-  }
-
-  /* Desktop menu stays in the same vertical tool stack.  Mobile keeps its
-     pre-existing fixed bottom-sheet behavior untouched. */
-  @media (min-width: 601px) {
-    #rightToolsWrapper > .tools-menu-container {
-      position: relative !important;
-      top: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      left: auto !important;
-      inset: auto !important;
-      flex: 0 0 auto !important;
-      align-self: flex-end !important;
-      margin-top: 0 !important;
-    }
-  }
-
-  @media (max-width: 600px) {
-    #rightToolsWrapper {
-      gap: 8px !important;
-    }
-  }
-</style>
-
-<script id="right-tools-control-stack-normalizer">
-(function () {
-  "use strict";
-
-  function getDirectChild(wrapper, predicate) {
-    return Array.prototype.find.call(
-      wrapper.children,
-      predicate
-    ) || null;
-  }
-
-  function isListeningControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains("tools-toggle-btn")) {
-      return false;
-    }
-
-    return String(node.getAttribute("onclick") || "")
-      .indexOf("toggleListeningMode") >= 0;
-  }
-
-  function isLayerControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains("tools-toggle-btn")) {
-      return false;
-    }
-
-    var onclick = String(node.getAttribute("onclick") || "");
-    var title = String(node.getAttribute("title") || "");
-
-    return onclick.indexOf("toggleRightToolsPanel") >= 0 ||
-      /圖層|圖資/.test(title);
-  }
-
-  function normalizeStack() {
-    var wrapper = document.getElementById("rightToolsWrapper");
-    var menu = document.getElementById("rightToolsMenu");
-
-    if (!wrapper || !menu) return;
-
-    /* Move any late-injected heat-risk key into this one controlled stack. */
-    Array.prototype.forEach.call(
-      document.querySelectorAll(".haidian-heat-risk-control"),
-      function (control) {
-        if (control !== wrapper && !wrapper.contains(control)) {
-          wrapper.insertBefore(control, menu);
-        }
-      }
-    );
-
-    var listening = getDirectChild(wrapper, isListeningControl);
-    var heatRisk = getDirectChild(wrapper, function (node) {
-      return node.classList &&
-        node.classList.contains("haidian-heat-risk-control");
-    });
-    var layers = getDirectChild(wrapper, isLayerControl);
-
-    /*
-     * Stable, non-overlapping order: headphones → heat-risk → layers → menu.
-     * Build it from right to left so an already-correct stack does not cause
-     * DOM mutations (and therefore cannot trigger an observer feedback loop).
-     */
-    var controls = [listening, heatRisk, layers].filter(Boolean);
-
-    for (var index = controls.length - 1; index >= 0; index -= 1) {
-      var control = controls[index];
-      var anchor = index === controls.length - 1 ?
-        menu :
-        controls[index + 1];
-
-      if (control.nextElementSibling !== anchor) {
-        wrapper.insertBefore(control, anchor);
-      }
-    }
-  }
-
-  function install() {
-    var wrapper = document.getElementById("rightToolsWrapper");
-    if (!wrapper) {
-      window.setTimeout(install, 120);
-      return;
-    }
-
-    var frameId = 0;
-    function scheduleNormalize() {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(normalizeStack);
-    }
-
-    /* Only watch this stack continuously.  A separate lightweight observer
-       notices a late-injected heat-risk key elsewhere on the page. */
-    var stackObserver = new MutationObserver(scheduleNormalize);
-    stackObserver.observe(wrapper, { childList: true });
-
-    var externalControlObserver = new MutationObserver(function(records) {
-      var foundHeatRiskControl = records.some(function(record) {
-        return Array.prototype.some.call(
-          record.addedNodes || [],
-          function(node) {
-            if (!node || node.nodeType !== 1) return false;
-            return (node.matches &&
-              node.matches(".haidian-heat-risk-control")) ||
-              (node.querySelector &&
-                node.querySelector(".haidian-heat-risk-control"));
-          }
-        );
-      });
-
-      if (foundHeatRiskControl) {
-        scheduleNormalize();
-      }
-    });
-
-    externalControlObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-
-    window.addEventListener("resize", scheduleNormalize);
-    scheduleNormalize();
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", install, { once: true });
-  } else {
-    install();
-  }
-})();
-</script>
 <!-- ===== END: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
 
 
@@ -13176,204 +12988,7 @@ body.listening-mode .glass-header,
 
   prewarmTainanHistoryFloodSourcesImmediately();
 
-  /* ===== Desktop right-tool rail: hard geometry normalizer ===== */
-  function setImportantStyle(node, property, value) {
-    if (!node || !node.style) return false;
 
-    if (
-      node.style.getPropertyValue(property) === value &&
-      node.style.getPropertyPriority(property) === 'important'
-    ) {
-      return false;
-    }
-
-    node.style.setProperty(property, value, 'important');
-    return true;
-  }
-
-  function isDesktopRightToolRail() {
-    return window.matchMedia &&
-      window.matchMedia('(min-width: 601px)').matches;
-  }
-
-  function isListeningControl(node) {
-    return !!(
-      node && node.classList &&
-      node.classList.contains('tools-toggle-btn') &&
-      String(node.getAttribute('onclick') || '')
-        .indexOf('toggleListeningMode') >= 0
-    );
-  }
-
-  function isLayerControl(node) {
-    if (!node || !node.classList ||
-        !node.classList.contains('tools-toggle-btn')) {
-      return false;
-    }
-
-    var onclick = String(node.getAttribute('onclick') || '');
-    var title = String(node.getAttribute('title') || '');
-
-    return onclick.indexOf('toggleRightToolsPanel') >= 0 ||
-      /圖層|圖資/.test(title);
-  }
-
-  function getDirectChild(wrapper, predicate) {
-    return Array.prototype.find.call(wrapper.children, predicate) || null;
-  }
-
-  function normalizePrimaryToolGeometry(control) {
-    if (!control || !isDesktopRightToolRail()) return;
-
-    [
-      ['position', 'relative'],
-      ['inset', 'auto'],
-      ['top', 'auto'],
-      ['right', 'auto'],
-      ['bottom', 'auto'],
-      ['left', 'auto'],
-      ['transform', 'none'],
-      ['float', 'none'],
-      ['margin', '0'],
-      ['width', '52px'],
-      ['min-width', '52px'],
-      ['height', '52px'],
-      ['min-height', '52px'],
-      ['flex', '0 0 52px'],
-      ['align-self', 'flex-end'],
-      ['z-index', '4504'],
-      ['display', 'flex'],
-      ['align-items', 'center'],
-      ['justify-content', 'center']
-    ].forEach(function (rule) {
-      setImportantStyle(control, rule[0], rule[1]);
-    });
-
-    Array.prototype.forEach.call(
-      control.querySelectorAll('button, a, [role="button"]'),
-      function (action) {
-        [
-          ['position', 'relative'],
-          ['inset', 'auto'],
-          ['top', 'auto'],
-          ['right', 'auto'],
-          ['bottom', 'auto'],
-          ['left', 'auto'],
-          ['transform', 'none'],
-          ['margin', '0'],
-          ['width', '100%'],
-          ['height', '100%'],
-          ['display', 'flex'],
-          ['align-items', 'center'],
-          ['justify-content', 'center']
-        ].forEach(function (rule) {
-          setImportantStyle(action, rule[0], rule[1]);
-        });
-      }
-    );
-  }
-
-  function normalizeDesktopRightToolRail() {
-    if (!isDesktopRightToolRail()) return;
-
-    var wrapper = document.getElementById('rightToolsWrapper');
-    var menu = document.getElementById('rightToolsMenu');
-
-    if (!wrapper || !menu) return;
-
-    /* 保留唯一一個小太陽控制；晚注入的重複節點一律隱藏，不再疊在右上角。 */
-    var heatControls = Array.prototype.slice.call(
-      document.querySelectorAll('.haidian-heat-risk-control')
-    );
-
-    var heatControl = heatControls.find(function (node) {
-      return node.parentElement === wrapper;
-    }) || heatControls[0] || null;
-
-    if (heatControl && heatControl.parentElement !== wrapper) {
-      wrapper.insertBefore(heatControl, menu);
-    }
-
-    heatControls.forEach(function (node) {
-      if (node === heatControl) return;
-      setImportantStyle(node, 'display', 'none');
-      node.setAttribute('aria-hidden', 'true');
-    });
-
-    var listening = getDirectChild(wrapper, isListeningControl);
-    var layers = getDirectChild(wrapper, isLayerControl);
-
-    /* 明確重排為：耳機 → 小太陽 → 圖層 → 圖資面板。 */
-    [listening, heatControl, layers]
-      .filter(Boolean)
-      .reverse()
-      .forEach(function (control, index, reversedControls) {
-        var anchor = index === 0 ?
-          menu :
-          reversedControls[index - 1];
-
-        if (control.nextElementSibling !== anchor) {
-          wrapper.insertBefore(control, anchor);
-        }
-      });
-
-    [listening, heatControl, layers]
-      .filter(Boolean)
-      .forEach(normalizePrimaryToolGeometry);
-
-    [
-      ['position', 'relative'],
-      ['inset', 'auto'],
-      ['top', 'auto'],
-      ['right', 'auto'],
-      ['bottom', 'auto'],
-      ['left', 'auto'],
-      ['margin', '0'],
-      ['align-self', 'flex-end'],
-      ['z-index', '4503']
-    ].forEach(function (rule) {
-      setImportantStyle(menu, rule[0], rule[1]);
-    });
-  }
-
-  function installRightToolRailNormalizer() {
-    var frameId = 0;
-
-    function schedule() {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(normalizeDesktopRightToolRail);
-    }
-
-    var wrapper = document.getElementById('rightToolsWrapper');
-
-    if (!wrapper) {
-      window.setTimeout(installRightToolRailNormalizer, 80);
-      return;
-    }
-
-    var observer = new MutationObserver(schedule);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'style']
-    });
-
-    window.addEventListener('resize', schedule, { passive: true });
-    [0, 80, 320, 900, 2200].forEach(function (delay) {
-      window.setTimeout(schedule, delay);
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      installRightToolRailNormalizer,
-      { once: true }
-    );
-  } else {
-    installRightToolRailNormalizer();
-  }
 })();
 </script>
 <!-- ===== END: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
@@ -13529,7 +13144,7 @@ body.listening-mode .glass-header,
  * the visual layout, eliminating fixed-position collisions in preview and deploy.
  */
 #rightToolsWrapper > #nativeHeatRiskProxy {
-  order: 2;
+  order: 0;
   margin: 0 !important;
   color: #ea580c !important;
 }
@@ -13583,7 +13198,7 @@ body.listening-mode .glass-header,
     return document.getElementById('rightToolsWrapper');
   }
 
-  function getToolsMenu() {
+  function getMenu() {
     return document.getElementById('rightToolsMenu');
   }
 
@@ -13591,8 +13206,7 @@ body.listening-mode .glass-header,
     return !!(
       node && node.classList &&
       node.classList.contains('tools-toggle-btn') &&
-      String(node.getAttribute('onclick') || '')
-        .indexOf('toggleListeningMode') >= 0
+      String(node.getAttribute('onclick') || '').indexOf('toggleListeningMode') >= 0
     );
   }
 
@@ -13600,18 +13214,54 @@ body.listening-mode .glass-header,
     return !!(
       node && node.classList &&
       node.classList.contains('tools-toggle-btn') &&
-      String(node.getAttribute('onclick') || '')
-        .indexOf('toggleRightToolsPanel') >= 0
+      String(node.getAttribute('onclick') || '').indexOf('toggleRightToolsPanel') >= 0
     );
   }
 
-  function getDirectControl(wrapper, predicate) {
+  function getDirectChild(wrapper, predicate) {
     return Array.prototype.find.call(wrapper.children, predicate) || null;
   }
 
-  function createProxyButton() {
-    var proxy = document.getElementById(PROXY_ID);
+  function getHeatTarget() {
+    return document.querySelector(TARGET_SELECTOR) ||
+      document.querySelector(EXTERNAL_SELECTOR);
+  }
 
+  function hideExternalHeatControl(control) {
+    if (!control || control.id === PROXY_ID) return null;
+
+    control.setAttribute('data-haidian-native-heat-risk-target', 'true');
+    control.setAttribute('aria-hidden', 'true');
+    control.style.setProperty('display', 'none', 'important');
+    control.style.setProperty('visibility', 'hidden', 'important');
+    control.style.setProperty('pointer-events', 'none', 'important');
+    return control;
+  }
+
+  function triggerExternalHeatControl() {
+    var target = getHeatTarget();
+    if (!target) return;
+
+    var action = target.matches('button, a, [role="button"]') ?
+      target :
+      target.querySelector('button:not([disabled]), a, [role="button"]');
+
+    action = action || target;
+
+    if (typeof action.click === 'function') {
+      action.click();
+      return;
+    }
+
+    action.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    }));
+  }
+
+  function getOrCreateProxy() {
+    var proxy = document.getElementById(PROXY_ID);
     if (proxy) return proxy;
 
     proxy = document.createElement('button');
@@ -13626,109 +13276,104 @@ body.listening-mode .glass-header,
       '<path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.55 1.55M17.15 17.15l1.55 1.55M18.7 5.3l-1.55 1.55M6.85 17.15L5.3 18.7"></path>' +
       '</svg>';
 
-    proxy.addEventListener('click', function () {
-      var target = document.querySelector(TARGET_SELECTOR);
-
-      if (!target) return;
-
-      var action = target.querySelector(
-        'button:not([disabled]), a, [role="button"]'
-      ) || target;
-
-      if (typeof action.click === 'function') {
-        action.click();
-        return;
-      }
-
-      action.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        view: window
-      }));
-    });
-
+    proxy.addEventListener('click', triggerExternalHeatControl);
     return proxy;
   }
 
-  function parkExternalHeatControls() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll(EXTERNAL_SELECTOR),
-      function (control) {
-        if (!control || control.matches(TARGET_SELECTOR)) return;
-
-        /* Keep its listeners intact; only detach the external visual class. */
-        control.classList.remove('haidian-heat-risk-control');
-        control.classList.add('haidian-heat-risk-control-native-target');
-        control.setAttribute('data-haidian-native-heat-risk-target', 'true');
-        control.setAttribute('aria-hidden', 'true');
-        control.style.setProperty('display', 'none', 'important');
-        control.style.setProperty('visibility', 'hidden', 'important');
-        control.style.setProperty('pointer-events', 'none', 'important');
-      }
-    );
-  }
-
-  function positionNativeProxy() {
+  function placeProxyOnce() {
     var wrapper = getWrapper();
-    var menu = getToolsMenu();
+    var menu = getMenu();
+    if (!wrapper || !menu) return false;
 
-    if (!wrapper || !menu) return;
+    var proxy = getOrCreateProxy();
+    var layers = getDirectChild(wrapper, isLayerControl);
+    var listening = getDirectChild(wrapper, isListeningControl);
 
-    var listening = getDirectControl(wrapper, isListeningControl);
-    var layers = getDirectControl(wrapper, isLayerControl);
-    var proxy = createProxyButton();
+    /* Stable DOM order: headphones → native sun → layers → menu. */
+    if (proxy.parentElement !== wrapper) {
+      wrapper.insertBefore(proxy, layers || menu);
+    } else if (layers && proxy.nextElementSibling !== layers) {
+      wrapper.insertBefore(proxy, layers);
+    } else if (!layers && proxy.nextElementSibling !== menu) {
+      wrapper.insertBefore(proxy, menu);
+    }
 
-    /* Deterministic visual order: earphones → native sun → layers → drawer. */
-    [listening, proxy, layers]
-      .filter(Boolean)
-      .forEach(function (node) {
-        wrapper.insertBefore(node, menu);
-      });
+    /* The native host button never receives externally injected positioning. */
+    [
+      ['position', 'relative'], ['inset', 'auto'], ['top', 'auto'],
+      ['right', 'auto'], ['bottom', 'auto'], ['left', 'auto'],
+      ['transform', 'none'], ['float', 'none'], ['margin', '0']
+    ].forEach(function (rule) {
+      proxy.style.setProperty(rule[0], rule[1], 'important');
+    });
 
-    proxy.style.setProperty('position', 'relative', 'important');
-    proxy.style.setProperty('inset', 'auto', 'important');
-    proxy.style.setProperty('transform', 'none', 'important');
-    proxy.style.setProperty('float', 'none', 'important');
-    proxy.style.setProperty('right', 'auto', 'important');
-    proxy.style.setProperty('top', 'auto', 'important');
+    /* Listening and layer controls are already native direct children. This
+       check only restores their expected adjacency once during initialization. */
+    if (listening && proxy.previousElementSibling !== listening) {
+      wrapper.insertBefore(listening, proxy);
+    }
+
+    return true;
   }
 
-  var scheduled = false;
-  function refresh() {
-    if (scheduled) return;
-    scheduled = true;
+  function collectExternalHeatControls(root) {
+    if (!root || root.nodeType !== 1) return [];
+    var matches = [];
 
-    window.requestAnimationFrame(function () {
-      scheduled = false;
-      parkExternalHeatControls();
-      /* Run after earlier rail normalizers in the same visual frame. */
-      window.requestAnimationFrame(function () {
-        positionNativeProxy();
-      });
-    });
+    if (root.matches && root.matches(EXTERNAL_SELECTOR)) {
+      matches.push(root);
+    }
+
+    if (root.querySelectorAll) {
+      matches = matches.concat(Array.prototype.slice.call(
+        root.querySelectorAll(EXTERNAL_SELECTOR)
+      ));
+    }
+
+    return matches;
+  }
+
+  function captureExistingHeatControl() {
+    var controls = Array.prototype.slice.call(
+      document.querySelectorAll(EXTERNAL_SELECTOR)
+    );
+    controls.forEach(hideExternalHeatControl);
+    return !!getHeatTarget();
   }
 
   function install() {
-    if (!getWrapper() || !getToolsMenu()) {
-      window.setTimeout(install, 50);
+    if (!placeProxyOnce()) {
+      window.setTimeout(install, 80);
       return;
     }
 
-    refresh();
+    if (captureExistingHeatControl()) return;
 
-    var observer = new MutationObserver(function () {
-      refresh();
+    /* heat-risk.js may inject the control after page-ready. Observe additions
+       only, then disconnect immediately after the first capture. */
+    var observer = new MutationObserver(function (records) {
+      var found = false;
+
+      records.forEach(function (record) {
+        Array.prototype.forEach.call(record.addedNodes || [], function (node) {
+          collectExternalHeatControls(node).forEach(function (control) {
+            hideExternalHeatControl(control);
+            found = true;
+          });
+        });
+      });
+
+      if (found) observer.disconnect();
     });
 
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'style']
-    });
+    observer.observe(document.body, { childList: true, subtree: true });
 
-    [80, 300, 900, 2200].forEach(function (delay) {
-      window.setTimeout(refresh, delay);
+    /* Bounded fallbacks cover a late script without leaving a permanent DOM
+       observer active, so the rail cannot enter a mutation feedback loop. */
+    [120, 500, 1400, 3200, 6500].forEach(function (delay) {
+      window.setTimeout(function () {
+        if (captureExistingHeatControl()) observer.disconnect();
+      }, delay);
     });
   }
 
@@ -13741,4 +13386,48 @@ body.listening-mode .glass-header,
 </script>
 <!-- ===== END: NATIVE_HEAT_PROXY_AND_FLOOD_EVENT_UI_FIX ===== -->
 
+
+<!-- ===== START: STABLE_RIGHT_TOOL_RAIL_NO_FLICKER ===== -->
+<style id="stable-right-tool-rail-no-flicker">
+@media (min-width: 601px) {
+  #rightToolsWrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-end !important;
+    gap: 12px !important;
+  }
+
+  #rightToolsWrapper > .tools-toggle-btn,
+  #rightToolsWrapper > #nativeHeatRiskProxy {
+    position: relative !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+    float: none !important;
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    flex: 0 0 52px !important;
+    align-self: flex-end !important;
+    margin: 0 !important;
+    z-index: 4504 !important;
+  }
+
+  #rightToolsWrapper > #nativeHeatRiskProxy {
+    color: #ea580c !important;
+  }
+
+  [data-haidian-native-heat-risk-target="true"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+</style>
+<!-- ===== END: STABLE_RIGHT_TOOL_RAIL_NO_FLICKER ===== -->
 </body></html>
