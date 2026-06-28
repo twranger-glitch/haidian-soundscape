@@ -2723,7 +2723,10 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
                 <hr style="border: 0; border-top: 1px solid rgba(148, 163, 184, 0.3); margin: 12px 0;">
 
-                <!-- ===== START: FLOOD POTENTIAL + REALTIME FOLDER ===== -->
+                
+
+
+<!-- ===== START: FLOOD POTENTIAL + REALTIME FOLDER ===== -->
 <details class="layer-folder layer-folder-flood">
     <summary>
         <span>淹水風險與水情</span>
@@ -2805,6 +2808,143 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 </section>
 <!-- ===== END: ORIGINAL_FLOOD_POTENTIAL_UI ===== -->
         
+
+<!-- ===== START: NATIONAL_HISTORY_FLOOD_V1_UI ===== -->
+<style>
+.national-history-flood-panel{border-color:#99c2e7;background:linear-gradient(180deg,#f8fcff 0%,#fff 100%)}
+.national-history-flood-panel .nhf-badge{background:#e0f2fe;border-color:#38bdf8;color:#075985}
+.national-history-flood-panel .nhf-main-toggle{border-color:#7dd3fc;background:#f0f9ff}
+.national-history-flood-panel .nhf-main-toggle input{accent-color:#0369a1}
+.national-history-flood-panel .nhf-controls{border-color:#bae6fd}
+.national-history-flood-panel .nhf-topline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.national-history-flood-panel .nhf-state{padding:4px 7px;color:#075985;background:#f0f9ff;border:1px solid #7dd3fc;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.national-history-flood-panel .nhf-state.is-warning{color:#9a3412;background:#fff7ed;border-color:#fdba74}
+.national-history-flood-panel .nhf-notice{margin:10px 0;padding:9px 10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;font-size:11.5px;line-height:1.55;font-weight:650}
+.national-history-flood-panel .nhf-notice strong{color:#0f172a}
+.national-history-flood-panel .nhf-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.national-history-flood-panel .nhf-field{display:grid;gap:4px;min-width:0}
+.national-history-flood-panel .nhf-field.is-wide{grid-column:1/-1}
+.national-history-flood-panel .nhf-field label{color:#334155;font-size:11px;font-weight:800}
+.national-history-flood-panel .nhf-field select{width:100%;min-height:34px;padding:7px 8px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:8px;font:inherit;font-size:12px;font-weight:700}
+.national-history-flood-panel .nhf-option-row{display:flex;align-items:center;gap:8px;margin:6px 0 0;color:#334155;font-size:12px;font-weight:700;cursor:pointer}
+.national-history-flood-panel .nhf-option-row input{width:17px;height:17px;margin:0;accent-color:#0369a1;cursor:pointer}
+.national-history-flood-panel .nhf-actions{display:flex;gap:7px;margin:10px 0 8px}
+.national-history-flood-panel .nhf-action{flex:1;min-height:34px;padding:7px 9px;color:#075985;background:#fff;border:1px solid #38bdf8;border-radius:8px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.national-history-flood-panel .nhf-action:hover{color:#fff;background:#0284c7;border-color:#0284c7}
+.national-history-flood-panel .nhf-action.secondary{color:#334155;border-color:#94a3b8}
+.national-history-flood-panel .nhf-action.secondary:hover{color:#fff;background:#475569;border-color:#475569}
+.national-history-flood-panel .nhf-results{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:10px;padding:9px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px}
+.national-history-flood-panel .nhf-results strong{display:block;color:#0c4a6e;font-size:12px;font-weight:900}
+.national-history-flood-panel .nhf-results span{display:block;margin-top:2px;color:#475569;font-size:11px;line-height:1.4;font-weight:650}
+.national-history-flood-panel .nhf-upload{margin-top:10px;padding:10px;background:#fff;border:1px dashed #7dd3fc;border-radius:10px}
+.national-history-flood-panel .nhf-upload label{display:grid;gap:4px;color:#0f172a;font-size:12px;font-weight:800;cursor:pointer}
+.national-history-flood-panel .nhf-upload small{color:#64748b;font-size:10.5px;line-height:1.45;font-weight:650}
+.national-history-flood-panel .nhf-upload input{width:100%;margin-top:3px;color:#334155;font:inherit;font-size:11px}
+.national-history-flood-panel .nhf-facts{margin-top:11px;padding-top:10px;border-top:1px dashed #94a3b8}
+.national-history-flood-panel .nhf-facts summary{color:#0f172a;cursor:pointer;font-size:12px;font-weight:800}
+.national-history-flood-panel .nhf-facts p{margin:7px 0;color:#334155;font-size:11.5px;line-height:1.58;font-weight:600}
+.national-history-flood-panel .nhf-facts a{color:#0369a1;font-size:11.5px;font-weight:800;text-decoration:none}
+.national-history-flood-panel .nhf-facts a:hover{text-decoration:underline}
+@media (max-width:600px){.national-history-flood-panel .nhf-field-grid{gap:7px}.national-history-flood-panel .nhf-actions{gap:6px}.national-history-flood-panel .nhf-action{font-size:11.5px}}
+</style>
+
+<section class="layer-subsection history-flood-panel national-history-flood-panel" id="nationalHistoryFloodModule">
+  <div class="hf-heading">
+    <div>
+      <div class="layer-subsection-title hf-title">
+        全國歷史淹水災情 <small>中央與地方官方紀錄</small>
+      </div>
+      <p class="hf-intro">
+        全國案件以點位或範圍呈現；地方原始範圍圖資另保留原始配色與來源標示。
+      </p>
+    </div>
+    <span class="hf-badge nhf-badge">NATIONWIDE</span>
+  </div>
+
+  <label class="hf-main-toggle">
+    <input type="checkbox" id="nationalHistoryFloodToggle" onchange="toggleNationalHistoryFloodLayer(this.checked)">
+    <span class="hf-toggle-copy">
+      <strong>顯示全國歷史淹水案件</strong>
+      <small id="nationalHistoryFloodHint">待載入官方整合資料</small>
+    </span>
+  </label>
+
+  <div class="hf-controls" id="nationalHistoryFloodControlPanel" hidden>
+    <div class="nhf-topline">
+      <span class="hf-kicker">全國資料整合</span>
+      <span class="nhf-state" id="nationalHistoryFloodState" aria-live="polite">圖層未啟用</span>
+    </div>
+
+    <div class="nhf-notice" id="nationalHistoryFloodNotice">
+      <strong>資料模式：</strong>預設讀取與網頁同層的 <code>national-historical-flood.geojson</code>。部署正式資料服務後，可改為同源 API；不在前端保存水利署 API 認證資訊。
+    </div>
+
+    <div class="hf-step" aria-label="全國歷史淹水案件篩選條件">
+      <div class="hf-step-title">
+        <span class="hf-step-number">1</span>
+        <span>設定篩選條件</span>
+      </div>
+
+      <div class="nhf-field-grid">
+        <div class="nhf-field is-wide">
+          <label for="nationalHistoryFloodCounty">縣市</label>
+          <select id="nationalHistoryFloodCounty" onchange="applyNationalHistoryFloodFilters()">
+            <option value="">全國</option>
+            <option>新北市</option><option>臺北市</option><option>桃園市</option><option>臺中市</option><option>臺南市</option><option>高雄市</option>
+            <option>宜蘭縣</option><option>新竹縣</option><option>苗栗縣</option><option>彰化縣</option><option>南投縣</option><option>雲林縣</option><option>嘉義縣</option><option>屏東縣</option><option>臺東縣</option><option>花蓮縣</option><option>澎湖縣</option><option>基隆市</option><option>新竹市</option><option>嘉義市</option><option>金門縣</option><option>連江縣</option>
+          </select>
+        </div>
+        <div class="nhf-field">
+          <label for="nationalHistoryFloodYearStart">起始年份</label>
+          <select id="nationalHistoryFloodYearStart" onchange="applyNationalHistoryFloodFilters()"></select>
+        </div>
+        <div class="nhf-field">
+          <label for="nationalHistoryFloodYearEnd">結束年份</label>
+          <select id="nationalHistoryFloodYearEnd" onchange="applyNationalHistoryFloodFilters()"></select>
+        </div>
+      </div>
+
+      <label class="nhf-option-row">
+        <input type="checkbox" id="nationalHistoryFloodMapBoundsOnly" onchange="applyNationalHistoryFloodFilters()">
+        <span>只顯示目前地圖範圍內案件</span>
+      </label>
+    </div>
+
+    <div class="hf-step" aria-label="資料操作">
+      <div class="hf-step-title">
+        <span class="hf-step-number">2</span>
+        <span>載入與呈現</span>
+      </div>
+      <div class="nhf-actions">
+        <button type="button" class="nhf-action" onclick="refreshNationalHistoryFloodData()">重新載入資料</button>
+        <button type="button" class="nhf-action secondary" onclick="fitNationalHistoryFloodLayer()">縮放至結果</button>
+      </div>
+      <div class="nhf-results" id="nationalHistoryFloodResults" aria-live="polite">
+        <div>
+          <strong>尚未載入案件</strong>
+          <span>開啟圖層後，會依篩選條件載入並在地圖上呈現。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nhf-upload">
+      <label for="nationalHistoryFloodFile">
+        匯入已核定的 GeoJSON
+        <small>可先用資料管理端輸出的 GeoJSON 測試；匯入內容只留在本次瀏覽器工作階段。</small>
+        <input id="nationalHistoryFloodFile" type="file" accept="application/geo+json,application/json,.geojson,.json" onchange="importNationalHistoryFloodGeoJson(this.files)">
+      </label>
+    </div>
+
+    <details class="nhf-facts">
+      <summary>資料來源與上線規則</summary>
+      <p>中央歷史案件、地方原始範圍與淹水潛勢必須分開標示。全國案件可由後端整合後輸出 GeoJSON；臺南市原始範圍仍保留在下一個「臺南地方原始災情範圍」模組中。</p>
+      <a href="https://moisagis.moi.gov.tw/moiap/gis2010/Pro/Logged/flood/web/index.cfm" target="_blank" rel="noopener noreferrer">查看內政部歷史淹水案件查詢 ↗</a><br>
+      <a href="https://datahub.ncdr.nat.gov.tw/dataset/detail?pid=b73c525a-df95-4385-b895-99ba61354a56" target="_blank" rel="noopener noreferrer">查看災防中心歷史淹水災害點位資料集 ↗</a>
+    </details>
+  </div>
+</section>
+<!-- ===== END: NATIONAL_HISTORY_FLOOD_V1_UI ===== -->
+
 <!-- ===== START: TAINAN_HISTORY_FLOOD_V5_UI ===== -->
 <style>
 .history-flood-panel{margin:14px 0;padding:14px;background:#fff;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 5px 16px rgba(15,23,42,.08);color:#0f172a}
@@ -2875,7 +3015,7 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
   <div class="hf-heading">
     <div>
       <div class="layer-subsection-title hf-title">
-        臺南歷年淹水災情 <small>官方實際紀錄</small>
+        臺南地方原始災情範圍 <small>地方官方實際紀錄</small>
       </div>
       <p class="hf-intro">
         地圖保留官方原始配色；事件狀態以勾選與文字呈現，不只靠顏色判讀。
@@ -2891,7 +3031,7 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
       onchange="toggleTainanHistoryFloodLayer(this.checked)"
     >
     <span class="hf-toggle-copy">
-      <strong>顯示臺南歷年淹水災情</strong>
+      <strong>顯示臺南地方歷年淹水災情範圍</strong>
       <small id="tainanHistoryFloodZoomHint">需放大至 z 9</small>
     </span>
   </label>
@@ -2974,7 +3114,7 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
     <details class="hf-facts">
       <summary>資料說明</summary>
-      <p>這是臺南市水利局公開的過去實際淹水災情紀錄；不代表目前正在淹水，也不是淹水潛勢模擬。</p>
+      <p>這是臺南市水利局公開的過去實際淹水災情範圍，保留地方政府原始圖例；不代表目前正在淹水，也不是淹水潛勢模擬。</p>
       <a href="https://water.tainan.gov.tw/tnwrbarcgis104/rest/services/WRB/TNWRB_HistoryData/MapServer" target="_blank" rel="noopener noreferrer">開啟官方 MapServer ↗</a>
     </details>
   </div>
@@ -3162,6 +3302,375 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
     <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin:0; width:17px; height:17px; cursor:pointer; flex-shrink:0;">
     <span>南山公墓歷史名人墓塚</span>
 </label>
+
+                <!-- ===== START: NIMBY_FACILITY_LAYER_V2_UI ===== -->
+                <style id="nimby-facility-layer-style">
+                /* 鄰避設施：沿用圖資工具的淺色通用元件語言 */
+                #rightToolsWrapper .layer-folder.layer-folder-nimby{
+                  margin:12px 0 !important;
+                  border:1px solid var(--rt-line) !important;
+                  border-radius:18px !important;
+                  overflow:hidden;
+                  background:#fff !important;
+                  box-shadow:0 8px 20px rgba(13,47,53,.08) !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary{
+                  min-height:58px;
+                  padding:10px 12px !important;
+                  color:var(--rt-ink) !important;
+                  background:linear-gradient(180deg,#ffffff,#f3f8f7) !important;
+                  border-bottom:0 !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby[open] > summary{
+                  border-bottom:1px solid #dce9e7 !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary span{
+                  display:inline;
+                  color:var(--rt-ink) !important;
+                  font-size:14px !important;
+                  font-weight:900 !important;
+                  letter-spacing:0;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary span::before{
+                  content:none !important;
+                  display:none !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary small{
+                  color:var(--rt-muted) !important;
+                  font-size:10px !important;
+                  font-weight:800 !important;
+                  letter-spacing:0;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary::after{
+                  color:var(--rt-primary) !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby .layer-folder-content{
+                  padding:2px 10px 12px !important;
+                }
+
+                .nimby-facility-panel{
+                  margin:0;
+                  padding-top:0 !important;
+                  overflow:hidden;
+                  color:var(--rt-ink);
+                  background:transparent;
+                }
+                .nimby-facility-panel *{box-sizing:border-box;font-family:inherit}
+                .nimby-hero{
+                  display:grid;
+                  grid-template-columns:auto 1fr auto;
+                  align-items:start;
+                  gap:10px;
+                  padding:12px 2px 10px;
+                  border-bottom:1px solid #dce9e7;
+                }
+                .nimby-hero-icon{
+                  display:grid;
+                  place-items:center;
+                  width:34px;
+                  height:34px;
+                  color:var(--rt-primary);
+                  background:#e9f6f4;
+                  border:1px solid #b7d9d4;
+                  border-radius:11px;
+                }
+                .nimby-hero-icon svg{width:19px;height:19px}
+                .nimby-eyebrow{
+                  display:block;
+                  margin-bottom:2px;
+                  color:var(--rt-primary);
+                  font-size:9px;
+                  font-weight:900;
+                  letter-spacing:.08em;
+                }
+                .nimby-hero h3{
+                  margin:0;
+                  color:var(--rt-ink);
+                  font-size:14px;
+                  font-weight:900;
+                  letter-spacing:0;
+                  line-height:1.35;
+                }
+                .nimby-hero p{
+                  margin:3px 0 0;
+                  color:var(--rt-muted);
+                  font-size:11px;
+                  line-height:1.5;
+                  font-weight:650;
+                }
+                .nimby-api-stamp{
+                  display:grid;
+                  place-items:center;
+                  min-width:46px;
+                  padding:6px 6px 5px;
+                  color:var(--rt-primary-dark);
+                  background:#f3f8f7;
+                  border:1px solid var(--rt-line);
+                  border-radius:9px;
+                  font-size:9px;
+                  font-weight:900;
+                  line-height:1.1;
+                  letter-spacing:.04em;
+                }
+                .nimby-api-stamp small{
+                  margin-top:2px;
+                  color:var(--rt-muted);
+                  font-size:7px;
+                  letter-spacing:.06em;
+                }
+
+                .nimby-main-toggle{
+                  position:relative;
+                  display:grid !important;
+                  grid-template-columns:34px 1fr auto;
+                  align-items:center;
+                  gap:10px;
+                  min-height:0 !important;
+                  margin:10px 0 0 !important;
+                  padding:10px !important;
+                  color:var(--rt-ink) !important;
+                  background:#f3f8f7 !important;
+                  border:1px solid var(--rt-line);
+                  border-radius:12px;
+                  box-shadow:none;
+                  cursor:pointer;
+                  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease;
+                }
+                #rightToolsWrapper .nimby-facility-panel .nimby-main-toggle:hover{
+                  background:#eef8f6 !important;
+                  border-color:#9bc8c1;
+                }
+                #rightToolsWrapper .nimby-facility-panel .nimby-main-toggle:has(input:checked){
+                  background:#e9f6f4 !important;
+                  border-color:#83bdb4;
+                  box-shadow:inset 4px 0 0 var(--rt-primary);
+                }
+                .nimby-toggle-icon{
+                  display:grid;
+                  place-items:center;
+                  width:34px;
+                  height:34px;
+                  color:var(--rt-primary);
+                  background:#fff;
+                  border:1px solid #b7d9d4;
+                  border-radius:10px;
+                }
+                .nimby-toggle-icon svg{width:18px;height:18px}
+                .nimby-toggle-copy{display:grid;gap:2px;min-width:0}
+                .nimby-toggle-copy strong{color:var(--rt-ink);font-size:12.5px;font-weight:900;line-height:1.3}
+                .nimby-toggle-copy small{color:var(--rt-muted);font-size:10.5px;font-weight:700;line-height:1.35}
+                .nimby-switch{position:relative;display:block;width:42px;height:24px;flex:0 0 auto}
+                #rightToolsWrapper .nimby-facility-panel .nimby-switch input{
+                  position:absolute !important;
+                  inset:0;
+                  width:1px !important;
+                  height:1px !important;
+                  min-width:0 !important;
+                  opacity:0;
+                  pointer-events:none;
+                }
+                .nimby-switch-track{
+                  position:absolute;
+                  inset:0;
+                  display:block;
+                  border:1px solid #9fb8b5;
+                  border-radius:999px;
+                  background:#cbd5d6;
+                  box-shadow:inset 0 1px 2px rgba(13,47,53,.12);
+                  transition:.24s ease;
+                }
+                .nimby-switch-track::after{
+                  content:"";
+                  position:absolute;
+                  top:3px;
+                  left:3px;
+                  width:16px;
+                  height:16px;
+                  border-radius:50%;
+                  background:#fff;
+                  box-shadow:0 1px 3px rgba(13,47,53,.26);
+                  transition:.24s cubic-bezier(.4,0,.2,1);
+                }
+                .nimby-switch input:checked + .nimby-switch-track{background:var(--rt-primary);border-color:var(--rt-primary)}
+                .nimby-switch input:checked + .nimby-switch-track::after{transform:translateX(18px)}
+
+                .nimby-controls{
+                  margin:10px 0 0;
+                  padding:10px;
+                  background:#fff;
+                  border:1px solid var(--rt-line);
+                  border-radius:12px;
+                  box-shadow:none;
+                }
+                .nimby-controls[hidden]{display:none!important}
+                .nimby-topline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+                .nimby-kicker{display:flex;align-items:center;gap:6px;color:var(--rt-primary-dark);font-size:10px;font-weight:900;letter-spacing:.06em}
+                .nimby-kicker::before{content:"查詢";padding:3px 5px;color:var(--rt-primary);background:#e9f6f4;border:1px solid #b7d9d4;border-radius:5px;font-size:8px;letter-spacing:.04em}
+                .nimby-state{padding:5px 8px;color:var(--rt-muted);background:#f3f8f7;border:1px solid var(--rt-line);border-radius:999px;font-size:10px;font-weight:850;white-space:nowrap}
+                .nimby-state.is-working{color:#0c4a6e;background:#eff6ff;border-color:#bfdbfe}
+                .nimby-state.is-ready{color:#065f46;background:#ecfdf5;border-color:#a7f3d0}
+                .nimby-state.is-warning{color:#92400e;background:#fffbeb;border-color:#fde68a}
+                .nimby-notice{margin:10px 0;padding:9px 10px;color:#5a4b2f;background:#fffaf0;border:1px solid #f5d9a8;border-radius:10px;font-size:10.5px;line-height:1.55;font-weight:650}
+                .nimby-notice strong{color:#8a5a00;font-weight:900}
+                .nimby-field{display:grid;gap:6px}
+                .nimby-field label{display:block !important;min-height:0 !important;padding:0 !important;color:var(--rt-primary-dark) !important;background:transparent !important;box-shadow:none !important;font-size:10px;font-weight:900;letter-spacing:.05em}
+                #rightToolsWrapper .nimby-field select{
+                  width:100%;
+                  min-height:40px;
+                  padding:8px 10px;
+                  color:var(--rt-ink) !important;
+                  background:#fff !important;
+                  border:1px solid var(--rt-line) !important;
+                  border-radius:10px !important;
+                  font-size:12px;
+                  font-weight:750;
+                  outline:none;
+                }
+                .nimby-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+                .nimby-action{
+                  display:inline-flex;
+                  align-items:center;
+                  justify-content:center;
+                  gap:6px;
+                  min-height:38px;
+                  padding:8px 9px;
+                  color:#fff;
+                  background:var(--rt-primary);
+                  border:1px solid var(--rt-primary);
+                  border-radius:10px;
+                  cursor:pointer;
+                  font-size:11px;
+                  font-weight:900;
+                  line-height:1.2;
+                  transition:background .2s ease,border-color .2s ease,transform .2s ease;
+                }
+                .nimby-action:hover{background:var(--rt-primary-dark);border-color:var(--rt-primary-dark);transform:translateY(-1px)}
+                .nimby-action.secondary{color:var(--rt-primary-dark);background:#fff;border-color:var(--rt-line)}
+                .nimby-action.secondary:hover{color:var(--rt-primary-dark);background:#f3f8f7;border-color:#9bc8c1}
+                .nimby-action svg{width:14px;height:14px}
+                .nimby-action:disabled{opacity:.58;cursor:not-allowed;transform:none;filter:none}
+                .nimby-result{
+                  margin-top:10px;
+                  padding:10px 11px;
+                  color:var(--rt-primary-dark);
+                  background:#e9f6f4;
+                  border:1px solid #b7d9d4;
+                  border-radius:10px;
+                }
+                .nimby-result strong{display:block;color:var(--rt-primary-dark);font-size:12px;font-weight:900;line-height:1.4}
+                .nimby-result span{display:block;margin-top:3px;color:var(--rt-muted);font-size:10.5px;line-height:1.5;font-weight:650}
+                .nimby-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed #c7dcda;color:var(--rt-muted);font-size:10px;font-weight:700}
+                .nimby-meta code{max-width:168px;color:var(--rt-muted);font-family:"SFMono-Regular",Consolas,monospace;font-size:9px;line-height:1.4;overflow-wrap:anywhere}
+                .nimby-doc-link{display:inline-flex;align-items:center;gap:4px;color:var(--rt-primary);font-size:10px;font-weight:900;text-decoration:none;white-space:nowrap}
+                .nimby-doc-link:hover{color:var(--rt-primary-dark);text-decoration:underline}
+
+                /* 地圖內設施資訊卡 */
+                .nimby-popup-card{width:275px;overflow:hidden;color:#172033;background:#f8fafc;border-radius:14px;font-family:'Helvetica Neue',Arial,'微軟正黑體',sans-serif}
+                .nimby-popup-top{display:flex;gap:10px;align-items:flex-start;padding:13px 13px 11px;color:#f8fafc;background:linear-gradient(135deg,#0f172a,#1f3b38)}
+                .nimby-popup-glyph{display:grid;place-items:center;flex:0 0 auto;width:34px;height:34px;color:#0f172a;background:linear-gradient(145deg,#fde68a,#f59e0b);border-radius:11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+                .nimby-popup-glyph svg{width:19px;height:19px}
+                .nimby-popup-kicker{display:block;margin-bottom:2px;color:#fcd34d;font-size:9px;font-weight:900;letter-spacing:.12em}
+                .nimby-popup-title{margin:0;color:#fff;font-size:14px;font-weight:900;line-height:1.3;overflow-wrap:anywhere}
+                .nimby-popup-body{padding:12px 13px 13px}
+                .nimby-popup-metrics{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:stretch;margin-bottom:10px}
+                .nimby-popup-address{padding:9px 10px;color:#475569;background:#fff;border:1px solid #e2e8f0;border-radius:10px;font-size:11px;line-height:1.5;font-weight:650;overflow-wrap:anywhere}
+                .nimby-popup-distance{display:grid;place-items:center;min-width:65px;padding:8px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;text-align:center}
+                .nimby-popup-distance strong{display:block;font-size:14px;font-weight:900;line-height:1.05}
+                .nimby-popup-distance span{display:block;margin-top:2px;font-size:9px;font-weight:800}
+                .nimby-popup-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}
+                .nimby-popup-data{padding:8px 9px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:9px}
+                .nimby-popup-data dt{margin:0 0 3px;color:#64748b;font-size:9px;font-weight:900;letter-spacing:.05em}
+                .nimby-popup-data dd{margin:0;color:#1e293b;font-size:10.5px;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+                .nimby-popup-source{margin:10px 0 0;padding-top:9px;border-top:1px dashed #cbd5e1;color:#64748b;font-size:9px;line-height:1.45;font-weight:700}
+                
+                @media(max-width:600px){
+                  .nimby-hero{grid-template-columns:auto 1fr;gap:10px}
+                  .nimby-api-stamp{grid-column:2;justify-self:start}
+                  .nimby-actions{grid-template-columns:1fr}
+                  .nimby-meta{align-items:flex-start;flex-direction:column}
+                  .nimby-meta code{max-width:none}
+                }
+                </style>
+                
+                <details class="layer-folder layer-folder-nimby">
+                    <summary>
+                        <span>鄰避設施查詢</span>
+                        <small>周邊空間</small>
+                    </summary>
+                    <div class="layer-folder-content">
+                        <section class="layer-subsection nimby-facility-panel" id="nimbyFacilityModule">
+                            <div class="nimby-hero">
+                                <div class="nimby-hero-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><circle cx="12" cy="12" r="7"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path></svg>
+                                </div>
+                                <div>
+                                    <span class="nimby-eyebrow">生活環境與設施</span>
+                                    <h3>周邊鄰避設施</h3>
+                                    <p>以目前地圖中心或指定點位，查詢周邊鄰避設施。</p>
+                                </div>
+                                <span class="nimby-api-stamp">COM_012<small>開放 API</small></span>
+                            </div>
+                
+                            <label class="nimby-main-toggle">
+                                <span class="nimby-toggle-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"></path><path d="M5 20V10l7-5 7 5v10"></path><path d="M9 20v-5h6v5"></path><path d="M12 8v3"></path></svg>
+                                </span>
+                                <span class="nimby-toggle-copy">
+                                    <strong>顯示周邊鄰避設施</strong>
+                                    <small id="nimbyFacilityHint">以目前地圖中心查詢</small>
+                                </span>
+                                <span class="nimby-switch">
+                                    <input type="checkbox" id="nimbyFacilityToggle" onchange="toggleNimbyFacilityLayer(this.checked)">
+                                    <span class="nimby-switch-track" aria-hidden="true"></span>
+                                </span>
+                            </label>
+                
+                            <div class="nimby-controls" id="nimbyFacilityControlPanel" hidden>
+                                <div class="nimby-topline">
+                                    <span class="nimby-kicker">圖層查詢</span>
+                                    <span class="nimby-state" id="nimbyFacilityState" aria-live="polite">圖層未啟用</span>
+                                </div>
+                
+                                <div class="nimby-notice">
+                                    <strong>如何解讀：</strong>這是 API 在指定位置與半徑內回傳的設施清單；不代表風險等級、違規紀錄或法定管制範圍。
+                                </div>
+                
+                                <div class="nimby-field">
+                                    <label for="nimbyFacilityRadius">查詢半徑</label>
+                                    <select id="nimbyFacilityRadius" onchange="refreshNimbyFacilityQuery()">
+                                        <option value="500">500 公尺｜步行尺度</option>
+                                        <option value="1000" selected>1 公里｜日常生活圈</option>
+                                        <option value="2000">2 公里｜鄰近街區</option>
+                                        <option value="3000">3 公里｜擴大檢視</option>
+                                        <option value="5000">5 公里｜區域範圍</option>
+                                    </select>
+                                </div>
+                
+                                <div class="nimby-actions">
+                                    <button type="button" class="nimby-action" id="nimbyFacilityRefresh" onclick="refreshNimbyFacilityQuery()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                        以目前中心更新
+                                    </button>
+                                    <button type="button" class="nimby-action secondary" id="nimbyFacilityPickPoint" onclick="enableNimbyFacilityPickMode()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-4.35 7-12a7 7 0 1 0-14 0c0 7.65 7 12 7 12z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+                                        指定地圖中心
+                                    </button>
+                                </div>
+                
+                                <div class="nimby-result" id="nimbyFacilityResults" aria-live="polite">
+                                    <strong>準備開始查詢</strong>
+                                    <span>啟用圖層後，將依目前地圖位置與所選半徑載入周邊設施。</span>
+                                </div>
+                
+                                <div class="nimby-meta">
+                                    <code id="nimbyFacilityQueryInfo">查詢中心：尚未設定</code>
+                                    <a class="nimby-doc-link" href="https://maps.nlsc.gov.tw/S09SOA/pro/Api_ajax_list.jsp" target="_blank" rel="noopener noreferrer">API 說明 ↗</a>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </details>
+                <!-- ===== END: NIMBY_FACILITY_LAYER_V2_UI ===== -->
             </div>
         </div>
     </div>
@@ -5576,6 +6085,901 @@ if (document.readyState === 'loading') {
     window.setTimeout(prefetchTainanHistoryFloodWhenIdle, 120);
 }
 /* ===== END: HISTORY_FLOOD_EARLY_ALL_SOURCE_PREFETCH ===== */
+
+
+
+/* ===== START: NIMBY_FACILITY_LAYER_V1_SCRIPT ===== */
+/*
+ * COM_012 查詢鄰避設施（國土測繪中心開放 API）
+ * 預設直接使用公開端點；若部署環境的 CSP 或瀏覽器 CORS 策略阻擋跨網域請求，
+ * 可在此程式之前設定 window.HAIDIAN_NIMBY_FACILITY_CONFIG.endpointBase 為同源代理端點。
+ * 同源代理須接受 {lng}/{lat}/{radius} 路徑段，並回傳原始 JSON 陣列。
+ */
+if (!map.getPane('nimbyFacilityPane')) {
+    map.createPane('nimbyFacilityPane');
+}
+map.getPane('nimbyFacilityPane').style.zIndex = 362;
+map.getPane('nimbyFacilityPane').style.pointerEvents = 'auto';
+
+var NIMBY_FACILITY_DEFAULT_CONFIG = {
+    endpointBase: 'https://api.nlsc.gov.tw/other/MarkBufferAnlys/dis',
+    sourceLabel: '國土測繪中心 COM_012 查詢鄰避設施',
+    maxRadius: 5000
+};
+var nimbyFacilityConfig = Object.assign(
+    {},
+    NIMBY_FACILITY_DEFAULT_CONFIG,
+    window.HAIDIAN_NIMBY_FACILITY_CONFIG || {}
+);
+var nimbyFacilityEnabled = false;
+var nimbyFacilityLayer = null;
+var nimbyFacilityCenterLayer = null;
+var nimbyFacilityQueryCenter = null;
+var nimbyFacilityPickMode = false;
+var nimbyFacilityRequestId = 0;
+var nimbyFacilityAbortController = null;
+var nimbyFacilityRows = [];
+
+function getNimbyFacilityElement(id) {
+    return document.getElementById(id);
+}
+
+function escapeNimbyFacilityHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#039;',
+            '"': '&quot;'
+        }[character];
+    });
+}
+
+function setNimbyFacilityState(text, warning) {
+    var state = getNimbyFacilityElement('nimbyFacilityState');
+    if (!state) return;
+    state.textContent = text;
+    state.classList.toggle('is-warning', !!warning);
+}
+
+function setNimbyFacilityResults(title, detail) {
+    var root = getNimbyFacilityElement('nimbyFacilityResults');
+    if (!root) return;
+    root.innerHTML = '<strong>' + escapeNimbyFacilityHtml(title) + '</strong><span>' +
+        escapeNimbyFacilityHtml(detail || '') + '</span>';
+}
+
+function getNimbyFacilityRadius() {
+    var field = getNimbyFacilityElement('nimbyFacilityRadius');
+    var requested = Number(field ? field.value : 1000);
+    if (!Number.isFinite(requested) || requested <= 0) requested = 1000;
+    return Math.min(Math.round(requested), Number(nimbyFacilityConfig.maxRadius) || 5000);
+}
+
+function getNimbyFacilityQueryCenter() {
+    return nimbyFacilityQueryCenter || map.getCenter();
+}
+
+function setNimbyFacilityQueryInfo(latlng, radius) {
+    var hint = getNimbyFacilityElement('nimbyFacilityHint');
+    var info = getNimbyFacilityElement('nimbyFacilityQueryInfo');
+    if (!latlng) {
+        if (hint) hint.textContent = '以目前地圖中心查詢';
+        if (info) info.textContent = '查詢中心：尚未設定';
+        return;
+    }
+
+    var text = latlng.lat.toFixed(5) + ', ' + latlng.lng.toFixed(5) + '｜' + radius + ' m';
+    if (hint) hint.textContent = '已顯示最近一次查詢結果';
+    if (info) info.textContent = '查詢中心：' + text;
+}
+
+function getNimbyFacilityLayer() {
+    if (nimbyFacilityLayer) return nimbyFacilityLayer;
+
+    nimbyFacilityLayer = L.layerGroup([], {
+        pane: 'nimbyFacilityPane'
+    });
+    return nimbyFacilityLayer;
+}
+
+function getNimbyFacilityCenterLayer() {
+    if (nimbyFacilityCenterLayer) return nimbyFacilityCenterLayer;
+
+    nimbyFacilityCenterLayer = L.layerGroup([], {
+        pane: 'nimbyFacilityPane'
+    });
+    return nimbyFacilityCenterLayer;
+}
+
+function clearNimbyFacilityMapLayers() {
+    getNimbyFacilityLayer().clearLayers();
+    getNimbyFacilityCenterLayer().clearLayers();
+}
+
+function getNimbyFacilityPopupHtml(row) {
+    var title = escapeNimbyFacilityHtml(row.name || row.sname || '鄰避設施');
+    var shortName = escapeNimbyFacilityHtml(row.sname || '—');
+    var address = escapeNimbyFacilityHtml(row.addr || '未提供地址');
+    var phone = escapeNimbyFacilityHtml(row.tel || '未提供電話');
+    var markType = escapeNimbyFacilityHtml(row.marktype || '未提供');
+    var recordId = escapeNimbyFacilityHtml(row.id || '未提供');
+    var distanceValue = Number(row.distance);
+    var distance = Number.isFinite(distanceValue) ? Math.round(distanceValue) + ' m' : '—';
+
+    return '<article class="nimby-popup-card">' +
+        '<header class="nimby-popup-top">' +
+            '<span class="nimby-popup-glyph" aria-hidden="true">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"></path><path d="M5 20V10l7-5 7 5v10"></path><path d="M9 20v-5h6v5"></path></svg>' +
+            '</span>' +
+            '<div><span class="nimby-popup-kicker">NIMBY FACILITY</span><h3 class="nimby-popup-title">' + title + '</h3></div>' +
+        '</header>' +
+        '<div class="nimby-popup-body">' +
+            '<div class="nimby-popup-metrics">' +
+                '<div class="nimby-popup-address">' + address + '</div>' +
+                '<div class="nimby-popup-distance"><strong>' + distance + '</strong><span>距離</span></div>' +
+            '</div>' +
+            '<dl class="nimby-popup-grid">' +
+                '<div class="nimby-popup-data"><dt>簡稱</dt><dd>' + shortName + '</dd></div>' +
+                '<div class="nimby-popup-data"><dt>電話</dt><dd>' + phone + '</dd></div>' +
+                '<div class="nimby-popup-data"><dt>設施類別</dt><dd>' + markType + '</dd></div>' +
+                '<div class="nimby-popup-data"><dt>資料識別碼</dt><dd>' + recordId + '</dd></div>' +
+            '</dl>' +
+            '<p class="nimby-popup-source">資料來源：' + escapeNimbyFacilityHtml(nimbyFacilityConfig.sourceLabel) + '</p>' +
+        '</div>' +
+    '</article>';
+}
+
+function renderNimbyFacilityRows(rows, center, radius) {
+    clearNimbyFacilityMapLayers();
+
+    var featureLayer = getNimbyFacilityLayer();
+    var centerLayer = getNimbyFacilityCenterLayer();
+
+    var queryCircle = L.circle(center, {
+        pane: 'nimbyFacilityPane',
+        radius: radius,
+        color: '#fb923c',
+        weight: 1.5,
+        dashArray: '5 6',
+        fillColor: '#fed7aa',
+        fillOpacity: 0.06,
+        interactive: false
+    });
+    var centerMarker = L.circleMarker(center, {
+        pane: 'nimbyFacilityPane',
+        radius: 6,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#ea580c',
+        fillOpacity: 1,
+        interactive: false
+    });
+    centerLayer.addLayer(queryCircle);
+    centerLayer.addLayer(centerMarker);
+
+    rows.forEach(function(row) {
+        var lng = Number(row.lon);
+        var lat = Number(row.lat);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+        var marker = L.circleMarker([lat, lng], {
+            pane: 'nimbyFacilityPane',
+            radius: 7,
+            color: '#7c2d12',
+            weight: 2,
+            fillColor: '#fb923c',
+            fillOpacity: 0.92
+        });
+        marker.bindTooltip(String(row.name || row.sname || '鄰避設施'), {
+            direction: 'top',
+            offset: [0, -8],
+            opacity: 0.94
+        });
+        marker.bindPopup(getNimbyFacilityPopupHtml(row), {
+            maxWidth: 310,
+            closeButton: true,
+            autoPanPadding: [24, 24]
+        });
+        featureLayer.addLayer(marker);
+    });
+
+    if (nimbyFacilityEnabled) {
+        if (!map.hasLayer(centerLayer)) map.addLayer(centerLayer);
+        if (!map.hasLayer(featureLayer)) map.addLayer(featureLayer);
+    }
+}
+
+function removeNimbyFacilityFromMap() {
+    if (nimbyFacilityLayer && map.hasLayer(nimbyFacilityLayer)) {
+        map.removeLayer(nimbyFacilityLayer);
+    }
+    if (nimbyFacilityCenterLayer && map.hasLayer(nimbyFacilityCenterLayer)) {
+        map.removeLayer(nimbyFacilityCenterLayer);
+    }
+}
+
+function buildNimbyFacilityRequestUrl(center, radius) {
+    var base = String(nimbyFacilityConfig.endpointBase || NIMBY_FACILITY_DEFAULT_CONFIG.endpointBase)
+        .replace(/\/+$/, '');
+    return base + '/' + encodeURIComponent(center.lng.toFixed(6)) + '/' +
+        encodeURIComponent(center.lat.toFixed(6)) + '/' + encodeURIComponent(radius);
+}
+
+function normalizeNimbyFacilityPayload(payload) {
+    if (!Array.isArray(payload)) return [];
+
+    return payload.filter(function(row) {
+        return row && Number.isFinite(Number(row.lon)) && Number.isFinite(Number(row.lat));
+    }).map(function(row) {
+        return Object.assign({}, row, {
+            lon: Number(row.lon),
+            lat: Number(row.lat),
+            distance: Number.isFinite(Number(row.distance)) ? Number(row.distance) : null
+        });
+    }).sort(function(a, b) {
+        var aDistance = a.distance == null ? Infinity : a.distance;
+        var bDistance = b.distance == null ? Infinity : b.distance;
+        return aDistance - bDistance;
+    });
+}
+
+function refreshNimbyFacilityQuery() {
+    if (!nimbyFacilityEnabled) return;
+
+    var center = map.getCenter();
+    nimbyFacilityQueryCenter = null;
+    requestNimbyFacilityQuery(center, getNimbyFacilityRadius());
+}
+
+function enableNimbyFacilityPickMode() {
+    if (!nimbyFacilityEnabled) return;
+    nimbyFacilityPickMode = true;
+    map.getContainer().style.cursor = 'crosshair';
+    setNimbyFacilityState('請點選地圖', false);
+    setNimbyFacilityResults('請指定查詢中心', '請在地圖上點選位置；選定後會立即查詢鄰避設施。');
+    var pickButton = getNimbyFacilityElement('nimbyFacilityPickPoint');
+    if (pickButton) pickButton.textContent = '請點選地圖…';
+}
+
+function resetNimbyFacilityPickMode() {
+    nimbyFacilityPickMode = false;
+    map.getContainer().style.cursor = '';
+    var pickButton = getNimbyFacilityElement('nimbyFacilityPickPoint');
+    if (pickButton) pickButton.textContent = '點地圖指定中心';
+}
+
+function requestNimbyFacilityQuery(center, radius) {
+    if (!nimbyFacilityEnabled) return Promise.resolve();
+
+    var requestId = ++nimbyFacilityRequestId;
+    var refreshButton = getNimbyFacilityElement('nimbyFacilityRefresh');
+    var radiusField = getNimbyFacilityElement('nimbyFacilityRadius');
+
+    if (nimbyFacilityAbortController && typeof nimbyFacilityAbortController.abort === 'function') {
+        nimbyFacilityAbortController.abort();
+    }
+    nimbyFacilityAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+    if (refreshButton) refreshButton.disabled = true;
+    if (radiusField) radiusField.disabled = true;
+    setNimbyFacilityState('正在查詢…', false);
+    setNimbyFacilityResults('正在查詢鄰避設施…', '查詢半徑 ' + radius + ' 公尺；請稍候。');
+
+    return fetch(buildNimbyFacilityRequestUrl(center, radius), {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+        signal: nimbyFacilityAbortController ? nimbyFacilityAbortController.signal : undefined
+    }).then(function(response) {
+        if (!response.ok) {
+            throw new Error('HTTP_' + response.status);
+        }
+        return response.json();
+    }).then(function(payload) {
+        if (requestId !== nimbyFacilityRequestId || !nimbyFacilityEnabled) return;
+
+        nimbyFacilityRows = normalizeNimbyFacilityPayload(payload);
+        nimbyFacilityQueryCenter = L.latLng(center.lat, center.lng);
+        renderNimbyFacilityRows(nimbyFacilityRows, nimbyFacilityQueryCenter, radius);
+        setNimbyFacilityQueryInfo(nimbyFacilityQueryCenter, radius);
+        setNimbyFacilityState('已載入 ' + nimbyFacilityRows.length + ' 筆', false);
+        setNimbyFacilityResults(
+            nimbyFacilityRows.length ? '已顯示 ' + nimbyFacilityRows.length + ' 筆設施' : '此範圍沒有回傳設施',
+            nimbyFacilityRows.length ? '點選標記可查看名稱、地址、電話、距離與設施類別代碼。' : '可改用較大的查詢半徑，或移動地圖後重新查詢。'
+        );
+    }).catch(function(error) {
+        if (error && error.name === 'AbortError') return;
+        if (requestId !== nimbyFacilityRequestId || !nimbyFacilityEnabled) return;
+
+        nimbyFacilityRows = [];
+        clearNimbyFacilityMapLayers();
+        setNimbyFacilityState('查詢失敗', true);
+        setNimbyFacilityResults(
+            '無法讀取鄰避設施資料',
+            '請確認網路連線與 API 可用性；若網站啟用跨網域限制，可設定 HAIDIAN_NIMBY_FACILITY_CONFIG.endpointBase 使用同源代理。'
+        );
+    }).finally(function() {
+        if (requestId !== nimbyFacilityRequestId) return;
+        if (refreshButton) refreshButton.disabled = false;
+        if (radiusField) radiusField.disabled = false;
+    });
+}
+
+function toggleNimbyFacilityLayer(enabled) {
+    nimbyFacilityEnabled = !!enabled;
+    var panel = getNimbyFacilityElement('nimbyFacilityControlPanel');
+    if (panel) panel.hidden = !nimbyFacilityEnabled;
+
+    resetNimbyFacilityPickMode();
+
+    if (!nimbyFacilityEnabled) {
+        removeNimbyFacilityFromMap();
+        setNimbyFacilityState('圖層未啟用', false);
+        return;
+    }
+
+    requestNimbyFacilityQuery(map.getCenter(), getNimbyFacilityRadius());
+}
+
+map.on('click', function(event) {
+    if (!nimbyFacilityEnabled || !nimbyFacilityPickMode) return;
+    resetNimbyFacilityPickMode();
+    requestNimbyFacilityQuery(event.latlng, getNimbyFacilityRadius());
+});
+/* ===== END: NIMBY_FACILITY_LAYER_V1_SCRIPT ===== */
+
+/* ===== START: NATIONAL_HISTORY_FLOOD_V1_SCRIPT ===== */
+/*
+ * 全國歷史淹水案件圖層：
+ * - 預設讀取同源 GeoJSON，適合純靜態網站部署；
+ * - 正式環境可在本檔案前方設定 window.HAIDIAN_NATIONAL_HISTORY_FLOOD_CONFIG.endpoint，
+ *   指向同源後端 API。API 可接受 bbox / county / yearStart / yearEnd 參數並回傳 GeoJSON；
+ * - API 金鑰不得放入本頁前端程式碼。水利署需認證的服務應由後端代理與快取。
+ */
+if (!map.getPane('nationalHistoryFloodPane')) {
+    map.createPane('nationalHistoryFloodPane');
+}
+
+map.getPane('nationalHistoryFloodPane').style.zIndex = 356;
+map.getPane('nationalHistoryFloodPane').style.pointerEvents = 'auto';
+
+var NATIONAL_HISTORY_FLOOD_DEFAULT_CONFIG = {
+    endpoint: './national-historical-flood.geojson',
+    sourceLabel: '全國官方整合 GeoJSON',
+    maxFeaturesForFit: 3000
+};
+
+var nationalHistoryFloodConfig = Object.assign(
+    {},
+    NATIONAL_HISTORY_FLOOD_DEFAULT_CONFIG,
+    window.HAIDIAN_NATIONAL_HISTORY_FLOOD_CONFIG || {}
+);
+
+var nationalHistoryFloodRawFeatures = [];
+var nationalHistoryFloodFilteredFeatures = [];
+var nationalHistoryFloodLayer = null;
+var nationalHistoryFloodEnabled = false;
+var nationalHistoryFloodLoaded = false;
+var nationalHistoryFloodManualSource = false;
+var nationalHistoryFloodRequestId = 0;
+var nationalHistoryFloodLastLoadError = null;
+
+function escapeNationalHistoryFloodHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/[&<>'"]/g, function(character) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#039;',
+                '"': '&quot;'
+            }[character];
+        });
+}
+
+function getNationalHistoryFloodElement(id) {
+    return document.getElementById(id);
+}
+
+function setNationalHistoryFloodState(text, warning) {
+    var state = getNationalHistoryFloodElement('nationalHistoryFloodState');
+    if (!state) return;
+    state.textContent = text;
+    state.classList.toggle('is-warning', !!warning);
+}
+
+function setNationalHistoryFloodResults(title, detail) {
+    var root = getNationalHistoryFloodElement('nationalHistoryFloodResults');
+    if (!root) return;
+    root.innerHTML = '<div><strong>' +
+        escapeNationalHistoryFloodHtml(title) +
+        '</strong><span>' +
+        escapeNationalHistoryFloodHtml(detail || '') +
+        '</span></div>';
+}
+
+function getNationalFloodProperty(props, aliases) {
+    var source = props || {};
+    var keys = Object.keys(source);
+
+    for (var i = 0; i < aliases.length; i++) {
+        var wanted = aliases[i];
+        if (source[wanted] !== undefined && source[wanted] !== null) {
+            return source[wanted];
+        }
+
+        var match = keys.find(function(key) {
+            return String(key).toLowerCase() ===
+                String(wanted).toLowerCase();
+        });
+
+        if (match && source[match] !== undefined && source[match] !== null) {
+            return source[match];
+        }
+    }
+
+    return '';
+}
+
+function getNationalFloodFeatureYear(feature) {
+    var props = feature && feature.properties ? feature.properties : {};
+    var direct = getNationalFloodProperty(props, [
+        'year', 'YEAR', '年份', '資料年度', '事件年度', 'FLOOD_YEAR'
+    ]);
+    var matched = String(direct || '').match(/(?:19|20)\d{2}/);
+    if (matched) return Number(matched[0]);
+
+    var dateValue = getNationalFloodProperty(props, [
+        'event_date', 'date', 'DATE', '時間', '淹水時間', 'TIME',
+        'start_time', 'START_TIME', '災害日期'
+    ]);
+    matched = String(dateValue || '').match(/(?:19|20)\d{2}/);
+    return matched ? Number(matched[0]) : null;
+}
+
+function normaliseNationalFloodFeature(feature) {
+    if (!feature || typeof feature !== 'object') return null;
+
+    var normalised = {
+        type: 'Feature',
+        properties: Object.assign({}, feature.properties || {}),
+        geometry: feature.geometry || null
+    };
+
+    if (!normalised.geometry) {
+        var longitude = Number(getNationalFloodProperty(normalised.properties, [
+            'longitude', 'lng', 'lon', 'X', '經度', 'LONGITUDE'
+        ]));
+        var latitude = Number(getNationalFloodProperty(normalised.properties, [
+            'latitude', 'lat', 'Y', '緯度', 'LATITUDE'
+        ]));
+
+        if (Number.isFinite(longitude) && Number.isFinite(latitude)) {
+            normalised.geometry = {
+                type: 'Point',
+                coordinates: [longitude, latitude]
+            };
+        }
+    }
+
+    if (!normalised.geometry || !normalised.geometry.type) return null;
+    return normalised;
+}
+
+function normaliseNationalFloodGeoJson(payload) {
+    var features = [];
+
+    if (payload && payload.type === 'FeatureCollection') {
+        features = payload.features || [];
+    } else if (payload && payload.type === 'Feature') {
+        features = [payload];
+    } else if (Array.isArray(payload)) {
+        features = payload;
+    } else if (payload && Array.isArray(payload.features)) {
+        features = payload.features;
+    }
+
+    return features
+        .map(normaliseNationalFloodFeature)
+        .filter(function(feature) { return !!feature; });
+}
+
+function getNationalHistoryFloodFilterState() {
+    var county = getNationalHistoryFloodElement('nationalHistoryFloodCounty');
+    var start = getNationalHistoryFloodElement('nationalHistoryFloodYearStart');
+    var end = getNationalHistoryFloodElement('nationalHistoryFloodYearEnd');
+    var boundsOnly = getNationalHistoryFloodElement('nationalHistoryFloodMapBoundsOnly');
+
+    return {
+        county: county ? county.value : '',
+        yearStart: start && start.value ? Number(start.value) : null,
+        yearEnd: end && end.value ? Number(end.value) : null,
+        boundsOnly: !!(boundsOnly && boundsOnly.checked)
+    };
+}
+
+function buildNationalHistoryFloodRequestUrl() {
+    var endpoint = nationalHistoryFloodConfig.endpoint ||
+        NATIONAL_HISTORY_FLOOD_DEFAULT_CONFIG.endpoint;
+    var url = new URL(endpoint, window.location.href);
+    var filters = getNationalHistoryFloodFilterState();
+    var bounds = map.getBounds();
+
+    url.searchParams.set('west', bounds.getWest().toFixed(6));
+    url.searchParams.set('south', bounds.getSouth().toFixed(6));
+    url.searchParams.set('east', bounds.getEast().toFixed(6));
+    url.searchParams.set('north', bounds.getNorth().toFixed(6));
+    if (filters.county) url.searchParams.set('county', filters.county);
+    if (filters.yearStart) url.searchParams.set('yearStart', filters.yearStart);
+    if (filters.yearEnd) url.searchParams.set('yearEnd', filters.yearEnd);
+    return url.toString();
+}
+
+function normaliseNationalFloodCountyName(value) {
+    return String(value == null ? '' : value)
+        .trim()
+        .replace(/台/g, '臺');
+}
+
+function getNationalFloodFeatureCounty(feature) {
+    var props = feature && feature.properties ? feature.properties : {};
+    return normaliseNationalFloodCountyName(getNationalFloodProperty(props, [
+        'county', 'COUNTY', 'COUNTY_NAME', '縣市', '縣市名稱', '縣市別'
+    ]));
+}
+
+function nationalFloodFeaturePassesFilters(feature, filters, bounds) {
+    var year = getNationalFloodFeatureYear(feature);
+    var county = getNationalFloodFeatureCounty(feature);
+    var requestedCounty = normaliseNationalFloodCountyName(filters.county);
+
+    if (requestedCounty && county && county !== requestedCounty) return false;
+    if (requestedCounty && !county) return false;
+    if (filters.yearStart && year && year < filters.yearStart) return false;
+    if (filters.yearEnd && year && year > filters.yearEnd) return false;
+
+    if (filters.boundsOnly && bounds) {
+        try {
+            if (feature.geometry && feature.geometry.type === 'Point') {
+                var coords = feature.geometry.coordinates || [];
+                if (!bounds.contains([coords[1], coords[0]])) return false;
+            }
+        } catch (error) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function getNationalFloodFeatureLabel(feature) {
+    var props = feature && feature.properties ? feature.properties : {};
+    var eventName = getNationalFloodProperty(props, [
+        'event_name', 'EVENT_NAME', '災害事件', '事件名稱', 'event', 'EVENT'
+    ]);
+    var location = getNationalFloodProperty(props, [
+        'location', 'LOCATION', '位置', '地址', '地點'
+    ]);
+    var year = getNationalFloodFeatureYear(feature);
+
+    if (eventName) return String(eventName);
+    if (location) return (year ? year + ' ' : '') + String(location);
+    return year ? year + ' 歷史淹水案件' : '歷史淹水案件';
+}
+
+function getNationalFloodPopupHtml(feature) {
+    var props = feature && feature.properties ? feature.properties : {};
+    var fields = [
+        ['事件', getNationalFloodProperty(props, ['event_name','EVENT_NAME','災害事件','事件名稱','event','EVENT'])],
+        ['縣市', getNationalFloodFeatureCounty(feature)],
+        ['鄉鎮市區', getNationalFloodProperty(props, ['town','TOWN','TOWN_NAME','鄉鎮市區','行政區'])],
+        ['位置', getNationalFloodProperty(props, ['location','LOCATION','位置','地址','地點'])],
+        ['發生時間', getNationalFloodProperty(props, ['event_date','date','DATE','時間','淹水時間','TIME','start_time','START_TIME','災害日期'])],
+        ['退水時間', getNationalFloodProperty(props, ['receded_date','RECEDEDDATE','退水時間','end_time','END_TIME'])],
+        ['最高淹水深度', getNationalFloodProperty(props, ['depth_cm','DEPTH_MAX','最大深度','最高淹水深度','depth'])],
+        ['資料來源', getNationalFloodProperty(props, ['source','SOURCE','資料來源','source_name'])]
+    ].filter(function(row) {
+        return row[1] !== undefined && row[1] !== null && String(row[1]).trim() !== '';
+    });
+
+    var body = '<div class="national-history-flood-popup">' +
+        '<strong style="display:block;margin-bottom:8px;color:#0f172a;font-size:14px;line-height:1.35;">' +
+        escapeNationalHistoryFloodHtml(getNationalFloodFeatureLabel(feature)) +
+        '</strong>';
+
+    if (fields.length) {
+        body += '<dl style="display:grid;grid-template-columns:74px 1fr;gap:5px 8px;margin:0;color:#334155;font-size:12px;line-height:1.45;">';
+        fields.forEach(function(row) {
+            body += '<dt style="font-weight:800;color:#64748b;">' +
+                escapeNationalHistoryFloodHtml(row[0]) +
+                '</dt><dd style="margin:0;overflow-wrap:anywhere;font-weight:650;">' +
+                escapeNationalHistoryFloodHtml(row[1]) + '</dd>';
+        });
+        body += '</dl>';
+    } else {
+        body += '<p style="margin:0;color:#64748b;font-size:12px;">此筆 GeoJSON 未提供可顯示的屬性欄位。</p>';
+    }
+
+    return body + '</div>';
+}
+
+function createNationalHistoryFloodLayer() {
+    if (nationalHistoryFloodLayer) return nationalHistoryFloodLayer;
+
+    nationalHistoryFloodLayer = L.geoJSON(null, {
+        pane: 'nationalHistoryFloodPane',
+        pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng, {
+                pane: 'nationalHistoryFloodPane',
+                radius: 6,
+                color: '#ffffff',
+                weight: 2,
+                fillColor: '#0369a1',
+                fillOpacity: 0.9
+            });
+        },
+        style: function() {
+            return {
+                pane: 'nationalHistoryFloodPane',
+                color: '#0369a1',
+                weight: 2,
+                fillColor: '#38bdf8',
+                fillOpacity: 0.28
+            };
+        },
+        onEachFeature: function(feature, layer) {
+            layer.bindPopup(getNationalFloodPopupHtml(feature), {
+                maxWidth: 300,
+                closeButton: true,
+                autoPanPadding: [24, 24]
+            });
+        }
+    });
+
+    return nationalHistoryFloodLayer;
+}
+
+function renderNationalHistoryFloodLayer() {
+    var layer = createNationalHistoryFloodLayer();
+    layer.clearLayers();
+
+    if (nationalHistoryFloodEnabled && nationalHistoryFloodFilteredFeatures.length) {
+        layer.addData({
+            type: 'FeatureCollection',
+            features: nationalHistoryFloodFilteredFeatures
+        });
+    }
+
+    if (nationalHistoryFloodEnabled && !map.hasLayer(layer)) {
+        map.addLayer(layer);
+    }
+
+    if (!nationalHistoryFloodEnabled && map.hasLayer(layer)) {
+        map.removeLayer(layer);
+    }
+}
+
+function syncNationalHistoryFloodSummary() {
+    var hint = getNationalHistoryFloodElement('nationalHistoryFloodHint');
+    var rawCount = nationalHistoryFloodRawFeatures.length;
+    var visibleCount = nationalHistoryFloodFilteredFeatures.length;
+    var filters = getNationalHistoryFloodFilterState();
+    var hasData = rawCount > 0;
+
+    if (!nationalHistoryFloodEnabled) {
+        setNationalHistoryFloodState('圖層未啟用', false);
+        if (hint) hint.textContent = hasData ? '已暫存 ' + rawCount + ' 件官方案件' : '待載入官方整合資料';
+        return;
+    }
+
+    if (!hasData) {
+        setNationalHistoryFloodState(
+            nationalHistoryFloodLastLoadError ? '資料尚未部署' : '尚無符合條件案件',
+            !!nationalHistoryFloodLastLoadError
+        );
+        if (hint) hint.textContent = nationalHistoryFloodLastLoadError ? '可匯入已核定 GeoJSON 測試' : '未找到符合目前篩選的案件';
+        return;
+    }
+
+    setNationalHistoryFloodState('已載入 ' + visibleCount + ' / ' + rawCount + ' 件', false);
+    if (hint) {
+        hint.textContent = (filters.county || '全國') + '｜' +
+            (filters.yearStart || '不限') + '–' +
+            (filters.yearEnd || '不限') +
+            (filters.boundsOnly ? '｜目前範圍' : '');
+    }
+}
+
+function applyNationalHistoryFloodFilters() {
+    var filters = getNationalHistoryFloodFilterState();
+    var bounds = filters.boundsOnly ? map.getBounds() : null;
+
+    nationalHistoryFloodFilteredFeatures = nationalHistoryFloodRawFeatures.filter(
+        function(feature) {
+            return nationalFloodFeaturePassesFilters(feature, filters, bounds);
+        }
+    );
+
+    renderNationalHistoryFloodLayer();
+
+    if (nationalHistoryFloodRawFeatures.length) {
+        setNationalHistoryFloodResults(
+            '已顯示 ' + nationalHistoryFloodFilteredFeatures.length + ' / ' + nationalHistoryFloodRawFeatures.length + ' 件案件',
+            '資料來源：' + (nationalHistoryFloodManualSource ? '本次匯入 GeoJSON' : nationalHistoryFloodConfig.sourceLabel) + '。點選圖徵可查看事件、位置與資料來源欄位。'
+        );
+    }
+
+    syncNationalHistoryFloodSummary();
+}
+
+function applyNationalHistoryFloodPayload(payload, sourceLabel, manual) {
+    nationalHistoryFloodRawFeatures = normaliseNationalFloodGeoJson(payload);
+    nationalHistoryFloodLoaded = true;
+    nationalHistoryFloodManualSource = !!manual;
+    nationalHistoryFloodLastLoadError = null;
+
+    if (sourceLabel) {
+        nationalHistoryFloodConfig.sourceLabel = sourceLabel;
+    }
+
+    applyNationalHistoryFloodFilters();
+
+    if (!nationalHistoryFloodRawFeatures.length) {
+        setNationalHistoryFloodResults(
+            '尚無已發布案件',
+            '資料檔已讀取，但目前沒有可呈現的 GeoJSON 圖徵。請確認資料已轉成 WGS84（EPSG:4326）並包含 FeatureCollection。'
+        );
+    }
+}
+
+function refreshNationalHistoryFloodData() {
+    if (nationalHistoryFloodManualSource && nationalHistoryFloodLoaded) {
+        applyNationalHistoryFloodFilters();
+        return Promise.resolve();
+    }
+
+    var requestId = ++nationalHistoryFloodRequestId;
+    var url = buildNationalHistoryFloodRequestUrl();
+
+    setNationalHistoryFloodState('正在載入官方資料…', false);
+    setNationalHistoryFloodResults('正在載入案件…', '已套用目前的縣市、年份與地圖範圍條件。');
+
+    return fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/geo+json, application/json' }
+    })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('HTTP_' + response.status);
+            }
+            return response.json();
+        })
+        .then(function(payload) {
+            if (requestId !== nationalHistoryFloodRequestId) return;
+            applyNationalHistoryFloodPayload(
+                payload,
+                nationalHistoryFloodConfig.sourceLabel,
+                false
+            );
+        })
+        .catch(function(error) {
+            if (requestId !== nationalHistoryFloodRequestId) return;
+            nationalHistoryFloodLastLoadError = error;
+            nationalHistoryFloodRawFeatures = [];
+            nationalHistoryFloodFilteredFeatures = [];
+            renderNationalHistoryFloodLayer();
+            setNationalHistoryFloodState('資料尚未部署', true);
+            setNationalHistoryFloodResults(
+                '無法讀取全國整合資料',
+                '請在網站同層部署 national-historical-flood.geojson，或將 HAIDIAN_NATIONAL_HISTORY_FLOOD_CONFIG.endpoint 設為同源後端 API。'
+            );
+            syncNationalHistoryFloodSummary();
+        });
+}
+
+function toggleNationalHistoryFloodLayer(enabled) {
+    nationalHistoryFloodEnabled = !!enabled;
+    var panel = getNationalHistoryFloodElement('nationalHistoryFloodControlPanel');
+    if (panel) panel.hidden = !nationalHistoryFloodEnabled;
+
+    if (nationalHistoryFloodEnabled && !nationalHistoryFloodLoaded) {
+        refreshNationalHistoryFloodData();
+    } else {
+        applyNationalHistoryFloodFilters();
+    }
+}
+
+function fitNationalHistoryFloodLayer() {
+    if (!nationalHistoryFloodFilteredFeatures.length) {
+        setNationalHistoryFloodResults('尚無可縮放結果', '先載入或匯入至少一筆含座標的歷史淹水案件。');
+        return;
+    }
+
+    var tempLayer = L.geoJSON({
+        type: 'FeatureCollection',
+        features: nationalHistoryFloodFilteredFeatures.slice(
+            0,
+            Number(nationalHistoryFloodConfig.maxFeaturesForFit) || 3000
+        )
+    });
+
+    var bounds = tempLayer.getBounds();
+    if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.12), { maxZoom: 12 });
+    }
+}
+
+function importNationalHistoryFloodGeoJson(files) {
+    var file = files && files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    setNationalHistoryFloodState('正在讀取匯入檔…', false);
+
+    reader.onload = function(event) {
+        try {
+            var payload = JSON.parse(String(event.target.result || ''));
+            var features = normaliseNationalFloodGeoJson(payload);
+            if (!features.length && payload && payload.type !== 'FeatureCollection') {
+                throw new Error('INVALID_GEOJSON');
+            }
+            applyNationalHistoryFloodPayload(payload, file.name, true);
+        } catch (error) {
+            nationalHistoryFloodLastLoadError = error;
+            setNationalHistoryFloodState('匯入格式不正確', true);
+            setNationalHistoryFloodResults('GeoJSON 匯入失敗', '請使用 FeatureCollection / Feature / Feature 陣列，並確認檔案為 UTF-8 JSON。');
+        }
+    };
+
+    reader.onerror = function() {
+        setNationalHistoryFloodState('無法讀取檔案', true);
+        setNationalHistoryFloodResults('GeoJSON 匯入失敗', '瀏覽器無法讀取這個檔案，請重新選取。');
+    };
+
+    reader.readAsText(file, 'utf-8');
+}
+
+function populateNationalHistoryFloodYearControls() {
+    var start = getNationalHistoryFloodElement('nationalHistoryFloodYearStart');
+    var end = getNationalHistoryFloodElement('nationalHistoryFloodYearEnd');
+    if (!start || !end || start.options.length || end.options.length) return;
+
+    var currentYear = new Date().getFullYear();
+    var years = [];
+    for (var year = currentYear; year >= 2000; year--) years.push(year);
+
+    var allOption = '<option value="">不限</option>';
+    var options = years.map(function(year) {
+        return '<option value="' + year + '">' + year + '</option>';
+    }).join('');
+
+    start.innerHTML = allOption + options;
+    end.innerHTML = allOption + options;
+    start.value = '2000';
+    end.value = String(currentYear);
+}
+
+function initialiseNationalHistoryFloodModule() {
+    populateNationalHistoryFloodYearControls();
+
+    map.on('moveend', function() {
+        var boundsOnly = getNationalHistoryFloodElement('nationalHistoryFloodMapBoundsOnly');
+        if (nationalHistoryFloodEnabled && boundsOnly && boundsOnly.checked) {
+            applyNationalHistoryFloodFilters();
+        }
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialiseNationalHistoryFloodModule, { once: true });
+} else {
+    initialiseNationalHistoryFloodModule();
+}
+/* ===== END: NATIONAL_HISTORY_FLOOD_V1_SCRIPT ===== */
+
 /* ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
 
         function getGeoJsonUrls(path) {
