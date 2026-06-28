@@ -2812,13 +2812,22 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 .history-flood-panel .hf-kicker{color:#334155;font-size:12px;font-weight:800}
 .history-flood-panel .hf-state{padding:4px 7px;color:#0f172a;background:#f8fafc;border:1px solid #94a3b8;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
 .history-flood-panel .hf-state.is-warning{color:#991b1b;background:#fef2f2;border-color:#fca5a5}
-.history-flood-panel .hf-field{display:grid;gap:6px;margin:12px 0;color:#1e293b;font-size:13px;font-weight:800}
-.history-flood-panel .hf-field select{width:100%;min-height:40px;padding:8px 10px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:9px;outline:none;font:inherit;font-size:14px;font-weight:700}
-.history-flood-panel .hf-field select:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.22)}
+.history-flood-panel .hf-step{margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #dbeafe;border-radius:12px}
+.history-flood-panel .hf-step-title{display:flex;align-items:center;gap:7px;color:#0f172a;font-size:13px;font-weight:900}
+.history-flood-panel .hf-step-number{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:#fff;background:#2563eb;border-radius:50%;font-size:11px;font-variant-numeric:tabular-nums}
+.history-flood-panel .hf-source-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:9px}
+.history-flood-panel .hf-source-option{display:grid;gap:2px;min-height:64px;padding:8px;color:#334155;background:#fff;border:1px solid #cbd5e1;border-radius:9px;text-align:left;cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease}
+.history-flood-panel .hf-source-option:hover{border-color:#60a5fa;background:#eff6ff;transform:translateY(-1px)}
+.history-flood-panel .hf-source-option.is-active{color:#0f172a;background:#dbeafe;border-color:#2563eb;box-shadow:inset 0 0 0 1px #2563eb}
+.history-flood-panel .hf-source-option strong{font-size:12px;font-weight:900;line-height:1.2}
+.history-flood-panel .hf-source-option small{color:#64748b;font-size:10.5px;font-weight:750;line-height:1.25}
+.history-flood-panel .hf-source-option.is-active small{color:#1d4ed8}
+.history-flood-panel .hf-source-help{margin:8px 0 0;color:#475569;font-size:11px;line-height:1.5;font-weight:650}
+.history-flood-panel .hf-native-select{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .history-flood-panel .hf-opacity-title{color:#334155;font-size:13px;font-weight:750}
 .history-flood-panel .hf-opacity-title output{color:#0f172a;font-variant-numeric:tabular-nums;font-weight:800}
 .history-flood-panel .hf-range{width:100%;min-height:28px;margin:4px 0 12px;accent-color:#2563eb;cursor:pointer}
-.history-flood-panel .hf-events-head{align-items:flex-start;margin:5px 0 8px}
+.history-flood-panel .hf-events-head{align-items:flex-start;margin:13px 0 8px}
 .history-flood-panel .hf-events-head strong{display:block;color:#0f172a;font-size:14px;font-weight:800}
 .history-flood-panel .hf-events-head span{display:block;margin-top:3px;color:#475569;font-size:12px;line-height:1.45;font-weight:600}
 .history-flood-panel .hf-events-actions{margin:9px 0 8px}
@@ -2828,16 +2837,19 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 .history-flood-panel .hf-action:hover{border-color:#2563eb;background:#eff6ff}
 .history-flood-panel .hf-action:disabled{opacity:.5;cursor:not-allowed}
 .history-flood-panel .hf-events{display:grid;gap:7px;max-height:320px;overflow:auto;padding:2px;scrollbar-width:thin;scrollbar-color:#94a3b8 transparent}
-.history-flood-panel .hf-event-row{display:grid;grid-template-columns:22px auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:45px;padding:8px 9px;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:9px;cursor:pointer}
+.history-flood-panel .hf-event-row{display:grid;grid-template-columns:22px auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:50px;padding:8px 9px;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:9px;cursor:pointer}
 .history-flood-panel .hf-event-row:hover{border-color:#64748b;background:#f8fafc}
 .history-flood-panel .hf-event-row input{width:18px;height:18px;margin:0;accent-color:#0f172a;cursor:pointer}
 .history-flood-panel .hf-swatch-stack{display:flex;align-items:center;gap:3px;max-width:49px}
 .history-flood-panel .hf-swatch{display:block;flex:0 0 22px;width:22px;height:16px;overflow:hidden;background:#fff;border:1px solid #94a3b8;border-radius:3px}
 .history-flood-panel .hf-swatch img{display:block;width:100%;height:100%;object-fit:contain}
-.history-flood-panel .hf-event-name{overflow-wrap:anywhere;color:inherit;font-size:13px;line-height:1.35;font-weight:750}
+.history-flood-panel .hf-event-copy{display:grid;gap:2px;min-width:0}
+.history-flood-panel .hf-event-name{overflow-wrap:anywhere;color:inherit;font-size:13px;line-height:1.35;font-weight:800}
+.history-flood-panel .hf-event-origin{overflow-wrap:anywhere;color:#64748b;font-size:10.5px;line-height:1.25;font-weight:700}
 .history-flood-panel .hf-event-status{min-width:44px;padding:4px 6px;color:#334155;background:#fff;border:1px solid #94a3b8;border-radius:6px;font-size:11px;font-weight:800;text-align:center;white-space:nowrap}
 .history-flood-panel .hf-event-row.is-visible .hf-event-status{color:#fff;background:#0f172a;border-color:#0f172a}
-.history-flood-panel .hf-events-loading,.history-flood-panel .hf-events-fallback{padding:10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}
+.history-flood-panel .hf-events-loading,.history-flood-panel .hf-events-fallback,.history-flood-panel .hf-events-empty{padding:10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}
+@media (max-width:600px){.history-flood-panel .hf-source-option{min-height:58px;padding:7px}.history-flood-panel .hf-source-option small{font-size:9.5px}.history-flood-panel .hf-events{max-height:280px}}
 .history-flood-panel .hf-facts{margin-top:12px;padding-top:10px;border-top:1px dashed #94a3b8}
 .history-flood-panel .hf-facts summary{color:#0f172a;cursor:pointer;font-size:13px;font-weight:800}
 .history-flood-panel .hf-facts p{margin:8px 0 7px;color:#334155;font-size:12px;line-height:1.6;font-weight:600}
@@ -2876,14 +2888,36 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
       <span class="hf-state" id="tainanHistoryFloodState" aria-live="polite">圖層未啟用</span>
     </div>
 
-    <label class="hf-field">
-      <span>資料圖層</span>
-      <select id="tainanHistoryFloodDataset" onchange="changeTainanHistoryFloodDataset()">
+    <div class="hf-step" aria-label="選擇水災圖資科別">
+      <div class="hf-step-title">
+        <span class="hf-step-number">1</span>
+        <span>先選圖資科別</span>
+      </div>
+
+      <div class="hf-source-switch" id="tainanHistoryFloodDatasetPicker" role="group" aria-label="水災圖資科別">
+        <button type="button" class="hf-source-option is-active" data-tainan-history-dataset="history_all" aria-pressed="true" onclick="setTainanHistoryFloodDataset('history_all')">
+          <strong>全部來源</strong>
+          <small>雨水科＋綜企科</small>
+        </button>
+        <button type="button" class="hf-source-option" data-tainan-history-dataset="history_stormwater" aria-pressed="false" onclick="setTainanHistoryFloodDataset('history_stormwater')">
+          <strong>雨水科</strong>
+          <small>單位原始圖資</small>
+        </button>
+        <button type="button" class="hf-source-option" data-tainan-history-dataset="history_planning" aria-pressed="false" onclick="setTainanHistoryFloodDataset('history_planning')">
+          <strong>綜企科</strong>
+          <small>單位原始圖資</small>
+        </button>
+      </div>
+
+      <p class="hf-source-help">切換科別時，同一筆官方事件會保留原本的勾選狀態；在「全部來源」可分別比較兩個單位。</p>
+
+      <select id="tainanHistoryFloodDataset" class="hf-native-select" aria-hidden="true" tabindex="-1" onchange="changeTainanHistoryFloodDataset()">
         <option value="history_all" selected>歷年淹水災情</option>
         <option value="history_stormwater">歷年淹水災情（雨水科）</option>
         <option value="history_planning">歷年淹水災情（綜企科）</option>
       </select>
-    </label>
+
+    </div>
 
     <div class="hf-opacity-title">
       <span>透明度</span>
@@ -2903,8 +2937,12 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
     <div class="hf-events-head">
       <div>
+        <div class="hf-step-title">
+          <span class="hf-step-number">2</span>
+          <span>再選要顯示的水災事件</span>
+        </div>
         <strong>官方事件色標與篩選</strong>
-        <span>每一列都能切換顯示或隱藏；水災名稱會完整換行顯示。</span>
+        <span>每一列可獨立顯示或隱藏；「全部來源」會同時列出雨水科與綜企科的完整事件。</span>
       </div>
     </div>
 
@@ -3786,11 +3824,26 @@ var tainanHistoryFloodMeta = {
 
 var tainanHistoryFloodLayer = null;
 var tainanHistoryFloodLayerId = null;
+var tainanHistoryFloodLayers = {};
 var tainanHistoryFloodEvents = [];
 var tainanHistoryFloodSelectedValues = new Set();
+var tainanHistoryFloodSelectionState = Object.create(null);
 var tainanHistoryFloodFilterField = null;
+var tainanHistoryFloodFilterFields = {};
+var TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS = [
+    'history_stormwater',
+    'history_planning'
+];
 var tainanHistoryFloodEventCache = {};
 var tainanHistoryFloodEventRequests = {};
+var tainanHistoryFloodLegendPayload = null;
+var tainanHistoryFloodLegendRequest = null;
+var tainanHistoryFloodMetadataRequests = {};
+var tainanHistoryFloodDatasetLoadState = {
+    history_all: 'idle',
+    history_stormwater: 'idle',
+    history_planning: 'idle'
+};
 
 var StableArcGisExportLayer = L.Layer.extend({
     initialize: function(options) {
@@ -4166,15 +4219,23 @@ function syncTainanHistoryFloodState() {
     }
 }
 
-function createTainanHistoryFloodLayer() {
+function getTainanHistoryFloodActiveDatasetIds() {
     var selectedId = getTainanHistoryFloodSelectedId();
 
-    var meta =
-        tainanHistoryFloodMeta[selectedId] ||
-        tainanHistoryFloodMeta.history_all;
+    return selectedId === 'history_all' ?
+        TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.slice() :
+        [selectedId];
+}
 
-    if (!tainanHistoryFloodLayer) {
-        tainanHistoryFloodLayer =
+function createTainanHistoryFloodExportLayer(datasetId) {
+    var meta = tainanHistoryFloodMeta[datasetId];
+
+    if (!meta || datasetId === 'history_all') {
+        return null;
+    }
+
+    if (!tainanHistoryFloodLayers[datasetId]) {
+        tainanHistoryFloodLayers[datasetId] =
             new StableArcGisExportLayer({
                 layerId: meta.layerId,
                 pane: 'tainanHistoryFloodPane',
@@ -4212,10 +4273,69 @@ function createTainanHistoryFloodLayer() {
                 }
             });
     } else {
-        tainanHistoryFloodLayer.setLayerId(meta.layerId);
+        tainanHistoryFloodLayers[datasetId].setLayerId(
+            meta.layerId
+        );
     }
 
-    tainanHistoryFloodLayerId = selectedId;
+    return tainanHistoryFloodLayers[datasetId];
+}
+
+function getTainanHistoryFloodActiveLayers() {
+    return getTainanHistoryFloodActiveDatasetIds()
+        .map(createTainanHistoryFloodExportLayer)
+        .filter(function(layer) {
+            return !!layer;
+        });
+}
+
+function setTainanHistoryFloodActiveLayersEnabled(enabled) {
+    var activeDatasetIds = getTainanHistoryFloodActiveDatasetIds();
+
+    Object.keys(tainanHistoryFloodLayers).forEach(
+        function(datasetId) {
+            var layer = tainanHistoryFloodLayers[datasetId];
+            var isActive = activeDatasetIds.indexOf(datasetId) !== -1;
+
+            if (!enabled || !isActive) {
+                layer.setEnabled(false);
+
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            }
+        }
+    );
+
+    if (!enabled) {
+        tainanHistoryFloodLayer = null;
+        return [];
+    }
+
+    var activeLayers = getTainanHistoryFloodActiveLayers();
+
+    activeLayers.forEach(function(layer) {
+        layer.setOpacity(getTainanHistoryFloodOpacityValue());
+
+        if (!map.hasLayer(layer)) {
+            map.addLayer(layer);
+        }
+
+        layer.setEnabled(true);
+    });
+
+    tainanHistoryFloodLayer = activeLayers[0] || null;
+    tainanHistoryFloodLayerId = getTainanHistoryFloodSelectedId();
+
+    return activeLayers;
+}
+
+/* Legacy call-site compatibility: returns the first active source layer. */
+function createTainanHistoryFloodLayer() {
+    var activeLayers = getTainanHistoryFloodActiveLayers();
+
+    tainanHistoryFloodLayer = activeLayers[0] || null;
+    tainanHistoryFloodLayerId = getTainanHistoryFloodSelectedId();
 
     return tainanHistoryFloodLayer;
 }
@@ -4269,6 +4389,68 @@ function saveTainanHistoryFloodCachedEvents(layerId, payload) {
     }
 }
 
+function getTainanHistoryFloodLegend() {
+    if (tainanHistoryFloodLegendPayload) {
+        return Promise.resolve(tainanHistoryFloodLegendPayload);
+    }
+
+    if (tainanHistoryFloodLegendRequest) {
+        return tainanHistoryFloodLegendRequest;
+    }
+
+    var legendUrl =
+        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
+        '/legend?f=pjson';
+
+    tainanHistoryFloodLegendRequest = fetch(legendUrl, {
+        cache: 'force-cache'
+    })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('LEGEND_HTTP_' + response.status);
+            }
+
+            return response.json();
+        })
+        .then(function(payload) {
+            tainanHistoryFloodLegendPayload = payload;
+            return payload;
+        })
+        .finally(function() {
+            tainanHistoryFloodLegendRequest = null;
+        });
+
+    return tainanHistoryFloodLegendRequest;
+}
+
+function getTainanHistoryFloodMetadata(layerId) {
+    var requestKey = String(layerId);
+
+    if (tainanHistoryFloodMetadataRequests[requestKey]) {
+        return tainanHistoryFloodMetadataRequests[requestKey];
+    }
+
+    var metadataUrl =
+        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
+        '/' + layerId + '?f=pjson';
+
+    var request = fetch(metadataUrl, { cache: 'force-cache' })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('METADATA_HTTP_' + response.status);
+            }
+
+            return response.json();
+        })
+        .finally(function() {
+            delete tainanHistoryFloodMetadataRequests[requestKey];
+        });
+
+    tainanHistoryFloodMetadataRequests[requestKey] = request;
+
+    return request;
+}
+
 function getTainanHistoryFloodLayerEvents(layerId) {
     var cached = getTainanHistoryFloodCachedEvents(layerId);
 
@@ -4282,40 +4464,9 @@ function getTainanHistoryFloodLayerEvents(layerId) {
         return tainanHistoryFloodEventRequests[requestKey];
     }
 
-    var legendUrl =
-        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
-        '/legend?f=pjson';
-
-    var metadataUrl =
-        TAINAN_HISTORY_FLOOD_MAPSERVER_URL +
-        '/' +
-        layerId +
-        '?f=pjson';
-
     var request = Promise.all([
-        fetch(legendUrl, { cache: 'force-cache' })
-            .then(function(response) {
-                if (!response.ok) {
-                    throw new Error(
-                        'LEGEND_HTTP_' +
-                        response.status
-                    );
-                }
-
-                return response.json();
-            }),
-
-        fetch(metadataUrl, { cache: 'force-cache' })
-            .then(function(response) {
-                if (!response.ok) {
-                    throw new Error(
-                        'METADATA_HTTP_' +
-                        response.status
-                    );
-                }
-
-                return response.json();
-            })
+        getTainanHistoryFloodLegend(),
+        getTainanHistoryFloodMetadata(layerId)
     ])
         .then(function(results) {
             var legendPayload = results[0];
@@ -4582,14 +4733,90 @@ function getTainanHistoryFloodEntryRawValues(entry) {
         });
 }
 
+function getTainanHistoryFloodEventStateKey(entry, kind) {
+    var department = String(
+        entry && entry.department ?
+            entry.department :
+            getTainanHistoryFloodDepartmentLabel(
+                entry && entry.sourceLabels ?
+                    entry.sourceLabels[0] :
+                    ''
+            )
+    ).trim();
+
+    var valueKey = kind === 'logical' ?
+        String(entry && entry.eventKey ? entry.eventKey : '') :
+        String(
+            entry && entry.rawValueKey ?
+                entry.rawValueKey :
+                getTainanHistoryFloodEntryRawValues(entry)
+                    .map(getTainanHistoryFloodEventPresentationKey)
+                    .join('|')
+        );
+
+    return 'history-flood:' + department + ':' + kind + ':' + valueKey;
+}
+
+function hasTainanHistoryFloodSelectionState(key) {
+    return Object.prototype.hasOwnProperty.call(
+        tainanHistoryFloodSelectionState,
+        key
+    );
+}
+
+function isTainanHistoryFloodEventSelected(entry) {
+    var exactKey = getTainanHistoryFloodEventStateKey(
+        entry,
+        'raw'
+    );
+
+    if (hasTainanHistoryFloodSelectionState(exactKey)) {
+        return !!tainanHistoryFloodSelectionState[exactKey];
+    }
+
+    var logicalKey = getTainanHistoryFloodEventStateKey(
+        entry,
+        'logical'
+    );
+
+    if (hasTainanHistoryFloodSelectionState(logicalKey)) {
+        return !!tainanHistoryFloodSelectionState[logicalKey];
+    }
+
+    /* First-seen events retain the original default: display them. */
+    return true;
+}
+
+function setTainanHistoryFloodEventSelected(entry, selected) {
+    var checked = !!selected;
+
+    tainanHistoryFloodSelectionState[
+        getTainanHistoryFloodEventStateKey(entry, 'raw')
+    ] = checked;
+
+    tainanHistoryFloodSelectionState[
+        getTainanHistoryFloodEventStateKey(entry, 'logical')
+    ] = checked;
+}
+
+function syncTainanHistoryFloodSelectedValues() {
+    tainanHistoryFloodSelectedValues.clear();
+
+    tainanHistoryFloodEvents.forEach(function(entry) {
+        if (isTainanHistoryFloodEventSelected(entry)) {
+            tainanHistoryFloodSelectedValues.add(
+                getTainanHistoryFloodEventSelectionKey(entry)
+            );
+        }
+    });
+}
+
 function getTainanHistoryFloodSelectedRawValues() {
     var seen = new Set();
     var values = [];
 
     tainanHistoryFloodEvents.forEach(function(entry) {
-        if (!tainanHistoryFloodSelectedValues.has(
-            getTainanHistoryFloodEventSelectionKey(entry)
-        )) {
+        if (!isTainanHistoryFloodEventSelected(entry)) {
             return;
         }
 
@@ -4608,24 +4835,21 @@ function getTainanHistoryFloodSelectedRawValues() {
 
 function getTainanHistoryFloodVisibleEventCount() {
     return tainanHistoryFloodEvents.filter(function(entry) {
-        return tainanHistoryFloodSelectedValues.has(
-            getTainanHistoryFloodEventSelectionKey(entry)
-        );
+        return isTainanHistoryFloodEventSelected(entry);
     }).length;
 }
 
 function selectAllTainanHistoryFloodEventsInCurrentDataset() {
     tainanHistoryFloodEvents.forEach(function(entry) {
-        tainanHistoryFloodSelectedValues.add(
-            getTainanHistoryFloodEventSelectionKey(entry)
-        );
+        setTainanHistoryFloodEventSelected(entry, true);
     });
+
+    syncTainanHistoryFloodSelectedValues();
 }
 
 function ensureTainanHistoryFloodDefaultSelection() {
-    if (tainanHistoryFloodUserHasChangedSelection) return;
-
-    selectAllTainanHistoryFloodEventsInCurrentDataset();
+    /* No reset here: new/unknown events default to visible, known states persist. */
+    syncTainanHistoryFloodSelectedValues();
 }
 
 function addUniqueTainanHistoryFloodValue(list, value) {
@@ -4644,7 +4868,18 @@ function addUniqueTainanHistoryFloodImageData(list, imageData) {
     }
 }
 
-function getTainanHistoryFloodDepartmentLabel(sourceLabel) {
+function getTainanHistoryFloodDepartmentLabel(
+    sourceLabel,
+    sourceDataset
+) {
+    if (sourceDataset === 'history_stormwater') {
+        return '雨水科';
+    }
+
+    if (sourceDataset === 'history_planning') {
+        return '綜企科';
+    }
+
     var selectedDataset = getTainanHistoryFloodSelectedId();
 
     if (selectedDataset === 'history_stormwater') {
@@ -4655,27 +4890,40 @@ function getTainanHistoryFloodDepartmentLabel(sourceLabel) {
         return '綜企科';
     }
 
-    /*
-     * 「歷年淹水災情」彙整圖層沿用兩單位的官方原始圖例命名：
-     * 「淹水範圍／淹水」為綜企科，其他颱風、豪雨與水災名稱為雨水科。
-     */
+    /* Backwards-compatible fallback for any future, unannotated source. */
     return /淹水範圍|淹水/.test(sourceLabel) ?
         '綜企科' :
         '雨水科';
 }
 
 function presentTainanHistoryFloodEvents(events) {
-    return (Array.isArray(events) ? events : [])
-        .map(function(entry, sourceIndex) {
+    /*
+     * 同一科別的官方圖例有時會以不同原始名稱重複描述同一場事件，
+     * 例如「88 水災」與「98 莫拉克颱風」。
+     *
+     * 清單以「來源科別 + 標準化事件」為單位收斂：
+     * - 同一科別內的同一事件只顯示一列；所有原始 values 仍完整保留，
+     *   供 ArcGIS 篩選時一起送出。
+     * - 雨水科與綜企科仍使用不同 groupKey，因此絕不跨科別合併。
+     */
+    var groups = new Map();
+
+    (Array.isArray(events) ? events : []).forEach(
+        function(entry, sourceIndex) {
             var sourceLabel = String(
-                entry &&
-                entry.sourceLabel !== undefined ?
+                entry && entry.sourceLabel !== undefined ?
                     entry.sourceLabel :
                     (entry && entry.label ? entry.label : '')
             ).trim();
 
             var sourceKey =
                 getTainanHistoryFloodEventPresentationKey(sourceLabel);
+
+            var sourceDataset = String(
+                entry && entry.sourceDataset ?
+                    entry.sourceDataset :
+                    ''
+            );
 
             var config =
                 TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION[sourceKey];
@@ -4688,22 +4936,50 @@ function presentTainanHistoryFloodEvents(events) {
             ).trim();
 
             var department =
-                getTainanHistoryFloodDepartmentLabel(sourceLabel);
+                getTainanHistoryFloodDepartmentLabel(
+                    sourceLabel,
+                    sourceDataset
+                );
 
-            var event = {
-                label: (config ? config.label : sourceLabel) +
-                    '（' + department + '）',
-                selectionKey: 'source:' + department + ':' +
-                    getTainanHistoryFloodEventPresentationKey(rawValue) +
-                    ':' + sourceIndex,
-                _presentationOrder: config ?
-                    config.order :
-                    999999 + sourceIndex,
-                _sourceIndex: sourceIndex,
-                values: [],
-                sourceLabels: [],
-                imageDataList: []
-            };
+            var eventKey = config ? config.selectionKey :
+                'source:' + sourceKey;
+
+            /* sourceDataset is part of the key: do not merge two departments. */
+            var groupKey = String(sourceDataset || department) +
+                '|' + eventKey;
+
+            var event = groups.get(groupKey);
+
+            if (!event) {
+                event = {
+                    label: (config ? config.label : sourceLabel) +
+                        '（' + department + '）',
+                    baseLabel: config ? config.label : sourceLabel,
+                    department: department,
+                    sourceDataset: sourceDataset,
+                    eventKey: eventKey,
+                    rawValueKey: '',
+                    selectionKey: 'source:' +
+                        String(sourceDataset || department) + ':' +
+                        eventKey,
+                    _presentationOrder: config ?
+                        config.order :
+                        999999 + sourceIndex,
+                    _sourceIndex: sourceIndex,
+                    values: [],
+                    sourceLabels: [],
+                    imageDataList: []
+                };
+
+                groups.set(groupKey, event);
+            }
+
+            /* Keep the earliest appearance for deterministic sort order. */
+            event._presentationOrder = Math.min(
+                event._presentationOrder,
+                config ? config.order : 999999 + sourceIndex
+            );
+            event._sourceIndex = Math.min(event._sourceIndex, sourceIndex);
 
             addUniqueTainanHistoryFloodValue(event.values, rawValue);
             addUniqueTainanHistoryFloodValue(
@@ -4714,6 +4990,19 @@ function presentTainanHistoryFloodEvents(events) {
                 event.imageDataList,
                 entry && entry.imageData
             );
+        }
+    );
+
+    return Array.from(groups.values())
+        .map(function(event) {
+            /*
+             * A stable canonical raw key lets per-event selection survive
+             * switching among「全部來源／雨水科／綜企科」.
+             */
+            event.rawValueKey = event.values
+                .map(getTainanHistoryFloodEventPresentationKey)
+                .sort()
+                .join('|') || event.eventKey;
 
             return event;
         })
@@ -4730,11 +5019,16 @@ function getTainanHistoryFloodSwatchMarkup(entry) {
         entry.imageDataList :
         [];
 
-    if (!imageDataList.length && entry && entry.imageData) {
-        imageDataList = [entry.imageData];
-    }
+    var imageData = imageDataList.length ?
+        imageDataList[0] :
+        (entry && entry.imageData ? entry.imageData : '');
 
-    if (!imageDataList.length) {
+    /*
+     * Each rendered row represents one event in one department, so only show
+     * one representative official swatch.  Any duplicate raw legend values
+     * remain in entry.values for filtering, not as duplicate squares in UI.
+     */
+    if (!imageData) {
         return '<span class="hf-swatch">' +
             '<img alt="" src="' +
             getTainanHistoryFloodSwatch(entry) +
@@ -4742,15 +5036,18 @@ function getTainanHistoryFloodSwatchMarkup(entry) {
             '</span>';
     }
 
-    return imageDataList.map(function(imageData) {
-        return '<span class="hf-swatch">' +
-            '<img alt="" src="data:image/png;base64,' +
-            imageData +
-            '">' +
-            '</span>';
-    }).join('');
+    return '<span class="hf-swatch">' +
+        '<img alt="" src="data:image/png;base64,' +
+        imageData +
+        '">' +
+        '</span>';
 }
 /* ===== END: TAINAN_HISTORY_FLOOD_EVENT_PRESENTATION ===== */
+
+function filterTainanHistoryFloodEvents() {
+    /* Retained as a harmless compatibility hook; the event search UI was removed. */
+    renderTainanHistoryFloodEvents();
+}
 
 function renderTainanHistoryFloodEvents() {
     var root = document.getElementById(
@@ -4776,22 +5073,21 @@ function renderTainanHistoryFloodEvents() {
     if (!tainanHistoryFloodEvents.length) {
         showAllButton.disabled = true;
         hideAllButton.disabled = true;
-
-        countEl.textContent = '正在預載官方事件…';
-
+        countEl.textContent = '正在整理官方事件…';
         root.innerHTML =
             '<div class="hf-events-loading">' +
-            '正在背景載入官方事件清單；不必等到開啟圖層才開始載入。' +
+            '正在背景整理目前科別的官方事件。' +
             '</div>';
-
         return;
     }
+
+    syncTainanHistoryFloodSelectedValues();
 
     showAllButton.disabled = false;
     hideAllButton.disabled = false;
 
     countEl.textContent =
-        '顯示 ' +
+        '已選 ' +
         getTainanHistoryFloodVisibleEventCount() +
         ' / ' +
         tainanHistoryFloodEvents.length +
@@ -4799,19 +5095,16 @@ function renderTainanHistoryFloodEvents() {
 
     root.innerHTML = tainanHistoryFloodEvents
         .map(function(entry, index) {
-            var visible =
-                tainanHistoryFloodSelectedValues.has(
-                    getTainanHistoryFloodEventSelectionKey(entry)
-                );
-
-            var name =
-                escapeTainanHistoryFloodHtml(entry.label);
-
-            var sourceNames =
-                escapeTainanHistoryFloodHtml(
-                    (entry.sourceLabels || []).join('／')
-                );
-
+            var visible = isTainanHistoryFloodEventSelected(entry);
+            var name = escapeTainanHistoryFloodHtml(
+                entry.baseLabel || entry.label
+            );
+            var department = escapeTainanHistoryFloodHtml(
+                entry.department || ''
+            );
+            var sourceNames = escapeTainanHistoryFloodHtml(
+                (entry.sourceLabels || []).join('／')
+            );
             var status = visible ? '顯示' : '隱藏';
 
             return '<label class="hf-event-row' +
@@ -4831,35 +5124,72 @@ function renderTainanHistoryFloodEvents() {
                 getTainanHistoryFloodSwatchMarkup(entry) +
                 '</span>' +
 
-                '<span class="hf-event-name">' +
-                name +
+                '<span class="hf-event-copy">' +
+                '<span class="hf-event-name">' + name + '</span>' +
+                '<span class="hf-event-origin">資料：' + department + '</span>' +
                 '</span>' +
 
-                '<span class="hf-event-status">' +
-                status +
-                '</span>' +
-
+                '<span class="hf-event-status">' + status + '</span>' +
                 '</label>';
         })
         .join('');
 }
 
-function applyTainanHistoryFloodEventFilter() {
-    if (!tainanHistoryFloodLayer) return;
+function getTainanHistoryFloodSelectedRawValuesForDataset(datasetId) {
+    var seen = new Set();
+    var values = [];
 
-    var selectedRawValues =
-        getTainanHistoryFloodSelectedRawValues();
+    tainanHistoryFloodEvents.forEach(function(entry) {
+        if (
+            entry.sourceDataset !== datasetId ||
+            !isTainanHistoryFloodEventSelected(entry)
+        ) {
+            return;
+        }
 
-    var allSelected =
-        tainanHistoryFloodEvents.length > 0 &&
-        getTainanHistoryFloodVisibleEventCount() ===
-            tainanHistoryFloodEvents.length;
+        getTainanHistoryFloodEntryRawValues(entry).forEach(
+            function(value) {
+                if (!seen.has(value)) {
+                    seen.add(value);
+                    values.push(value);
+                }
+            }
+        );
+    });
 
-    tainanHistoryFloodLayer.setEventFilter(
-        tainanHistoryFloodFilterField,
-        selectedRawValues,
-        allSelected
+    return values;
+}
+
+function isTainanHistoryFloodDatasetFullySelected(datasetId) {
+    var entries = tainanHistoryFloodEvents.filter(
+        function(entry) {
+            return entry.sourceDataset === datasetId;
+        }
     );
+
+    return entries.length > 0 && entries.every(
+        isTainanHistoryFloodEventSelected
+    );
+}
+
+function applyTainanHistoryFloodEventFilter() {
+    var activeDatasetIds = getTainanHistoryFloodActiveDatasetIds();
+
+    if (!activeDatasetIds.length) return;
+
+    activeDatasetIds.forEach(function(datasetId) {
+        var layer = createTainanHistoryFloodExportLayer(datasetId);
+
+        if (!layer) return;
+
+        layer.setEventFilter(
+            tainanHistoryFloodFilterFields[datasetId] ||
+                tainanHistoryFloodFilterField ||
+                'NAME',
+            getTainanHistoryFloodSelectedRawValuesForDataset(datasetId),
+            isTainanHistoryFloodDatasetFullySelected(datasetId)
+        );
+    });
 
     renderTainanHistoryFloodEvents();
     syncTainanHistoryFloodState();
@@ -4869,61 +5199,168 @@ function setTainanHistoryFloodEventsFromPayload(payload) {
     tainanHistoryFloodEvents =
         presentTainanHistoryFloodEvents(payload.events);
 
-    tainanHistoryFloodFilterField = payload.fieldName;
+    tainanHistoryFloodFilterFields = payload.fieldNames || {};
+    tainanHistoryFloodFilterField = payload.fieldName ||
+        tainanHistoryFloodFilterFields.history_stormwater ||
+        tainanHistoryFloodFilterFields.history_planning ||
+        null;
 
     ensureTainanHistoryFloodDefaultSelection();
 }
 
-function loadTainanHistoryFloodEvents() {
+function getTainanHistoryFloodPayloadForDataset(datasetId) {
+    var meta = tainanHistoryFloodMeta[datasetId];
+
+    if (!meta || datasetId === 'history_all') {
+        return Promise.reject(new Error('UNKNOWN_HISTORY_FLOOD_SOURCE'));
+    }
+
+    return getTainanHistoryFloodLayerEvents(meta.layerId)
+        .then(function(payload) {
+            return {
+                fieldNames: {
+                    [datasetId]: payload.fieldName
+                },
+                events: (payload.events || []).map(function(entry) {
+                    var copiedEntry = Object.assign({}, entry);
+                    copiedEntry.sourceDataset = datasetId;
+                    return copiedEntry;
+                })
+            };
+        });
+}
+
+function getTainanHistoryFloodPayloadForSelection(selectedId) {
+    var sourceDatasetIds = selectedId === 'history_all' ?
+        TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS :
+        [selectedId];
+
+    return Promise.all(
+        sourceDatasetIds.map(getTainanHistoryFloodPayloadForDataset)
+    ).then(function(payloads) {
+        return payloads.reduce(function(merged, payload) {
+            Object.assign(merged.fieldNames, payload.fieldNames || {});
+            merged.events = merged.events.concat(payload.events || []);
+            return merged;
+        }, {
+            fieldNames: {},
+            events: []
+        });
+    });
+}
+
+function syncTainanHistoryFloodDatasetPicker() {
     var selectedId = getTainanHistoryFloodSelectedId();
+    var buttons = document.querySelectorAll(
+        '[data-tainan-history-dataset]'
+    );
 
-    var meta =
-        tainanHistoryFloodMeta[selectedId] ||
-        tainanHistoryFloodMeta.history_all;
+    buttons.forEach(function(button) {
+        var active = button.dataset.tainanHistoryDataset === selectedId;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
 
-    var activeLayerId = meta.layerId;
+function setTainanHistoryFloodDataset(datasetId) {
+    if (!tainanHistoryFloodMeta[datasetId]) return;
 
-    var cached =
-        getTainanHistoryFloodCachedEvents(activeLayerId);
+    var selectEl = document.getElementById(
+        'tainanHistoryFloodDataset'
+    );
 
-    if (cached) {
-        setTainanHistoryFloodEventsFromPayload(cached);
+    if (!selectEl) return;
 
-        renderTainanHistoryFloodEvents();
+    if (selectEl.value === datasetId) {
+        syncTainanHistoryFloodDatasetPicker();
+        return;
+    }
 
-        if (tainanHistoryFloodLayer) {
-            applyTainanHistoryFloodEventFilter();
-        }
+    selectEl.value = datasetId;
+    syncTainanHistoryFloodDatasetPicker();
+    changeTainanHistoryFloodDataset();
+}
 
+function updateTainanHistoryFloodPreloadStatus() {
+    /* Preload is intentionally silent; events themselves show their loading state. */
+}
+
+function setTainanHistoryFloodDatasetLoadState(datasetId, state) {
+    if (!tainanHistoryFloodMeta[datasetId]) return;
+
+    tainanHistoryFloodDatasetLoadState[datasetId] = state;
+    updateTainanHistoryFloodPreloadStatus();
+}
+
+function prefetchTainanHistoryFloodDataset(datasetId) {
+    var meta = tainanHistoryFloodMeta[datasetId];
+
+    if (!meta || datasetId === 'history_all') {
         return Promise.resolve();
     }
 
+    var cached = getTainanHistoryFloodCachedEvents(meta.layerId);
+
+    if (cached) {
+        setTainanHistoryFloodDatasetLoadState(datasetId, 'ready');
+        return Promise.resolve(cached);
+    }
+
+    setTainanHistoryFloodDatasetLoadState(datasetId, 'loading');
+
+    return getTainanHistoryFloodLayerEvents(meta.layerId)
+        .then(function(payload) {
+            setTainanHistoryFloodDatasetLoadState(datasetId, 'ready');
+            return payload;
+        })
+        .catch(function(error) {
+            setTainanHistoryFloodDatasetLoadState(datasetId, 'error');
+            throw error;
+        });
+}
+
+function loadTainanHistoryFloodEvents() {
+    var selectedId = getTainanHistoryFloodSelectedId();
+    var sourceDatasetIds = selectedId === 'history_all' ?
+        TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS :
+        [selectedId];
+
+    sourceDatasetIds.forEach(function(datasetId) {
+        setTainanHistoryFloodDatasetLoadState(datasetId, 'loading');
+    });
+
     tainanHistoryFloodEvents = [];
     tainanHistoryFloodFilterField = null;
-
+    tainanHistoryFloodFilterFields = {};
     renderTainanHistoryFloodEvents();
 
-    return getTainanHistoryFloodLayerEvents(activeLayerId)
+    return getTainanHistoryFloodPayloadForSelection(selectedId)
         .then(function(payload) {
-            var currentMeta =
-                tainanHistoryFloodMeta[
-                    getTainanHistoryFloodSelectedId()
-                ] ||
-                tainanHistoryFloodMeta.history_all;
+            sourceDatasetIds.forEach(function(datasetId) {
+                setTainanHistoryFloodDatasetLoadState(datasetId, 'ready');
+            });
 
-            if (activeLayerId !== currentMeta.layerId) {
+            if (selectedId !== getTainanHistoryFloodSelectedId()) {
                 return;
             }
 
             setTainanHistoryFloodEventsFromPayload(payload);
-
             renderTainanHistoryFloodEvents();
 
-            if (tainanHistoryFloodLayer) {
+            var toggleEl = document.getElementById(
+                'tainanHistoryFloodToggle'
+            );
+
+            if (toggleEl && toggleEl.checked) {
+                setTainanHistoryFloodActiveLayersEnabled(true);
                 applyTainanHistoryFloodEventFilter();
             }
         })
         .catch(function() {
+            sourceDatasetIds.forEach(function(datasetId) {
+                setTainanHistoryFloodDatasetLoadState(datasetId, 'error');
+            });
+
             var root = document.getElementById(
                 'tainanHistoryFloodEvents'
             );
@@ -4972,35 +5409,24 @@ function toggleTainanHistoryFloodLayer(checked) {
     }
 
     if (!checked) {
-        if (tainanHistoryFloodLayer) {
-            tainanHistoryFloodLayer.setEnabled(false);
-
-            if (map.hasLayer(tainanHistoryFloodLayer)) {
-                map.removeLayer(tainanHistoryFloodLayer);
-            }
-        }
-
+        setTainanHistoryFloodActiveLayersEnabled(false);
         syncTainanHistoryFloodState();
         return;
     }
 
-    var layer = createTainanHistoryFloodLayer();
+    setTainanHistoryFloodActiveLayersEnabled(true);
 
-    layer.setOpacity(
-        getTainanHistoryFloodOpacityValue()
-    );
-
-    if (!map.hasLayer(layer)) {
-        map.addLayer(layer);
+    if (!tainanHistoryFloodEvents.length) {
+        loadTainanHistoryFloodEvents();
+    } else {
+        applyTainanHistoryFloodEventFilter();
     }
-
-    layer.setEnabled(true);
 
     syncTainanHistoryFloodState();
 }
 
 function changeTainanHistoryFloodDataset() {
-    var layer = createTainanHistoryFloodLayer();
+    syncTainanHistoryFloodDatasetPicker();
 
     var toggleEl = document.getElementById(
         'tainanHistoryFloodToggle'
@@ -5008,11 +5434,15 @@ function changeTainanHistoryFloodDataset() {
 
     var isEnabled = !!(toggleEl && toggleEl.checked);
 
-    layer.setEnabled(false);
+    setTainanHistoryFloodActiveLayersEnabled(false);
 
     loadTainanHistoryFloodEvents()
         .then(function() {
-            layer.setEnabled(isEnabled);
+            if (isEnabled && toggleEl && toggleEl.checked) {
+                setTainanHistoryFloodActiveLayersEnabled(true);
+                applyTainanHistoryFloodEventFilter();
+            }
+
             syncTainanHistoryFloodState();
         });
 }
@@ -5029,9 +5459,11 @@ function updateTainanHistoryFloodOpacity(value) {
             Math.round(opacity * 100) + '%';
     }
 
-    if (tainanHistoryFloodLayer) {
-        tainanHistoryFloodLayer.setOpacity(opacity);
-    }
+    Object.keys(tainanHistoryFloodLayers).forEach(
+        function(datasetId) {
+            tainanHistoryFloodLayers[datasetId].setOpacity(opacity);
+        }
+    );
 }
 
 document.addEventListener('change', function(event) {
@@ -5051,16 +5483,10 @@ document.addEventListener('change', function(event) {
 
     if (!entry) return;
 
-    var selectionKey =
-        getTainanHistoryFloodEventSelectionKey(entry);
-
     tainanHistoryFloodUserHasChangedSelection = true;
 
-    if (input.checked) {
-        tainanHistoryFloodSelectedValues.add(selectionKey);
-    } else {
-        tainanHistoryFloodSelectedValues.delete(selectionKey);
-    }
+    setTainanHistoryFloodEventSelected(entry, input.checked);
+    syncTainanHistoryFloodSelectedValues();
 
     applyTainanHistoryFloodEventFilter();
 });
@@ -5069,13 +5495,7 @@ document.getElementById(
     'tainanHistoryFloodShowAll'
 ).addEventListener('click', function() {
     tainanHistoryFloodUserHasChangedSelection = true;
-
-    tainanHistoryFloodEvents.forEach(function(entry) {
-        tainanHistoryFloodSelectedValues.add(
-            getTainanHistoryFloodEventSelectionKey(entry)
-        );
-    });
-
+    selectAllTainanHistoryFloodEventsInCurrentDataset();
     applyTainanHistoryFloodEventFilter();
 });
 
@@ -5085,11 +5505,10 @@ document.getElementById(
     tainanHistoryFloodUserHasChangedSelection = true;
 
     tainanHistoryFloodEvents.forEach(function(entry) {
-        tainanHistoryFloodSelectedValues.delete(
-            getTainanHistoryFloodEventSelectionKey(entry)
-        );
+        setTainanHistoryFloodEventSelected(entry, false);
     });
 
+    syncTainanHistoryFloodSelectedValues();
     applyTainanHistoryFloodEventFilter();
 });
 
@@ -5097,31 +5516,40 @@ map.on('zoomend', function() {
     syncTainanHistoryFloodState();
 });
 
-/* ===== START: HISTORY_FLOOD_IDLE_PREFETCH ===== */
+/* ===== START: HISTORY_FLOOD_EARLY_ALL_SOURCE_PREFETCH ===== */
 function prefetchTainanHistoryFloodWhenIdle() {
-    var loadHistoryEvents = function() {
-        loadTainanHistoryFloodEvents();
-    };
+    var selectedId = getTainanHistoryFloodSelectedId();
+    var datasetIds = TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.slice();
 
-    if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(loadHistoryEvents, {
-            timeout: 8000
+    if (selectedId !== 'history_all') {
+        datasetIds.sort(function(a, b) {
+            return (a === selectedId ? -1 : 0) -
+                (b === selectedId ? -1 : 0);
         });
-    } else {
-        window.setTimeout(loadHistoryEvents, 3500);
     }
+
+    datasetIds.forEach(function(datasetId, index) {
+        window.setTimeout(function() {
+            prefetchTainanHistoryFloodDataset(datasetId)
+                .catch(function() {
+                    /* Each source can fail independently without affecting other features. */
+                });
+        }, index * 80);
+    });
 }
 
-if (document.readyState === 'complete') {
-    prefetchTainanHistoryFloodWhenIdle();
-} else {
-    window.addEventListener(
-        'load',
-        prefetchTainanHistoryFloodWhenIdle,
+if (document.readyState === 'loading') {
+    document.addEventListener(
+        'DOMContentLoaded',
+        function() {
+            window.setTimeout(prefetchTainanHistoryFloodWhenIdle, 120);
+        },
         { once: true }
     );
+} else {
+    window.setTimeout(prefetchTainanHistoryFloodWhenIdle, 120);
 }
-/* ===== END: HISTORY_FLOOD_IDLE_PREFETCH ===== */
+/* ===== END: HISTORY_FLOOD_EARLY_ALL_SOURCE_PREFETCH ===== */
 /* ===== END: TAINAN_HISTORY_FLOOD_V5_SCRIPT ===== */
 
         function getGeoJsonUrls(path) {
@@ -12255,5 +12683,687 @@ body.listening-mode .glass-header,
   }
 })();
 </script>
+
+
+<!-- ===== START: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
+<style id="flood-dedupe-and-right-tools-stack-fix">
+  /*
+   * 右上控制列由多個舊版與外掛控制動態組成。強制它們回到同一個
+   * flex column，並取消外掛可能殘留的 absolute/fixed 定位，避免圖示重疊。
+   */
+  #rightToolsWrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 12px !important;
+  }
+
+  #rightToolsWrapper > .tools-toggle-btn,
+  #rightToolsWrapper > .haidian-heat-risk-control {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: auto !important;
+    flex: 0 0 auto !important;
+    align-self: flex-end !important;
+    margin: 0 !important;
+  }
+
+  /* 外掛小太陽若以 fixed/absolute 建立，移入工具列後必須回到正常流。 */
+  #rightToolsWrapper .haidian-heat-risk-control {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: auto !important;
+    transform: none !important;
+    z-index: auto !important;
+  }
+
+  /* Desktop menu stays in the same vertical tool stack.  Mobile keeps its
+     pre-existing fixed bottom-sheet behavior untouched. */
+  @media (min-width: 601px) {
+    #rightToolsWrapper > .tools-menu-container {
+      position: relative !important;
+      top: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      left: auto !important;
+      inset: auto !important;
+      flex: 0 0 auto !important;
+      align-self: flex-end !important;
+      margin-top: 0 !important;
+    }
+  }
+
+  @media (max-width: 600px) {
+    #rightToolsWrapper {
+      gap: 8px !important;
+    }
+  }
+</style>
+
+<script id="right-tools-control-stack-normalizer">
+(function () {
+  "use strict";
+
+  function getDirectChild(wrapper, predicate) {
+    return Array.prototype.find.call(
+      wrapper.children,
+      predicate
+    ) || null;
+  }
+
+  function isListeningControl(node) {
+    if (!node || !node.classList ||
+        !node.classList.contains("tools-toggle-btn")) {
+      return false;
+    }
+
+    return String(node.getAttribute("onclick") || "")
+      .indexOf("toggleListeningMode") >= 0;
+  }
+
+  function isLayerControl(node) {
+    if (!node || !node.classList ||
+        !node.classList.contains("tools-toggle-btn")) {
+      return false;
+    }
+
+    var onclick = String(node.getAttribute("onclick") || "");
+    var title = String(node.getAttribute("title") || "");
+
+    return onclick.indexOf("toggleRightToolsPanel") >= 0 ||
+      /圖層|圖資/.test(title);
+  }
+
+  function normalizeStack() {
+    var wrapper = document.getElementById("rightToolsWrapper");
+    var menu = document.getElementById("rightToolsMenu");
+
+    if (!wrapper || !menu) return;
+
+    /* Move any late-injected heat-risk key into this one controlled stack. */
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".haidian-heat-risk-control"),
+      function (control) {
+        if (control !== wrapper && !wrapper.contains(control)) {
+          wrapper.insertBefore(control, menu);
+        }
+      }
+    );
+
+    var listening = getDirectChild(wrapper, isListeningControl);
+    var heatRisk = getDirectChild(wrapper, function (node) {
+      return node.classList &&
+        node.classList.contains("haidian-heat-risk-control");
+    });
+    var layers = getDirectChild(wrapper, isLayerControl);
+
+    /*
+     * Stable, non-overlapping order: headphones → heat-risk → layers → menu.
+     * Build it from right to left so an already-correct stack does not cause
+     * DOM mutations (and therefore cannot trigger an observer feedback loop).
+     */
+    var controls = [listening, heatRisk, layers].filter(Boolean);
+
+    for (var index = controls.length - 1; index >= 0; index -= 1) {
+      var control = controls[index];
+      var anchor = index === controls.length - 1 ?
+        menu :
+        controls[index + 1];
+
+      if (control.nextElementSibling !== anchor) {
+        wrapper.insertBefore(control, anchor);
+      }
+    }
+  }
+
+  function install() {
+    var wrapper = document.getElementById("rightToolsWrapper");
+    if (!wrapper) {
+      window.setTimeout(install, 120);
+      return;
+    }
+
+    var frameId = 0;
+    function scheduleNormalize() {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(normalizeStack);
+    }
+
+    /* Only watch this stack continuously.  A separate lightweight observer
+       notices a late-injected heat-risk key elsewhere on the page. */
+    var stackObserver = new MutationObserver(scheduleNormalize);
+    stackObserver.observe(wrapper, { childList: true });
+
+    var externalControlObserver = new MutationObserver(function(records) {
+      var foundHeatRiskControl = records.some(function(record) {
+        return Array.prototype.some.call(
+          record.addedNodes || [],
+          function(node) {
+            if (!node || node.nodeType !== 1) return false;
+            return (node.matches &&
+              node.matches(".haidian-heat-risk-control")) ||
+              (node.querySelector &&
+                node.querySelector(".haidian-heat-risk-control"));
+          }
+        );
+      });
+
+      if (foundHeatRiskControl) {
+        scheduleNormalize();
+      }
+    });
+
+    externalControlObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    window.addEventListener("resize", scheduleNormalize);
+    scheduleNormalize();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", install, { once: true });
+  } else {
+    install();
+  }
+})();
+</script>
+<!-- ===== END: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
+
+
+<!-- ===== START: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
+<style id="immediate-flood-events-and-solid-right-tool-rail-fix">
+  /*
+   * 水災事件交給外層圖資面板捲動，不再有第二層固定高度的事件清單。
+   * 因此所有事件列會在同一輪 DOM 更新中建立，不會讓末段事件看起來像晚到。
+   */
+  #tainanHistoryFloodEvents.hf-events {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+
+  /*
+   * 桌機右上控制列：三個主要圖示一律在同一條 flex 軌道中排列。
+   * 外部 heat-risk.js 即使晚注入 style，也會再由下方 JS 以 inline !important 固定幾何。
+   */
+  @media (min-width: 601px) {
+    #rightToolsWrapper {
+      display: flex !important;
+      flex-direction: column !important;
+      flex-wrap: nowrap !important;
+      align-items: flex-end !important;
+      align-content: flex-end !important;
+      gap: 12px !important;
+      isolation: isolate;
+    }
+
+    #rightToolsWrapper > .tools-toggle-btn,
+    #rightToolsWrapper > .haidian-heat-risk-control {
+      position: relative !important;
+      inset: auto !important;
+      top: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      left: auto !important;
+      transform: none !important;
+      float: none !important;
+      clear: both !important;
+      flex: 0 0 52px !important;
+      width: 52px !important;
+      min-width: 52px !important;
+      height: 52px !important;
+      min-height: 52px !important;
+      margin: 0 !important;
+      align-self: flex-end !important;
+      z-index: 4504 !important;
+    }
+
+    #rightToolsWrapper > .tools-menu-container {
+      position: relative !important;
+      inset: auto !important;
+      top: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      left: auto !important;
+      transform-origin: top right !important;
+      flex: 0 0 auto !important;
+      align-self: flex-end !important;
+      margin: 0 !important;
+      z-index: 4503 !important;
+    }
+
+    /* 收合耳朵只會在圖資選單打開時顯示，避免初始化瞬間與主圖示重疊。 */
+    #rightToolsWrapper:not(.open) > #rightToolsCollapseEar,
+    #rightToolsWrapper.haidian-v4-tools-user-hidden > #rightToolsCollapseEar {
+      display: none !important;
+    }
+
+    #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCollapseEar {
+      display: flex !important;
+      z-index: 4510 !important;
+    }
+  }
+</style>
+
+<script id="immediate-flood-events-and-solid-right-tool-rail-fix-script">
+(function () {
+  'use strict';
+
+  /*
+   * 事件預覽採用官方 layer metadata 的 uniqueValueInfos。
+   * 這份清單比 legend 圖檔輕，可先一次建立所有事件文字；legend 回來後再補回官方色票。
+   */
+  var tainanHistoryFloodLoadSerial = 0;
+
+  function getTainanHistoryFloodPreviewPayloadForDataset(datasetId) {
+    var meta = window.tainanHistoryFloodMeta &&
+      window.tainanHistoryFloodMeta[datasetId];
+
+    if (!meta || datasetId === 'history_all') {
+      return Promise.reject(new Error('UNKNOWN_HISTORY_FLOOD_SOURCE'));
+    }
+
+    return getTainanHistoryFloodMetadata(meta.layerId)
+      .then(function (metadata) {
+        var renderer = metadata && metadata.drawingInfo ?
+          metadata.drawingInfo.renderer : null;
+
+        var fieldName = renderer && (renderer.field1 || renderer.field) ?
+          (renderer.field1 || renderer.field) : 'NAME';
+
+        var uniqueValueInfos = renderer &&
+          Array.isArray(renderer.uniqueValueInfos) ?
+          renderer.uniqueValueInfos : [];
+
+        var events = uniqueValueInfos
+          .map(function (info) {
+            var label = String(
+              info && info.label !== undefined && info.label !== null ?
+                info.label :
+                (info && info.value !== undefined && info.value !== null ?
+                  info.value : '')
+            ).trim();
+
+            var value = info && info.value !== undefined &&
+              info.value !== null ?
+              info.value : label;
+
+            if (!label || value === '') {
+              return null;
+            }
+
+            return {
+              label: label,
+              sourceLabel: label,
+              value: value,
+              imageData: '',
+              sourceDataset: datasetId
+            };
+          })
+          .filter(Boolean);
+
+        if (!events.length) {
+          throw new Error('NO_METADATA_EVENTS');
+        }
+
+        return {
+          fieldNames: (function () {
+            var fields = {};
+            fields[datasetId] = fieldName;
+            return fields;
+          })(),
+          events: events
+        };
+      });
+  }
+
+  function getTainanHistoryFloodPreviewPayloadForSelection(selectedId) {
+    var datasetIds = selectedId === 'history_all' ?
+      TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.slice() :
+      [selectedId];
+
+    return Promise.all(
+      datasetIds.map(getTainanHistoryFloodPreviewPayloadForDataset)
+    ).then(function (payloads) {
+      return payloads.reduce(function (merged, payload) {
+        Object.assign(merged.fieldNames, payload.fieldNames || {});
+        merged.events = merged.events.concat(payload.events || []);
+        return merged;
+      }, {
+        fieldNames: {},
+        events: []
+      });
+    });
+  }
+
+  function applyTainanHistoryFloodPayloadIfCurrent(
+    selectedId,
+    loadSerial,
+    payload
+  ) {
+    if (
+      loadSerial !== tainanHistoryFloodLoadSerial ||
+      selectedId !== getTainanHistoryFloodSelectedId()
+    ) {
+      return false;
+    }
+
+    setTainanHistoryFloodEventsFromPayload(payload);
+    renderTainanHistoryFloodEvents();
+
+    var toggleEl = document.getElementById('tainanHistoryFloodToggle');
+
+    if (toggleEl && toggleEl.checked) {
+      setTainanHistoryFloodActiveLayersEnabled(true);
+      applyTainanHistoryFloodEventFilter();
+    }
+
+    return true;
+  }
+
+  /*
+   * 覆寫原本「先清空、再等 legend」的流程：
+   * metadata 清單先完整顯示，官方 legend 完成後只更新色票，不會逐筆補列。
+   */
+  window.loadTainanHistoryFloodEvents = function () {
+    var selectedId = getTainanHistoryFloodSelectedId();
+    var sourceDatasetIds = selectedId === 'history_all' ?
+      TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.slice() :
+      [selectedId];
+    var loadSerial = ++tainanHistoryFloodLoadSerial;
+
+    sourceDatasetIds.forEach(function (datasetId) {
+      setTainanHistoryFloodDatasetLoadState(datasetId, 'loading');
+    });
+
+    tainanHistoryFloodEvents = [];
+    tainanHistoryFloodFilterField = null;
+    tainanHistoryFloodFilterFields = {};
+    renderTainanHistoryFloodEvents();
+
+    /* 先取較輕的 metadata，讓所有事件名稱同時出現。 */
+    getTainanHistoryFloodPreviewPayloadForSelection(selectedId)
+      .then(function (payload) {
+        applyTainanHistoryFloodPayloadIfCurrent(
+          selectedId,
+          loadSerial,
+          payload
+        );
+      })
+      .catch(function () {
+        /* 若 metadata 不含 renderer，仍由完整官方 legend 流程接手。 */
+      });
+
+    /* 再取得完整 legend，將預覽色塊換成官方色票。 */
+    return getTainanHistoryFloodPayloadForSelection(selectedId)
+      .then(function (payload) {
+        sourceDatasetIds.forEach(function (datasetId) {
+          setTainanHistoryFloodDatasetLoadState(datasetId, 'ready');
+        });
+
+        applyTainanHistoryFloodPayloadIfCurrent(
+          selectedId,
+          loadSerial,
+          payload
+        );
+      })
+      .catch(function () {
+        sourceDatasetIds.forEach(function (datasetId) {
+          setTainanHistoryFloodDatasetLoadState(datasetId, 'error');
+        });
+
+        /* metadata 預覽成功時保留可操作的完整事件清單，不覆蓋成錯誤訊息。 */
+        if (
+          loadSerial !== tainanHistoryFloodLoadSerial ||
+          selectedId !== getTainanHistoryFloodSelectedId() ||
+          tainanHistoryFloodEvents.length
+        ) {
+          return;
+        }
+
+        var root = document.getElementById('tainanHistoryFloodEvents');
+        var countEl = document.getElementById('tainanHistoryFloodEventCount');
+        var showAllButton = document.getElementById('tainanHistoryFloodShowAll');
+        var hideAllButton = document.getElementById('tainanHistoryFloodHideAll');
+
+        if (root) {
+          root.innerHTML =
+            '<div class="hf-events-fallback">' +
+            '官方事件清單暫時無法取得；地圖仍維持官方原始配色，請稍後重新整理再試。' +
+            '</div>';
+        }
+
+        if (countEl) {
+          countEl.textContent = '官方事件清單暫時無法取得';
+        }
+
+        if (showAllButton) showAllButton.disabled = true;
+        if (hideAllButton) hideAllButton.disabled = true;
+      });
+  };
+
+  /* 頁面載入後立刻並行暖機兩科資料，不再等待 120ms 或分段 80ms。 */
+  function prewarmTainanHistoryFloodSourcesImmediately() {
+    if (!window.TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS) return;
+
+    TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.forEach(function (datasetId) {
+      prefetchTainanHistoryFloodDataset(datasetId)
+        .catch(function () {
+          /* 個別來源失敗不影響其他既有功能。 */
+        });
+    });
+  }
+
+  prewarmTainanHistoryFloodSourcesImmediately();
+
+  /* ===== Desktop right-tool rail: hard geometry normalizer ===== */
+  function setImportantStyle(node, property, value) {
+    if (!node || !node.style) return false;
+
+    if (
+      node.style.getPropertyValue(property) === value &&
+      node.style.getPropertyPriority(property) === 'important'
+    ) {
+      return false;
+    }
+
+    node.style.setProperty(property, value, 'important');
+    return true;
+  }
+
+  function isDesktopRightToolRail() {
+    return window.matchMedia &&
+      window.matchMedia('(min-width: 601px)').matches;
+  }
+
+  function isListeningControl(node) {
+    return !!(
+      node && node.classList &&
+      node.classList.contains('tools-toggle-btn') &&
+      String(node.getAttribute('onclick') || '')
+        .indexOf('toggleListeningMode') >= 0
+    );
+  }
+
+  function isLayerControl(node) {
+    if (!node || !node.classList ||
+        !node.classList.contains('tools-toggle-btn')) {
+      return false;
+    }
+
+    var onclick = String(node.getAttribute('onclick') || '');
+    var title = String(node.getAttribute('title') || '');
+
+    return onclick.indexOf('toggleRightToolsPanel') >= 0 ||
+      /圖層|圖資/.test(title);
+  }
+
+  function getDirectChild(wrapper, predicate) {
+    return Array.prototype.find.call(wrapper.children, predicate) || null;
+  }
+
+  function normalizePrimaryToolGeometry(control) {
+    if (!control || !isDesktopRightToolRail()) return;
+
+    [
+      ['position', 'relative'],
+      ['inset', 'auto'],
+      ['top', 'auto'],
+      ['right', 'auto'],
+      ['bottom', 'auto'],
+      ['left', 'auto'],
+      ['transform', 'none'],
+      ['float', 'none'],
+      ['margin', '0'],
+      ['width', '52px'],
+      ['min-width', '52px'],
+      ['height', '52px'],
+      ['min-height', '52px'],
+      ['flex', '0 0 52px'],
+      ['align-self', 'flex-end'],
+      ['z-index', '4504'],
+      ['display', 'flex'],
+      ['align-items', 'center'],
+      ['justify-content', 'center']
+    ].forEach(function (rule) {
+      setImportantStyle(control, rule[0], rule[1]);
+    });
+
+    Array.prototype.forEach.call(
+      control.querySelectorAll('button, a, [role="button"]'),
+      function (action) {
+        [
+          ['position', 'relative'],
+          ['inset', 'auto'],
+          ['top', 'auto'],
+          ['right', 'auto'],
+          ['bottom', 'auto'],
+          ['left', 'auto'],
+          ['transform', 'none'],
+          ['margin', '0'],
+          ['width', '100%'],
+          ['height', '100%'],
+          ['display', 'flex'],
+          ['align-items', 'center'],
+          ['justify-content', 'center']
+        ].forEach(function (rule) {
+          setImportantStyle(action, rule[0], rule[1]);
+        });
+      }
+    );
+  }
+
+  function normalizeDesktopRightToolRail() {
+    if (!isDesktopRightToolRail()) return;
+
+    var wrapper = document.getElementById('rightToolsWrapper');
+    var menu = document.getElementById('rightToolsMenu');
+
+    if (!wrapper || !menu) return;
+
+    /* 保留唯一一個小太陽控制；晚注入的重複節點一律隱藏，不再疊在右上角。 */
+    var heatControls = Array.prototype.slice.call(
+      document.querySelectorAll('.haidian-heat-risk-control')
+    );
+
+    var heatControl = heatControls.find(function (node) {
+      return node.parentElement === wrapper;
+    }) || heatControls[0] || null;
+
+    if (heatControl && heatControl.parentElement !== wrapper) {
+      wrapper.insertBefore(heatControl, menu);
+    }
+
+    heatControls.forEach(function (node) {
+      if (node === heatControl) return;
+      setImportantStyle(node, 'display', 'none');
+      node.setAttribute('aria-hidden', 'true');
+    });
+
+    var listening = getDirectChild(wrapper, isListeningControl);
+    var layers = getDirectChild(wrapper, isLayerControl);
+
+    /* 明確重排為：耳機 → 小太陽 → 圖層 → 圖資面板。 */
+    [listening, heatControl, layers]
+      .filter(Boolean)
+      .reverse()
+      .forEach(function (control, index, reversedControls) {
+        var anchor = index === 0 ?
+          menu :
+          reversedControls[index - 1];
+
+        if (control.nextElementSibling !== anchor) {
+          wrapper.insertBefore(control, anchor);
+        }
+      });
+
+    [listening, heatControl, layers]
+      .filter(Boolean)
+      .forEach(normalizePrimaryToolGeometry);
+
+    [
+      ['position', 'relative'],
+      ['inset', 'auto'],
+      ['top', 'auto'],
+      ['right', 'auto'],
+      ['bottom', 'auto'],
+      ['left', 'auto'],
+      ['margin', '0'],
+      ['align-self', 'flex-end'],
+      ['z-index', '4503']
+    ].forEach(function (rule) {
+      setImportantStyle(menu, rule[0], rule[1]);
+    });
+  }
+
+  function installRightToolRailNormalizer() {
+    var frameId = 0;
+
+    function schedule() {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(normalizeDesktopRightToolRail);
+    }
+
+    var wrapper = document.getElementById('rightToolsWrapper');
+
+    if (!wrapper) {
+      window.setTimeout(installRightToolRailNormalizer, 80);
+      return;
+    }
+
+    var observer = new MutationObserver(schedule);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+
+    window.addEventListener('resize', schedule, { passive: true });
+    [0, 80, 320, 900, 2200].forEach(function (delay) {
+      window.setTimeout(schedule, delay);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      installRightToolRailNormalizer,
+      { once: true }
+    );
+  } else {
+    installRightToolRailNormalizer();
+  }
+})();
+</script>
+<!-- ===== END: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
 
 </body></html>
