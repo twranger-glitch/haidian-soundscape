@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.6
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.7
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -2040,8 +2040,23 @@
 
   function activePopupClassName() {
     const popup = mapRef && mapRef._popup;
+    if (!popup) return "";
+
+    // Leaflet keeps map._popup pointing at the last popup object even after
+    // popup.close()/map.removeLayer(popup).  That stale reference must not keep
+    // shade point-query permanently disabled after the host submit popup closes.
+    // Prefer the public layer-membership check; fall back to Popup._map only when
+    // hasLayer() is unavailable (older/custom Leaflet hosts).
+    if (mapRef && typeof mapRef.hasLayer === "function") {
+      try {
+        if (!mapRef.hasLayer(popup)) return "";
+      } catch (_) {}
+    } else if (Object.prototype.hasOwnProperty.call(popup, "_map") && popup._map !== mapRef) {
+      return "";
+    }
+
     return String(
-      popup && popup.options && popup.options.className
+      popup.options && popup.options.className
         ? popup.options.className
         : ""
     );
