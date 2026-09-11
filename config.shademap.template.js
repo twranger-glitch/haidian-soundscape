@@ -42,6 +42,11 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // waits for navigation to settle, then mounts only the newest viewport.
   navigationRebuildDelayMs: 520,
   hardCanvasCleanup: true,
+  // v7.8.3: explicitly release retired WebGL contexts and avoid remounting
+  // ShadeMap when a pan stays inside the same prepared CHMv2 coverage.
+  webglContextReleaseDelayMs: 90,
+  webglRecoveryRetryMs: 180,
+  preserveShadeLayerDuringNavigation: true,
 
   // Desktop banner UX: manual collapse to a compact pill; remember only for the current browser tab/session.
   headerMinimizeEnabled: true,
