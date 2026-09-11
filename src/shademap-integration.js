@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.6
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.7
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -56,7 +56,7 @@
     bareTerrainLabel: "Mapzen / Tilezen global terrain DEM",
     bareTerrainNote: "Global fallback terrain used by the shadow engine until authoritative regional terrain tiles are configured.",
 
-    // v7.6 authoritative Taiwan point elevation. Keep the credential OFF the browser:
+    // v7.7 authoritative Taiwan point elevation. Keep the credential OFF the browser:
     // put the MOI DTM api_key in a server-side proxy (Cloudflare Worker template included).
     // The point-query UI will suppress the global DEM number in Taiwan until this
     // proxy is configured, so a coarse fallback is never presented as authoritative.
@@ -381,30 +381,60 @@
         visibility:hidden!important;opacity:0!important;
       }
       .leaflet-tooltip.haidian-shade-query-tooltip{
-        white-space:normal!important;max-width:330px;padding:10px 12px!important;
-        background:rgba(255,255,255,.97)!important;border:1px solid #99f6e4!important;
-        border-radius:12px!important;box-shadow:0 10px 28px rgba(15,23,42,.18)!important;
-        color:#0f172a!important
+        white-space:normal!important;max-width:300px;padding:0!important;
+        background:rgba(255,255,255,.985)!important;border:1px solid #99f6e4!important;
+        border-radius:14px!important;box-shadow:0 12px 30px rgba(15,23,42,.18)!important;
+        color:#0f172a!important;overflow:hidden
       }
       .leaflet-tooltip.haidian-shade-query-tooltip:before{display:none!important}
-      .haidian-shade-query-popup{min-width:238px;line-height:1.45}
+      .haidian-shade-query-popup{min-width:246px;line-height:1.38}
+      .haidian-shade-query-popup .hsq-head{
+        display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+        padding:10px 11px 8px;border-bottom:1px solid #ecfdf5;background:#f8fffd
+      }
       .haidian-shade-query-popup .hsq-title{
-        margin-bottom:6px;font-weight:900;color:#0f766e;font-size:13px
+        margin:0;font-weight:900;color:#0f766e;font-size:13px
       }
-      .haidian-shade-query-popup .hsq-grid{
-        display:grid;grid-template-columns:auto 1fr;gap:3px 9px;font-size:11px
+      .haidian-shade-query-popup .hsq-coord{margin-top:2px;color:#94a3b8;font-size:9px;font-weight:650}
+      .haidian-shade-query-popup .hsq-status{
+        flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#eef2ff;color:#3730a3;
+        font-size:10px;font-weight:900;white-space:nowrap
       }
-      .haidian-shade-query-popup .hsq-label{color:#64748b}
-      .haidian-shade-query-popup .hsq-value{color:#0f172a;font-weight:800}
+      .haidian-shade-query-popup .hsq-status.is-sun{background:#fff7ed;color:#c2410c}
+      .haidian-shade-query-popup .hsq-status.is-shade{background:#eef2ff;color:#4338ca}
+      .haidian-shade-query-popup .hsq-status.is-pending{background:#f1f5f9;color:#64748b}
+      .haidian-shade-query-popup .hsq-main{padding:9px 11px 8px}
+      .haidian-shade-query-popup .hsq-metrics{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+      .haidian-shade-query-popup .hsq-metric{
+        padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff
+      }
+      .haidian-shade-query-popup .hsq-metric-label{color:#64748b;font-size:9px;font-weight:750}
+      .haidian-shade-query-popup .hsq-metric-value{margin-top:2px;color:#0f172a;font-size:15px;font-weight:950}
+      .haidian-shade-query-popup .hsq-metric small{font-size:9px;color:#94a3b8;font-weight:700}
+      .haidian-shade-query-popup .hsq-row{
+        display:flex;justify-content:space-between;gap:10px;margin-top:7px;padding-top:7px;
+        border-top:1px solid #f1f5f9;font-size:10.5px
+      }
+      .haidian-shade-query-popup .hsq-row-label{color:#64748b}
+      .haidian-shade-query-popup .hsq-row-value{color:#0f172a;font-weight:850;text-align:right}
       .haidian-shade-query-popup .hsq-pending{
         color:#0f766e;font-weight:800;animation:haidianShadeQueryPulse 1.1s ease-in-out infinite
       }
-      .haidian-shade-query-popup .hsq-muted{color:#64748b;font-weight:650}
+      .haidian-shade-query-popup .hsq-muted{color:#94a3b8;font-weight:700}
       @keyframes haidianShadeQueryPulse{0%,100%{opacity:.48}50%{opacity:1}}
-      .haidian-shade-query-popup .hsq-foot{
-        margin-top:7px;padding-top:6px;border-top:1px solid #e2e8f0;
-        color:#78716c;font-size:9px
+      .haidian-shade-query-popup details.hsq-details{
+        margin-top:8px;border-top:1px solid #e2e8f0;padding-top:7px;color:#64748b;font-size:9px
       }
+      .haidian-shade-query-popup details.hsq-details summary{
+        cursor:pointer;list-style:none;color:#64748b;font-size:9.5px;font-weight:850;user-select:none
+      }
+      .haidian-shade-query-popup details.hsq-details summary::-webkit-details-marker{display:none}
+      .haidian-shade-query-popup details.hsq-details summary:after{content:' ▾'}
+      .haidian-shade-query-popup details.hsq-details[open] summary:after{content:' ▴'}
+      .haidian-shade-query-popup .hsq-detail-grid{
+        display:grid;grid-template-columns:auto 1fr;gap:3px 7px;margin-top:6px;word-break:break-word
+      }
+      .haidian-shade-query-popup .hsq-detail-grid b{color:#475569;font-weight:800}
 
       /* Desktop banner: manually collapse the large top banner into a small pill. */
       .haidian-header-minimize-btn{display:none}
@@ -666,7 +696,7 @@
 
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
-          高解析樹蔭建議在 z14–17 判讀。v7.6 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
+          高解析樹蔭建議在 z14–17 判讀。v7.7 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
           若設定官方 DTM Terrarium XYZ，臺灣的陰影地形也會改用該官方資料；未設定或 tile 缺失時才使用全球 DEM fallback。兩者不混稱為同一份資料。
           建築高度可能來自 OSM 或預設值，適合環境教育與空間比較，不取代現地測量。
         </div>
@@ -1579,71 +1609,97 @@
     const canopyText = model.canopy === undefined
       ? pending
       : model.canopyError
-        ? `<span class="hsq-muted">${escapeHtml(model.canopyError)}</span>`
+        ? '<span class="hsq-muted">暫不可用</span>'
         : model.canopy == null
           ? "—"
           : model.canopy === 0
-            ? "0 m（亦可能為 no-data）"
+            ? '0 m <small>可能為 no-data</small>'
             : escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1));
+
+    const inTaiwan = !!taiwanOfficialDtmRegion(latlng);
+    const groundAvailable = Number.isFinite(model.ground) && !model.groundWithheldFallback;
     const groundText = model.ground === undefined
       ? pending
-      : model.groundError
-        ? `<span class="hsq-muted">${escapeHtml(model.groundError)}</span>`
-        : model.groundWithheldFallback
-          ? '<span class="hsq-muted">—（未顯示全球 DEM 參考值）</span>'
-          : model.ground == null
-            ? "—"
-            : escapeHtml(meters(model.ground));
-    const surface = Number.isFinite(model.ground) && Number.isFinite(model.canopy)
+      : groundAvailable
+        ? escapeHtml(meters(model.ground))
+        : "—";
+
+    const surface = groundAvailable && Number.isFinite(model.canopy)
       ? model.ground + model.canopy
       : null;
-    const surfaceText = model.ground === undefined || model.canopy === undefined
-      ? pending
-      : Number.isFinite(surface)
-        ? escapeHtml(meters(surface))
-        : "—";
-    const shadeText = model.shade === undefined
-      ? pending
-      : escapeHtml(model.shade && model.shade.label ? model.shade.label : "—");
+    const shadeLabel = model.shade && model.shade.label ? String(model.shade.label) : "讀取中…";
+    const shadeClass = model.shade === undefined || (model.shade && model.shade.shaded == null)
+      ? "is-pending"
+      : model.shade.shaded
+        ? "is-shade"
+        : "is-sun";
+
     const building = model.building;
     const buildingHeight = building && Number(building.properties && building.properties.height);
     const buildingName = building && building.properties && building.properties.name;
     const heightSource = building && building.properties && building.properties.height_source;
     const time = `${formatDateInput(state.date)} ${String(state.date.getHours()).padStart(2, "0")}:${String(state.date.getMinutes()).padStart(2, "0")}`;
 
-    const rows = [
-      ["位置", escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)],
-      ["目前狀態", shadeText],
-      ["Meta 樹冠高度", canopyText],
-      ["地面海拔", groundText],
-      ["地表＋樹冠海拔", surfaceText],
-      ["點位高程來源", escapeHtml(model.groundSource || (model.ground === undefined ? "讀取中…" : "—"))],
-      ["點位高程資料集", escapeHtml(model.groundDataset || (model.ground === undefined ? "讀取中…" : "—"))],
-      ["陰影地形來源", escapeHtml(dynamicShadowTerrainLabel(latlng))],
-      ["模擬時間", escapeHtml(time)],
-      ["研究模式", escapeHtml(modeLabel(state.mode))]
-    ];
-
-    if (building) {
-      rows.push(["建築", escapeHtml(buildingName || "OSM building")]);
-      rows.push(["建築高度", escapeHtml(meters(buildingHeight))]);
-      rows.push(["高度來源", escapeHtml(heightSource || "未知")]);
-    } else {
-      rows.push(["建築", '<span class="hsq-muted">目前已載入建築快取中未命中</span>']);
+    const secondaryRows = [];
+    if (groundAvailable) {
+      secondaryRows.push(["地面海拔", escapeHtml(meters(model.ground))]);
+      if (Number.isFinite(surface)) secondaryRows.push(["樹冠頂海拔", escapeHtml(meters(surface))]);
     }
+    if (building) {
+      secondaryRows.push(["建築", escapeHtml(buildingName || "OSM building")]);
+      if (Number.isFinite(buildingHeight)) secondaryRows.push(["建築高度", escapeHtml(meters(buildingHeight))]);
+    }
+    secondaryRows.push(["模擬時間", escapeHtml(time)]);
+
+    const officialStatus = inTaiwan
+      ? (model.ground === undefined
+          ? "官方 DTM 查詢中"
+          : model.groundAuthoritative
+            ? "已使用內政部官方 DTM"
+            : officialDtmProxyConfigured()
+              ? (model.groundError ? "官方 DTM 查詢失敗" : "官方 DTM 未回傳有效值")
+              : "官方 DTM 尚未啟用")
+      : "不在臺灣官方 DTM 範圍";
+
+    const detailItems = [
+      ["樹高來源", "Meta / WRI CHMv2"],
+      ["取樣層級", `z${model.queryZoom}`],
+      ["點位高程", groundAvailable ? (model.groundSource || "—") : officialStatus],
+      ["陰影地形", dynamicShadowTerrainLabel(latlng)],
+      ["研究模式", modeLabel(state.mode)]
+    ];
+    if (groundAvailable && model.groundDataset) detailItems.splice(3, 0, ["高程資料集", model.groundDataset]);
+    if (building && heightSource) detailItems.push(["建築高度來源", heightSource]);
 
     return `
       <div class="haidian-shade-query-popup">
-        <div class="hsq-title">🌳 點位日照／樹冠資訊</div>
-        <div class="hsq-grid">
-          ${rows.map(([label, value]) =>
-            `<div class="hsq-label">${escapeHtml(label)}</div><div class="hsq-value">${value}</div>`
-          ).join("")}
+        <div class="hsq-head">
+          <div>
+            <div class="hsq-title">🌳 樹蔭點位</div>
+            <div class="hsq-coord">${escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)}</div>
+          </div>
+          <div class="hsq-status ${shadeClass}">${escapeHtml(shadeLabel)}</div>
         </div>
-        <div class="hsq-foot">
-          結果會逐項更新。十字中心是點擊位置；小方格是實際取樣的 z${model.queryZoom} CHMv2 raster pixel。
-          樹高為模型估計。臺灣點位海拔優先使用內政部 DTM 20 m 安全代理；若代理未設定，v7.6 預設不顯示全球 DEM 的單點數字，避免把 fallback 誤認為官方高程。
-          注意：「點位高程來源」與「陰影地形來源」可能不同；若已設定官方 DTM Terrarium XYZ，臺灣陰影 surface 也會優先採用官方地形，缺 tile 才回退全球 DEM。
+        <div class="hsq-main">
+          <div class="hsq-metrics">
+            <div class="hsq-metric">
+              <div class="hsq-metric-label">樹冠高度</div>
+              <div class="hsq-metric-value">${canopyText}</div>
+            </div>
+            <div class="hsq-metric">
+              <div class="hsq-metric-label">地面海拔</div>
+              <div class="hsq-metric-value">${groundText}</div>
+            </div>
+          </div>
+          ${secondaryRows.map(([label, value]) => `
+            <div class="hsq-row"><span class="hsq-row-label">${escapeHtml(label)}</span><span class="hsq-row-value">${value}</span></div>
+          `).join("")}
+          <details class="hsq-details">
+            <summary>資料與精度</summary>
+            <div class="hsq-detail-grid">
+              ${detailItems.map(([label, value]) => `<b>${escapeHtml(label)}</b><span>${escapeHtml(value)}</span>`).join("")}
+            </div>
+          </details>
         </div>
       </div>`;
   }
