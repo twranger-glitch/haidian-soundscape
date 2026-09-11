@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.5
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.6
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -40,14 +40,16 @@
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
 
-    // v7.8.5 lifecycle policy: keep terrain/data caches, but never trust a ShadeMap
-    // WebGL canvas across a changed Leaflet viewport. Use only the SDK's documented
-    // remove() lifecycle; old canvases are retired and can never be re-claimed by a
-    // newer renderer. A new renderer stays hidden until its own `idle` event.
+    // v7.8.6 lifecycle policy: terrain/data caches may be reused, but renderer DOM
+    // ownership is single-canvas. Date/time changes stay in-place via setDate(), are
+    // debounced, and the SDK canvas is hidden until the matching renderer becomes idle.
+    // Viewport changes still replace the renderer, with retired canvases scrubbed only
+    // after SDK remove()/idle safe points (never force WEBGL_lose_context).
     navigationRebuildDelayMs: 520,
+    dateUpdateDebounceMs: 180,
     hardCanvasCleanup: false,
-    retiredCanvasCleanupDelayMs: 12000,
-    layerSwapDelayMs: 60,
+    retiredCanvasCleanupDelayMs: 1200,
+    layerSwapDelayMs: 80,
     preserveShadeLayerDuringNavigation: true,
 
     // Host-page UX: desktop top banner can be collapsed to a compact pill.
@@ -128,7 +130,12 @@
   let shadeDomObserver = null;
   let shadeHostCanvasBaseline = null;
   let shadeCanvasMountBaseline = null;
+  let shadeActiveCanvas = null;
   let shadeCanvasCleanupTimers = [];
+  let shadeDateUpdateTimer = null;
+  let shadeDateRequestSerial = 0;
+  let shadeAppliedDateMs = null;
+  let shadePendingDate = null;
   let enginePromise = null;
   let customBuildingsCache = null;
   let geoTiffPromise = null;
@@ -190,51 +197,144 @@
     return inMapPane;
   }
 
+  function getLikelyShadeCanvases() {
+    if (!mapRef || !mapRef.getContainer) return [];
+    const container = mapRef.getContainer();
+    if (!container) return [];
+    return Array.from(container.querySelectorAll("canvas")).filter(isLikelyShadeCanvas);
+  }
+
   function beginShadeCanvasOwnership(serial) {
     if (!mapRef || !mapRef.getContainer) {
       shadeCanvasMountBaseline = null;
+      shadeActiveCanvas = null;
       return;
     }
-    const container = mapRef.getContainer();
-    const canvases = new Set(
-      Array.from(container.querySelectorAll("canvas")).filter(isLikelyShadeCanvas)
-    );
+    const canvases = new Set(getLikelyShadeCanvases());
     shadeCanvasMountBaseline = { serial, canvases };
+    shadeActiveCanvas = null;
   }
 
-  function markActiveShadeCanvases() {
-    if (!mapRef || !mapRef.getContainer || !shadeLayer || !shadeLayerSerial) return;
-    const token = String(shadeLayerSerial);
-    const container = mapRef.getContainer();
+  function canvasExistedBeforeMount(canvas, serial) {
     const baseline = shadeCanvasMountBaseline;
+    return !!(
+      baseline &&
+      baseline.serial === serial &&
+      baseline.canvases &&
+      baseline.canvases.has(canvas)
+    );
+  }
 
-    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
-      if (!isLikelyShadeCanvas(canvas)) return;
+  function retireShadeCanvas(canvas) {
+    if (!canvas) return;
+    if (shadeActiveCanvas === canvas) shadeActiveCanvas = null;
+    try {
+      canvas.classList.remove("haidian-shade-sdk-canvas");
+      canvas.classList.add("haidian-shade-retired-canvas");
+      canvas.setAttribute && canvas.setAttribute("aria-hidden", "true");
+    } catch (_) {}
+  }
 
-      const owner = String(canvas.dataset.haidianShadeOwner || "");
-      const existedBeforeThisMount = !!(
-        baseline &&
-        baseline.serial === shadeLayerSerial &&
-        baseline.canvases &&
-        baseline.canvases.has(canvas)
-      );
-
-      // A canvas owned by an older renderer is permanently retired. Likewise, a
-      // pre-existing unowned canvas must not be adopted by the newly mounted layer.
-      // This prevents a delayed SDK canvas from an old instance being "revived"
-      // when markActiveShadeCanvases() runs for the replacement renderer.
-      if ((owner && owner !== token) || (!owner && existedBeforeThisMount)) {
-        canvas.classList.remove("haidian-shade-sdk-canvas");
-        canvas.classList.add("haidian-shade-retired-canvas");
-        return;
-      }
-
-      // Only a canvas already owned by this renderer, or a genuinely new unowned
-      // canvas created after this renderer began mounting, may become active.
+  function claimShadeCanvas(canvas, serial) {
+    if (!canvas) return null;
+    const token = String(serial);
+    if (shadeActiveCanvas && shadeActiveCanvas !== canvas) {
+      retireShadeCanvas(shadeActiveCanvas);
+    }
+    try {
       canvas.dataset.haidianShadeOwner = token;
       canvas.classList.remove("haidian-shade-retired-canvas");
       canvas.classList.add("haidian-shade-sdk-canvas");
+      canvas.removeAttribute && canvas.removeAttribute("aria-hidden");
+    } catch (_) {}
+    shadeActiveCanvas = canvas;
+    return canvas;
+  }
+
+  function reconcileShadeCanvasOwnership(preferredCanvas) {
+    if (!mapRef || !mapRef.getContainer || !shadeLayer || !shadeLayerSerial) return null;
+    const token = String(shadeLayerSerial);
+    const canvases = getLikelyShadeCanvases();
+    const eligible = [];
+
+    canvases.forEach((canvas) => {
+      const owner = String(canvas.dataset.haidianShadeOwner || "");
+      const existedBeforeThisMount = canvasExistedBeforeMount(canvas, shadeLayerSerial);
+
+      // Anything belonging to an older renderer, or present before this renderer
+      // mounted without an owner, can never be adopted by the current renderer.
+      if ((owner && owner !== token) || (!owner && existedBeforeThisMount)) {
+        retireShadeCanvas(canvas);
+        return;
+      }
+
+      // Current-owner canvases and genuinely new unowned canvases are candidates.
+      eligible.push(canvas);
     });
+
+    let winner = null;
+    if (preferredCanvas && eligible.includes(preferredCanvas)) {
+      winner = preferredCanvas;
+    } else {
+      const fresh = eligible.filter((canvas) => !canvas.dataset.haidianShadeOwner);
+      if (fresh.length) {
+        // A newly inserted SDK canvas supersedes the old framebuffer. This matters
+        // for setDate()/internal redraws that may replace the DOM canvas without
+        // changing our renderer serial.
+        winner = fresh[fresh.length - 1];
+      } else if (shadeActiveCanvas && eligible.includes(shadeActiveCanvas)) {
+        winner = shadeActiveCanvas;
+      } else if (eligible.length) {
+        // Recover deterministically if a previous version left multiple canvases
+        // with the same serial: the last DOM canvas wins, all siblings retire.
+        winner = eligible[eligible.length - 1];
+      }
+    }
+
+    if (winner) claimShadeCanvas(winner, shadeLayerSerial);
+    eligible.forEach((canvas) => {
+      if (canvas !== winner) retireShadeCanvas(canvas);
+    });
+    return winner;
+  }
+
+  function markActiveShadeCanvases(preferredCanvas) {
+    return reconcileShadeCanvasOwnership(preferredCanvas);
+  }
+
+  function getShadeCanvasDiagnostics() {
+    const canvases = getLikelyShadeCanvases();
+    const active = canvases.filter((canvas) =>
+      canvas.classList && canvas.classList.contains("haidian-shade-sdk-canvas") &&
+      !canvas.classList.contains("haidian-shade-retired-canvas")
+    );
+    const retired = canvases.filter((canvas) =>
+      canvas.classList && canvas.classList.contains("haidian-shade-retired-canvas")
+    );
+    const token = shadeLayerSerial ? String(shadeLayerSerial) : "";
+    const currentOwner = active.filter((canvas) =>
+      String(canvas.dataset.haidianShadeOwner || "") === token
+    );
+    return {
+      total: canvases.length,
+      active: active.length,
+      retired: retired.length,
+      currentOwner: currentOwner.length,
+      ownerSerial: shadeLayerSerial || 0,
+      rebuildSerial: shadeRebuildSerial,
+      ready: !!shadeReady,
+      navigationSuspended: !!shadeNavigationSuspended
+    };
+  }
+
+  function enforceShadeCanvasInvariant(reason) {
+    reconcileShadeCanvasOwnership();
+    const info = getShadeCanvasDiagnostics();
+    if (info.active > 1 || info.currentOwner > 1) {
+      console.warn("[Haidian Shade] canvas invariant violation", reason || "", info);
+      reconcileShadeCanvasOwnership();
+    }
+    return getShadeCanvasDiagnostics();
   }
 
   function webglCapability() {
@@ -249,15 +349,12 @@
   }
 
   function retireActiveShadeCanvases() {
-    if (!mapRef || !mapRef.getContainer) return 0;
-    const container = mapRef.getContainer();
     let count = 0;
-    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
-      if (!isLikelyShadeCanvas(canvas)) return;
-      canvas.classList.remove("haidian-shade-sdk-canvas");
-      canvas.classList.add("haidian-shade-retired-canvas");
+    getLikelyShadeCanvases().forEach((canvas) => {
+      retireShadeCanvas(canvas);
       count += 1;
     });
+    shadeActiveCanvas = null;
     return count;
   }
 
@@ -266,6 +363,7 @@
     const container = mapRef.getContainer();
     let removed = 0;
     Array.from(container.querySelectorAll("canvas.haidian-shade-retired-canvas")).forEach((canvas) => {
+      if (canvas === shadeActiveCanvas) return;
       try { canvas.remove(); removed += 1; } catch (_) {}
     });
     return removed;
@@ -285,11 +383,19 @@
     shadeCanvasCleanupTimers = [];
   }
 
-  function scheduleRetiredCanvasScrub() {
+  function scheduleRetiredCanvasScrub(customDelay) {
     clearCanvasCleanupTimers();
-    const wait = Math.max(2000, Number(config.retiredCanvasCleanupDelayMs) || 12000);
+    const configured = Number(config.retiredCanvasCleanupDelayMs) || 1200;
+    const wait = Math.max(120, customDelay == null ? configured : Number(customDelay) || configured);
     shadeCanvasCleanupTimers.push(setTimeout(() => {
+      // While a renderer is still drawing, CSS retirement is sufficient. Physical
+      // removal waits until a safe idle point so SDK internals are not disturbed.
+      if (shadeLayer && !shadeReady) {
+        scheduleRetiredCanvasScrub(Math.max(300, wait));
+        return;
+      }
       cleanupRetiredShadeCanvases();
+      enforceShadeCanvasInvariant("post-scrub");
     }, wait));
   }
 
@@ -299,24 +405,30 @@
     const container = mapRef.getContainer();
     if (!container || typeof MutationObserver === "undefined") return;
     shadeDomObserver = new MutationObserver((records) => {
-      if (shadeLayer) {
-        markActiveShadeCanvases();
-        return;
-      }
-      // A late canvas from a layer that has already been removed is hidden, not
-      // destroyed. This avoids the v7.5-v7.8.3 unsupported WebGL/context surgery.
+      const addedShadeCanvases = [];
       for (const record of records) {
         for (const node of Array.from(record.addedNodes || [])) {
           if (!node || node.nodeType !== 1) continue;
           const canvases = node.tagName === "CANVAS" ? [node] :
             (node.querySelectorAll ? Array.from(node.querySelectorAll("canvas")) : []);
           canvases.forEach((canvas) => {
-            if (!isLikelyShadeCanvas(canvas)) return;
-            canvas.classList.remove("haidian-shade-sdk-canvas");
-            canvas.classList.add("haidian-shade-retired-canvas");
+            if (isLikelyShadeCanvas(canvas)) addedShadeCanvases.push(canvas);
           });
         }
       }
+
+      if (shadeLayer) {
+        const preferred = addedShadeCanvases.length
+          ? addedShadeCanvases[addedShadeCanvases.length - 1]
+          : null;
+        reconcileShadeCanvasOwnership(preferred);
+        return;
+      }
+
+      // A late canvas from a renderer that has already been removed is always
+      // retired immediately. It may be physically scrubbed at the next safe point.
+      addedShadeCanvases.forEach(retireShadeCanvas);
+      if (addedShadeCanvases.length) scheduleRetiredCanvasScrub();
     });
     shadeDomObserver.observe(container, { childList: true, subtree: true });
   }
@@ -641,14 +753,69 @@
     el.classList.toggle("haidian-shade-warning", !!warning);
   }
 
-  function applyShadeDate(date) {
-    if (!shadeLayer || typeof shadeLayer.setDate !== "function") return;
-    shadeReady = false;
-    try {
-      shadeLayer.setDate(date);
-    } catch (error) {
-      console.warn("[Haidian Shade] setDate:", error);
+  function clearShadeDateUpdateTimer() {
+    if (shadeDateUpdateTimer) clearTimeout(shadeDateUpdateTimer);
+    shadeDateUpdateTimer = null;
+  }
+
+  function flushShadeDateUpdate(requestSerial) {
+    if (requestSerial != null && requestSerial !== shadeDateRequestSerial) return false;
+    shadeDateUpdateTimer = null;
+    if (!shadePendingDate) return false;
+    if (!state.enabled || !shadeLayer || typeof shadeLayer.setDate !== "function") return false;
+
+    // If the map is moving or this layer is already stale, do not touch it. The
+    // replacement renderer is constructed from the latest state.date instead.
+    if (
+      shadeNavigationSuspended ||
+      shadeLayerSerial !== shadeRebuildSerial
+    ) return false;
+
+    const desired = new Date(shadePendingDate.getTime());
+    const desiredMs = desired.getTime();
+    if (shadeAppliedDateMs === desiredMs) {
+      shadePendingDate = null;
+      return false;
     }
+
+    // Never stack setDate() calls on top of an unfinished WebGL render. Keep only
+    // the newest requested time and let onActiveShadeIdle() flush it next.
+    if (!shadeReady) return false;
+
+    shadeReady = false;
+    setNavigationCanvasState(true);
+    setStatus("正在更新太陽位置／陰影時間…");
+    const previousAppliedDateMs = shadeAppliedDateMs;
+    // Commit ownership of this request before entering SDK code so even a
+    // synchronous idle callback cannot recursively issue the same setDate().
+    shadeAppliedDateMs = desiredMs;
+    shadePendingDate = null;
+    try {
+      shadeLayer.setDate(desired);
+      return true;
+    } catch (error) {
+      shadeAppliedDateMs = previousAppliedDateMs;
+      shadePendingDate = desired;
+      shadeReady = true;
+      setNavigationCanvasState(false);
+      console.warn("[Haidian Shade] setDate:", error);
+      setStatus(`時間更新失敗：${error.message || error}`, true);
+      return false;
+    }
+  }
+
+  function applyShadeDate(date, immediate) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
+    shadePendingDate = new Date(date.getTime());
+    const requestSerial = ++shadeDateRequestSerial;
+    clearShadeDateUpdateTimer();
+
+    const wait = immediate === true
+      ? 0
+      : Math.max(80, Number(config.dateUpdateDebounceMs) || 180);
+    shadeDateUpdateTimer = setTimeout(() => {
+      flushShadeDateUpdate(requestSerial);
+    }, wait);
   }
 
   function syncDateFromControls() {
@@ -670,7 +837,7 @@
       0
     );
     updateTimeLabel();
-    applyShadeDate(state.date);
+    applyShadeDate(state.date, true);
   }
 
   function injectPanel() {
@@ -814,7 +981,7 @@
         0
       );
       updateTimeLabel();
-      applyShadeDate(state.date);
+      applyShadeDate(state.date, false);
     });
 
     document
@@ -855,7 +1022,7 @@
           Math.max(300, minutesOfDay(state.date))
         );
         updateTimeLabel();
-        applyShadeDate(state.date);
+        applyShadeDate(state.date, true);
       });
 
     document
@@ -1848,11 +2015,26 @@
 
     shadeReady = true;
     markActiveShadeCanvases();
-    // The renderer is revealed only after the CURRENT generation has completed
-    // its first render. An idle event from a stale/pre-navigation layer can no
-    // longer remove the navigation mask and expose an out-of-date framebuffer.
+    enforceShadeCanvasInvariant("idle");
+
+    // A newer time may have been requested while the previous setDate()/initial
+    // render was still running. Chain only the latest request and keep the canvas
+    // hidden; do not flash an intermediate framebuffer.
+    if (shadePendingDate) {
+      const pendingMs = shadePendingDate.getTime();
+      if (shadeAppliedDateMs !== pendingMs) {
+        if (flushShadeDateUpdate()) return;
+        if (!shadeReady) return;
+      } else {
+        shadePendingDate = null;
+      }
+    }
+
+    // Reveal only the single current-owner canvas after the CURRENT generation
+    // is idle. Retired siblings stay hidden and are scrubbed after this safe point.
     setNavigationCanvasState(false);
     setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+    scheduleRetiredCanvasScrub(260);
     refreshActivePointShade();
   }
 
@@ -2574,8 +2756,9 @@
     }
     clearCanvasCleanupTimers();
 
+    const mountDate = new Date(state.date.getTime());
     const layer = L.shadeMap({
-      date: state.date,
+      date: mountDate,
       color: config.defaultColor,
       opacity: state.opacity,
       apiKey: config.apiKey,
@@ -2589,6 +2772,10 @@
     shadeLayer = layer;
     shadeLayerSerial = serial;
     shadeReady = false;
+    shadeAppliedDateMs = mountDate.getTime();
+    if (shadePendingDate && shadePendingDate.getTime() === shadeAppliedDateMs) {
+      shadePendingDate = null;
+    }
 
     const idleHandler = () => onActiveShadeIdle(layer, serial);
     shadeIdleHandler = idleHandler;
@@ -2610,7 +2797,9 @@
         shadeLayerSerial = 0;
         shadeIdleHandler = null;
         shadeReady = false;
+        shadeAppliedDateMs = null;
         shadeCanvasMountBaseline = null;
+        shadeActiveCanvas = null;
       }
       if (isWebGLContextFailure(error)) {
         const webgl = webglCapability();
@@ -2620,6 +2809,7 @@
     }
 
     markActiveShadeCanvases();
+    enforceShadeCanvasInvariant("mount");
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => {
         if (shadeLayer === layer && shadeLayerSerial === serial) markActiveShadeCanvases();
@@ -2652,7 +2842,9 @@
     shadeLayerSerial = 0;
     shadeIdleHandler = null;
     shadeReady = false;
+    shadeAppliedDateMs = null;
     shadeCanvasMountBaseline = null;
+    shadeActiveCanvas = null;
 
     if (layer) {
       try {
@@ -2728,7 +2920,7 @@
     if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
     shadeNavigationSuspended = true;
     setNavigationCanvasState(true);
-    // v7.8.5: do NOT destroy the WebGL layer at every movestart. Keep the old
+    // v7.8.6: do NOT destroy the WebGL layer at every movestart. Keep the old
     // renderer hidden while terrain/data preparation runs, then replace it once
     // after navigation settles. It is never directly revealed for a changed
     // viewport, even when CHMv2 coverage tiles are unchanged.
@@ -2741,6 +2933,10 @@
     shadeRebuildSerial += 1;
     shadeNavigationSuspended = false;
     clearTimeout(liveMoveTimer);
+    clearShadeDateUpdateTimer();
+    shadeDateRequestSerial += 1;
+    shadePendingDate = null;
+    shadeAppliedDateMs = null;
     clearPointShadeRetry();
     detachShadeLayerOnly();
     state.enabled = false;
@@ -2777,9 +2973,12 @@
 
       // Swap instances only after replacement terrain is ready. This minimizes
       // time without shade and drastically reduces WebGL context churn.
-      detachShadeLayerOnly({ scheduleScrub: true });
-      await delay(Math.max(0, Number(config.layerSwapDelayMs) || 60));
+      detachShadeLayerOnly({ scheduleScrub: false });
+      await delay(Math.max(40, Number(config.layerSwapDelayMs) || 80));
       if (serial !== shadeRebuildSerial || !state.enabled) return;
+      // The old SDK instance has now been removed and yielded a safe turn. Physically
+      // remove its retired DOM before the replacement renderer can be mistaken for it.
+      cleanupRetiredShadeCanvases();
 
       const layer = await mountPreparedShadeLayer(terrain, serial);
       if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
@@ -2878,7 +3077,8 @@
     },
     get config() {
       return Object.assign({}, config);
-    }
+    },
+    getCanvasDiagnostics: getShadeCanvasDiagnostics
   };
 
   if (document.readyState === "loading") {
