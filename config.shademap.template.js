@@ -5,18 +5,32 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Required by leaflet-shadow-simulator / ShadeMap.
   apiKey: __SHADEMAP_API_KEY_JSON__,
 
-  // Real Meta / WRI CHMv2 canopy height, streamed directly from public COGs.
+  // Real Meta / WRI CHMv2 canopy height, streamed dynamically from public COGs.
+  // World-scale/global: moving the map to another city selects that location's COG automatically.
   // No local 1321232301.tif and no pre-generated meta-dsm folder are required.
   metaMode: "live-cog",
   metaCogBaseUrl: "https://data.source.coop/tge-labs/meta-chm-v2/chm",
   geotiffUrl: "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js",
   metaMinZoom: 14,
   metaMaxZoom: 17,
-  metaTileBuffer: 1,
-  metaTileConcurrency: 4,
+  // v7: smaller live-COG prefetch window for faster first render.
+  metaTileBuffer: 0,
+  metaTileConcurrency: 6,
   metaMaxPreparedTiles: 180,
   metaMaxCachedTiles: 480,
   metaBlendBareTerrain: true,
+  metaNoDataFallback: "bare-dem",
+
+  // v7 future-ready: when pre-generated Terrarium surface XYZ tiles are hosted
+  // on Hugging Face + Cloudflare, switch metaMode to "xyz" and set this URL.
+  // Example: "https://your-worker.workers.dev/meta-dsm/{z}/{x}/{y}.png"
+  metaTileUrl: "./meta-dsm/{z}/{x}/{y}.png",
+
+  // Point-query can keep reading the public CHMv2 COG even after terrain moves
+  // to fast XYZ tiles, so clicked canopy-height values remain available.
+  queryCanopyFromCog: true,
+  queryZoom: 17,
+  canopyCacheTiles: 256,
 
   // Bare-earth terrain. CHMv2 canopy height is added to this before ShadeMap sees it.
   bareTerrainTileUrl: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
@@ -29,6 +43,14 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingMinZoom: 15,
 
   defaultResearchMode: "full",
+
+  // v7 presentation/query defaults.
+  defaultOpacity: 0.36,
+  defaultColor: "#172554",
+  queryOnClick: false,
+  canopyOverlayDefault: true,
+  canopyOverlayMinHeight: 2,
+  canopyOverlayOpacity: 0.28,
 
   // Pin versions so a CDN "latest" update cannot silently break the site.
   sdkUrl: "https://unpkg.com/leaflet-shadow-simulator@0.67.0/dist/leaflet-shadow-simulator.umd.min.js"
