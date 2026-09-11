@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.3
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -37,6 +37,8 @@
     bareTerrainTileUrl:
       "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     bareTerrainMaxZoom: 15,
+    bareTerrainLabel: "Mapzen / Tilezen global terrain DEM",
+    bareTerrainNote: "Taiwan is typically sourced from global SRTM-class terrain; this is real DEM data, not an estimated building/tree height.",
 
     buildingMode: "osm",
     buildingGeoJSONUrl: "",
@@ -89,6 +91,8 @@
   let customBuildingsCache = null;
   let geoTiffPromise = null;
   let liveMoveTimer = null;
+  let shadeRebuildSerial = 0;
+  let shadeNavigationSuspended = false;
   let mapMoveHooked = false;
   let mapQueryHooked = false;
   let canopyOverlayLayer = null;
@@ -190,6 +194,12 @@
       .haidian-shade-swatch{
         display:inline-block;width:11px;height:11px;border-radius:3px;
         margin-right:4px;vertical-align:-2px
+      }
+      /* Precision point-query cursor: override Leaflet's default grab/open-hand cursor. */
+      .leaflet-container.haidian-shade-query-active,
+      .leaflet-container.haidian-shade-query-active.leaflet-grab,
+      .leaflet-container.haidian-shade-query-active .leaflet-grab{
+        cursor:crosshair!important;
       }
       .leaflet-tooltip.haidian-shade-query-tooltip{
         white-space:normal!important;max-width:330px;padding:10px 12px!important;
@@ -1065,8 +1075,9 @@
     const rows = [
       ["位置", `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`],
       ["Meta 樹冠高度", canopyText],
-      ["裸地高程", meters(result.ground)],
-      ["樹冠表面高度", meters(result.surface)],
+      ["地面海拔（DEM）", meters(result.ground)],
+      ["地表＋樹冠海拔", meters(result.surface)],
+      ["DEM 來源", config.bareTerrainLabel || "全球地形 DEM"],
       ["目前狀態", result.shade.label],
       ["模擬時間", time],
       ["研究模式", modeLabel(state.mode)]
@@ -1088,6 +1099,7 @@
         </div>
         <div class="hsq-foot">
           十字中心是你的點擊位置；地圖上的小方格是實際被取樣的 z${result.queryZoom} CHMv2 raster pixel。樹高為模型估計，不代表單株樹木現地量測。
+          「地面海拔（DEM）」是地形資料的海拔值，不是建築高度，也不是陰影高度；低於海平面的地形可以是負值。
           「完整」模式的陰影可能由樹冠、建築或地形共同造成，無法由單一陰影像素判定成因。
         </div>
       </div>`;
@@ -1755,10 +1767,15 @@
 
     try {
       setStatus("正在載入陰影模擬…");
+      state.enabled = true;
+      const serial = ++shadeRebuildSerial;
       applyShadeZoomConstraint();
       const result = await createShadeLayer();
+      if (serial !== shadeRebuildSerial || !state.enabled) {
+        try { if (result && result.layer && typeof result.layer.remove === "function") result.layer.remove(); } catch (_) {}
+        return;
+      }
       shadeLayer = result.layer;
-      state.enabled = true;
       syncPointQueryCursor();
       syncCanopyOverlay();
       if (config.metaMode === "live-cog") {
@@ -1781,19 +1798,34 @@
     }
   }
 
-  function disableShade(updateStatus = true) {
-    if (shadeLayer) {
-      try {
-        if (typeof shadeLayer.remove === "function") {
-          shadeLayer.remove();
-        } else if (mapRef && mapRef.hasLayer(shadeLayer)) {
-          mapRef.removeLayer(shadeLayer);
-        }
-      } catch (_) {}
-    }
-
+  function detachShadeLayerOnly() {
+    if (!shadeLayer) return;
+    try {
+      if (typeof shadeLayer.remove === "function") {
+        shadeLayer.remove();
+      } else if (mapRef && mapRef.hasLayer(shadeLayer)) {
+        mapRef.removeLayer(shadeLayer);
+      }
+    } catch (_) {}
     shadeLayer = null;
     shadeReady = false;
+  }
+
+  function suspendShadeForNavigation() {
+    if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
+    shadeNavigationSuspended = true;
+    // Hide the old viewport's shade immediately. Keeping it visible while the
+    // next CHMv2 coverage is prepared creates the large stale blue rectangle.
+    detachShadeLayerOnly();
+    removePointQueryOverlay();
+    setStatus("地圖移動中：暫時隱藏舊陰影，停下後會載入目前位置資料…");
+  }
+
+  function disableShade(updateStatus = true) {
+    shadeRebuildSerial += 1;
+    shadeNavigationSuspended = false;
+    clearTimeout(liveMoveTimer);
+    detachShadeLayerOnly();
     state.enabled = false;
     removeCanopyOverlay();
 
@@ -1807,17 +1839,60 @@
   }
 
   async function rebuildShade() {
-    disableShade(false);
+    if (!mapRef || !state.enabled) return;
 
-    const toggle = document.getElementById("haidianShadeToggle");
-    if (toggle) toggle.checked = true;
+    const serial = ++shadeRebuildSerial;
+    shadeNavigationSuspended = false;
+    detachShadeLayerOnly();
 
-    await enableShade();
+    try {
+      setStatus("正在載入目前位置的 Meta CHMv2／地形陰影…");
+      applyShadeZoomConstraint();
+      const result = await createShadeLayer();
+
+      // The user may have panned/zoomed again while the asynchronous COG/DEM
+      // build was running. Never let an older result paint over a newer view.
+      if (serial !== shadeRebuildSerial || !state.enabled) {
+        try {
+          if (result && result.layer && typeof result.layer.remove === "function") {
+            result.layer.remove();
+          } else if (result && result.layer && mapRef && mapRef.hasLayer(result.layer)) {
+            mapRef.removeLayer(result.layer);
+          }
+        } catch (_) {}
+        return;
+      }
+
+      shadeLayer = result.layer;
+      shadeReady = false;
+      syncPointQueryCursor();
+      syncCanopyOverlay();
+      lastLiveViewSignature = currentLiveCoverageSignature();
+
+      if (result.terrain.warning) {
+        setStatus(result.terrain.warning, !result.terrain.meta);
+      } else {
+        setStatus(`已更新目前位置：${modeLabel(state.mode)}。`);
+      }
+    } catch (error) {
+      if (serial !== shadeRebuildSerial || !state.enabled) return;
+      console.error(error);
+      setStatus(`更新失敗：${error.message || error}`, true);
+    }
   }
 
   function hookMapMoveRebuild() {
     if (!mapRef || mapMoveHooked || typeof mapRef.on !== "function") return;
     mapMoveHooked = true;
+
+    const startNavigation = () => {
+      if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
+      if (document.body && document.body.classList.contains("listening-mode")) return;
+      // Invalidate any in-flight rebuild immediately and remove stale visuals.
+      shadeRebuildSerial += 1;
+      suspendShadeForNavigation();
+    };
+
     const scheduleRebuild = () => {
       if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
@@ -1825,11 +1900,13 @@
       liveMoveTimer = setTimeout(() => {
         if (!state.enabled) return;
         const nextSignature = currentLiveCoverageSignature();
-        if (nextSignature && nextSignature === lastLiveViewSignature) return;
-        setStatus("正在切換到目前位置的全球 CHMv2 資料…");
+        if (nextSignature && nextSignature === lastLiveViewSignature && !shadeNavigationSuspended) return;
         rebuildShade();
-      }, 550);
+      }, 220);
     };
+
+    mapRef.on("movestart", startNavigation);
+    mapRef.on("zoomstart", startNavigation);
     mapRef.on("moveend", scheduleRebuild);
     mapRef.on("zoomend", scheduleRebuild);
   }
