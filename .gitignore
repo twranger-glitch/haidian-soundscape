@@ -1,0 +1,4 @@
+# Generated only during local testing or GitHub Pages deployment.
+# Never commit the rendered ShadeMap browser key.
+/config.shademap.js
+/_site/
