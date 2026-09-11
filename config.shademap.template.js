@@ -35,6 +35,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Bare-earth terrain. CHMv2 canopy height is added to this before ShadeMap sees it.
   bareTerrainTileUrl: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
   bareTerrainMaxZoom: 15,
+  bareTerrainLabel: "Mapzen / Tilezen global terrain DEM",
+  // This is a real published DEM source, not a guessed height. For Taiwan-specific
+  // authoritative analysis, a later build can replace it with the Ministry of Interior DTM tiles.
 
   // Prototype: fetch visible OSM building footprints at runtime.
   // For production reliability, you can later switch to "custom" and host GeoJSON.
