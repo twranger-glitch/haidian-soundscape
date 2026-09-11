@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.4
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.5
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -40,9 +40,10 @@
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
 
-    // v7.8.4 lifecycle policy: use ShadeMap's documented remove() lifecycle only.
-    // Never force WEBGL_lose_context and never delete an SDK canvas while the SDK
-    // may still own it. Old canvases are visually retired first and cleaned later.
+    // v7.8.5 lifecycle policy: keep terrain/data caches, but never trust a ShadeMap
+    // WebGL canvas across a changed Leaflet viewport. Use only the SDK's documented
+    // remove() lifecycle; old canvases are retired and can never be re-claimed by a
+    // newer renderer. A new renderer stays hidden until its own `idle` event.
     navigationRebuildDelayMs: 520,
     hardCanvasCleanup: false,
     retiredCanvasCleanupDelayMs: 12000,
@@ -126,6 +127,7 @@
   let shadeIdleHandler = null;
   let shadeDomObserver = null;
   let shadeHostCanvasBaseline = null;
+  let shadeCanvasMountBaseline = null;
   let shadeCanvasCleanupTimers = [];
   let enginePromise = null;
   let customBuildingsCache = null;
@@ -188,12 +190,47 @@
     return inMapPane;
   }
 
-  function markActiveShadeCanvases() {
-    if (!mapRef || !mapRef.getContainer || !shadeLayer) return;
-    const token = String(shadeLayerSerial || shadeRebuildSerial || "active");
+  function beginShadeCanvasOwnership(serial) {
+    if (!mapRef || !mapRef.getContainer) {
+      shadeCanvasMountBaseline = null;
+      return;
+    }
     const container = mapRef.getContainer();
+    const canvases = new Set(
+      Array.from(container.querySelectorAll("canvas")).filter(isLikelyShadeCanvas)
+    );
+    shadeCanvasMountBaseline = { serial, canvases };
+  }
+
+  function markActiveShadeCanvases() {
+    if (!mapRef || !mapRef.getContainer || !shadeLayer || !shadeLayerSerial) return;
+    const token = String(shadeLayerSerial);
+    const container = mapRef.getContainer();
+    const baseline = shadeCanvasMountBaseline;
+
     Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
       if (!isLikelyShadeCanvas(canvas)) return;
+
+      const owner = String(canvas.dataset.haidianShadeOwner || "");
+      const existedBeforeThisMount = !!(
+        baseline &&
+        baseline.serial === shadeLayerSerial &&
+        baseline.canvases &&
+        baseline.canvases.has(canvas)
+      );
+
+      // A canvas owned by an older renderer is permanently retired. Likewise, a
+      // pre-existing unowned canvas must not be adopted by the newly mounted layer.
+      // This prevents a delayed SDK canvas from an old instance being "revived"
+      // when markActiveShadeCanvases() runs for the replacement renderer.
+      if ((owner && owner !== token) || (!owner && existedBeforeThisMount)) {
+        canvas.classList.remove("haidian-shade-sdk-canvas");
+        canvas.classList.add("haidian-shade-retired-canvas");
+        return;
+      }
+
+      // Only a canvas already owned by this renderer, or a genuinely new unowned
+      // canvas created after this renderer began mounting, may become active.
       canvas.dataset.haidianShadeOwner = token;
       canvas.classList.remove("haidian-shade-retired-canvas");
       canvas.classList.add("haidian-shade-sdk-canvas");
@@ -1801,9 +1838,19 @@
   }
 
   function onActiveShadeIdle(layer, serial) {
-    if (!state.enabled || layer !== shadeLayer || serial !== shadeLayerSerial) return;
+    if (
+      !state.enabled ||
+      layer !== shadeLayer ||
+      serial !== shadeLayerSerial ||
+      serial !== shadeRebuildSerial ||
+      shadeNavigationSuspended
+    ) return;
+
     shadeReady = true;
     markActiveShadeCanvases();
+    // The renderer is revealed only after the CURRENT generation has completed
+    // its first render. An idle event from a stale/pre-navigation layer can no
+    // longer remove the navigation mask and expose an out-of-date framebuffer.
     setNavigationCanvasState(false);
     setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
     refreshActivePointShade();
@@ -2538,6 +2585,7 @@
         console.debug("[Haidian ShadeMap]", message)
     });
 
+    beginShadeCanvasOwnership(serial);
     shadeLayer = layer;
     shadeLayerSerial = serial;
     shadeReady = false;
@@ -2562,6 +2610,7 @@
         shadeLayerSerial = 0;
         shadeIdleHandler = null;
         shadeReady = false;
+        shadeCanvasMountBaseline = null;
       }
       if (isWebGLContextFailure(error)) {
         const webgl = webglCapability();
@@ -2603,6 +2652,7 @@
     shadeLayerSerial = 0;
     shadeIdleHandler = null;
     shadeReady = false;
+    shadeCanvasMountBaseline = null;
 
     if (layer) {
       try {
@@ -2652,7 +2702,8 @@
 
       syncCanopyOverlay();
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
-      setNavigationCanvasState(false);
+      // Keep the SDK canvas hidden until onActiveShadeIdle() confirms that this
+      // exact renderer generation has completed its first frame.
 
       if (terrain.warning) {
         setStatus(`${terrain.warning} 陰影引擎正在完成畫面計算…`, !terrain.meta);
@@ -2677,10 +2728,10 @@
     if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
     shadeNavigationSuspended = true;
     setNavigationCanvasState(true);
-    // v7.8.3: do NOT destroy the WebGL layer at every movestart. Hiding the
-    // current SDK canvas is enough while the user navigates. If coverage is
-    // unchanged we simply reveal the same instance again, avoiding a new GPU
-    // context altogether.
+    // v7.8.5: do NOT destroy the WebGL layer at every movestart. Keep the old
+    // renderer hidden while terrain/data preparation runs, then replace it once
+    // after navigation settles. It is never directly revealed for a changed
+    // viewport, even when CHMv2 coverage tiles are unchanged.
     if (config.preserveShadeLayerDuringNavigation === false) detachShadeLayerOnly();
     removePointQueryOverlay();
     setStatus("地圖移動中：暫時隱藏陰影；停下後更新目前視野…");
@@ -2736,7 +2787,7 @@
       syncPointQueryCursor();
       syncCanopyOverlay();
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
-      setNavigationCanvasState(false);
+      // Remain under the navigation mask until the current-generation idle event.
 
       if (terrain.warning) {
         setStatus(`${terrain.warning} 陰影引擎正在完成畫面計算…`, !terrain.meta);
@@ -2761,7 +2812,7 @@
       if (document.body && document.body.classList.contains("listening-mode")) return;
 
       // Invalidate the current preparation BEFORE any stale async task gets a
-      // chance to mount. Then tear down the one active SDK instance.
+      // chance to mount. Keep the current SDK instance hidden until the debounced rebuild swaps it.
       shadeRebuildSerial += 1;
       clearTimeout(liveMoveTimer);
       suspendShadeForNavigation();
@@ -2774,20 +2825,12 @@
       clearTimeout(liveMoveTimer);
       liveMoveTimer = setTimeout(() => {
         if (!state.enabled) return;
-        const nextSignature = currentLiveCoverageSignature();
 
-        // If navigation stayed inside the same prepared CHMv2 coverage, keep
-        // the existing ShadeMap/WebGL instance. Leaflet has already moved the
-        // layer with the map; just reveal it again instead of creating another
-        // GPU context.
-        if (shadeLayer && nextSignature && nextSignature === lastLiveViewSignature) {
-          shadeNavigationSuspended = false;
-          setNavigationCanvasState(false);
-          if (shadeReady) setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
-          else setStatus(`目前視野未跨出既有資料範圍；陰影引擎正在完成畫面計算…`);
-          return;
-        }
-
+        // Terrain/CHMv2 caches may be reused, but the WebGL renderer is viewport-
+        // specific. Always rebuild once after a real pan/zoom settles; never
+        // reveal the pre-navigation framebuffer merely because data coverage is
+        // unchanged. rebuildShade() still delays SDK teardown until replacement
+        // terrain is ready, avoiding movestart-time context churn.
         rebuildShade();
       }, Math.max(180, Number(config.navigationRebuildDelayMs) || 520));
     };
