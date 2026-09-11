@@ -38,14 +38,12 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeRetryMs: 250,
   queryShadeRetryTimeoutMs: 10000,
 
-  // v7.5 lifecycle safety. Pan/zoom tears down the old SDK canvas first,
-  // waits for navigation to settle, then mounts only the newest viewport.
+  // v7.8.4: use only ShadeMap's documented remove() lifecycle.
+  // No WEBGL_lose_context and no synchronous deletion of SDK-owned canvases.
   navigationRebuildDelayMs: 520,
-  hardCanvasCleanup: true,
-  // v7.8.3: explicitly release retired WebGL contexts and avoid remounting
-  // ShadeMap when a pan stays inside the same prepared CHMv2 coverage.
-  webglContextReleaseDelayMs: 90,
-  webglRecoveryRetryMs: 180,
+  hardCanvasCleanup: false,
+  retiredCanvasCleanupDelayMs: 12000,
+  layerSwapDelayMs: 60,
   preserveShadeLayerDuringNavigation: true,
 
   // Desktop banner UX: manual collapse to a compact pill; remember only for the current browser tab/session.
