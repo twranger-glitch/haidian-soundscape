@@ -49,6 +49,7 @@
     defaultOpacity: 0.36,
     defaultColor: "#172554",
     queryOnClick: false,
+    lockMapMaxZoomToMeta: true,
     canopyOverlayDefault: true,
     canopyOverlayMinHeight: 2,
     canopyOverlayOpacity: 0.28,
@@ -80,6 +81,8 @@
   };
 
   let mapRef = null;
+  let shadePreviousMaxZoom = null;
+  let shadeZoomConstraintApplied = false;
   let shadeLayer = null;
   let shadeReady = false;
   let enginePromise = null;
@@ -90,6 +93,8 @@
   let mapQueryHooked = false;
   let canopyOverlayLayer = null;
   let queryPopup = null;
+  let queryPointMarker = null;
+  let querySampleCell = null;
   let lastMapDragAt = 0;
   let lastLiveViewSignature = null;
   const overpassCache = new Map();
@@ -385,7 +390,7 @@
 
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
-          高解析樹蔭建議在 z14–17 判讀；無資料處會回退裸地 DEM。建築高度可能來自 OSM 或預設值，
+          高解析樹蔭建議在 z14–17 判讀；樹木／完整模式開啟時最高縮放會鎖定 z17，避免超出 CHMv2 原生層級。無資料處會回退裸地 DEM。建築高度可能來自 OSM 或預設值，
           適合環境教育與空間比較，不取代現地測量。
         </div>
       </div>
@@ -459,11 +464,11 @@
       .getElementById("haidianShadeQueryToggle")
       .addEventListener("change", (event) => {
         state.queryOnClick = !!event.target.checked;
-        if (!state.queryOnClick && queryPopup && mapRef) {
-          try {
-            if (mapRef.hasLayer(queryPopup)) mapRef.removeLayer(queryPopup);
-          } catch (_) {}
-          queryPopup = null;
+        syncPointQueryCursor();
+        if (!state.queryOnClick) {
+          removePointQueryOverlay();
+        } else if (state.enabled) {
+          setStatus("點位查詢已開啟：十字游標中心就是 CHMv2 取樣位置。單擊查詢，拖曳仍可移動地圖。");
         }
       });
 
@@ -1040,7 +1045,8 @@
         : null,
       building,
       shade,
-      queryZoom: qz
+      queryZoom: qz,
+      sampleTile: tile
     };
   }
 
@@ -1081,7 +1087,7 @@
           ).join("")}
         </div>
         <div class="hsq-foot">
-          CHMv2 樹高為約 z${result.queryZoom} raster pixel 的模型估計，不代表單株樹木現地量測。
+          十字中心是你的點擊位置；地圖上的小方格是實際被取樣的 z${result.queryZoom} CHMv2 raster pixel。樹高為模型估計，不代表單株樹木現地量測。
           「完整」模式的陰影可能由樹冠、建築或地形共同造成，無法由單一陰影像素判定成因。
         </div>
       </div>`;
@@ -1131,15 +1137,57 @@
     return false;
   }
 
+  function syncPointQueryCursor() {
+    if (!mapRef || !mapRef.getContainer) return;
+    const container = mapRef.getContainer();
+    if (!container) return;
+    container.classList.toggle(
+      "haidian-shade-query-active",
+      !!(state.enabled && state.queryOnClick)
+    );
+  }
+
   function removePointQueryOverlay() {
-    if (!queryPopup || !mapRef) {
+    if (!mapRef) {
       queryPopup = null;
+      queryPointMarker = null;
+      querySampleCell = null;
       return;
     }
     try {
-      if (mapRef.hasLayer(queryPopup)) mapRef.removeLayer(queryPopup);
+      if (queryPopup && mapRef.hasLayer(queryPopup)) mapRef.removeLayer(queryPopup);
+      if (queryPointMarker && mapRef.hasLayer(queryPointMarker)) mapRef.removeLayer(queryPointMarker);
+      if (querySampleCell && mapRef.hasLayer(querySampleCell)) mapRef.removeLayer(querySampleCell);
     } catch (_) {}
     queryPopup = null;
+    queryPointMarker = null;
+    querySampleCell = null;
+  }
+
+  function drawQuerySampleCell(tile) {
+    if (!mapRef || !tile || !window.L) return;
+    try {
+      if (!mapRef.getPane("haidianShadeQueryPane")) {
+        const pane = mapRef.createPane("haidianShadeQueryPane");
+        pane.style.zIndex = "690";
+        pane.style.pointerEvents = "none";
+      }
+      const gx = tile.x * 256 + tile.px;
+      const gy = tile.y * 256 + tile.py;
+      const nw = mapRef.unproject(L.point(gx, gy), tile.z);
+      const se = mapRef.unproject(L.point(gx + 1, gy + 1), tile.z);
+      querySampleCell = L.rectangle(L.latLngBounds(nw, se), {
+        pane: "haidianShadeQueryPane",
+        color: "#0f766e",
+        weight: 2,
+        opacity: 0.95,
+        fillColor: "#ffffff",
+        fillOpacity: 0.10,
+        interactive: false
+      }).addTo(mapRef);
+    } catch (error) {
+      console.warn("[Haidian Shade] sample cell:", error);
+    }
   }
 
   let pointQuerySerial = 0;
@@ -1151,6 +1199,20 @@
     const latlng = event.latlng;
 
     removePointQueryOverlay();
+    // Show the exact sampled coordinate. The marker is non-interactive and does
+    // not steal clicks from the host map.
+    queryPointMarker = L.marker(latlng, {
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 4900,
+      icon: L.divIcon({
+        className: "haidian-shade-query-target",
+        html: "<span><i></i></span>",
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      })
+    }).addTo(mapRef);
+
     // Use a Tooltip instead of Popup/openOn().  The host soundscape keeps a
     // single work popup alive while audio plays; openOn() would close it and
     // trigger the host's popupclose/player cleanup.
@@ -1169,6 +1231,7 @@
     try {
       const result = await queryPointData(latlng);
       if (serial !== pointQuerySerial || !queryPopup) return;
+      drawQuerySampleCell(result.sampleTile);
       queryPopup.setContent(pointQueryHtml(latlng, result));
       if (typeof queryPopup.update === "function") queryPopup.update();
     } catch (error) {
@@ -1621,6 +1684,41 @@
     };
   }
 
+  function shouldConstrainMapZoomForShade() {
+    return config.lockMapMaxZoomToMeta !== false && state.mode !== "buildings";
+  }
+
+  function applyShadeZoomConstraint() {
+    if (!mapRef || typeof mapRef.setMaxZoom !== "function") return;
+    if (!shouldConstrainMapZoomForShade()) {
+      restoreShadeZoomConstraint();
+      return;
+    }
+
+    if (!shadeZoomConstraintApplied) {
+      const currentMax = typeof mapRef.getMaxZoom === "function" ? mapRef.getMaxZoom() : null;
+      shadePreviousMaxZoom = Number.isFinite(currentMax) ? currentMax : null;
+      shadeZoomConstraintApplied = true;
+    }
+
+    const limit = Number(config.metaMaxZoom) || 17;
+    mapRef.setMaxZoom(limit);
+    if (mapRef.getZoom() > limit) {
+      mapRef.setZoom(limit, { animate: false });
+    }
+  }
+
+  function restoreShadeZoomConstraint() {
+    if (!mapRef || !shadeZoomConstraintApplied) return;
+    try {
+      if (typeof mapRef.setMaxZoom === "function" && Number.isFinite(shadePreviousMaxZoom)) {
+        mapRef.setMaxZoom(shadePreviousMaxZoom);
+      }
+    } catch (_) {}
+    shadePreviousMaxZoom = null;
+    shadeZoomConstraintApplied = false;
+  }
+
   async function createShadeLayer() {
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       throw new Error("尚未填入 ShadeMap API key。");
@@ -1657,9 +1755,11 @@
 
     try {
       setStatus("正在載入陰影模擬…");
+      applyShadeZoomConstraint();
       const result = await createShadeLayer();
       shadeLayer = result.layer;
       state.enabled = true;
+      syncPointQueryCursor();
       syncCanopyOverlay();
       if (config.metaMode === "live-cog") {
         lastLiveViewSignature = currentLiveCoverageSignature();
@@ -1673,6 +1773,8 @@
     } catch (error) {
       console.error(error);
       state.enabled = false;
+      syncPointQueryCursor();
+      restoreShadeZoomConstraint();
       const toggle = document.getElementById("haidianShadeToggle");
       if (toggle) toggle.checked = false;
       setStatus(`啟動失敗：${error.message || error}`, true);
@@ -1696,6 +1798,8 @@
     removeCanopyOverlay();
 
     removePointQueryOverlay();
+    syncPointQueryCursor();
+    restoreShadeZoomConstraint();
 
     if (updateStatus) {
       setStatus("陰影模擬已關閉。");
