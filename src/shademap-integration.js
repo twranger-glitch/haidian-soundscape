@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.3
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.4
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -33,6 +33,12 @@
     queryCanopyFromCog: true,
     queryZoom: 17,
     canopyCacheTiles: 256,
+    queryCanopyTimeoutMs: 12000,
+    queryDemTimeoutMs: 6000,
+
+    // Host-page UX: desktop top banner can be collapsed to a compact pill.
+    headerMinimizeEnabled: true,
+    headerMinimizeRemember: "session",
 
     bareTerrainTileUrl:
       "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
@@ -102,6 +108,8 @@
   let lastMapDragAt = 0;
   let lastLiveViewSignature = null;
   const overpassCache = new Map();
+  let lastBuildingFeatures = [];
+  let lastBuildingCoverageKey = null;
   const metaCogCache = new Map();
   const metaSurfaceUrls = new Map();
   const metaSurfacePromises = new Map();
@@ -217,15 +225,92 @@
       }
       .haidian-shade-query-popup .hsq-label{color:#64748b}
       .haidian-shade-query-popup .hsq-value{color:#0f172a;font-weight:800}
+      .haidian-shade-query-popup .hsq-pending{
+        color:#0f766e;font-weight:800;animation:haidianShadeQueryPulse 1.1s ease-in-out infinite
+      }
+      .haidian-shade-query-popup .hsq-muted{color:#64748b;font-weight:650}
+      @keyframes haidianShadeQueryPulse{0%,100%{opacity:.48}50%{opacity:1}}
       .haidian-shade-query-popup .hsq-foot{
         margin-top:7px;padding-top:6px;border-top:1px solid #e2e8f0;
         color:#78716c;font-size:9px
+      }
+
+      /* Desktop banner: manually collapse the large top banner into a small pill. */
+      .haidian-header-minimize-btn{display:none}
+      @media (min-width:601px){
+        .glass-header{overflow:visible!important}
+        .haidian-header-minimize-btn{
+          display:flex;position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);
+          width:38px;height:24px;align-items:center;justify-content:center;
+          border:1px solid rgba(148,163,184,.45);border-radius:0 0 11px 11px;
+          background:rgba(255,255,255,.96);color:#475569;cursor:pointer;
+          box-shadow:0 5px 12px rgba(15,23,42,.12);z-index:3;font-size:15px;font-weight:900;
+          line-height:1;transition:background .18s ease,color .18s ease
+        }
+        .haidian-header-minimize-btn:hover{background:#ecfdf5;color:#047857}
+        .glass-header.haidian-manual-minimized{
+          left:50%!important;top:10px!important;transform:translateX(-50%)!important;
+          width:auto!important;max-width:235px!important;min-width:0!important;
+          padding:8px 34px 8px 12px!important;border-radius:999px!important;gap:6px!important;
+          box-shadow:0 5px 16px rgba(15,23,42,.14)!important
+        }
+        .glass-header.haidian-manual-minimized .nav-buttons{display:none!important}
+        .glass-header.haidian-manual-minimized .project-title{
+          width:auto!important;margin:0!important;font-size:14px!important;white-space:nowrap!important;
+          line-height:1.2!important
+        }
+        .glass-header.haidian-manual-minimized .project-title .sub-title{display:none!important}
+        .glass-header.haidian-manual-minimized .haidian-header-minimize-btn{
+          left:auto;right:4px;bottom:auto;top:50%;transform:translateY(-50%);
+          width:26px;height:26px;border-radius:50%;border:0;box-shadow:none;background:transparent;
+        }
       }
       @media (max-width:600px){
         .haidian-shade-card{padding:9px}
       }
     `;
     document.head.appendChild(style);
+  }
+
+  function installDesktopHeaderMinimizer() {
+    if (config.headerMinimizeEnabled === false) return false;
+    const header = document.querySelector(".glass-header");
+    if (!header || document.getElementById("haidianHeaderMinimizeBtn")) return !!header;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = "haidianHeaderMinimizeBtn";
+    button.className = "haidian-header-minimize-btn";
+    header.appendChild(button);
+
+    const storageKey = "haidianHeaderManuallyMinimized";
+    const storage = config.headerMinimizeRemember === "local"
+      ? window.localStorage
+      : window.sessionStorage;
+    let minimized = false;
+    try { minimized = storage.getItem(storageKey) === "1"; } catch (_) {}
+
+    const render = () => {
+      header.classList.toggle("haidian-manual-minimized", minimized);
+      button.textContent = minimized ? "⌄" : "⌃";
+      button.setAttribute("aria-expanded", minimized ? "false" : "true");
+      button.setAttribute("aria-label", minimized ? "展開上方選單" : "縮小上方選單");
+      button.title = minimized ? "展開上方選單" : "縮小上方選單";
+    };
+
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      minimized = !minimized;
+      try { storage.setItem(storageKey, minimized ? "1" : "0"); } catch (_) {}
+      render();
+      if (mapRef && typeof mapRef.invalidateSize === "function") {
+        window.setTimeout(() => mapRef.invalidateSize({ pan: false }), 180);
+      }
+    });
+
+    render();
+    return true;
   }
 
   function getTargetContainer() {
@@ -970,8 +1055,12 @@
     if (config.buildingMode === "custom") {
       try { return await loadCustomBuildings(); } catch (_) { return []; }
     }
-    if (!mapRef || mapRef.getZoom() < config.buildingMinZoom) return [];
-    return loadOSMBuildings();
+
+    // Point queries must feel immediate. Never start a fresh Overpass request
+    // from a click. Reuse the building features already loaded for ShadeMap.
+    // If they are not ready yet, return [] and let the core canopy/DEM/shade
+    // result render without waiting up to Overpass' 20-second timeout.
+    return Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
   }
 
   function escapeHtml(value) {
@@ -1007,86 +1096,134 @@
     }
   }
 
-  async function queryPointData(latlng) {
+  function withTimeout(promise, ms, label) {
+    const timeout = Math.max(500, Number(ms) || 0);
+    if (!timeout) return Promise.resolve(promise);
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(
+        () => reject(new Error(`${label || "資料"}讀取逾時`)),
+        timeout
+      );
+      Promise.resolve(promise).then(
+        (value) => { window.clearTimeout(timer); resolve(value); },
+        (error) => { window.clearTimeout(timer); reject(error); }
+      );
+    });
+  }
+
+  function queryTileAt(latlng) {
     const qz = Math.max(
       config.metaMinZoom,
       Math.min(config.metaMaxZoom, Number(config.queryZoom) || config.metaMaxZoom)
     );
-    const tile = latLngToTilePixel(latlng.lat, latlng.lng, qz);
+    return latLngToTilePixel(latlng.lat, latlng.lng, qz);
+  }
 
-    let canopy = null;
-    let ground = null;
-    let buildings = [];
+  function canopyValueFromRaster(raster, tile) {
+    if (!raster) return null;
+    const raw = Number(raster[tile.index]);
+    return raw > 0 && raw < 255 ? raw : 0;
+  }
 
-    const canopyPromise = (async () => {
-      if (config.queryCanopyFromCog === false) return null;
-      await ensureGeoTIFF();
-      const raster = await readMetaCanopyTile(tile.x, tile.y, tile.z);
-      if (!raster) return null;
-      const raw = Number(raster[tile.index]);
-      return raw > 0 && raw < 255 ? raw : 0;
-    })().catch((error) => {
-      console.warn("[Haidian Shade] canopy point query:", error);
-      return null;
-    });
+  async function queryCanopyAtTile(tile) {
+    if (config.queryCanopyFromCog === false) return null;
+    await ensureGeoTIFF();
+    const raster = await readMetaCanopyTile(tile.x, tile.y, tile.z);
+    return canopyValueFromRaster(raster, tile);
+  }
 
-    const groundPromise = readBareTerrainHeights(tile.x, tile.y, tile.z)
-      .then((raster) => raster ? Number(raster[tile.index]) : null)
-      .catch(() => null);
+  async function sampleBareTerrainHeightAtTilePixel(tile) {
+    if (!config.metaBlendBareTerrain) return null;
 
-    const buildingsPromise = getQueryableBuildings().catch(() => []);
-    const shadePromise = shadeStatusAt(latlng);
+    const demZ = Math.min(tile.z, config.bareTerrainMaxZoom);
+    const factor = 1 << (tile.z - demZ);
+    const parentX = Math.floor(tile.x / factor);
+    const parentY = Math.floor(tile.y / factor);
+    const bitmap = await getDemBitmap(parentX, parentY, demZ);
 
-    [canopy, ground, buildings] = await Promise.all([
-      canopyPromise,
-      groundPromise,
-      buildingsPromise
-    ]);
-    const shade = await shadePromise;
-    const building = buildings.find((feature) =>
+    // Convert the z17 query pixel back to the actual DEM source pixel.
+    const sourceX = Math.max(0, Math.min(255, Math.floor(((tile.x % factor) * 256 + tile.px) / factor)));
+    const sourceY = Math.max(0, Math.min(255, Math.floor(((tile.y % factor) * 256 + tile.py) / factor)));
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(bitmap, sourceX, sourceY, 1, 1, 0, 0, 1, 1);
+    const rgba = ctx.getImageData(0, 0, 1, 1).data;
+    return rgba[0] * 256 + rgba[1] + rgba[2] / 256 - 32768;
+  }
+
+  function findCachedBuildingAt(latlng) {
+    const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    return buildings.find((feature) =>
       pointInPolygonFeature(latlng.lng, latlng.lat, feature)
     ) || null;
+  }
 
+  function pointQueryViewModel(latlng, tile) {
     return {
-      canopy,
-      ground,
-      surface: Number.isFinite(ground) && Number.isFinite(canopy)
-        ? ground + canopy
-        : null,
-      building,
-      shade,
-      queryZoom: qz,
-      sampleTile: tile
+      latlng,
+      queryZoom: tile.z,
+      sampleTile: tile,
+      canopy: undefined,
+      canopyError: "",
+      ground: undefined,
+      groundError: "",
+      shade: undefined,
+      building: findCachedBuildingAt(latlng)
     };
   }
 
-  function pointQueryHtml(latlng, result) {
-    const canopyText = result.canopy == null
-      ? "—"
-      : result.canopy === 0
-        ? "0 m（亦可能為 no-data）"
-        : meters(result.canopy, result.canopy >= 10 ? 0 : 1);
-    const building = result.building;
+  function pointQueryHtmlProgress(model) {
+    const latlng = model.latlng;
+    const pending = '<span class="hsq-pending">讀取中…</span>';
+    const canopyText = model.canopy === undefined
+      ? pending
+      : model.canopyError
+        ? `<span class="hsq-muted">${escapeHtml(model.canopyError)}</span>`
+        : model.canopy == null
+          ? "—"
+          : model.canopy === 0
+            ? "0 m（亦可能為 no-data）"
+            : escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1));
+    const groundText = model.ground === undefined
+      ? pending
+      : model.groundError
+        ? `<span class="hsq-muted">${escapeHtml(model.groundError)}</span>`
+        : escapeHtml(meters(model.ground));
+    const surface = Number.isFinite(model.ground) && Number.isFinite(model.canopy)
+      ? model.ground + model.canopy
+      : null;
+    const surfaceText = model.ground === undefined || model.canopy === undefined
+      ? pending
+      : escapeHtml(meters(surface));
+    const shadeText = model.shade === undefined
+      ? pending
+      : escapeHtml(model.shade && model.shade.label ? model.shade.label : "—");
+    const building = model.building;
     const buildingHeight = building && Number(building.properties && building.properties.height);
     const buildingName = building && building.properties && building.properties.name;
     const heightSource = building && building.properties && building.properties.height_source;
     const time = `${formatDateInput(state.date)} ${String(state.date.getHours()).padStart(2, "0")}:${String(state.date.getMinutes()).padStart(2, "0")}`;
 
     const rows = [
-      ["位置", `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`],
+      ["位置", escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)],
+      ["目前狀態", shadeText],
       ["Meta 樹冠高度", canopyText],
-      ["地面海拔（DEM）", meters(result.ground)],
-      ["地表＋樹冠海拔", meters(result.surface)],
-      ["DEM 來源", config.bareTerrainLabel || "全球地形 DEM"],
-      ["目前狀態", result.shade.label],
-      ["模擬時間", time],
-      ["研究模式", modeLabel(state.mode)]
+      ["地面海拔（DEM）", groundText],
+      ["地表＋樹冠海拔", surfaceText],
+      ["DEM 來源", escapeHtml(config.bareTerrainLabel || "全球地形 DEM")],
+      ["模擬時間", escapeHtml(time)],
+      ["研究模式", escapeHtml(modeLabel(state.mode))]
     ];
 
     if (building) {
-      rows.push(["建築", buildingName || "OSM building"]);
-      rows.push(["建築高度", meters(buildingHeight)]);
-      rows.push(["高度來源", heightSource || "未知"]);
+      rows.push(["建築", escapeHtml(buildingName || "OSM building")]);
+      rows.push(["建築高度", escapeHtml(meters(buildingHeight))]);
+      rows.push(["高度來源", escapeHtml(heightSource || "未知")]);
+    } else {
+      rows.push(["建築", '<span class="hsq-muted">目前已載入建築快取中未命中</span>']);
     }
 
     return `
@@ -1094,15 +1231,21 @@
         <div class="hsq-title">🌳 點位日照／樹冠資訊</div>
         <div class="hsq-grid">
           ${rows.map(([label, value]) =>
-            `<div class="hsq-label">${escapeHtml(label)}</div><div class="hsq-value">${escapeHtml(value)}</div>`
+            `<div class="hsq-label">${escapeHtml(label)}</div><div class="hsq-value">${value}</div>`
           ).join("")}
         </div>
         <div class="hsq-foot">
-          十字中心是你的點擊位置；地圖上的小方格是實際被取樣的 z${result.queryZoom} CHMv2 raster pixel。樹高為模型估計，不代表單株樹木現地量測。
-          「地面海拔（DEM）」是地形資料的海拔值，不是建築高度，也不是陰影高度；低於海平面的地形可以是負值。
-          「完整」模式的陰影可能由樹冠、建築或地形共同造成，無法由單一陰影像素判定成因。
+          結果會逐項更新，不再等待所有網路來源才一次顯示。十字中心是點擊位置；小方格是實際取樣的 z${model.queryZoom} CHMv2 raster pixel。
+          樹高為模型估計；地面海拔是 DEM 海拔，不是建築或陰影高度。建築資訊只讀取 ShadeMap 已載入的快取，因此不會為單次點擊額外等待 Overpass。
         </div>
       </div>`;
+  }
+
+  function refreshPointQueryTooltip(serial, model) {
+    if (serial !== pointQuerySerial || !queryPopup) return false;
+    queryPopup.setContent(pointQueryHtmlProgress(model));
+    if (typeof queryPopup.update === "function") queryPopup.update();
+    return true;
   }
 
   function activePopupClassName() {
@@ -1179,6 +1322,10 @@
   function drawQuerySampleCell(tile) {
     if (!mapRef || !tile || !window.L) return;
     try {
+      if (querySampleCell && mapRef.hasLayer(querySampleCell)) {
+        mapRef.removeLayer(querySampleCell);
+      }
+      querySampleCell = null;
       if (!mapRef.getPane("haidianShadeQueryPane")) {
         const pane = mapRef.createPane("haidianShadeQueryPane");
         pane.style.zIndex = "690";
@@ -1209,10 +1356,10 @@
 
     const serial = ++pointQuerySerial;
     const latlng = event.latlng;
+    const tile = queryTileAt(latlng);
+    const model = pointQueryViewModel(latlng, tile);
 
     removePointQueryOverlay();
-    // Show the exact sampled coordinate. The marker is non-interactive and does
-    // not steal clicks from the host map.
     queryPointMarker = L.marker(latlng, {
       interactive: false,
       keyboard: false,
@@ -1225,9 +1372,9 @@
       })
     }).addTo(mapRef);
 
-    // Use a Tooltip instead of Popup/openOn().  The host soundscape keeps a
-    // single work popup alive while audio plays; openOn() would close it and
-    // trigger the host's popupclose/player cleanup.
+    // Draw the exact CHMv2 sample cell immediately; it does not need network data.
+    drawQuerySampleCell(tile);
+
     queryPopup = L.tooltip({
       permanent: true,
       direction: "top",
@@ -1237,29 +1384,72 @@
       className: "haidian-shade-query-tooltip"
     })
       .setLatLng(latlng)
-      .setContent('<div class="haidian-shade-query-popup"><div class="hsq-title">🌳 正在查詢…</div></div>')
+      .setContent(pointQueryHtmlProgress(model))
       .addTo(mapRef);
 
-    try {
-      const result = await queryPointData(latlng);
-      if (serial !== pointQuerySerial || !queryPopup) return;
-      drawQuerySampleCell(result.sampleTile);
-      queryPopup.setContent(pointQueryHtml(latlng, result));
-      if (typeof queryPopup.update === "function") queryPopup.update();
-    } catch (error) {
-      console.error("[Haidian Shade] point query failed:", error);
-      if (serial !== pointQuerySerial || !queryPopup) return;
-      queryPopup.setContent(
-        `<div class="haidian-shade-query-popup"><div class="hsq-title">查詢失敗</div>` +
-        `<div class="hsq-foot">${escapeHtml(error.message || error)}</div></div>`
-      );
-    }
+    // 1) Shade status: independent and usually available immediately.
+    shadeStatusAt(latlng).then((shade) => {
+      if (serial !== pointQuerySerial) return;
+      model.shade = shade;
+      refreshPointQueryTooltip(serial, model);
+    }).catch(() => {
+      if (serial !== pointQuerySerial) return;
+      model.shade = { label: "陰影判讀暫不可用", shaded: null };
+      refreshPointQueryTooltip(serial, model);
+    });
+
+    // 2) Canopy: often already in cache because the visible ShadeMap surface used it.
+    withTimeout(
+      queryCanopyAtTile(tile),
+      config.queryCanopyTimeoutMs,
+      "CHMv2"
+    ).then((canopy) => {
+      if (serial !== pointQuerySerial) return;
+      model.canopy = canopy;
+      refreshPointQueryTooltip(serial, model);
+    }).catch((error) => {
+      if (serial !== pointQuerySerial) return;
+      model.canopy = null;
+      model.canopyError = error && error.message ? error.message : "CHMv2 讀取失敗";
+      refreshPointQueryTooltip(serial, model);
+    });
+
+    // 3) DEM: sample only one source pixel instead of decoding an entire 256×256 tile.
+    withTimeout(
+      sampleBareTerrainHeightAtTilePixel(tile),
+      config.queryDemTimeoutMs,
+      "DEM"
+    ).then((ground) => {
+      if (serial !== pointQuerySerial) return;
+      model.ground = ground;
+      refreshPointQueryTooltip(serial, model);
+    }).catch((error) => {
+      if (serial !== pointQuerySerial) return;
+      model.ground = null;
+      model.groundError = error && error.message ? error.message : "DEM 讀取失敗";
+      refreshPointQueryTooltip(serial, model);
+    });
+
+    // Building lookup is intentionally synchronous from the already-loaded cache.
+    refreshPointQueryTooltip(serial, model);
   }
 
   function hookMapPointQuery() {
     if (!mapRef || mapQueryHooked || typeof mapRef.on !== "function") return;
     mapQueryHooked = true;
-    mapRef.on("dragstart", () => { lastMapDragAt = Date.now(); });
+
+    const clearQueryForNavigation = () => {
+      lastMapDragAt = Date.now();
+      pointQuerySerial += 1;
+      removePointQueryOverlay();
+    };
+
+    // Query markers/cells describe one exact viewport sample. They must never
+    // survive pan/zoom/view reset, regardless of ShadeMap research mode.
+    mapRef.on("movestart", clearQueryForNavigation);
+    mapRef.on("zoomstart", clearQueryForNavigation);
+    mapRef.on("viewreset", clearQueryForNavigation);
+    mapRef.on("zoomlevelschange", clearQueryForNavigation);
     mapRef.on("dragend", () => { lastMapDragAt = Date.now(); });
     mapRef.on("click", handleMapPointQuery);
   }
@@ -1507,7 +1697,11 @@
     const key = boundsCacheKey(bounds);
 
     if (overpassCache.has(key)) {
-      return overpassCache.get(key);
+      return overpassCache.get(key).then((features) => {
+        lastBuildingFeatures = Array.isArray(features) ? features : [];
+        lastBuildingCoverageKey = key;
+        return lastBuildingFeatures;
+      });
     }
 
     const query =
@@ -1566,6 +1760,8 @@
           });
         }
 
+        lastBuildingFeatures = features;
+        lastBuildingCoverageKey = key;
         return features;
       })
       .catch((error) => {
@@ -1913,11 +2109,13 @@
 
   function boot() {
     injectStyles();
+    installDesktopHeaderMinimizer();
 
     let attempts = 0;
     const timer = setInterval(() => {
       attempts += 1;
       mapRef = mapRef || resolveMap();
+      installDesktopHeaderMinimizer();
 
       const panelReady = injectPanel();
 
