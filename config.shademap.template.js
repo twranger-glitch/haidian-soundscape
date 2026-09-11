@@ -48,6 +48,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   defaultOpacity: 0.36,
   defaultColor: "#172554",
   queryOnClick: false,
+  // Keep tree/full analysis at or below the native CHMv2 Web-Mercator level.
+  // The host map max zoom is restored when ShadeMap is turned off (or buildings-only mode is used).
+  lockMapMaxZoomToMeta: true,
   canopyOverlayDefault: true,
   canopyOverlayMinHeight: 2,
   canopyOverlayOpacity: 0.28,
