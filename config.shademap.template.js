@@ -47,12 +47,27 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   headerMinimizeEnabled: true,
   headerMinimizeRemember: "session",
 
-  // Bare-earth terrain. CHMv2 canopy height is added to this before ShadeMap sees it.
+  // Bare-earth terrain used by the shadow engine today. CHMv2 canopy height is added to this before ShadeMap sees it.
+  // In Taiwan this remains a GLOBAL FALLBACK until official DTM Terrarium tiles are generated.
   bareTerrainTileUrl: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
   bareTerrainMaxZoom: 15,
-  bareTerrainLabel: "Mapzen / Tilezen global terrain DEM",
-  // This is a real published DEM source, not a guessed height. For Taiwan-specific
-  // authoritative analysis, a later build can replace it with the Ministry of Interior DTM tiles.
+  bareTerrainLabel: "Mapzen / Tilezen global terrain DEM (shadow fallback)",
+
+  // v7.6 — authoritative Taiwan point elevation.
+  // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
+  // Worker and set only its public proxy URL here. Until then, Taiwan point queries
+  // intentionally hide the coarse global DEM number instead of presenting it as truth.
+  taiwanOfficialDtmProxyUrl: "",
+  taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
+  taiwanOfficialDtmTimeoutMs: 6500,
+  taiwanHideGlobalDemPointValue: true,
+
+  // Future-ready: after the official Taiwan DTM download is converted to Terrarium XYZ,
+  // set this URL and use it to replace the shadow engine's global terrain fallback.
+  taiwanTerrainTileUrl: "",
+  taiwanTerrainMaxZoom: 13,
+  taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
+  taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
   // Prototype: fetch visible OSM building footprints at runtime.
   // For production reliability, you can later switch to "custom" and host GeoJSON.
