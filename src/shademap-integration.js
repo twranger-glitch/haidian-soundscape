@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.3
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.4
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -40,16 +40,13 @@
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
 
-    // v7.5 lifecycle safety: never create a new WebGL/canvas shade layer until
-    // navigation has settled. This also leaves a short cleanup window for the
-    // previous SDK instance before the next one is mounted.
+    // v7.8.4 lifecycle policy: use ShadeMap's documented remove() lifecycle only.
+    // Never force WEBGL_lose_context and never delete an SDK canvas while the SDK
+    // may still own it. Old canvases are visually retired first and cleaned later.
     navigationRebuildDelayMs: 520,
-    hardCanvasCleanup: true,
-    // v7.8.3: release retired WebGL contexts before creating the next ShadeMap.
-    // Chrome keeps removed WebGL canvases alive for a while; repeated rebuilds can
-    // otherwise exhaust the context pool and make canvas.getContext() return null.
-    webglContextReleaseDelayMs: 90,
-    webglRecoveryRetryMs: 180,
+    hardCanvasCleanup: false,
+    retiredCanvasCleanupDelayMs: 12000,
+    layerSwapDelayMs: 60,
     preserveShadeLayerDuringNavigation: true,
 
     // Host-page UX: desktop top banner can be collapsed to a compact pill.
@@ -198,39 +195,40 @@
     Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
       if (!isLikelyShadeCanvas(canvas)) return;
       canvas.dataset.haidianShadeOwner = token;
+      canvas.classList.remove("haidian-shade-retired-canvas");
       canvas.classList.add("haidian-shade-sdk-canvas");
     });
   }
 
-  function releaseShadeCanvasWebGLContext(canvas) {
-    if (!canvas || typeof canvas.getContext !== "function") return false;
-    let gl = null;
-    try { gl = canvas.getContext("webgl2"); } catch (_) {}
-    if (!gl) {
-      try { gl = canvas.getContext("webgl"); } catch (_) {}
-    }
-    if (!gl) {
-      try { gl = canvas.getContext("experimental-webgl"); } catch (_) {}
-    }
-    if (!gl) return false;
+  function webglCapability() {
+    const result = { webgl: false, webgl2: false };
     try {
-      const ext = gl.getExtension && gl.getExtension("WEBGL_lose_context");
-      if (ext && typeof ext.loseContext === "function") ext.loseContext();
+      result.webgl = !!document.createElement("canvas").getContext("webgl");
     } catch (_) {}
-    return true;
+    try {
+      result.webgl2 = !!document.createElement("canvas").getContext("webgl2");
+    } catch (_) {}
+    return result;
   }
 
-  function hardScrubShadeCanvases() {
-    if (config.hardCanvasCleanup === false) return 0;
+  function retireActiveShadeCanvases() {
+    if (!mapRef || !mapRef.getContainer) return 0;
+    const container = mapRef.getContainer();
+    let count = 0;
+    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
+      if (!isLikelyShadeCanvas(canvas)) return;
+      canvas.classList.remove("haidian-shade-sdk-canvas");
+      canvas.classList.add("haidian-shade-retired-canvas");
+      count += 1;
+    });
+    return count;
+  }
+
+  function cleanupRetiredShadeCanvases() {
     if (!mapRef || !mapRef.getContainer) return 0;
     const container = mapRef.getContainer();
     let removed = 0;
-    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
-      if (!isLikelyShadeCanvas(canvas)) return;
-      // Removing a WebGL canvas from the DOM does NOT guarantee that Chrome
-      // immediately releases its GPU context. Explicitly lose it first so
-      // repeated pan/zoom rebuilds do not exhaust the browser context pool.
-      releaseShadeCanvasWebGLContext(canvas);
+    Array.from(container.querySelectorAll("canvas.haidian-shade-retired-canvas")).forEach((canvas) => {
       try { canvas.remove(); removed += 1; } catch (_) {}
     });
     return removed;
@@ -252,14 +250,10 @@
 
   function scheduleRetiredCanvasScrub() {
     clearCanvasCleanupTimers();
-    [0, 70, 180, 360].forEach((delay) => {
-      shadeCanvasCleanupTimers.push(setTimeout(() => {
-        // Scrub only while there is no current shade layer. The next layer is
-        // mounted after navigationDebounce + terrain preparation, so these
-        // passes clean late SDK callbacks without touching the new instance.
-        if (!shadeLayer) hardScrubShadeCanvases();
-      }, delay));
-    });
+    const wait = Math.max(2000, Number(config.retiredCanvasCleanupDelayMs) || 12000);
+    shadeCanvasCleanupTimers.push(setTimeout(() => {
+      cleanupRetiredShadeCanvases();
+    }, wait));
   }
 
   function installShadeCanvasObserver() {
@@ -268,29 +262,22 @@
     const container = mapRef.getContainer();
     if (!container || typeof MutationObserver === "undefined") return;
     shadeDomObserver = new MutationObserver((records) => {
-      // If a retired SDK instance appends a canvas after remove(), delete it
-      // immediately while no active shade layer exists. This is the v7.5
-      // guard against the large white/blue orphan rectangle.
       if (shadeLayer) {
         markActiveShadeCanvases();
         return;
       }
+      // A late canvas from a layer that has already been removed is hidden, not
+      // destroyed. This avoids the v7.5-v7.8.3 unsupported WebGL/context surgery.
       for (const record of records) {
         for (const node of Array.from(record.addedNodes || [])) {
-          if (node && node.nodeType === 1) {
-            if (node.tagName === "CANVAS" && isLikelyShadeCanvas(node)) {
-              releaseShadeCanvasWebGLContext(node);
-              try { node.remove(); } catch (_) {}
-            }
-            if (node.querySelectorAll) {
-              Array.from(node.querySelectorAll("canvas")).forEach((canvas) => {
-                if (isLikelyShadeCanvas(canvas)) {
-                  releaseShadeCanvasWebGLContext(canvas);
-                  try { canvas.remove(); } catch (_) {}
-                }
-              });
-            }
-          }
+          if (!node || node.nodeType !== 1) continue;
+          const canvases = node.tagName === "CANVAS" ? [node] :
+            (node.querySelectorAll ? Array.from(node.querySelectorAll("canvas")) : []);
+          canvases.forEach((canvas) => {
+            if (!isLikelyShadeCanvas(canvas)) return;
+            canvas.classList.remove("haidian-shade-sdk-canvas");
+            canvas.classList.add("haidian-shade-retired-canvas");
+          });
         }
       }
     });
@@ -420,6 +407,9 @@
          CHMv2 viewport is being prepared. */
       .leaflet-container.haidian-shade-navigation .haidian-shade-sdk-canvas{
         visibility:hidden!important;opacity:0!important;
+      }
+      .leaflet-container canvas.haidian-shade-retired-canvas{
+        visibility:hidden!important;opacity:0!important;pointer-events:none!important;
       }
       .leaflet-tooltip.haidian-shade-query-tooltip{
         white-space:normal!important;max-width:300px;padding:0!important;
@@ -2521,7 +2511,7 @@
     shadeZoomConstraintApplied = false;
   }
 
-  async function mountPreparedShadeLayer(terrain, serial, recoveryAttempt = 0) {
+  async function mountPreparedShadeLayer(terrain, serial) {
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       throw new Error("尚未填入 ShadeMap API key。");
     }
@@ -2530,15 +2520,12 @@
     await ensureEngine();
     if (serial !== shadeRebuildSerial || !state.enabled) return null;
 
-    // A retired WebGL canvas can keep its GPU context even after DOM removal.
-    // Release stale contexts explicitly, then give Chrome a short turn before
-    // asking the SDK for a fresh WebGL context.
-    const scrubbed = hardScrubShadeCanvases();
-    clearCanvasCleanupTimers();
-    if (scrubbed > 0) {
-      await delay(config.webglContextReleaseDelayMs);
-      if (serial !== shadeRebuildSerial || !state.enabled) return null;
+    // Validate browser capability without touching any SDK-owned canvas.
+    const webgl = webglCapability();
+    if (!webgl.webgl && !webgl.webgl2) {
+      throw new Error("瀏覽器目前無法建立 WebGL context；請確認硬體加速/WebGL 已啟用。");
     }
+    clearCanvasCleanupTimers();
 
     const layer = L.shadeMap({
       date: state.date,
@@ -2576,20 +2563,9 @@
         shadeIdleHandler = null;
         shadeReady = false;
       }
-      hardScrubShadeCanvases();
-
-      // One bounded recovery attempt for browser WebGL-context exhaustion.
-      // This is intentionally not an infinite retry loop.
-      if (
-        recoveryAttempt < 1 &&
-        isWebGLContextFailure(error) &&
-        serial === shadeRebuildSerial &&
-        state.enabled
-      ) {
-        setStatus("WebGL 資源正在重置，正在重新啟動陰影…");
-        await delay(config.webglRecoveryRetryMs);
-        if (serial !== shadeRebuildSerial || !state.enabled) return null;
-        return mountPreparedShadeLayer(terrain, serial, recoveryAttempt + 1);
+      if (isWebGLContextFailure(error)) {
+        const webgl = webglCapability();
+        error.message = `${error.message || error}（WebGL preflight: webgl=${webgl.webgl}, webgl2=${webgl.webgl2}）`;
       }
       throw error;
     }
@@ -2619,8 +2595,10 @@
     const layer = shadeLayer;
     const idleHandler = shadeIdleHandler;
 
-    // Clear global references FIRST. If the SDK appends a delayed canvas during
-    // remove(), the MutationObserver sees there is no active shade and removes it.
+    // Hide the current SDK canvas before calling the SDK's documented remove().
+    // Do not force context loss or delete SDK-owned DOM synchronously.
+    retireActiveShadeCanvases();
+
     shadeLayer = null;
     shadeLayerSerial = 0;
     shadeIdleHandler = null;
@@ -2642,7 +2620,6 @@
       } catch (_) {}
     }
 
-    hardScrubShadeCanvases();
     if (opts.scheduleScrub !== false) scheduleRetiredCanvasScrub();
   }
 
@@ -2749,8 +2726,8 @@
 
       // Swap instances only after replacement terrain is ready. This minimizes
       // time without shade and drastically reduces WebGL context churn.
-      detachShadeLayerOnly({ scheduleScrub: false });
-      await delay(config.webglContextReleaseDelayMs);
+      detachShadeLayerOnly({ scheduleScrub: true });
+      await delay(Math.max(0, Number(config.layerSwapDelayMs) || 60));
       if (serial !== shadeRebuildSerial || !state.enabled) return;
 
       const layer = await mountPreparedShadeLayer(terrain, serial);
