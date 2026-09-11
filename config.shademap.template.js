@@ -53,7 +53,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   bareTerrainMaxZoom: 15,
   bareTerrainLabel: "Mapzen / Tilezen global terrain DEM (shadow fallback)",
 
-  // v7.6 — authoritative Taiwan point elevation.
+  // v7.7 — authoritative Taiwan point elevation.
   // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
   // Worker and set only its public proxy URL here. Until then, Taiwan point queries
   // intentionally hide the coarse global DEM number instead of presenting it as truth.
@@ -81,6 +81,8 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   defaultOpacity: 0.36,
   defaultColor: "#172554",
   queryOnClick: false,
+  pointCardCompact: true,
+  pointCardTechnicalDetailsDefaultOpen: false,
   // Keep tree/full analysis at or below the native CHMv2 Web-Mercator level.
   // The host map max zoom is restored when ShadeMap is turned off (or buildings-only mode is used).
   lockMapMaxZoomToMeta: true,
