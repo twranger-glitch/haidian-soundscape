@@ -57,7 +57,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
   // Worker and set only its public proxy URL here. Until then, Taiwan point queries
   // intentionally hide the coarse global DEM number instead of presenting it as truth.
-  taiwanOfficialDtmProxyUrl: "",
+  taiwanOfficialDtmProxyUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/elevation",
   taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
   taiwanOfficialDtmTimeoutMs: 6500,
   taiwanHideGlobalDemPointValue: true,
