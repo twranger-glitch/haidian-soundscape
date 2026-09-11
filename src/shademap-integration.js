@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.5
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.6
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -54,7 +54,23 @@
       "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     bareTerrainMaxZoom: 15,
     bareTerrainLabel: "Mapzen / Tilezen global terrain DEM",
-    bareTerrainNote: "Taiwan is typically sourced from global SRTM-class terrain; this is real DEM data, not an estimated building/tree height.",
+    bareTerrainNote: "Global fallback terrain used by the shadow engine until authoritative regional terrain tiles are configured.",
+
+    // v7.6 authoritative Taiwan point elevation. Keep the credential OFF the browser:
+    // put the MOI DTM api_key in a server-side proxy (Cloudflare Worker template included).
+    // The point-query UI will suppress the global DEM number in Taiwan until this
+    // proxy is configured, so a coarse fallback is never presented as authoritative.
+    taiwanOfficialDtmProxyUrl: "",
+    taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
+    taiwanOfficialDtmTimeoutMs: 6500,
+    taiwanHideGlobalDemPointValue: true,
+    // Optional future Terrarium XYZ generated from an official Taiwan DTM download.
+    // This is separate from the point API. When populated in a later data-build,
+    // it can replace the global DEM inside the actual ShadeMap terrain surface.
+    taiwanTerrainTileUrl: "",
+    taiwanTerrainMaxZoom: 13,
+    taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
+    taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
     buildingMode: "osm",
     buildingGeoJSONUrl: "",
@@ -132,6 +148,7 @@
   const metaSurfacePromises = new Map();
   const metaSurfaceMeta = new Map();
   const demBitmapCache = new Map();
+  const officialDtmPointCache = new Map();
   const canopyRasterCache = new Map();
   const canopyRasterPromises = new Map();
 
@@ -632,6 +649,8 @@
         <div class="haidian-shade-source">
           <b>陰影：</b>ShadeMap Leaflet SDK<br>
           <b>樹冠：</b>${terrainSourceLabel()}<br>
+          <b>陰影地形：</b>${escapeHtml(dynamicShadowTerrainLabel(mapRef && mapRef.getCenter ? mapRef.getCenter() : null))}<br>
+          <b>臺灣點位海拔：</b>${escapeHtml(officialTerrainConfigured() ? (config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ") : (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"))}${officialTerrainConfigured() ? "" : "（需安全代理）"}<br>
           <b>建築：</b>${buildingSourceLabel()}
         </div>
 
@@ -647,8 +666,9 @@
 
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
-          高解析樹蔭建議在 z14–17 判讀；樹木／完整模式開啟時最高縮放會鎖定 z17，避免超出 CHMv2 原生層級。無資料處會回退裸地 DEM。建築高度可能來自 OSM 或預設值，
-          適合環境教育與空間比較，不取代現地測量。
+          高解析樹蔭建議在 z14–17 判讀。v7.6 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
+          若設定官方 DTM Terrarium XYZ，臺灣的陰影地形也會改用該官方資料；未設定或 tile 缺失時才使用全球 DEM fallback。兩者不混稱為同一份資料。
+          建築高度可能來自 OSM 或預設值，適合環境教育與空間比較，不取代現地測量。
         </div>
       </div>
     `;
@@ -946,34 +966,80 @@
     return promise;
   }
 
-  async function getDemBitmap(x, y, z) {
-    const key = tileKey(x, y, z);
+  function tileCenterLatLng(x, y, z) {
+    const n = Math.pow(2, z);
+    const lng = ((x + 0.5) / n) * 360 - 180;
+    const mercY = Math.PI * (1 - 2 * ((y + 0.5) / n));
+    const lat = Math.atan(Math.sinh(mercY)) * 180 / Math.PI;
+    return { lat, lng };
+  }
+
+  function officialTerrainConfigured() {
+    return typeof config.taiwanTerrainTileUrl === "string" &&
+      config.taiwanTerrainTileUrl.trim().length > 0;
+  }
+
+  function groundTerrainSpecForTile(x, y, z) {
+    const center = tileCenterLatLng(x, y, z);
+    const region = taiwanOfficialDtmRegion(center);
+    if (region && officialTerrainConfigured()) {
+      return {
+        id: `moi-${region.code}`,
+        template: config.taiwanTerrainTileUrl,
+        maxZoom: Math.max(0, Number(config.taiwanTerrainMaxZoom) || 14),
+        label: config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ",
+        dataset: config.taiwanTerrainDatasetLabel || "官方 DTM static tiles",
+        authoritative: true,
+        region: region.code
+      };
+    }
+    return {
+      id: "global",
+      template: config.bareTerrainTileUrl,
+      maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
+      label: config.bareTerrainLabel || "全球地形 DEM fallback",
+      dataset: "global-fallback",
+      authoritative: false,
+      region: region ? region.code : null
+    };
+  }
+
+  function dynamicShadowTerrainLabel(latlng) {
+    if (latlng && taiwanOfficialDtmRegion(latlng) && officialTerrainConfigured()) {
+      return config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ";
+    }
+    return config.bareTerrainLabel || "全球地形 DEM fallback";
+  }
+
+  async function getDemBitmapForSpec(spec, x, y, z) {
+    const key = `${spec.id}:${tileKey(x, y, z)}`;
     let promise = demBitmapCache.get(key);
     if (!promise) {
       promise = (async () => {
-        const url = fillTemplate(config.bareTerrainTileUrl, x, y, z);
+        const url = fillTemplate(spec.template, x, y, z);
         const response = await fetch(url, { mode: "cors", cache: "force-cache" });
-        if (!response.ok) throw new Error(`DEM HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`${spec.label} HTTP ${response.status}`);
         return createImageBitmap(await response.blob());
       })();
       demBitmapCache.set(key, promise);
-      if (demBitmapCache.size > 80) {
+      if (demBitmapCache.size > 120) {
         demBitmapCache.delete(demBitmapCache.keys().next().value);
       }
     }
     return promise;
   }
 
-  async function readBareTerrainHeights(x, y, z) {
+  async function readGroundTerrainHeights(x, y, z) {
     if (!config.metaBlendBareTerrain) return null;
 
-    const demZ = Math.min(z, config.bareTerrainMaxZoom);
+    const spec = groundTerrainSpecForTile(x, y, z);
+    const demZ = Math.min(z, spec.maxZoom);
     const factor = 1 << (z - demZ);
     const parentX = Math.floor(x / factor);
     const parentY = Math.floor(y / factor);
 
     try {
-      const bitmap = await getDemBitmap(parentX, parentY, demZ);
+      const bitmap = await getDemBitmapForSpec(spec, parentX, parentY, demZ);
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 256;
@@ -990,9 +1056,50 @@
       for (let i = 0, p = 0; i < heights.length; i += 1, p += 4) {
         heights[i] = rgba[p] * 256 + rgba[p + 1] + rgba[p + 2] / 256 - 32768;
       }
+      heights.__terrainSpec = spec;
       return heights;
     } catch (error) {
-      console.warn("[Haidian Shade] bare DEM merge skipped:", error);
+      // If official static terrain is configured but one tile is absent, fail
+      // over to the global terrain for continuity instead of breaking ShadeMap.
+      if (spec.authoritative) {
+        console.warn("[Haidian Shade] official terrain tile missing; using global fallback:", error);
+        const fallback = {
+          id: "global",
+          template: config.bareTerrainTileUrl,
+          maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
+          label: config.bareTerrainLabel || "全球地形 DEM fallback",
+          dataset: "global-fallback",
+          authoritative: false,
+          region: spec.region
+        };
+        try {
+          const fallbackZ = Math.min(z, fallback.maxZoom);
+          const factor = 1 << (z - fallbackZ);
+          const parentX = Math.floor(x / factor);
+          const parentY = Math.floor(y / factor);
+          const bitmap = await getDemBitmapForSpec(fallback, parentX, parentY, fallbackZ);
+          const canvas = document.createElement("canvas");
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.imageSmoothingEnabled = true;
+          const crop = 256 / factor;
+          const sx = (x % factor) * crop;
+          const sy = (y % factor) * crop;
+          ctx.drawImage(bitmap, sx, sy, crop, crop, 0, 0, 256, 256);
+          const rgba = ctx.getImageData(0, 0, 256, 256).data;
+          const heights = new Float32Array(256 * 256);
+          for (let i = 0, p = 0; i < heights.length; i += 1, p += 4) {
+            heights[i] = rgba[p] * 256 + rgba[p + 1] + rgba[p + 2] / 256 - 32768;
+          }
+          heights.__terrainSpec = fallback;
+          return heights;
+        } catch (fallbackError) {
+          console.warn("[Haidian Shade] global terrain fallback also failed:", fallbackError);
+          return null;
+        }
+      }
+      console.warn("[Haidian Shade] ground DEM merge skipped:", error);
       return null;
     }
   }
@@ -1030,7 +1137,7 @@
 
     const promise = (async () => {
       const canopy = await readMetaCanopyTile(x, y, z);
-      const dem = await readBareTerrainHeights(x, y, z);
+      const dem = await readGroundTerrainHeights(x, y, z);
       // CHMv2 is world-scale, but individual locations can be absent/no-data.
       // Keep terrain/building shadows alive with bare DEM instead of failing.
       if (!canopy && !dem) return null;
@@ -1051,7 +1158,12 @@
       ctx.putImageData(image, 0, 0);
       const url = await canvasToBlobUrl(canvas);
       metaSurfaceUrls.set(key, url);
-      metaSurfaceMeta.set(key, { hasCanopy: !!canopy });
+      metaSurfaceMeta.set(key, {
+        hasCanopy: !!canopy,
+        terrainId: dem && dem.__terrainSpec ? dem.__terrainSpec.id : "none",
+        terrainLabel: dem && dem.__terrainSpec ? dem.__terrainSpec.label : "無地面 DEM",
+        terrainAuthoritative: !!(dem && dem.__terrainSpec && dem.__terrainSpec.authoritative)
+      });
       const maxCached = Math.max(64, Number(config.metaMaxCachedTiles) || 480);
       while (metaSurfaceUrls.size > maxCached) {
         const oldestKey = metaSurfaceUrls.keys().next().value;
@@ -1290,16 +1402,137 @@
     return canopyValueFromRaster(raster, tile);
   }
 
-  async function sampleBareTerrainHeightAtTilePixel(tile) {
+  function taiwanOfficialDtmRegion(latlng) {
+    if (!latlng || !Number.isFinite(Number(latlng.lat)) || !Number.isFinite(Number(latlng.lng))) return null;
+    const lat = Number(latlng.lat);
+    const lng = Number(latlng.lng);
+
+    // Main island first. These are intentionally broad service-selection bounds,
+    // not administrative boundary claims. The upstream DTM service remains the
+    // authority for whether a point has data.
+    if (lng >= 119.9 && lng <= 122.1 && lat >= 21.7 && lat <= 25.6) {
+      return { code: "TW", dataset: "TW_DLA_20100101_20191101_20M_3826_DEM" };
+    }
+    // Penghu and Kinmen dataset identifiers are also exposed by the official API.
+    if (lng >= 119.1 && lng <= 119.9 && lat >= 22.9 && lat <= 24.0) {
+      return { code: "PH", dataset: "PH_DLA_20100101_20191101_20M_3825_DEM" };
+    }
+    if (lng >= 118.0 && lng <= 118.7 && lat >= 24.2 && lat <= 24.7) {
+      return { code: "KM", dataset: "KM_DLA_20160101_20170101_20M_3825_DEM" };
+    }
+    return null;
+  }
+
+  function officialDtmProxyConfigured() {
+    return typeof config.taiwanOfficialDtmProxyUrl === "string" &&
+      config.taiwanOfficialDtmProxyUrl.trim().length > 0;
+  }
+
+  async function queryOfficialTaiwanDtm(latlng) {
+    const region = taiwanOfficialDtmRegion(latlng);
+    if (!region) return null;
+    if (!officialDtmProxyConfigured()) {
+      const error = new Error("官方 DTM 安全代理尚未設定");
+      error.code = "OFFICIAL_DTM_NOT_CONFIGURED";
+      throw error;
+    }
+
+    // About 1 m keying is finer than the source 20 m grid and avoids needless
+    // duplicate network calls while preserving deterministic clicked locations.
+    const key = `${region.code}:${Number(latlng.lat).toFixed(5)},${Number(latlng.lng).toFixed(5)}`;
+    if (officialDtmPointCache.has(key)) return officialDtmPointCache.get(key);
+
+    const promise = (async () => {
+      const base = new URL(config.taiwanOfficialDtmProxyUrl, window.location.href);
+      base.searchParams.set("lat", Number(latlng.lat).toFixed(7));
+      base.searchParams.set("lng", Number(latlng.lng).toFixed(7));
+      base.searchParams.set("region", region.code);
+      base.searchParams.set("dataset", region.dataset);
+
+      const response = await fetch(base.toString(), {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "force-cache",
+        headers: { "Accept": "application/json" }
+      });
+      if (!response.ok) throw new Error(`官方 DTM HTTP ${response.status}`);
+      const payload = await response.json();
+      const elevation = Number(
+        payload && (payload.elevation ?? payload.height ?? payload.z)
+      );
+      if (!Number.isFinite(elevation)) throw new Error("官方 DTM 回傳缺少有效高程");
+      return {
+        height: elevation,
+        source: String(payload.source || config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"),
+        dataset: String(payload.dataset || region.dataset),
+        authoritative: true,
+        region: region.code
+      };
+    })();
+
+    officialDtmPointCache.set(key, promise);
+    if (officialDtmPointCache.size > 256) {
+      officialDtmPointCache.delete(officialDtmPointCache.keys().next().value);
+    }
+    try {
+      return await promise;
+    } catch (error) {
+      officialDtmPointCache.delete(key);
+      throw error;
+    }
+  }
+
+  async function queryPointGround(latlng, tile) {
+    const region = taiwanOfficialDtmRegion(latlng);
+    if (region && officialTerrainConfigured()) {
+      const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
+      return {
+        height: sampled ? sampled.height : null,
+        source: sampled && sampled.spec ? sampled.spec.label : (config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ"),
+        dataset: sampled && sampled.spec ? sampled.spec.dataset : (config.taiwanTerrainDatasetLabel || "official-static-tiles"),
+        authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
+        withheldFallback: false,
+        region: region.code
+      };
+    }
+    if (region) {
+      if (officialDtmProxyConfigured()) {
+        return queryOfficialTaiwanDtm(latlng);
+      }
+      if (config.taiwanHideGlobalDemPointValue !== false) {
+        return {
+          height: null,
+          source: `${config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"}（尚未介接）`,
+          dataset: region.dataset,
+          authoritative: false,
+          withheldFallback: true,
+          region: region.code
+        };
+      }
+    }
+
+    const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
+    return {
+      height: sampled ? sampled.height : null,
+      source: sampled && sampled.spec ? sampled.spec.label : (config.bareTerrainLabel || "全球地形 DEM"),
+      dataset: sampled && sampled.spec ? sampled.spec.dataset : "global-fallback",
+      authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
+      withheldFallback: false,
+      region: region ? region.code : null
+    };
+  }
+
+  async function sampleGroundTerrainHeightAtTilePixel(tile) {
     if (!config.metaBlendBareTerrain) return null;
 
-    const demZ = Math.min(tile.z, config.bareTerrainMaxZoom);
+    const spec = groundTerrainSpecForTile(tile.x, tile.y, tile.z);
+    const demZ = Math.min(tile.z, spec.maxZoom);
     const factor = 1 << (tile.z - demZ);
     const parentX = Math.floor(tile.x / factor);
     const parentY = Math.floor(tile.y / factor);
-    const bitmap = await getDemBitmap(parentX, parentY, demZ);
+    const bitmap = await getDemBitmapForSpec(spec, parentX, parentY, demZ);
 
-    // Convert the z17 query pixel back to the actual DEM source pixel.
     const sourceX = Math.max(0, Math.min(255, Math.floor(((tile.x % factor) * 256 + tile.px) / factor)));
     const sourceY = Math.max(0, Math.min(255, Math.floor(((tile.y % factor) * 256 + tile.py) / factor)));
     const canvas = document.createElement("canvas");
@@ -1309,7 +1542,10 @@
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(bitmap, sourceX, sourceY, 1, 1, 0, 0, 1, 1);
     const rgba = ctx.getImageData(0, 0, 1, 1).data;
-    return rgba[0] * 256 + rgba[1] + rgba[2] / 256 - 32768;
+    return {
+      height: rgba[0] * 256 + rgba[1] + rgba[2] / 256 - 32768,
+      spec
+    };
   }
 
   function findCachedBuildingAt(latlng) {
@@ -1328,6 +1564,10 @@
       canopyError: "",
       ground: undefined,
       groundError: "",
+      groundSource: "",
+      groundDataset: "",
+      groundAuthoritative: false,
+      groundWithheldFallback: false,
       shade: undefined,
       building: findCachedBuildingAt(latlng)
     };
@@ -1349,13 +1589,19 @@
       ? pending
       : model.groundError
         ? `<span class="hsq-muted">${escapeHtml(model.groundError)}</span>`
-        : escapeHtml(meters(model.ground));
+        : model.groundWithheldFallback
+          ? '<span class="hsq-muted">—（未顯示全球 DEM 參考值）</span>'
+          : model.ground == null
+            ? "—"
+            : escapeHtml(meters(model.ground));
     const surface = Number.isFinite(model.ground) && Number.isFinite(model.canopy)
       ? model.ground + model.canopy
       : null;
     const surfaceText = model.ground === undefined || model.canopy === undefined
       ? pending
-      : escapeHtml(meters(surface));
+      : Number.isFinite(surface)
+        ? escapeHtml(meters(surface))
+        : "—";
     const shadeText = model.shade === undefined
       ? pending
       : escapeHtml(model.shade && model.shade.label ? model.shade.label : "—");
@@ -1369,9 +1615,11 @@
       ["位置", escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)],
       ["目前狀態", shadeText],
       ["Meta 樹冠高度", canopyText],
-      ["地面海拔（DEM）", groundText],
+      ["地面海拔", groundText],
       ["地表＋樹冠海拔", surfaceText],
-      ["DEM 來源", escapeHtml(config.bareTerrainLabel || "全球地形 DEM")],
+      ["點位高程來源", escapeHtml(model.groundSource || (model.ground === undefined ? "讀取中…" : "—"))],
+      ["點位高程資料集", escapeHtml(model.groundDataset || (model.ground === undefined ? "讀取中…" : "—"))],
+      ["陰影地形來源", escapeHtml(dynamicShadowTerrainLabel(latlng))],
       ["模擬時間", escapeHtml(time)],
       ["研究模式", escapeHtml(modeLabel(state.mode))]
     ];
@@ -1393,8 +1641,9 @@
           ).join("")}
         </div>
         <div class="hsq-foot">
-          結果會逐項更新，不再等待所有網路來源才一次顯示。十字中心是點擊位置；小方格是實際取樣的 z${model.queryZoom} CHMv2 raster pixel。
-          樹高為模型估計；地面海拔是 DEM 海拔，不是建築或陰影高度。建築資訊只讀取 ShadeMap 已載入的快取，因此不會為單次點擊額外等待 Overpass。
+          結果會逐項更新。十字中心是點擊位置；小方格是實際取樣的 z${model.queryZoom} CHMv2 raster pixel。
+          樹高為模型估計。臺灣點位海拔優先使用內政部 DTM 20 m 安全代理；若代理未設定，v7.6 預設不顯示全球 DEM 的單點數字，避免把 fallback 誤認為官方高程。
+          注意：「點位高程來源」與「陰影地形來源」可能不同；若已設定官方 DTM Terrarium XYZ，臺灣陰影 surface 也會優先採用官方地形，缺 tile 才回退全球 DEM。
         </div>
       </div>`;
   }
@@ -1646,19 +1895,28 @@
       refreshPointQueryTooltip(serial, model);
     });
 
-    // 3) DEM: sample only one source pixel instead of decoding an entire 256×256 tile.
+    // 3) Ground elevation: in Taiwan, prefer the official MOI 20 m DTM via a
+    // server-side proxy. The secret/api_key never enters this browser bundle.
+    // Elsewhere (or when explicitly allowed) use the global DEM fallback.
     withTimeout(
-      sampleBareTerrainHeightAtTilePixel(tile),
-      config.queryDemTimeoutMs,
-      "DEM"
-    ).then((ground) => {
+      queryPointGround(latlng, tile),
+      Math.max(Number(config.queryDemTimeoutMs) || 6000, Number(config.taiwanOfficialDtmTimeoutMs) || 6500),
+      "地面高程"
+    ).then((groundResult) => {
       if (serial !== pointQuerySerial) return;
-      model.ground = ground;
+      model.ground = groundResult ? groundResult.height : null;
+      model.groundSource = groundResult ? groundResult.source : "—";
+      model.groundDataset = groundResult ? groundResult.dataset : "";
+      model.groundAuthoritative = !!(groundResult && groundResult.authoritative);
+      model.groundWithheldFallback = !!(groundResult && groundResult.withheldFallback);
       refreshPointQueryTooltip(serial, model);
     }).catch((error) => {
       if (serial !== pointQuerySerial) return;
       model.ground = null;
-      model.groundError = error && error.message ? error.message : "DEM 讀取失敗";
+      model.groundSource = taiwanOfficialDtmRegion(latlng)
+        ? (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m")
+        : (config.bareTerrainLabel || "全球地形 DEM");
+      model.groundError = error && error.message ? error.message : "地面高程讀取失敗";
       refreshPointQueryTooltip(serial, model);
     });
 
@@ -1784,8 +2042,16 @@
       const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
       return count + (info && info.hasCanopy ? 1 : 0);
     }, 0);
+    const officialTerrainTiles = tiles.reduce((count, tile) => {
+      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
+      return count + (info && info.terrainAuthoritative ? 1 : 0);
+    }, 0);
+    const globalTerrainTiles = tiles.reduce((count, tile) => {
+      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
+      return count + (info && info.terrainId === "global" ? 1 : 0);
+    }, 0);
 
-    return { loaded, canopyTiles, total: tiles.length, zooms, snapshot: view };
+    return { loaded, canopyTiles, officialTerrainTiles, globalTerrainTiles, total: tiles.length, zooms, snapshot: view };
   }
 
   function liveMetaTerrainSource() {
@@ -2088,14 +2354,18 @@
       const prepared = await prepareLiveMetaSurface(view, serial);
       const hasCanopy = prepared.canopyTiles > 0;
       const canopySummary = `${prepared.canopyTiles}/${prepared.total} canopy tiles`;
+      const terrainSummary = prepared.officialTerrainTiles
+        ? `官方 DTM ${prepared.officialTerrainTiles}/${prepared.total} tiles` +
+          (prepared.globalTerrainTiles ? `，全球 fallback ${prepared.globalTerrainTiles}/${prepared.total}` : "")
+        : `全球 DEM ${prepared.globalTerrainTiles || prepared.total}/${prepared.total} tiles`;
       return {
         source: liveMetaTerrainSource(),
         meta: hasCanopy,
         warning: hasCanopy
           ? (config.metaBlendBareTerrain
-              ? `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}），並與裸地 DEM 相加；移動到其他地區會自動載入當地資料。`
-              : `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}）；目前未疊加裸地 DEM。`)
-          : "目前視野沒有可讀取的 CHMv2 樹冠像素；陰影暫以裸地 DEM／建築計算。移到其他地區或放大後會重新嘗試載入。"
+              ? `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}），地面來源：${terrainSummary}；移動到其他地區會自動載入當地資料。`
+              : `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}）；目前未疊加地面 DEM。`)
+          : `目前視野沒有可讀取的 CHMv2 樹冠像素；陰影以 ${terrainSummary}／建築計算。移到其他地區或放大後會重新嘗試載入。`
       };
     }
 
