@@ -31,6 +31,13 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryCanopyFromCog: true,
   queryZoom: 17,
   canopyCacheTiles: 256,
+  // Point-query rows update independently. Slow CHMv2/DEM sources no longer block the whole tooltip.
+  queryCanopyTimeoutMs: 12000,
+  queryDemTimeoutMs: 6000,
+
+  // Desktop banner UX: manual collapse to a compact pill; remember only for the current browser tab/session.
+  headerMinimizeEnabled: true,
+  headerMinimizeRemember: "session",
 
   // Bare-earth terrain. CHMv2 canopy height is added to this before ShadeMap sees it.
   bareTerrainTileUrl: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
