@@ -34,6 +34,14 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Point-query rows update independently. Slow CHMv2/DEM sources no longer block the whole tooltip.
   queryCanopyTimeoutMs: 12000,
   queryDemTimeoutMs: 6000,
+  // v7.5: point shade status auto-refreshes after the SDK emits idle.
+  queryShadeRetryMs: 250,
+  queryShadeRetryTimeoutMs: 10000,
+
+  // v7.5 lifecycle safety. Pan/zoom tears down the old SDK canvas first,
+  // waits for navigation to settle, then mounts only the newest viewport.
+  navigationRebuildDelayMs: 520,
+  hardCanvasCleanup: true,
 
   // Desktop banner UX: manual collapse to a compact pill; remember only for the current browser tab/session.
   headerMinimizeEnabled: true,
