@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.4
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.5
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -35,6 +35,16 @@
     canopyCacheTiles: 256,
     queryCanopyTimeoutMs: 12000,
     queryDemTimeoutMs: 6000,
+    // v7.5: if the ShadeMap render is still busy when a point is clicked,
+    // keep the tooltip alive and refresh sun/shade automatically on SDK idle.
+    queryShadeRetryMs: 250,
+    queryShadeRetryTimeoutMs: 10000,
+
+    // v7.5 lifecycle safety: never create a new WebGL/canvas shade layer until
+    // navigation has settled. This also leaves a short cleanup window for the
+    // previous SDK instance before the next one is mounted.
+    navigationRebuildDelayMs: 520,
+    hardCanvasCleanup: true,
 
     // Host-page UX: desktop top banner can be collapsed to a compact pill.
     headerMinimizeEnabled: true,
@@ -93,6 +103,11 @@
   let shadeZoomConstraintApplied = false;
   let shadeLayer = null;
   let shadeReady = false;
+  let shadeLayerSerial = 0;
+  let shadeIdleHandler = null;
+  let shadeDomObserver = null;
+  let shadeHostCanvasBaseline = null;
+  let shadeCanvasCleanupTimers = [];
   let enginePromise = null;
   let customBuildingsCache = null;
   let geoTiffPromise = null;
@@ -105,6 +120,8 @@
   let queryPopup = null;
   let queryPointMarker = null;
   let querySampleCell = null;
+  let activePointQuery = null;
+  let pointShadeRetryTimer = null;
   let lastMapDragAt = 0;
   let lastLiveViewSignature = null;
   const overpassCache = new Map();
@@ -129,6 +146,138 @@
       return window.map;
     }
     return null;
+  }
+
+  function initShadeCanvasBaseline() {
+    if (!mapRef || !mapRef.getContainer || shadeHostCanvasBaseline) return;
+    const container = mapRef.getContainer();
+    if (!container) return;
+    shadeHostCanvasBaseline = new Set(Array.from(container.querySelectorAll("canvas")));
+  }
+
+  function isLikelyShadeCanvas(canvas) {
+    if (!canvas || !mapRef || !mapRef.getContainer) return false;
+    if (shadeHostCanvasBaseline && shadeHostCanvasBaseline.has(canvas)) return false;
+    // Our canopy overlay is an L.GridLayer whose canvas tiles carry .leaflet-tile.
+    // Never touch those; the stale artifact observed in v7.4 lives in the
+    // overlay/map pane as a viewport-sized SDK canvas.
+    if (canvas.classList && canvas.classList.contains("leaflet-tile")) return false;
+    const container = mapRef.getContainer();
+    if (!container || !container.contains(canvas)) return false;
+    const inMapPane = !!canvas.closest(".leaflet-map-pane,.leaflet-overlay-pane");
+    return inMapPane;
+  }
+
+  function markActiveShadeCanvases() {
+    if (!mapRef || !mapRef.getContainer || !shadeLayer) return;
+    const token = String(shadeLayerSerial || shadeRebuildSerial || "active");
+    const container = mapRef.getContainer();
+    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
+      if (!isLikelyShadeCanvas(canvas)) return;
+      canvas.dataset.haidianShadeOwner = token;
+      canvas.classList.add("haidian-shade-sdk-canvas");
+    });
+  }
+
+  function hardScrubShadeCanvases() {
+    if (config.hardCanvasCleanup === false) return;
+    if (!mapRef || !mapRef.getContainer) return;
+    const container = mapRef.getContainer();
+    Array.from(container.querySelectorAll("canvas")).forEach((canvas) => {
+      if (!isLikelyShadeCanvas(canvas)) return;
+      try { canvas.remove(); } catch (_) {}
+    });
+  }
+
+  function clearCanvasCleanupTimers() {
+    shadeCanvasCleanupTimers.forEach((id) => clearTimeout(id));
+    shadeCanvasCleanupTimers = [];
+  }
+
+  function scheduleRetiredCanvasScrub() {
+    clearCanvasCleanupTimers();
+    [0, 70, 180, 360].forEach((delay) => {
+      shadeCanvasCleanupTimers.push(setTimeout(() => {
+        // Scrub only while there is no current shade layer. The next layer is
+        // mounted after navigationDebounce + terrain preparation, so these
+        // passes clean late SDK callbacks without touching the new instance.
+        if (!shadeLayer) hardScrubShadeCanvases();
+      }, delay));
+    });
+  }
+
+  function installShadeCanvasObserver() {
+    if (!mapRef || !mapRef.getContainer || shadeDomObserver) return;
+    initShadeCanvasBaseline();
+    const container = mapRef.getContainer();
+    if (!container || typeof MutationObserver === "undefined") return;
+    shadeDomObserver = new MutationObserver((records) => {
+      // If a retired SDK instance appends a canvas after remove(), delete it
+      // immediately while no active shade layer exists. This is the v7.5
+      // guard against the large white/blue orphan rectangle.
+      if (shadeLayer) {
+        markActiveShadeCanvases();
+        return;
+      }
+      for (const record of records) {
+        for (const node of Array.from(record.addedNodes || [])) {
+          if (node && node.nodeType === 1) {
+            if (node.tagName === "CANVAS" && isLikelyShadeCanvas(node)) {
+              try { node.remove(); } catch (_) {}
+            }
+            if (node.querySelectorAll) {
+              Array.from(node.querySelectorAll("canvas")).forEach((canvas) => {
+                if (isLikelyShadeCanvas(canvas)) {
+                  try { canvas.remove(); } catch (_) {}
+                }
+              });
+            }
+          }
+        }
+      }
+    });
+    shadeDomObserver.observe(container, { childList: true, subtree: true });
+  }
+
+  function captureViewSnapshot() {
+    if (!mapRef) return null;
+    const bounds = mapRef.getBounds();
+    return {
+      zoom: mapRef.getZoom(),
+      north: bounds.getNorth(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      west: bounds.getWest(),
+      mode: state.mode
+    };
+  }
+
+  function snapshotBounds(snapshot) {
+    return {
+      getNorth: () => snapshot.north,
+      getSouth: () => snapshot.south,
+      getEast: () => snapshot.east,
+      getWest: () => snapshot.west
+    };
+  }
+
+  function snapshotCoverageSignature(snapshot) {
+    if (!snapshot || config.metaMode !== "live-cog") return null;
+    const clampZoom = (value) => Math.max(
+      config.metaMinZoom,
+      Math.min(config.metaMaxZoom, value)
+    );
+    const zooms = Array.from(new Set([
+      clampZoom(Math.floor(snapshot.zoom)),
+      clampZoom(Math.ceil(snapshot.zoom))
+    ]));
+    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
+    const bounds = snapshotBounds(snapshot);
+    const parts = zooms.map((z) => {
+      const r = tileRangeForBounds(bounds, z, buffer);
+      return `${z}:${r.minX},${r.maxX},${r.minY},${r.maxY}`;
+    });
+    return `${snapshot.mode}|${parts.join("|")}`;
   }
 
   function injectStyles() {
@@ -208,6 +357,11 @@
       .leaflet-container.haidian-shade-query-active.leaflet-grab,
       .leaflet-container.haidian-shade-query-active .leaflet-grab{
         cursor:crosshair!important;
+      }
+      /* v7.5: navigation never shows a retired SDK canvas while the next
+         CHMv2 viewport is being prepared. */
+      .leaflet-container.haidian-shade-navigation .haidian-shade-sdk-canvas{
+        visibility:hidden!important;opacity:0!important;
       }
       .leaflet-tooltip.haidian-shade-query-tooltip{
         white-space:normal!important;max-width:330px;padding:10px 12px!important;
@@ -372,6 +526,16 @@
     el.classList.toggle("haidian-shade-warning", !!warning);
   }
 
+  function applyShadeDate(date) {
+    if (!shadeLayer || typeof shadeLayer.setDate !== "function") return;
+    shadeReady = false;
+    try {
+      shadeLayer.setDate(date);
+    } catch (error) {
+      console.warn("[Haidian Shade] setDate:", error);
+    }
+  }
+
   function syncDateFromControls() {
     const dateEl = document.getElementById("haidianShadeDate");
     const timeEl = document.getElementById("haidianShadeTime");
@@ -391,9 +555,7 @@
       0
     );
     updateTimeLabel();
-    if (shadeLayer && typeof shadeLayer.setDate === "function") {
-      shadeLayer.setDate(state.date);
-    }
+    applyShadeDate(state.date);
   }
 
   function injectPanel() {
@@ -534,9 +696,7 @@
         0
       );
       updateTimeLabel();
-      if (shadeLayer && typeof shadeLayer.setDate === "function") {
-        shadeLayer.setDate(state.date);
-      }
+      applyShadeDate(state.date);
     });
 
     document
@@ -577,9 +737,7 @@
           Math.max(300, minutesOfDay(state.date))
         );
         updateTimeLabel();
-        if (shadeLayer && typeof shadeLayer.setDate === "function") {
-          shadeLayer.setDate(state.date);
-        }
+        applyShadeDate(state.date);
       });
 
     document
@@ -1078,7 +1236,7 @@
 
   async function shadeStatusAt(latlng) {
     if (!shadeLayer || !mapRef) return { label: "陰影未啟用", shaded: null };
-    if (!shadeReady) return { label: "陰影圖層仍在計算", shaded: null };
+    if (!shadeReady) return { label: "⏳ 陰影計算中…", shaded: null };
     const point = mapRef.latLngToContainerPoint(latlng);
     try {
       if (typeof shadeLayer.isPositionInShade === "function") {
@@ -1092,7 +1250,7 @@
       return { label: "此 SDK 版本不支援點位判讀", shaded: null };
     } catch (error) {
       console.warn("[Haidian Shade] point shade query:", error);
-      return { label: "陰影圖層仍在計算", shaded: null };
+      return { label: "⏳ 陰影計算中…", shaded: null };
     }
   }
 
@@ -1248,6 +1406,73 @@
     return true;
   }
 
+  function clearPointShadeRetry() {
+    if (pointShadeRetryTimer) {
+      clearTimeout(pointShadeRetryTimer);
+      pointShadeRetryTimer = null;
+    }
+  }
+
+  async function refreshActivePointShade() {
+    const active = activePointQuery;
+    if (!active || active.serial !== pointQuerySerial || !queryPopup) return;
+    if (!shadeLayer || !shadeReady) return;
+    try {
+      const shade = await shadeStatusAt(active.latlng);
+      if (!activePointQuery || activePointQuery.serial !== active.serial) return;
+      active.model.shade = shade;
+      refreshPointQueryTooltip(active.serial, active.model);
+      clearPointShadeRetry();
+    } catch (_) {}
+  }
+
+  function schedulePointShadeRetry(serial, startedAt) {
+    clearPointShadeRetry();
+    const start = Number(startedAt) || Date.now();
+    const tick = async () => {
+      if (
+        !activePointQuery ||
+        activePointQuery.serial !== serial ||
+        serial !== pointQuerySerial ||
+        !queryPopup
+      ) return;
+
+      if (shadeReady && shadeLayer) {
+        await refreshActivePointShade();
+        return;
+      }
+
+      const elapsed = Date.now() - start;
+      if (elapsed >= Math.max(1000, Number(config.queryShadeRetryTimeoutMs) || 10000)) {
+        activePointQuery.model.shade = {
+          label: "陰影仍在背景計算；完成後再點一次可重新判讀",
+          shaded: null
+        };
+        refreshPointQueryTooltip(serial, activePointQuery.model);
+        clearPointShadeRetry();
+        return;
+      }
+
+      pointShadeRetryTimer = setTimeout(
+        tick,
+        Math.max(100, Number(config.queryShadeRetryMs) || 250)
+      );
+    };
+    pointShadeRetryTimer = setTimeout(
+      tick,
+      Math.max(100, Number(config.queryShadeRetryMs) || 250)
+    );
+  }
+
+  function onActiveShadeIdle(layer, serial) {
+    if (!state.enabled || layer !== shadeLayer || serial !== shadeLayerSerial) return;
+    shadeReady = true;
+    markActiveShadeCanvases();
+    setNavigationCanvasState(false);
+    setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+    refreshActivePointShade();
+  }
+
   function activePopupClassName() {
     const popup = mapRef && mapRef._popup;
     return String(
@@ -1303,6 +1528,8 @@
   }
 
   function removePointQueryOverlay() {
+    clearPointShadeRetry();
+    activePointQuery = null;
     if (!mapRef) {
       queryPopup = null;
       queryPointMarker = null;
@@ -1360,6 +1587,7 @@
     const model = pointQueryViewModel(latlng, tile);
 
     removePointQueryOverlay();
+    activePointQuery = { serial, latlng, model, startedAt: Date.now() };
     queryPointMarker = L.marker(latlng, {
       interactive: false,
       keyboard: false,
@@ -1392,10 +1620,14 @@
       if (serial !== pointQuerySerial) return;
       model.shade = shade;
       refreshPointQueryTooltip(serial, model);
+      if (shade && shade.shaded == null && /計算/.test(String(shade.label || ""))) {
+        schedulePointShadeRetry(serial, activePointQuery && activePointQuery.startedAt);
+      }
     }).catch(() => {
       if (serial !== pointQuerySerial) return;
       model.shade = { label: "陰影判讀暫不可用", shaded: null };
       refreshPointQueryTooltip(serial, model);
+      schedulePointShadeRetry(serial, activePointQuery && activePointQuery.startedAt);
     });
 
     // 2) Canopy: often already in cache because the visible ShadeMap surface used it.
@@ -1467,25 +1699,10 @@
   }
 
   function currentLiveCoverageSignature() {
-    if (!mapRef || config.metaMode !== "live-cog") return null;
-    const mapZoom = mapRef.getZoom();
-    const clampZoom = (value) => Math.max(
-      config.metaMinZoom,
-      Math.min(config.metaMaxZoom, value)
-    );
-    const zooms = Array.from(new Set([
-      clampZoom(Math.floor(mapZoom)),
-      clampZoom(Math.ceil(mapZoom))
-    ]));
-    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
-    const parts = zooms.map((z) => {
-      const r = tileRangeForBounds(mapRef.getBounds(), z, buffer);
-      return `${z}:${r.minX},${r.maxX},${r.minY},${r.maxY}`;
-    });
-    return `${state.mode}|${parts.join("|")}`;
+    return snapshotCoverageSignature(captureViewSnapshot());
   }
 
-  async function runWithConcurrency(items, concurrency, task) {
+  async function runWithConcurrency(items, concurrency, task, progressSerial) {
     let cursor = 0;
     let done = 0;
     const results = [];
@@ -1502,7 +1719,10 @@
           console.warn("[Haidian Shade] tile build failed:", items[index], error);
         }
         done += 1;
-        if (done === 1 || done % 12 === 0 || done === items.length) {
+        if (
+          (done === 1 || done % 12 === 0 || done === items.length) &&
+          (progressSerial == null || progressSerial === shadeRebuildSerial)
+        ) {
           setStatus(`正在準備 Meta CHMv2 樹冠高度… ${done}/${items.length}`);
         }
       }
@@ -1513,13 +1733,17 @@
     return results;
   }
 
-  async function prepareLiveMetaSurface() {
+  async function prepareLiveMetaSurface(snapshot, serial) {
     await ensureGeoTIFF();
     if (!mapRef) throw new Error("Leaflet map 尚未就緒。");
 
-    // Leaflet may be at a fractional zoom. Prebuild both adjacent integer
-    // levels so ShadeMap can request either one without falling through.
-    const mapZoom = mapRef.getZoom();
+    const view = snapshot || captureViewSnapshot();
+    if (!view) throw new Error("無法取得目前地圖視野。");
+
+    // Freeze zoom/bounds at rebuild start. If the user moves again, the serial
+    // becomes stale and this preparation is allowed to finish only as cache
+    // warming; it will never mount an obsolete ShadeMap layer.
+    const mapZoom = view.zoom;
     const clampZoom = (value) => Math.max(
       config.metaMinZoom,
       Math.min(config.metaMaxZoom, value)
@@ -1531,8 +1755,9 @@
 
     const tiles = [];
     const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
+    const bounds = snapshotBounds(view);
     for (const z of zooms) {
-      const range = tileRangeForBounds(mapRef.getBounds(), z, buffer);
+      const range = tileRangeForBounds(bounds, z, buffer);
       for (let x = range.minX; x <= range.maxX; x += 1) {
         for (let y = range.minY; y <= range.maxY; y += 1) {
           tiles.push({ x, y, z });
@@ -1549,7 +1774,8 @@
     const results = await runWithConcurrency(
       tiles,
       Number(config.metaTileConcurrency) || 4,
-      (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z)
+      (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
+      serial
     );
     const loaded = results.filter(Boolean).length;
     if (!loaded) throw new Error("目前視野無法建立地形 surface tiles。");
@@ -1559,7 +1785,7 @@
       return count + (info && info.hasCanopy ? 1 : 0);
     }, 0);
 
-    return { loaded, canopyTiles, total: tiles.length, zooms };
+    return { loaded, canopyTiles, total: tiles.length, zooms, snapshot: view };
   }
 
   function liveMetaTerrainSource() {
@@ -1838,7 +2064,8 @@
     }
   }
 
-  async function selectTerrainSource() {
+  async function selectTerrainSource(snapshot, serial) {
+    const view = snapshot || captureViewSnapshot();
     if (state.mode === "buildings") {
       return {
         source: bareTerrainSource(),
@@ -1847,18 +2074,18 @@
       };
     }
 
-    if (mapRef && mapRef.getZoom() < config.metaMinZoom) {
+    if (view && view.zoom < config.metaMinZoom) {
       return {
         source: bareTerrainSource(),
         meta: false,
         warning:
-          `目前縮放層級 z${mapRef.getZoom()} 低於高解析樹冠陰影層級 z${config.metaMinZoom}；` +
+          `目前縮放層級 z${view.zoom} 低於高解析樹冠陰影層級 z${config.metaMinZoom}；` +
           "CHMv2 可全球移動查詢，請在任何地點放大後即可載入當地樹冠。"
       };
     }
 
     if (config.metaMode === "live-cog") {
-      const prepared = await prepareLiveMetaSurface();
+      const prepared = await prepareLiveMetaSurface(view, serial);
       const hasCanopy = prepared.canopyTiles > 0;
       const canopySummary = `${prepared.canopyTiles}/${prepared.total} canopy tiles`;
       return {
@@ -1927,15 +2154,20 @@
     shadeZoomConstraintApplied = false;
   }
 
-  async function createShadeLayer() {
+  async function mountPreparedShadeLayer(terrain, serial) {
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       throw new Error("尚未填入 ShadeMap API key。");
     }
+    if (!mapRef || serial !== shadeRebuildSerial || !state.enabled) return null;
 
     await ensureEngine();
-    const terrain = await selectTerrainSource();
+    if (serial !== shadeRebuildSerial || !state.enabled) return null;
 
-    shadeReady = false;
+    // Do one final hard scrub before mounting. Stale v7.4 instances were able
+    // to leave a viewport-sized white/blue canvas behind after remove().
+    hardScrubShadeCanvases();
+    clearCanvasCleanupTimers();
+
     const layer = L.shadeMap({
       date: state.date,
       color: config.defaultColor,
@@ -1947,12 +2179,79 @@
         console.debug("[Haidian ShadeMap]", message)
     });
 
-    if (layer && typeof layer.on === "function") {
-      layer.on("idle", () => { shadeReady = true; });
-    }
-    layer.addTo(mapRef);
+    shadeLayer = layer;
+    shadeLayerSerial = serial;
+    shadeReady = false;
 
-    return { layer, terrain };
+    const idleHandler = () => onActiveShadeIdle(layer, serial);
+    shadeIdleHandler = idleHandler;
+    if (layer && typeof layer.on === "function") {
+      layer.on("idle", idleHandler);
+    }
+
+    try {
+      layer.addTo(mapRef);
+    } catch (error) {
+      if (shadeLayer === layer) {
+        shadeLayer = null;
+        shadeLayerSerial = 0;
+        shadeIdleHandler = null;
+      }
+      throw error;
+    }
+
+    // The SDK canvas is usually attached synchronously, but tag again on the
+    // next frames because WebGL/canvas setup can be deferred.
+    markActiveShadeCanvases();
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        if (shadeLayer === layer && shadeLayerSerial === serial) markActiveShadeCanvases();
+      });
+    }
+    setTimeout(() => {
+      if (shadeLayer === layer && shadeLayerSerial === serial) markActiveShadeCanvases();
+    }, 120);
+
+    return layer;
+  }
+
+  function setNavigationCanvasState(active) {
+    if (!mapRef || !mapRef.getContainer) return;
+    const container = mapRef.getContainer();
+    if (!container) return;
+    container.classList.toggle("haidian-shade-navigation", !!active);
+  }
+
+  function detachShadeLayerOnly(options) {
+    const opts = options || {};
+    const layer = shadeLayer;
+    const idleHandler = shadeIdleHandler;
+
+    // Clear global references FIRST. If the SDK appends a delayed canvas during
+    // remove(), the MutationObserver sees there is no active shade and removes it.
+    shadeLayer = null;
+    shadeLayerSerial = 0;
+    shadeIdleHandler = null;
+    shadeReady = false;
+
+    if (layer) {
+      try {
+        if (idleHandler && typeof layer.off === "function") {
+          layer.off("idle", idleHandler);
+        }
+      } catch (_) {}
+      try {
+        if (mapRef && typeof mapRef.hasLayer === "function" && mapRef.hasLayer(layer)) {
+          mapRef.removeLayer(layer);
+        }
+      } catch (_) {}
+      try {
+        if (typeof layer.remove === "function") layer.remove();
+      } catch (_) {}
+    }
+
+    hardScrubShadeCanvases();
+    if (opts.scheduleScrub !== false) scheduleRetiredCanvasScrub();
   }
 
   async function enableShade() {
@@ -1961,66 +2260,64 @@
       return;
     }
 
-    try {
-      setStatus("正在載入陰影模擬…");
-      state.enabled = true;
-      const serial = ++shadeRebuildSerial;
-      applyShadeZoomConstraint();
-      const result = await createShadeLayer();
-      if (serial !== shadeRebuildSerial || !state.enabled) {
-        try { if (result && result.layer && typeof result.layer.remove === "function") result.layer.remove(); } catch (_) {}
-        return;
-      }
-      shadeLayer = result.layer;
-      syncPointQueryCursor();
-      syncCanopyOverlay();
-      if (config.metaMode === "live-cog") {
-        lastLiveViewSignature = currentLiveCoverageSignature();
-      }
+    state.enabled = true;
+    syncPointQueryCursor();
+    initShadeCanvasBaseline();
+    installShadeCanvasObserver();
+    applyShadeZoomConstraint();
+    setNavigationCanvasState(true);
 
-      if (result.terrain.warning) {
-        setStatus(result.terrain.warning, !result.terrain.meta);
+    const serial = ++shadeRebuildSerial;
+    const snapshot = captureViewSnapshot();
+
+    try {
+      setStatus("正在載入陰影模擬所需的 CHMv2／地形資料…");
+      const terrain = await selectTerrainSource(snapshot, serial);
+
+      // Critical v7.5 rule: a stale async terrain preparation may warm caches,
+      // but it is NEVER allowed to create/add a ShadeMap layer.
+      if (serial !== shadeRebuildSerial || !state.enabled) return;
+
+      const layer = await mountPreparedShadeLayer(terrain, serial);
+      if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
+
+      syncCanopyOverlay();
+      lastLiveViewSignature = snapshotCoverageSignature(snapshot);
+      setNavigationCanvasState(false);
+
+      if (terrain.warning) {
+        setStatus(`${terrain.warning} 陰影引擎正在完成畫面計算…`, !terrain.meta);
       } else {
-        setStatus(`已啟用：${modeLabel(state.mode)}。`);
+        setStatus(`已載入：${modeLabel(state.mode)}；陰影引擎正在完成畫面計算…`);
       }
     } catch (error) {
+      if (serial !== shadeRebuildSerial || !state.enabled) return;
       console.error(error);
+      detachShadeLayerOnly();
       state.enabled = false;
       syncPointQueryCursor();
       restoreShadeZoomConstraint();
+      setNavigationCanvasState(false);
       const toggle = document.getElementById("haidianShadeToggle");
       if (toggle) toggle.checked = false;
       setStatus(`啟動失敗：${error.message || error}`, true);
     }
   }
 
-  function detachShadeLayerOnly() {
-    if (!shadeLayer) return;
-    try {
-      if (typeof shadeLayer.remove === "function") {
-        shadeLayer.remove();
-      } else if (mapRef && mapRef.hasLayer(shadeLayer)) {
-        mapRef.removeLayer(shadeLayer);
-      }
-    } catch (_) {}
-    shadeLayer = null;
-    shadeReady = false;
-  }
-
   function suspendShadeForNavigation() {
     if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
     shadeNavigationSuspended = true;
-    // Hide the old viewport's shade immediately. Keeping it visible while the
-    // next CHMv2 coverage is prepared creates the large stale blue rectangle.
+    setNavigationCanvasState(true);
     detachShadeLayerOnly();
     removePointQueryOverlay();
-    setStatus("地圖移動中：暫時隱藏舊陰影，停下後會載入目前位置資料…");
+    setStatus("地圖移動中：舊陰影已清除；停下後只建立目前視野的新陰影…");
   }
 
   function disableShade(updateStatus = true) {
     shadeRebuildSerial += 1;
     shadeNavigationSuspended = false;
     clearTimeout(liveMoveTimer);
+    clearPointShadeRetry();
     detachShadeLayerOnly();
     state.enabled = false;
     removeCanopyOverlay();
@@ -2028,6 +2325,7 @@
     removePointQueryOverlay();
     syncPointQueryCursor();
     restoreShadeZoomConstraint();
+    setNavigationCanvasState(false);
 
     if (updateStatus) {
       setStatus("陰影模擬已關閉。");
@@ -2039,40 +2337,39 @@
 
     const serial = ++shadeRebuildSerial;
     shadeNavigationSuspended = false;
+    setNavigationCanvasState(true);
     detachShadeLayerOnly();
 
+    const snapshot = captureViewSnapshot();
+    if (!snapshot) return;
+
     try {
-      setStatus("正在載入目前位置的 Meta CHMv2／地形陰影…");
+      setStatus("正在準備目前視野的 Meta CHMv2／地形資料…");
       applyShadeZoomConstraint();
-      const result = await createShadeLayer();
 
-      // The user may have panned/zoomed again while the asynchronous COG/DEM
-      // build was running. Never let an older result paint over a newer view.
-      if (serial !== shadeRebuildSerial || !state.enabled) {
-        try {
-          if (result && result.layer && typeof result.layer.remove === "function") {
-            result.layer.remove();
-          } else if (result && result.layer && mapRef && mapRef.hasLayer(result.layer)) {
-            mapRef.removeLayer(result.layer);
-          }
-        } catch (_) {}
-        return;
-      }
+      // Prepare only data first. No SDK layer is mounted until we know this
+      // rebuild is still the newest requested viewport.
+      const terrain = await selectTerrainSource(snapshot, serial);
+      if (serial !== shadeRebuildSerial || !state.enabled) return;
 
-      shadeLayer = result.layer;
-      shadeReady = false;
+      const layer = await mountPreparedShadeLayer(terrain, serial);
+      if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
+
       syncPointQueryCursor();
       syncCanopyOverlay();
-      lastLiveViewSignature = currentLiveCoverageSignature();
+      lastLiveViewSignature = snapshotCoverageSignature(snapshot);
+      setNavigationCanvasState(false);
 
-      if (result.terrain.warning) {
-        setStatus(result.terrain.warning, !result.terrain.meta);
+      if (terrain.warning) {
+        setStatus(`${terrain.warning} 陰影引擎正在完成畫面計算…`, !terrain.meta);
       } else {
-        setStatus(`已更新目前位置：${modeLabel(state.mode)}。`);
+        setStatus(`已更新目前位置：${modeLabel(state.mode)}；陰影引擎正在完成畫面計算…`);
       }
     } catch (error) {
       if (serial !== shadeRebuildSerial || !state.enabled) return;
       console.error(error);
+      detachShadeLayerOnly();
+      setNavigationCanvasState(false);
       setStatus(`更新失敗：${error.message || error}`, true);
     }
   }
@@ -2084,21 +2381,35 @@
     const startNavigation = () => {
       if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
-      // Invalidate any in-flight rebuild immediately and remove stale visuals.
+
+      // Invalidate the current preparation BEFORE any stale async task gets a
+      // chance to mount. Then tear down the one active SDK instance.
       shadeRebuildSerial += 1;
+      clearTimeout(liveMoveTimer);
       suspendShadeForNavigation();
     };
 
     const scheduleRebuild = () => {
       if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
+
       clearTimeout(liveMoveTimer);
       liveMoveTimer = setTimeout(() => {
         if (!state.enabled) return;
         const nextSignature = currentLiveCoverageSignature();
-        if (nextSignature && nextSignature === lastLiveViewSignature && !shadeNavigationSuspended) return;
+
+        // If there is still a mounted layer and coverage did not change, no work.
+        // During navigation the layer is intentionally detached, so remount once
+        // even when the drag stayed inside the same CHMv2 tile range.
+        if (
+          shadeLayer &&
+          nextSignature &&
+          nextSignature === lastLiveViewSignature &&
+          !shadeNavigationSuspended
+        ) return;
+
         rebuildShade();
-      }, 220);
+      }, Math.max(180, Number(config.navigationRebuildDelayMs) || 520));
     };
 
     mapRef.on("movestart", startNavigation);
