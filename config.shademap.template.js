@@ -34,16 +34,21 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Point-query rows update independently. Slow CHMv2/DEM sources no longer block the whole tooltip.
   queryCanopyTimeoutMs: 12000,
   queryDemTimeoutMs: 6000,
+  // v7.8.8: official Taiwan DTM gets a bounded attempt, then the point query
+  // can fall back to the same global Terrarium DEM used by the shadow engine.
+  queryGroundTotalTimeoutMs: 10500,
+  queryGlobalDemFallbackTimeoutMs: 4500,
   // v7.5: point shade status auto-refreshes after the SDK emits idle.
   queryShadeRetryMs: 250,
   queryShadeRetryTimeoutMs: 10000,
 
-  // v7.8.4: use only ShadeMap's documented remove() lifecycle.
-  // No WEBGL_lose_context and no synchronous deletion of SDK-owned canvases.
+  // v7.8.6 lifecycle: SDK remove() + generation gating + one active canvas owner.
+  // No WEBGL_lose_context and no synchronous deletion of the current SDK-owned canvas.
   navigationRebuildDelayMs: 520,
+  dateUpdateDebounceMs: 180,
   hardCanvasCleanup: false,
-  retiredCanvasCleanupDelayMs: 12000,
-  layerSwapDelayMs: 60,
+  retiredCanvasCleanupDelayMs: 1200,
+  layerSwapDelayMs: 80,
   preserveShadeLayerDuringNavigation: true,
 
   // Desktop banner UX: manual collapse to a compact pill; remember only for the current browser tab/session.
@@ -58,11 +63,12 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
 
   // v7.7 — authoritative Taiwan point elevation.
   // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
-  // Worker and set only its public proxy URL here. Until then, Taiwan point queries
-  // intentionally hide the coarse global DEM number instead of presenting it as truth.
+  // Worker and set only its public proxy URL here. v7.8.8 prefers the official value
+  // but can fall back to the global Terrarium DEM, clearly labelled as non-official.
   taiwanOfficialDtmProxyUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/elevation",
   taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
-  taiwanOfficialDtmTimeoutMs: 6500,
+  taiwanOfficialDtmTimeoutMs: 5000,
+  taiwanGlobalDemFallbackEnabled: true,
   taiwanHideGlobalDemPointValue: true,
 
   // Future-ready: after the official Taiwan DTM download is converted to Terrarium XYZ,
