@@ -62,6 +62,21 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeSourceMixedDistanceToleranceM: 3,
   queryShadeSourceMinAltitudeDeg: 1.5,
 
+  // v8.0.0 experimental canopy-contribution prototype. Click a CHMv2 canopy
+  // pixel while point query is enabled to estimate a local canopy patch, its
+  // current projected shadow, and the ground/building receiver split. This is
+  // deliberately labelled experimental: CHMv2 is raster canopy height, not
+  // single-tree segmentation or LiDAR crown geometry.
+  queryCanopyBenefitEnabled: true,
+  queryCanopyBenefitTimeoutMs: 5500,
+  queryCanopyBenefitMinHeightM: 2,
+  queryCanopyBenefitMaxRadiusM: 14,
+  queryCanopyBenefitMaxPixels: 420,
+  queryCanopyBenefitShadowCellM: 1.25,
+  queryCanopyBenefitMaxShadowLengthM: 90,
+  queryCanopyBenefitMinSolarAltitudeDeg: 3,
+  queryCanopyBenefitOverlay: true,
+
   // v7.8.6 lifecycle: SDK remove() + generation gating + one active canvas owner.
   // No WEBGL_lose_context and no synchronous deletion of the current SDK-owned canvas.
   navigationRebuildDelayMs: 520,
