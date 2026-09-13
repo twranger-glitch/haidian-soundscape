@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.2
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -68,6 +68,22 @@
     buildingShadowFetchPaddingM: 280,
     queryShadeSourceMixedDistanceToleranceM: 3,
     queryShadeSourceMinAltitudeDeg: 1.5,
+
+    // v8.0.0 experimental Tree-Folio-inspired canopy contribution prototype.
+    // CHMv2 is a raster canopy-height model, not a surveyed single-tree inventory,
+    // so the selected object is deliberately called a local canopy patch. The
+    // current-sun shadow is estimated from the same vertical-column semantics used
+    // by the DSM surface and split into ground/building receivers when cached OSM
+    // building coverage is available.
+    queryCanopyBenefitEnabled: true,
+    queryCanopyBenefitTimeoutMs: 5500,
+    queryCanopyBenefitMinHeightM: 2,
+    queryCanopyBenefitMaxRadiusM: 14,
+    queryCanopyBenefitMaxPixels: 420,
+    queryCanopyBenefitShadowCellM: 1.25,
+    queryCanopyBenefitMaxShadowLengthM: 90,
+    queryCanopyBenefitMinSolarAltitudeDeg: 3,
+    queryCanopyBenefitOverlay: true,
 
     // v7.8.6 lifecycle policy: terrain/data caches may be reused, but renderer DOM
     // ownership is single-canvas. Date/time changes stay in-place via setDate(), are
@@ -182,6 +198,7 @@
   let queryPopup = null;
   let queryPointMarker = null;
   let querySampleCell = null;
+  let queryCanopyBenefitLayer = null;
   let activePointQuery = null;
   let pointShadeRetryTimer = null;
   let lastMapDragAt = 0;
@@ -641,6 +658,20 @@
       }
       .haidian-shade-query-popup .hsq-muted{color:#94a3b8;font-weight:700}
       @keyframes haidianShadeQueryPulse{0%,100%{opacity:.48}50%{opacity:1}}
+      .haidian-shade-query-popup .hsq-benefit{
+        margin-top:8px;padding:8px 9px;border:1px solid #d1fae5;border-radius:10px;background:#f7fffb
+      }
+      .haidian-shade-query-popup .hsq-benefit-head{
+        display:flex;align-items:center;justify-content:space-between;gap:8px;color:#065f46;font-size:10px;font-weight:900
+      }
+      .haidian-shade-query-popup .hsq-benefit-head small{color:#64748b;font-size:8px;font-weight:750}
+      .haidian-shade-query-popup .hsq-benefit-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+      .haidian-shade-query-popup .hsq-benefit-metric{padding:5px 6px;border-radius:8px;background:#fff;border:1px solid #ecfdf5}
+      .haidian-shade-query-popup .hsq-benefit-metric span{display:block;color:#64748b;font-size:8px;font-weight:750}
+      .haidian-shade-query-popup .hsq-benefit-metric b{display:block;margin-top:1px;color:#0f172a;font-size:12px}
+      .haidian-shade-query-popup .hsq-benefit-split{margin-top:6px;color:#475569;font-size:9px;font-weight:750}
+      .haidian-shade-query-popup .hsq-benefit-note{margin-top:4px;color:#94a3b8;font-size:8px;line-height:1.35}
+
       .haidian-shade-query-popup details.hsq-details{
         margin-top:8px;border-top:1px solid #e2e8f0;padding-top:7px;color:#64748b;font-size:9px
       }
@@ -1731,6 +1762,365 @@
     };
   }
 
+
+  function webMercatorPixelCenterLatLng(gx, gy, z) {
+    const world = 256 * Math.pow(2, z);
+    const x = (Number(gx) + 0.5) / world;
+    const y = (Number(gy) + 0.5) / world;
+    const lng = x * 360 - 180;
+    const merc = Math.PI * (1 - 2 * y);
+    const lat = Math.atan(Math.sinh(merc)) * 180 / Math.PI;
+    return { lat, lng };
+  }
+
+  function latLngFromLocalMeters(origin, x, y) {
+    const R = 6371008.8;
+    const rad = Math.PI / 180;
+    const deg = 180 / Math.PI;
+    const lat0 = Number(origin && origin.lat) * rad;
+    const lng0 = Number(origin && origin.lng) * rad;
+    return {
+      lat: (lat0 + Number(y || 0) / R) * deg,
+      lng: (lng0 + Number(x || 0) / (R * Math.max(0.05, Math.cos(lat0)))) * deg
+    };
+  }
+
+  function canopyPixelSizeMeters(lat, z) {
+    const zoom = Math.max(0, Number(z) || 0);
+    const cosLat = Math.max(0.05, Math.cos(Number(lat || 0) * Math.PI / 180));
+    return 156543.03392804097 * cosLat / Math.pow(2, zoom);
+  }
+
+  async function segmentLocalCanopyPatch(latlng) {
+    if (config.queryCanopyBenefitEnabled === false || config.queryCanopyFromCog === false) return null;
+    const z = Math.max(10, Math.min(17, Number(config.queryZoom) || 17));
+    const seed = latLngToTilePixel(latlng.lat, latlng.lng, z);
+    const seedGx = seed.x * 256 + seed.px;
+    const seedGy = seed.y * 256 + seed.py;
+    const pixelSizeM = canopyPixelSizeMeters(latlng.lat, z);
+    const maxRadiusM = Math.max(pixelSizeM, Number(config.queryCanopyBenefitMaxRadiusM) || 14);
+    const maxRadiusPx = Math.max(1, Math.ceil(maxRadiusM / pixelSizeM));
+    const minHeight = Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2);
+    const maxPixels = Math.max(24, Number(config.queryCanopyBenefitMaxPixels) || 420);
+    const worldTiles = Math.pow(2, z);
+    const tileRasters = new Map();
+
+    const minGx = Math.max(0, seedGx - maxRadiusPx - 1);
+    const maxGx = Math.min(worldTiles * 256 - 1, seedGx + maxRadiusPx + 1);
+    const minGy = Math.max(0, seedGy - maxRadiusPx - 1);
+    const maxGy = Math.min(worldTiles * 256 - 1, seedGy + maxRadiusPx + 1);
+    const minTx = Math.floor(minGx / 256);
+    const maxTx = Math.floor(maxGx / 256);
+    const minTy = Math.floor(minGy / 256);
+    const maxTy = Math.floor(maxGy / 256);
+    const tileJobs = [];
+    for (let tx = minTx; tx <= maxTx; tx += 1) {
+      for (let ty = minTy; ty <= maxTy; ty += 1) {
+        const key = tileKey(tx, ty, z);
+        tileJobs.push((async () => {
+          tileRasters.set(key, await readMetaCanopyTile(tx, ty, z));
+        })());
+      }
+    }
+    await Promise.all(tileJobs);
+
+    const valueAt = (gx, gy) => {
+      if (gx < minGx || gx > maxGx || gy < minGy || gy > maxGy) return 0;
+      const tx = Math.floor(gx / 256);
+      const ty = Math.floor(gy / 256);
+      const px = gx - tx * 256;
+      const py = gy - ty * 256;
+      const raster = tileRasters.get(tileKey(tx, ty, z));
+      if (!raster) return 0;
+      const raw = Number(raster[py * 256 + px]);
+      return Number.isFinite(raw) && raw > 0 && raw < 255 ? raw : 0;
+    };
+
+    const seedHeight = valueAt(seedGx, seedGy);
+    if (!(seedHeight >= minHeight)) return null;
+
+    const queue = [[seedGx, seedGy]];
+    let cursor = 0;
+    const seen = new Set([`${seedGx},${seedGy}`]);
+    const accepted = [];
+    let truncated = false;
+    const dirs = [
+      [-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]
+    ];
+
+    while (cursor < queue.length) {
+      const [gx, gy] = queue[cursor++];
+      const dx = gx - seedGx;
+      const dy = gy - seedGy;
+      if (Math.hypot(dx, dy) > maxRadiusPx + 0.15) continue;
+      const height = valueAt(gx, gy);
+      if (!(height >= minHeight)) continue;
+      accepted.push({ gx, gy, height });
+      if (accepted.length >= maxPixels) {
+        truncated = true;
+        break;
+      }
+      for (const [ox, oy] of dirs) {
+        const nx = gx + ox;
+        const ny = gy + oy;
+        const key = `${nx},${ny}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (Math.hypot(nx - seedGx, ny - seedGy) > maxRadiusPx + 0.15) continue;
+        if (valueAt(nx, ny) >= minHeight) queue.push([nx, ny]);
+      }
+    }
+
+    if (!accepted.length) return null;
+    if (!truncated) {
+      truncated = accepted.some((p) => Math.hypot(p.gx - seedGx, p.gy - seedGy) >= maxRadiusPx - 0.75);
+    }
+    let heightSum = 0;
+    let maxHeight = 0;
+    const pixels = accepted.map((p) => {
+      heightSum += p.height;
+      maxHeight = Math.max(maxHeight, p.height);
+      return {
+        ...p,
+        latlng: webMercatorPixelCenterLatLng(p.gx, p.gy, z)
+      };
+    });
+    const areaM2 = pixels.length * pixelSizeM * pixelSizeM;
+    return {
+      center: { lat: Number(latlng.lat), lng: Number(latlng.lng) },
+      z,
+      seedHeight,
+      pixelSizeM,
+      pixelCount: pixels.length,
+      areaM2,
+      equivalentDiameterM: 2 * Math.sqrt(areaM2 / Math.PI),
+      meanHeight: heightSum / pixels.length,
+      maxHeight,
+      maxRadiusM,
+      truncated,
+      pixels
+    };
+  }
+
+  function convexHullLocal(points) {
+    if (!Array.isArray(points) || points.length < 3) return Array.isArray(points) ? points.slice() : [];
+    const unique = [];
+    const seen = new Set();
+    for (const p of points) {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      const key = `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(p);
+    }
+    if (unique.length < 3) return unique;
+    unique.sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [];
+    for (const p of unique) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = unique.length - 1; i >= 0; i -= 1) {
+      const p = unique[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+  }
+
+  function buildingReceiverCoverageKnown() {
+    if (config.buildingMode === "none" || state.mode === "trees") return false;
+    if (config.buildingMode === "custom") return Array.isArray(lastBuildingFeatures);
+    return !!lastBuildingCoverageKey;
+  }
+
+  function estimateCanopyShadowContribution(patch, solar, buildings = null) {
+    if (!patch || !Array.isArray(patch.pixels) || !patch.pixels.length || !solar || solar.night) return null;
+    const minAltitude = Math.max(0, Number(config.queryCanopyBenefitMinSolarAltitudeDeg) || 3);
+    if (!(solar.altitudeDeg >= minAltitude)) {
+      return { unavailableReason: "太陽高度過低；目前投影陰影會超出可靠試算範圍" };
+    }
+    const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
+    const cellM = Math.max(0.75, Number(config.queryCanopyBenefitShadowCellM) || patch.pixelSizeM || 1.25);
+    const stepM = Math.max(0.45, Math.min(cellM * 0.72, patch.pixelSizeM || cellM));
+    const maxShadowLength = Math.max(10, Number(config.queryCanopyBenefitMaxShadowLengthM) || 90);
+    const downBearing = (Number(solar.sunBearingDeg) + 180) % 360;
+    const theta = downBearing * Math.PI / 180;
+    const dir = { x: Math.sin(theta), y: Math.cos(theta) };
+    const cells = new Map();
+    let theoreticalMaxLength = 0;
+
+    for (const pixel of patch.pixels) {
+      const base = localMetersFromLatLng(patch.center, pixel.latlng);
+      const length = Math.min(maxShadowLength, Math.max(0, Number(pixel.height) / tanAlt));
+      theoreticalMaxLength = Math.max(theoreticalMaxLength, length);
+      const steps = Math.max(1, Math.ceil(length / stepM));
+      for (let i = 0; i <= steps; i += 1) {
+        const distance = Math.min(length, i * stepM);
+        const x = base.x + dir.x * distance;
+        const y = base.y + dir.y * distance;
+        const ix = Math.floor(x / cellM);
+        const iy = Math.floor(y / cellM);
+        const key = `${ix},${iy}`;
+        if (!cells.has(key)) {
+          cells.set(key, {
+            ix, iy,
+            x: (ix + 0.5) * cellM,
+            y: (iy + 0.5) * cellM,
+            maxCasterHeight: Number(pixel.height) || 0
+          });
+        } else {
+          cells.get(key).maxCasterHeight = Math.max(cells.get(key).maxCasterHeight, Number(pixel.height) || 0);
+        }
+      }
+    }
+
+    const receiverBuildings = Array.isArray(buildings) ? buildings : (Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : []);
+    const receiverKnown = buildingReceiverCoverageKnown();
+    let buildingCells = 0;
+    const shadowPoints = [];
+    for (const cell of cells.values()) {
+      const ll = latLngFromLocalMeters(patch.center, cell.x, cell.y);
+      cell.latlng = ll;
+      shadowPoints.push({ x: cell.x, y: cell.y, latlng: ll });
+      if (receiverKnown && receiverBuildings.some((feature) => pointInPolygonFeature(ll.lng, ll.lat, feature))) {
+        cell.receiver = "building";
+        buildingCells += 1;
+      } else {
+        cell.receiver = receiverKnown ? "ground" : "unclassified";
+      }
+    }
+
+    const cellArea = cellM * cellM;
+    const totalAreaM2 = cells.size * cellArea;
+    const buildingAreaM2 = receiverKnown ? buildingCells * cellArea : null;
+    const groundAreaM2 = receiverKnown ? totalAreaM2 - buildingAreaM2 : null;
+    const crownLocal = patch.pixels.map((pixel) => {
+      const local = localMetersFromLatLng(patch.center, pixel.latlng);
+      return { x: local.x, y: local.y, latlng: pixel.latlng };
+    });
+    return {
+      totalAreaM2,
+      groundAreaM2,
+      buildingAreaM2,
+      receiverKnown,
+      groundPercent: receiverKnown && totalAreaM2 > 0 ? groundAreaM2 / totalAreaM2 * 100 : null,
+      buildingPercent: receiverKnown && totalAreaM2 > 0 ? buildingAreaM2 / totalAreaM2 * 100 : null,
+      shadowCellM: cellM,
+      shadowCellCount: cells.size,
+      maxShadowLengthM: theoreticalMaxLength,
+      downBearingDeg: downBearing,
+      crownHull: convexHullLocal(crownLocal),
+      shadowHull: convexHullLocal(shadowPoints),
+      cells: Array.from(cells.values())
+    };
+  }
+
+  async function analyzeCanopyBenefitAt(latlng, solar = null) {
+    const sun = solar || solarPositionAt(latlng, state.date);
+    const patch = await segmentLocalCanopyPatch(latlng);
+    if (!patch) return { available: false, reason: "此點未形成可分析的 CHMv2 樹冠片" };
+    if (!sun || sun.night) {
+      return { available: true, patch, solar: sun, shadow: null, reason: "夜間不計算目前樹冠投影陰影" };
+    }
+    let receiverBuildings = [];
+    try {
+      receiverBuildings = await getQueryableBuildings();
+    } catch (_) {}
+    const shadow = estimateCanopyShadowContribution(patch, sun, receiverBuildings);
+    return {
+      available: true,
+      patch,
+      solar: sun,
+      shadow,
+      reason: shadow && shadow.unavailableReason ? shadow.unavailableReason : ""
+    };
+  }
+
+  function removeCanopyBenefitOverlay() {
+    if (!queryCanopyBenefitLayer || !mapRef) {
+      queryCanopyBenefitLayer = null;
+      return;
+    }
+    try {
+      if (mapRef.hasLayer(queryCanopyBenefitLayer)) mapRef.removeLayer(queryCanopyBenefitLayer);
+    } catch (_) {}
+    queryCanopyBenefitLayer = null;
+  }
+
+  function drawCanopyBenefitOverlay(result) {
+    removeCanopyBenefitOverlay();
+    if (config.queryCanopyBenefitOverlay === false || !mapRef || !window.L || !result || !result.patch) return;
+    try {
+      if (!mapRef.getPane("haidianShadeBenefitPane")) {
+        const pane = mapRef.createPane("haidianShadeBenefitPane");
+        pane.style.zIndex = "685";
+        pane.style.pointerEvents = "none";
+      }
+      const layers = [];
+      const crownHull = result.shadow && Array.isArray(result.shadow.crownHull) ? result.shadow.crownHull : [];
+      const shadowHull = result.shadow && Array.isArray(result.shadow.shadowHull) ? result.shadow.shadowHull : [];
+      if (crownHull.length >= 3) {
+        layers.push(L.polygon(crownHull.map((p) => [p.latlng.lat, p.latlng.lng]), {
+          pane: "haidianShadeBenefitPane", color: "#047857", weight: 2, opacity: 0.95, fillColor: "#10b981", fillOpacity: 0.12,
+          interactive: false
+        }));
+      }
+      if (shadowHull.length >= 3) {
+        layers.push(L.polygon(shadowHull.map((p) => [p.latlng.lat, p.latlng.lng]), {
+          pane: "haidianShadeBenefitPane", color: "#6d28d9", weight: 2, opacity: 0.85, dashArray: "5 4", fillColor: "#7c3aed", fillOpacity: 0.10,
+          interactive: false
+        }));
+      }
+      if (!layers.length) return;
+      queryCanopyBenefitLayer = L.layerGroup(layers).addTo(mapRef);
+    } catch (error) {
+      console.warn("[Haidian Shade] canopy benefit overlay:", error);
+    }
+  }
+
+  async function resolveCanopyBenefit(serial, model, targetLatLng, targetKind = "clicked-canopy", priority = 2) {
+    if (config.queryCanopyBenefitEnabled === false || !model || !targetLatLng) return;
+    const targetKey = `${Number(targetLatLng.lat).toFixed(6)},${Number(targetLatLng.lng).toFixed(6)}:${targetKind}`;
+    const currentPriority = Number(model.canopyBenefitTargetPriority) || 0;
+    if (model.canopyBenefitResolving && priority < currentPriority) return;
+    if (model.canopyBenefitTargetKey === targetKey && (model.canopyBenefitResolving || model.canopyBenefit)) return;
+
+    const localToken = (Number(model.canopyBenefitToken) || 0) + 1;
+    model.canopyBenefitToken = localToken;
+    model.canopyBenefitTargetKey = targetKey;
+    model.canopyBenefitTargetKind = targetKind;
+    model.canopyBenefitTargetPriority = priority;
+    model.canopyBenefitResolving = true;
+    model.canopyBenefit = undefined;
+    model.canopyBenefitError = "";
+    removeCanopyBenefitOverlay();
+    refreshPointQueryTooltip(serial, model);
+    try {
+      const result = await withTimeout(
+        analyzeCanopyBenefitAt(targetLatLng, solarPositionAt(targetLatLng, state.date)),
+        Math.max(1800, Number(config.queryCanopyBenefitTimeoutMs) || 5500),
+        "樹冠遮蔭試算"
+      );
+      if (serial !== pointQuerySerial || model.canopyBenefitToken !== localToken) return;
+      model.canopyBenefit = result;
+      if (result && result.available) drawCanopyBenefitOverlay(result);
+    } catch (error) {
+      if (serial !== pointQuerySerial || model.canopyBenefitToken !== localToken) return;
+      model.canopyBenefit = null;
+      model.canopyBenefitError = error && error.message ? error.message : "樹冠遮蔭試算失敗";
+    } finally {
+      if (serial === pointQuerySerial && model.canopyBenefitToken === localToken) {
+        model.canopyBenefitResolving = false;
+        refreshPointQueryTooltip(serial, model);
+      }
+    }
+  }
+
   function buildingHeightMeta(feature) {
     const properties = feature && feature.properties ? feature.properties : {};
     const height = Number(properties.height);
@@ -1992,6 +2382,11 @@
           distance: sample.distance,
           rayHeight: sample.rayHeight,
           clearanceMargin: canopy - sample.rayHeight,
+          sampleLatLng: webMercatorPixelCenterLatLng(
+            sample.tile.x * 256 + sample.tile.px,
+            sample.tile.y * 256 + sample.tile.py,
+            sample.tile.z
+          ),
           confidence: "high"
         };
       }
@@ -2115,6 +2510,10 @@
       const source = await inferShadeSource(model.latlng, model.solar || shade.solar || solarPositionAt(model.latlng, state.date));
       if (serial !== pointQuerySerial) return;
       model.shadeSource = source || { type: "unknown", reason: "無法判讀陰影來源" };
+      const sourceTree = model.shadeSource && model.shadeSource.tree;
+      if (sourceTree && sourceTree.sampleLatLng && !(Number.isFinite(model.canopy) && model.canopy >= Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2))) {
+        resolveCanopyBenefit(serial, model, sourceTree.sampleLatLng, "shadow-source", 1);
+      }
     } catch (error) {
       if (serial !== pointQuerySerial) return;
       model.shadeSource = {
@@ -2422,8 +2821,53 @@
       solar: solarPositionAt(latlng, state.date),
       shadeSource: undefined,
       shadeSourceResolving: false,
+      canopyBenefit: undefined,
+      canopyBenefitResolving: false,
+      canopyBenefitError: "",
+      canopyBenefitTargetKey: "",
+      canopyBenefitTargetKind: "",
+      canopyBenefitTargetPriority: 0,
+      canopyBenefitToken: 0,
       building: findCachedBuildingAt(latlng)
     };
+  }
+
+
+  function canopyBenefitHtml(model) {
+    if (!model || (!model.canopyBenefitResolving && model.canopyBenefit === undefined && !model.canopyBenefitError)) return "";
+    const targetLabel = model.canopyBenefitTargetKind === "shadow-source" ? "遮蔭來源樹冠" : "點選樹冠片";
+    if (model.canopyBenefitResolving) {
+      return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div><div class="hsq-benefit-note">正在從 CHMv2 擷取局部樹冠片並估算目前太陽角度下的投影陰影…</div></div>`;
+    }
+    if (model.canopyBenefitError) {
+      return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗</small></div><div class="hsq-benefit-note">${escapeHtml(model.canopyBenefitError)}</div></div>`;
+    }
+    const benefit = model.canopyBenefit;
+    if (!benefit || !benefit.available || !benefit.patch) return "";
+    const patch = benefit.patch;
+    const shadow = benefit.shadow;
+    const area = (value) => Number.isFinite(value) ? `${value < 10 ? value.toFixed(1) : value.toFixed(0)} m²` : "—";
+    let split = "";
+    if (shadow && !shadow.unavailableReason && shadow.receiverKnown) {
+      split = `地表 ${area(shadow.groundAreaM2)}（${shadow.groundPercent.toFixed(0)}%） · 建築 ${area(shadow.buildingAreaM2)}（${shadow.buildingPercent.toFixed(0)}%）`;
+    } else if (shadow && !shadow.unavailableReason) {
+      split = "接收面分類：目前沒有可確認的建築 coverage；先只顯示總投影面積";
+    }
+    const noteParts = [
+      "CHMv2 raster 局部樹冠片，非單株樹普查",
+      patch.truncated ? "樹冠片碰到範圍／像素上限，面積為下限" : "",
+      benefit.reason || "",
+      shadow && Number.isFinite(shadow.maxShadowLengthM) ? `最遠投影約 ${shadow.maxShadowLengthM.toFixed(0)} m` : ""
+    ].filter(Boolean);
+    return `<div class="hsq-benefit">
+      <div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div>
+      <div class="hsq-benefit-metrics">
+        <div class="hsq-benefit-metric"><span>局部樹冠片</span><b>${escapeHtml(area(patch.areaM2))}</b></div>
+        <div class="hsq-benefit-metric"><span>目前投影陰影</span><b>${shadow && !shadow.unavailableReason ? escapeHtml(area(shadow.totalAreaM2)) : "—"}</b></div>
+      </div>
+      ${split ? `<div class="hsq-benefit-split">${escapeHtml(split)}</div>` : ""}
+      <div class="hsq-benefit-note">${escapeHtml(noteParts.join(" · "))}</div>
+    </div>`;
   }
 
   function pointQueryHtmlProgress(model) {
@@ -2627,6 +3071,13 @@
     if (sourceBuilding && sourceBuilding.feature && sourceBuilding.feature.properties && sourceBuilding.feature.properties.height_source) {
       detailItems.push(["遮蔽建築高度來源", sourceBuilding.feature.properties.height_source]);
     }
+    if (model.canopyBenefit && model.canopyBenefit.available && model.canopyBenefit.patch) {
+      const benefitPatch = model.canopyBenefit.patch;
+      detailItems.push(["樹冠試算物件", "CHMv2 局部連通樹冠片（非單株辨識）"]);
+      detailItems.push(["樹冠片最大高度", meters(benefitPatch.maxHeight, benefitPatch.maxHeight >= 10 ? 0 : 1)]);
+      detailItems.push(["樹冠片等效直徑", meters(benefitPatch.equivalentDiameterM)]);
+      detailItems.push(["樹冠試算限制", "目前為 DSM 垂直柱幾何投影；尚未扣除樹冠孔隙、樹本身被建築遮住等 3D 效應"]);
+    }
 
     return `
       <div class="haidian-shade-query-popup">
@@ -2651,6 +3102,7 @@
           ${secondaryRows.map(([label, value]) => `
             <div class="hsq-row"><span class="hsq-row-label">${escapeHtml(label)}</span><span class="hsq-row-value">${value}</span></div>
           `).join("")}
+          ${canopyBenefitHtml(model)}
           <details class="hsq-details">
             <summary>資料與精度</summary>
             <div class="hsq-detail-grid">
@@ -2684,6 +3136,22 @@
       if (!activePointQuery || activePointQuery.serial !== active.serial) return;
       active.model.shade = shade;
       active.model.solar = shade && shade.solar ? shade.solar : active.model.solar;
+      if (active.model.canopyBenefitTargetKind === "clicked-canopy" && Number.isFinite(active.model.canopy) && active.model.canopy >= Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2)) {
+        active.model.canopyBenefit = undefined;
+        active.model.canopyBenefitTargetKey = "";
+        resolveCanopyBenefit(active.serial, active.model, active.latlng, "clicked-canopy", 2);
+      } else if (active.model.canopyBenefitTargetKind === "shadow-source") {
+        // Shadow-source canopy selection is time-dependent. Drop the old source
+        // before re-tracing at the new solar position so its projected footprint
+        // never survives a timeline change as stale evidence.
+        active.model.canopyBenefitToken = (Number(active.model.canopyBenefitToken) || 0) + 1;
+        active.model.canopyBenefit = undefined;
+        active.model.canopyBenefitTargetKey = "";
+        active.model.canopyBenefitTargetKind = "";
+        active.model.canopyBenefitTargetPriority = 0;
+        active.model.canopyBenefitResolving = false;
+        removeCanopyBenefitOverlay();
+      }
       if (shade && shade.shaded === true && !shade.night) {
         resolvePointShadeSource(active.serial, active.model);
       } else {
@@ -2838,6 +3306,7 @@
 
   function removePointQueryOverlay() {
     clearPointShadeRetry();
+    removeCanopyBenefitOverlay();
     activePointQuery = null;
     if (!mapRef) {
       queryPopup = null;
@@ -2954,6 +3423,9 @@
     ).then((canopy) => {
       if (serial !== pointQuerySerial) return;
       model.canopy = canopy;
+      if (Number.isFinite(canopy) && canopy >= Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2)) {
+        resolveCanopyBenefit(serial, model, latlng, "clicked-canopy", 2);
+      }
       refreshPointQueryTooltip(serial, model);
     }).catch((error) => {
       if (serial !== pointQuerySerial) return;
@@ -3849,6 +4321,11 @@
     },
     get config() {
       return Object.assign({}, config);
+    },
+    analyzeCanopyAt(lat, lng, date) {
+      const latlng = { lat: Number(lat), lng: Number(lng) };
+      const when = date ? new Date(date) : state.date;
+      return analyzeCanopyBenefitAt(latlng, solarPositionAt(latlng, when));
     },
     getCanvasDiagnostics: getShadeCanvasDiagnostics
   };
