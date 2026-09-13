@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.1
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -44,17 +44,21 @@
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
 
-    // v7.9.0: point-card illumination semantics. ShadeMap currently exposes a
-    // sun/shade boolean, not the exact occluding object. For shaded daytime
-    // points, infer the likely source along the sun ray from the already-loaded
-    // OSM building geometry and CHMv2 canopy raster; label the result as an
-    // estimate and fall back to "source unknown" instead of guessing.
+    // v7.9.1: solar-ray occluder tracing for point-card shade attribution.
+    // ShadeMap exposes only sun/shade, so a shaded point casts a reverse ray
+    // toward the sun. Buildings are tested by exact footprint/ray intersection
+    // (with a small geometry tolerance corridor); CHMv2 is sampled along the
+    // same ray. Missing OSM building heights may still produce a clearly-marked
+    // probable result when the required minimum height is physically plausible.
     queryShadeSourceEnabled: true,
-    queryShadeSourceTimeoutMs: 3200,
+    queryShadeSourceTimeoutMs: 3600,
     queryShadeSourceMaxDistanceM: 240,
-    queryShadeSourceSampleStepM: 2.5,
+    queryShadeSourceSampleStepM: 1.25,
     queryShadeSourceCanopyMaxHeightM: 55,
     queryShadeSourceRayClearanceM: 0.5,
+    queryShadeSourceRayWidthM: 1.5,
+    queryShadeSourceUnknownBuildingMaxHeightM: 24,
+    queryShadeSourceMixedDistanceToleranceM: 3,
     queryShadeSourceMinAltitudeDeg: 1.5,
 
     // v7.8.6 lifecycle policy: terrain/data caches may be reused, but renderer DOM
@@ -1719,9 +1723,90 @@
     };
   }
 
+  function buildingHeightMeta(feature) {
+    const properties = feature && feature.properties ? feature.properties : {};
+    const height = Number(properties.height);
+    const source = String(properties.height_source || "");
+    const safeHeight = Number.isFinite(height) && height > 0
+      ? height
+      : Number(config.defaultBuildingHeight) || 3.1;
+    let quality = "default";
+    if (/^OSM height$/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
+    else if (/building:levels/i.test(source)) quality = "levels";
+    else if (source && !/預設|default/i.test(source)) quality = "estimated";
+    return { height: safeHeight, source: source || "預設估計值", quality };
+  }
+
   function buildingHeightForFeature(feature) {
-    const h = Number(feature && feature.properties && feature.properties.height);
-    return Number.isFinite(h) && h > 0 ? h : Number(config.defaultBuildingHeight) || 3.1;
+    return buildingHeightMeta(feature).height;
+  }
+
+  function localMetersFromLatLng(origin, point) {
+    const R = 6371008.8;
+    const rad = Math.PI / 180;
+    const lat0 = Number(origin && origin.lat) * rad;
+    const lat = Number(point && point.lat) * rad;
+    const lng0 = Number(origin && origin.lng) * rad;
+    const lng = Number(point && point.lng) * rad;
+    return {
+      x: (lng - lng0) * Math.cos(lat0) * R,
+      y: (lat - lat0) * R
+    };
+  }
+
+  function cross2d(a, b) {
+    return a.x * b.y - a.y * b.x;
+  }
+
+  function outerRingsForFeature(feature) {
+    const geometry = feature && feature.geometry;
+    if (!geometry) return [];
+    if (geometry.type === "Polygon") {
+      return geometry.coordinates && geometry.coordinates[0] ? [geometry.coordinates[0]] : [];
+    }
+    if (geometry.type === "MultiPolygon") {
+      return (geometry.coordinates || []).map((polygon) => polygon && polygon[0]).filter(Boolean);
+    }
+    return [];
+  }
+
+  function featureRayEntryDistance(latlng, feature, bearingDeg, lateralOffsetM = 0) {
+    const bearingRad = Number(bearingDeg) * Math.PI / 180;
+    const dir = { x: Math.sin(bearingRad), y: Math.cos(bearingRad) };
+    const right = { x: Math.cos(bearingRad), y: -Math.sin(bearingRad) };
+    const rayOrigin = {
+      x: right.x * Number(lateralOffsetM || 0),
+      y: right.y * Number(lateralOffsetM || 0)
+    };
+
+    const shiftedOrigin = Math.abs(lateralOffsetM) < 0.001
+      ? latlng
+      : destinationLatLng(
+          latlng,
+          (Number(bearingDeg) + (lateralOffsetM >= 0 ? 90 : 270)) % 360,
+          Math.abs(lateralOffsetM)
+        );
+    if (pointInPolygonFeature(shiftedOrigin.lng, shiftedOrigin.lat, feature)) return 0;
+
+    let best = Infinity;
+    for (const ring of outerRingsForFeature(feature)) {
+      if (!Array.isArray(ring) || ring.length < 2) continue;
+      for (let i = 0; i < ring.length - 1; i += 1) {
+        const aRaw = ring[i];
+        const bRaw = ring[i + 1];
+        if (!aRaw || !bRaw) continue;
+        const a0 = localMetersFromLatLng(latlng, { lat: Number(aRaw[1]), lng: Number(aRaw[0]) });
+        const b0 = localMetersFromLatLng(latlng, { lat: Number(bRaw[1]), lng: Number(bRaw[0]) });
+        const a = { x: a0.x - rayOrigin.x, y: a0.y - rayOrigin.y };
+        const seg = { x: b0.x - a0.x, y: b0.y - a0.y };
+        const denom = cross2d(dir, seg);
+        if (Math.abs(denom) < 1e-9) continue;
+        const t = cross2d(a, seg) / denom;
+        const u = cross2d(a, dir) / denom;
+        if (t >= -0.05 && u >= -1e-7 && u <= 1 + 1e-7) best = Math.min(best, Math.max(0, t));
+      }
+    }
+    return Number.isFinite(best) ? best : null;
   }
 
   function findBuildingShadowEvidence(latlng, solar) {
@@ -1730,24 +1815,70 @@
     if (!buildings.length) return null;
 
     const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
-    const maxConfigured = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
-    const step = Math.max(1.5, Number(config.queryShadeSourceSampleStepM) || 2.5);
+    const maxDistance = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
     const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
-    let maxHeight = Number(config.defaultBuildingHeight) || 3.1;
-    for (const feature of buildings) maxHeight = Math.max(maxHeight, buildingHeightForFeature(feature));
-    const maxDistance = Math.min(maxConfigured, maxHeight / tanAlt + step);
+    const rayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 1.5);
+    const unknownMaxHeight = Math.max(6, Number(config.queryShadeSourceUnknownBuildingMaxHeightM) || 24);
+    const offsets = rayWidth > 0 ? [0, -rayWidth, rayWidth] : [0];
+    const confirmed = [];
+    const plausible = [];
 
-    for (let distance = Math.max(0.75, step / 2); distance <= maxDistance; distance += step) {
-      const sample = destinationLatLng(latlng, solar.sunBearingDeg, distance);
-      const feature = buildings.find((candidate) => pointInPolygonFeature(sample.lng, sample.lat, candidate));
-      if (!feature) continue;
-      const height = buildingHeightForFeature(feature);
-      const rayHeight = distance * tanAlt + clearance;
-      if (height > rayHeight) {
-        return { type: "building", feature, height, distance, rayHeight };
+    for (const feature of buildings) {
+      let entry = null;
+      let entryOffset = 0;
+      for (const offset of offsets) {
+        const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset);
+        if (!Number.isFinite(distance) || distance > maxDistance) continue;
+        if (entry == null || distance < entry) {
+          entry = distance;
+          entryOffset = offset;
+        }
+      }
+      if (!Number.isFinite(entry)) continue;
+
+      const heightMeta = buildingHeightMeta(feature);
+      const distance = Math.max(0, entry);
+      const requiredHeight = distance * tanAlt + clearance;
+      const margin = heightMeta.height - requiredHeight;
+      const base = {
+        type: "building",
+        feature,
+        height: heightMeta.height,
+        heightSource: heightMeta.source,
+        heightQuality: heightMeta.quality,
+        distance,
+        rayHeight: requiredHeight,
+        requiredHeight,
+        clearanceMargin: margin,
+        corridorOffsetM: entryOffset
+      };
+
+      if (margin > 0) {
+        let confidence = heightMeta.quality === "measured"
+          ? "high"
+          : heightMeta.quality === "levels" || heightMeta.quality === "estimated"
+            ? "medium"
+            : "medium";
+        if (Math.abs(entryOffset) > 0.1 && confidence === "high") confidence = "medium";
+        confirmed.push({ ...base, confidence, plausibleUnknownHeight: false });
+      } else if (heightMeta.quality === "default" && requiredHeight <= unknownMaxHeight) {
+        // OSM often has a footprint but no height/levels. When ShadeMap says the
+        // point is shaded and that footprint lies exactly toward the sun, retain
+        // it as a probable candidate instead of discarding it because our 3.1 m
+        // rendering fallback is not a real survey of the building.
+        plausible.push({
+          ...base,
+          confidence: "possible",
+          plausibleUnknownHeight: true,
+          inferredMinimumHeight: requiredHeight
+        });
       }
     }
-    return null;
+
+    const byDistance = (a, b) => a.distance - b.distance || Math.abs(a.corridorOffsetM) - Math.abs(b.corridorOffsetM);
+    confirmed.sort(byDistance);
+    plausible.sort(byDistance);
+    return confirmed[0] || plausible[0] || null;
   }
 
   async function findCanopyShadowEvidence(latlng, solar) {
@@ -1755,7 +1886,7 @@
     const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
     const maxConfigured = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
     const maxCanopy = Math.max(10, Number(config.queryShadeSourceCanopyMaxHeightM) || 55);
-    const step = Math.max(1.5, Number(config.queryShadeSourceSampleStepM) || 2.5);
+    const step = Math.max(0.75, Number(config.queryShadeSourceSampleStepM) || 1.25);
     const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
     const maxDistance = Math.min(maxConfigured, maxCanopy / tanAlt + step);
     const samples = [];
@@ -1787,11 +1918,22 @@
           type: "tree",
           height: canopy,
           distance: sample.distance,
-          rayHeight: sample.rayHeight
+          rayHeight: sample.rayHeight,
+          clearanceMargin: canopy - sample.rayHeight,
+          confidence: "high"
         };
       }
     }
     return null;
+  }
+
+  function compassDirectionZh(bearingDeg) {
+    const labels = [
+      "北", "北北東", "東北", "東北東", "東", "東南東", "東南", "南南東",
+      "南", "南南西", "西南", "西南偏西", "西", "西北偏西", "西北", "北北西"
+    ];
+    const bearing = ((Number(bearingDeg) % 360) + 360) % 360;
+    return labels[Math.round(bearing / 22.5) % 16];
   }
 
   async function inferShadeSource(latlng, solar) {
@@ -1810,41 +1952,80 @@
     try {
       tree = await withTimeout(
         findCanopyShadowEvidence(latlng, solar),
-        Math.max(900, Number(config.queryShadeSourceTimeoutMs) || 3200),
+        Math.max(900, Number(config.queryShadeSourceTimeoutMs) || 3600),
         "樹冠陰影來源"
       );
     } catch (error) {
       treeError = error && error.message ? error.message : "樹冠來源讀取失敗";
     }
 
+    const bearingText = `${compassDirectionZh(solar.sunBearingDeg)} ${solar.sunBearingDeg.toFixed(0)}°`;
+    const mixedTolerance = Math.max(1, Number(config.queryShadeSourceMixedDistanceToleranceM) || 3);
+
     if (building && tree) {
+      const delta = Math.abs(building.distance - tree.distance);
+      if (delta <= mixedTolerance) {
+        return {
+          type: "mixed",
+          building,
+          tree,
+          confidence: building.plausibleUnknownHeight ? "medium" : "high",
+          bearingDeg: solar.sunBearingDeg,
+          bearingText,
+          method: "反向太陽光線同時命中建築 footprint 與 CHMv2 樹冠；兩者距離接近"
+        };
+      }
+      if (tree.distance < building.distance) {
+        return {
+          type: "tree",
+          tree,
+          confidence: "high",
+          bearingDeg: solar.sunBearingDeg,
+          bearingText,
+          method: "反向太陽光線先命中 CHMv2 樹冠，再到達建築候選"
+        };
+      }
       return {
-        type: "mixed",
+        type: "building",
         building,
-        tree,
-        method: "依太陽方向、OSM 建築高度與 CHMv2 樹冠高度推定"
+        confidence: building.plausibleUnknownHeight ? "possible" : building.confidence,
+        bearingDeg: solar.sunBearingDeg,
+        bearingText,
+        method: building.plausibleUnknownHeight
+          ? "反向太陽光線先命中 OSM 建築 footprint；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
+          : "反向太陽光線先命中 OSM 建築 footprint，且建築高度足以截斷太陽視線"
       };
     }
     if (building) {
       return {
         type: "building",
         building,
-        method: treeError
-          ? "依太陽方向與 OSM 建築高度推定；樹冠來源查詢未完成"
-          : "依太陽方向與 OSM 建築高度推定"
+        confidence: building.plausibleUnknownHeight ? "possible" : building.confidence,
+        bearingDeg: solar.sunBearingDeg,
+        bearingText,
+        method: building.plausibleUnknownHeight
+          ? "反向太陽光線命中 OSM 建築 footprint；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
+          : (treeError
+              ? "反向太陽光線命中 OSM 建築且高度足夠；樹冠來源查詢未完成"
+              : "反向太陽光線命中 OSM 建築 footprint，且建築高度足以截斷太陽視線")
       };
     }
     if (tree) {
       return {
         type: "tree",
         tree,
-        method: "依太陽方向與 CHMv2 樹冠高度推定"
+        confidence: "high",
+        bearingDeg: solar.sunBearingDeg,
+        bearingText,
+        method: "反向太陽光線沿線的 CHMv2 樹冠高度高於太陽視線"
       };
     }
     return {
       type: "unknown",
-      reason: treeError || "目前資料無法確認是樹冠或建築物造成",
-      method: "ShadeMap 僅回傳日照／陰影；來源以可用遮蔽物資料另行推定"
+      reason: treeError || "反向太陽光線未找到足以解釋此陰影的建築或樹冠",
+      bearingDeg: solar.sunBearingDeg,
+      bearingText,
+      method: "ShadeMap 回傳陰影後，以反向太陽光線檢查 OSM 建築 footprint 與 CHMv2 樹冠"
     };
   }
 
@@ -2225,17 +2406,24 @@
         shadeClass = "is-shade";
         primaryMetricValue = '<span class="hsq-pending">判讀中…</span>';
       } else if (source && source.type === "building") {
-        statusLabel = "🏢 建築陰影";
+        statusLabel = source.confidence === "possible" ? "🏢 可能為建築陰影" : "🏢 建築陰影";
         shadeClass = "is-building";
-        primaryMetricValue = '🏢 建築物 <small>推定</small>';
+        const confidence = source.confidence === "high"
+          ? "高信心"
+          : source.confidence === "medium"
+            ? "中信心"
+            : source.confidence === "possible"
+              ? "可能"
+              : "推定";
+        primaryMetricValue = `🏢 建築物 <small>${confidence}</small>`;
       } else if (source && source.type === "tree") {
         statusLabel = "🌳 樹蔭";
         shadeClass = "is-tree";
-        primaryMetricValue = '🌳 樹冠 <small>推定</small>';
+        primaryMetricValue = `🌳 樹冠 <small>${source.confidence === "high" ? "高信心" : "推定"}</small>`;
       } else if (source && source.type === "mixed") {
         statusLabel = "🌳🏢 複合遮蔽";
         shadeClass = "is-mixed";
-        primaryMetricValue = '🌳🏢 樹冠＋建築 <small>推定</small>';
+        primaryMetricValue = `🌳🏢 樹冠＋建築 <small>${source.confidence === "high" ? "高信心" : "中信心"}</small>`;
       } else {
         statusLabel = "◐ 陰影・來源未判定";
         shadeClass = "is-unknown";
@@ -2261,7 +2449,12 @@
       const feature = sourceBuilding.feature;
       const name = feature && feature.properties && feature.properties.name;
       secondaryRows.push(["遮蔽建築", escapeHtml(name || "OSM building")]);
-      if (Number.isFinite(sourceBuilding.height)) {
+      if (sourceBuilding.plausibleUnknownHeight) {
+        secondaryRows.push(["建築高度資料", "OSM 未提供"]);
+        if (Number.isFinite(sourceBuilding.inferredMinimumHeight)) {
+          secondaryRows.push(["遮蔽所需最低高度", escapeHtml(`約 ${meters(sourceBuilding.inferredMinimumHeight)}`)]);
+        }
+      } else if (Number.isFinite(sourceBuilding.height)) {
         secondaryRows.push(["遮蔽物高度", escapeHtml(meters(sourceBuilding.height))]);
       }
       if (Number.isFinite(sourceBuilding.distance)) {
@@ -2313,9 +2506,9 @@
 
     let sourceInterpretation = "—";
     if (source === undefined && shade && shade.shaded === true) sourceInterpretation = "判讀中";
-    else if (source && source.type === "building") sourceInterpretation = "建築物（推定）";
-    else if (source && source.type === "tree") sourceInterpretation = "樹冠（推定）";
-    else if (source && source.type === "mixed") sourceInterpretation = "樹冠＋建築（推定）";
+    else if (source && source.type === "building") sourceInterpretation = source.confidence === "possible" ? "建築物（可能）" : "建築物（光線追蹤）";
+    else if (source && source.type === "tree") sourceInterpretation = "樹冠（光線追蹤）";
+    else if (source && source.type === "mixed") sourceInterpretation = "樹冠＋建築（光線追蹤）";
     else if (source && source.type === "unknown") sourceInterpretation = "來源未判定";
     else if (isNight) sourceInterpretation = "不適用";
     else if (shade && shade.shaded === false) sourceInterpretation = "不適用";
@@ -2335,6 +2528,17 @@
       detailItems.splice(3, 0, ["太陽方位", `${solar.sunBearingDeg.toFixed(0)}°`]);
     }
     if (source && source.method) detailItems.splice(2, 0, ["來源方法", source.method]);
+    if (source && source.bearingText) detailItems.splice(2, 0, ["遮蔽物方向", source.bearingText]);
+    if (source && source.confidence) {
+      const sourceConfidence = source.confidence === "high"
+        ? "高信心"
+        : source.confidence === "medium"
+          ? "中信心"
+          : source.confidence === "possible"
+            ? "可能；建築高度缺資料"
+            : source.confidence;
+      detailItems.splice(2, 0, ["來源信心", sourceConfidence]);
+    }
     if (source && source.reason) detailItems.splice(2, 0, ["來源限制", source.reason]);
     if (groundAvailable && model.groundDataset) detailItems.splice(detailItems.length - 2, 0, ["高程資料集", model.groundDataset]);
     if (inTaiwan && model.groundFallback) {
