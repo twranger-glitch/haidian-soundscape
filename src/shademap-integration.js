@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.8
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.7
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -35,10 +35,6 @@
     canopyCacheTiles: 256,
     queryCanopyTimeoutMs: 12000,
     queryDemTimeoutMs: 6000,
-    // v7.8.8: total budget for point-ground resolution, including Taiwan official
-    // DTM attempt plus the clearly-labelled global Terrarium fallback.
-    queryGroundTotalTimeoutMs: 10500,
-    queryGlobalDemFallbackTimeoutMs: 4500,
     // v7.5: if the ShadeMap render is still busy when a point is clicked,
     // keep the tooltip alive and refresh sun/shade automatically on SDK idle.
     queryShadeRetryMs: 250,
@@ -68,16 +64,11 @@
 
     // v7.7 authoritative Taiwan point elevation. Keep the credential OFF the browser:
     // put the MOI DTM api_key in a server-side proxy (Cloudflare Worker template included).
-    // v7.8.8: Taiwan point queries prefer the official proxy, but if it times out or
-    // fails they may use the global Terrarium DEM as an explicitly non-authoritative fallback.
+    // The point-query UI will suppress the global DEM number in Taiwan until this
+    // proxy is configured, so a coarse fallback is never presented as authoritative.
     taiwanOfficialDtmProxyUrl: "",
     taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
-    // Keep this shorter than the Worker upstream timeout so the browser can fail over
-    // before the outer point-query budget expires.
-    taiwanOfficialDtmTimeoutMs: 5000,
-    taiwanGlobalDemFallbackEnabled: true,
-    // Legacy safety switch. When global fallback is disabled, this still controls
-    // whether a non-official Taiwan value is withheld.
+    taiwanOfficialDtmTimeoutMs: 6500,
     taiwanHideGlobalDemPointValue: true,
     // Optional future Terrarium XYZ generated from an official Taiwan DTM download.
     // This is separate from the point API. When populated in a later data-build,
@@ -1253,18 +1244,6 @@
       config.taiwanTerrainTileUrl.trim().length > 0;
   }
 
-  function globalTerrainSpec(regionCode = null) {
-    return {
-      id: "global",
-      template: config.bareTerrainTileUrl,
-      maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
-      label: config.bareTerrainLabel || "全球地形 DEM fallback",
-      dataset: "global-fallback",
-      authoritative: false,
-      region: regionCode || null
-    };
-  }
-
   function groundTerrainSpecForTile(x, y, z) {
     const center = tileCenterLatLng(x, y, z);
     const region = taiwanOfficialDtmRegion(center);
@@ -1279,7 +1258,15 @@
         region: region.code
       };
     }
-    return globalTerrainSpec(region ? region.code : null);
+    return {
+      id: "global",
+      template: config.bareTerrainTileUrl,
+      maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
+      label: config.bareTerrainLabel || "全球地形 DEM fallback",
+      dataset: "global-fallback",
+      authoritative: false,
+      region: region ? region.code : null
+    };
   }
 
   function dynamicShadowTerrainLabel(latlng) {
@@ -1299,11 +1286,6 @@
         if (!response.ok) throw new Error(`${spec.label} HTTP ${response.status}`);
         return createImageBitmap(await response.blob());
       })();
-      // Do not poison the bitmap cache with a rejected Promise. A transient global
-      // terrain failure must be retryable on the next point/tile request.
-      promise.catch(() => {
-        if (demBitmapCache.get(key) === promise) demBitmapCache.delete(key);
-      });
       demBitmapCache.set(key, promise);
       if (demBitmapCache.size > 120) {
         demBitmapCache.delete(demBitmapCache.keys().next().value);
@@ -1346,7 +1328,15 @@
       // over to the global terrain for continuity instead of breaking ShadeMap.
       if (spec.authoritative) {
         console.warn("[Haidian Shade] official terrain tile missing; using global fallback:", error);
-        const fallback = globalTerrainSpec(spec.region);
+        const fallback = {
+          id: "global",
+          template: config.bareTerrainTileUrl,
+          maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
+          label: config.bareTerrainLabel || "全球地形 DEM fallback",
+          dataset: "global-fallback",
+          authoritative: false,
+          region: spec.region
+        };
         try {
           const fallbackZ = Math.min(z, fallback.maxZoom);
           const factor = 1 << (z - fallbackZ);
@@ -1724,29 +1714,13 @@
       base.searchParams.set("region", region.code);
       base.searchParams.set("dataset", region.dataset);
 
-      const controller = new AbortController();
-      const timeoutMs = Math.max(1000, Number(config.taiwanOfficialDtmTimeoutMs) || 5000);
-      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-      let response;
-      try {
-        response = await fetch(base.toString(), {
-          method: "GET",
-          mode: "cors",
-          credentials: "omit",
-          cache: "force-cache",
-          headers: { "Accept": "application/json" },
-          signal: controller.signal
-        });
-      } catch (error) {
-        if (controller.signal.aborted || (error && error.name === "AbortError")) {
-          const timeoutError = new Error(`官方 DTM timeout（${timeoutMs} ms）`);
-          timeoutError.code = "OFFICIAL_DTM_TIMEOUT";
-          throw timeoutError;
-        }
-        throw error;
-      } finally {
-        window.clearTimeout(timer);
-      }
+      const response = await fetch(base.toString(), {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "force-cache",
+        headers: { "Accept": "application/json" }
+      });
       if (!response.ok) throw new Error(`官方 DTM HTTP ${response.status}`);
       const payload = await response.json();
       const elevation = Number(
@@ -1774,28 +1748,6 @@
     }
   }
 
-  async function queryGlobalTerrainFallback(latlng, tile, reason = "") {
-    const region = taiwanOfficialDtmRegion(latlng);
-    const sampled = await withTimeout(
-      sampleGroundTerrainHeightAtTilePixel(tile, globalTerrainSpec(region ? region.code : null)),
-      Math.max(1000, Number(config.queryGlobalDemFallbackTimeoutMs) || 4500),
-      "全球 DEM 備援"
-    );
-    if (!sampled || !Number.isFinite(Number(sampled.height))) {
-      throw new Error("全球 DEM 備援未回傳有效高程");
-    }
-    return {
-      height: Number(sampled.height),
-      source: `${sampled.spec ? sampled.spec.label : (config.bareTerrainLabel || "全球地形 DEM")}（全球備援；非官方 DTM）`,
-      dataset: sampled.spec ? sampled.spec.dataset : "global-fallback",
-      authoritative: false,
-      withheldFallback: false,
-      fallback: true,
-      fallbackReason: String(reason || "官方 DTM 暫不可用"),
-      region: region ? region.code : null
-    };
-  }
-
   async function queryPointGround(latlng, tile) {
     const region = taiwanOfficialDtmRegion(latlng);
     if (region && officialTerrainConfigured()) {
@@ -1806,44 +1758,23 @@
         dataset: sampled && sampled.spec ? sampled.spec.dataset : (config.taiwanTerrainDatasetLabel || "official-static-tiles"),
         authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
         withheldFallback: false,
-        fallback: false,
-        fallbackReason: "",
         region: region.code
       };
     }
-
-    if (region && officialDtmProxyConfigured()) {
-      try {
-        const official = await queryOfficialTaiwanDtm(latlng);
-        return Object.assign({ fallback: false, fallbackReason: "" }, official);
-      } catch (error) {
-        if (config.taiwanGlobalDemFallbackEnabled !== false) {
-          console.warn("[Haidian Shade] official DTM unavailable; using global point fallback:", error);
-          return queryGlobalTerrainFallback(
-            latlng,
-            tile,
-            error && error.message ? error.message : "官方 DTM 查詢失敗"
-          );
-        }
-        throw error;
+    if (region) {
+      if (officialDtmProxyConfigured()) {
+        return queryOfficialTaiwanDtm(latlng);
       }
-    }
-
-    if (region && config.taiwanGlobalDemFallbackEnabled !== false) {
-      return queryGlobalTerrainFallback(latlng, tile, "官方 DTM 安全代理尚未設定");
-    }
-
-    if (region && config.taiwanHideGlobalDemPointValue !== false) {
-      return {
-        height: null,
-        source: `${config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"}（尚未介接）`,
-        dataset: region.dataset,
-        authoritative: false,
-        withheldFallback: true,
-        fallback: false,
-        fallbackReason: "",
-        region: region.code
-      };
+      if (config.taiwanHideGlobalDemPointValue !== false) {
+        return {
+          height: null,
+          source: `${config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"}（尚未介接）`,
+          dataset: region.dataset,
+          authoritative: false,
+          withheldFallback: true,
+          region: region.code
+        };
+      }
     }
 
     const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
@@ -1853,16 +1784,14 @@
       dataset: sampled && sampled.spec ? sampled.spec.dataset : "global-fallback",
       authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
       withheldFallback: false,
-      fallback: false,
-      fallbackReason: "",
       region: region ? region.code : null
     };
   }
 
-  async function sampleGroundTerrainHeightAtTilePixel(tile, forcedSpec = null) {
+  async function sampleGroundTerrainHeightAtTilePixel(tile) {
     if (!config.metaBlendBareTerrain) return null;
 
-    const spec = forcedSpec || groundTerrainSpecForTile(tile.x, tile.y, tile.z);
+    const spec = groundTerrainSpecForTile(tile.x, tile.y, tile.z);
     const demZ = Math.min(tile.z, spec.maxZoom);
     const factor = 1 << (tile.z - demZ);
     const parentX = Math.floor(tile.x / factor);
@@ -1904,8 +1833,6 @@
       groundDataset: "",
       groundAuthoritative: false,
       groundWithheldFallback: false,
-      groundFallback: false,
-      groundFallbackReason: "",
       shade: undefined,
       building: findCachedBuildingAt(latlng)
     };
@@ -1964,11 +1891,9 @@
           ? "官方 DTM 查詢中"
           : model.groundAuthoritative
             ? "已使用內政部官方 DTM"
-            : model.groundFallback
-              ? "官方 DTM 暫不可用；已切全球 DEM 備援"
-              : officialDtmProxyConfigured()
-                ? (model.groundError ? "官方 DTM 查詢失敗" : "官方 DTM 未回傳有效值")
-                : "官方 DTM 尚未啟用")
+            : officialDtmProxyConfigured()
+              ? (model.groundError ? "官方 DTM 查詢失敗" : "官方 DTM 未回傳有效值")
+              : "官方 DTM 尚未啟用")
       : "不在臺灣官方 DTM 範圍";
 
     const detailItems = [
@@ -1979,10 +1904,6 @@
       ["研究模式", modeLabel(state.mode)]
     ];
     if (groundAvailable && model.groundDataset) detailItems.splice(3, 0, ["高程資料集", model.groundDataset]);
-    if (inTaiwan && model.groundFallback) {
-      detailItems.splice(3, 0, ["DTM 狀態", officialStatus]);
-      if (model.groundFallbackReason) detailItems.splice(4, 0, ["備援原因", model.groundFallbackReason]);
-    }
     if (building && heightSource) detailItems.push(["建築高度來源", heightSource]);
 
     return `
@@ -2310,7 +2231,7 @@
     // Elsewhere (or when explicitly allowed) use the global DEM fallback.
     withTimeout(
       queryPointGround(latlng, tile),
-      Math.max(3000, Number(config.queryGroundTotalTimeoutMs) || 10500),
+      Math.max(Number(config.queryDemTimeoutMs) || 6000, Number(config.taiwanOfficialDtmTimeoutMs) || 6500),
       "地面高程"
     ).then((groundResult) => {
       if (serial !== pointQuerySerial) return;
@@ -2319,8 +2240,6 @@
       model.groundDataset = groundResult ? groundResult.dataset : "";
       model.groundAuthoritative = !!(groundResult && groundResult.authoritative);
       model.groundWithheldFallback = !!(groundResult && groundResult.withheldFallback);
-      model.groundFallback = !!(groundResult && groundResult.fallback);
-      model.groundFallbackReason = groundResult && groundResult.fallbackReason ? String(groundResult.fallbackReason) : "";
       refreshPointQueryTooltip(serial, model);
     }).catch((error) => {
       if (serial !== pointQuerySerial) return;
@@ -2329,8 +2248,6 @@
         ? (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m")
         : (config.bareTerrainLabel || "全球地形 DEM");
       model.groundError = error && error.message ? error.message : "地面高程讀取失敗";
-      model.groundFallback = false;
-      model.groundFallbackReason = "";
       refreshPointQueryTooltip(serial, model);
     });
 
