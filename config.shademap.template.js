@@ -42,19 +42,23 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeRetryMs: 250,
   queryShadeRetryTimeoutMs: 10000,
 
-  // v7.9.1: reverse solar-ray occluder tracing. Building footprints are tested
-  // by exact ray/polygon intersection (plus a 1.5 m geometry-tolerance corridor)
-  // instead of coarse 2.5 m point sampling. CHMv2 is sampled along the same ray.
-  // If OSM has a footprint but no height, a ray-aligned building can be shown as
-  // "可能" only when the physically required height is still plausible.
+  // v7.9.2: reverse solar-ray occluder tracing with spatial consensus.
+  // The exact center ray is still authoritative, but a small parallel-ray fan
+  // absorbs OSM alignment / screen-position error. Off-center-only matches are
+  // downgraded instead of presented as certain. CHMv2 remains center-ray based.
   queryShadeSourceEnabled: true,
   queryShadeSourceTimeoutMs: 3600,
   queryShadeSourceMaxDistanceM: 240,
   queryShadeSourceSampleStepM: 1.25,
   queryShadeSourceCanopyMaxHeightM: 55,
   queryShadeSourceRayClearanceM: 0.5,
-  queryShadeSourceRayWidthM: 1.5,
+  queryShadeSourceRayWidthM: 9,
+  queryShadeSourceRayStepM: 1.5,
+  queryShadeSourceCorridorMinHits: 2,
+  queryShadeSourceRayBaseToleranceM: 3.5,
+  queryShadeSourceRayAngularToleranceDeg: 3,
   queryShadeSourceUnknownBuildingMaxHeightM: 24,
+  buildingShadowFetchPaddingM: 280,
   queryShadeSourceMixedDistanceToleranceM: 3,
   queryShadeSourceMinAltitudeDeg: 1.5,
 
