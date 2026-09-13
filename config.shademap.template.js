@@ -42,6 +42,18 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeRetryMs: 250,
   queryShadeRetryTimeoutMs: 10000,
 
+  // v7.9.0: daytime shade-source inference for the point card. The ShadeMap SDK
+  // exposes sun/shade only, so the UI checks the sun-ray direction against the
+  // visible OSM buildings and CHMv2 canopy. Results are explicitly labelled as
+  // inferred; uncertain cases stay "來源未判定" instead of guessing.
+  queryShadeSourceEnabled: true,
+  queryShadeSourceTimeoutMs: 3200,
+  queryShadeSourceMaxDistanceM: 240,
+  queryShadeSourceSampleStepM: 2.5,
+  queryShadeSourceCanopyMaxHeightM: 55,
+  queryShadeSourceRayClearanceM: 0.5,
+  queryShadeSourceMinAltitudeDeg: 1.5,
+
   // v7.8.6 lifecycle: SDK remove() + generation gating + one active canvas owner.
   // No WEBGL_lose_context and no synchronous deletion of the current SDK-owned canvas.
   navigationRebuildDelayMs: 520,
