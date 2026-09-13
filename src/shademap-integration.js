@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.8.7
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -35,10 +35,27 @@
     canopyCacheTiles: 256,
     queryCanopyTimeoutMs: 12000,
     queryDemTimeoutMs: 6000,
+    // v7.8.8: total budget for point-ground resolution, including Taiwan official
+    // DTM attempt plus the clearly-labelled global Terrarium fallback.
+    queryGroundTotalTimeoutMs: 10500,
+    queryGlobalDemFallbackTimeoutMs: 4500,
     // v7.5: if the ShadeMap render is still busy when a point is clicked,
     // keep the tooltip alive and refresh sun/shade automatically on SDK idle.
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
+
+    // v7.9.0: point-card illumination semantics. ShadeMap currently exposes a
+    // sun/shade boolean, not the exact occluding object. For shaded daytime
+    // points, infer the likely source along the sun ray from the already-loaded
+    // OSM building geometry and CHMv2 canopy raster; label the result as an
+    // estimate and fall back to "source unknown" instead of guessing.
+    queryShadeSourceEnabled: true,
+    queryShadeSourceTimeoutMs: 3200,
+    queryShadeSourceMaxDistanceM: 240,
+    queryShadeSourceSampleStepM: 2.5,
+    queryShadeSourceCanopyMaxHeightM: 55,
+    queryShadeSourceRayClearanceM: 0.5,
+    queryShadeSourceMinAltitudeDeg: 1.5,
 
     // v7.8.6 lifecycle policy: terrain/data caches may be reused, but renderer DOM
     // ownership is single-canvas. Date/time changes stay in-place via setDate(), are
@@ -64,11 +81,16 @@
 
     // v7.7 authoritative Taiwan point elevation. Keep the credential OFF the browser:
     // put the MOI DTM api_key in a server-side proxy (Cloudflare Worker template included).
-    // The point-query UI will suppress the global DEM number in Taiwan until this
-    // proxy is configured, so a coarse fallback is never presented as authoritative.
+    // v7.8.8: Taiwan point queries prefer the official proxy, but if it times out or
+    // fails they may use the global Terrarium DEM as an explicitly non-authoritative fallback.
     taiwanOfficialDtmProxyUrl: "",
     taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
-    taiwanOfficialDtmTimeoutMs: 6500,
+    // Keep this shorter than the Worker upstream timeout so the browser can fail over
+    // before the outer point-query budget expires.
+    taiwanOfficialDtmTimeoutMs: 5000,
+    taiwanGlobalDemFallbackEnabled: true,
+    // Legacy safety switch. When global fallback is disabled, this still controls
+    // whether a non-official Taiwan value is withheld.
     taiwanHideGlobalDemPointValue: true,
     // Optional future Terrarium XYZ generated from an official Taiwan DTM download.
     // This is separate from the point API. When populated in a later data-build,
@@ -582,6 +604,11 @@
       }
       .haidian-shade-query-popup .hsq-status.is-sun{background:#fff7ed;color:#c2410c}
       .haidian-shade-query-popup .hsq-status.is-shade{background:#eef2ff;color:#4338ca}
+      .haidian-shade-query-popup .hsq-status.is-tree{background:#ecfdf5;color:#047857}
+      .haidian-shade-query-popup .hsq-status.is-building{background:#eff6ff;color:#1d4ed8}
+      .haidian-shade-query-popup .hsq-status.is-mixed{background:#f5f3ff;color:#6d28d9}
+      .haidian-shade-query-popup .hsq-status.is-night{background:#f1f5f9;color:#334155}
+      .haidian-shade-query-popup .hsq-status.is-unknown{background:#f8fafc;color:#475569}
       .haidian-shade-query-popup .hsq-status.is-pending{background:#f1f5f9;color:#64748b}
       .haidian-shade-query-popup .hsq-main{padding:9px 11px 8px}
       .haidian-shade-query-popup .hsq-metrics{display:grid;grid-template-columns:1fr 1fr;gap:7px}
@@ -1244,6 +1271,18 @@
       config.taiwanTerrainTileUrl.trim().length > 0;
   }
 
+  function globalTerrainSpec(regionCode = null) {
+    return {
+      id: "global",
+      template: config.bareTerrainTileUrl,
+      maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
+      label: config.bareTerrainLabel || "全球地形 DEM fallback",
+      dataset: "global-fallback",
+      authoritative: false,
+      region: regionCode || null
+    };
+  }
+
   function groundTerrainSpecForTile(x, y, z) {
     const center = tileCenterLatLng(x, y, z);
     const region = taiwanOfficialDtmRegion(center);
@@ -1258,15 +1297,7 @@
         region: region.code
       };
     }
-    return {
-      id: "global",
-      template: config.bareTerrainTileUrl,
-      maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
-      label: config.bareTerrainLabel || "全球地形 DEM fallback",
-      dataset: "global-fallback",
-      authoritative: false,
-      region: region ? region.code : null
-    };
+    return globalTerrainSpec(region ? region.code : null);
   }
 
   function dynamicShadowTerrainLabel(latlng) {
@@ -1286,6 +1317,11 @@
         if (!response.ok) throw new Error(`${spec.label} HTTP ${response.status}`);
         return createImageBitmap(await response.blob());
       })();
+      // Do not poison the bitmap cache with a rejected Promise. A transient global
+      // terrain failure must be retryable on the next point/tile request.
+      promise.catch(() => {
+        if (demBitmapCache.get(key) === promise) demBitmapCache.delete(key);
+      });
       demBitmapCache.set(key, promise);
       if (demBitmapCache.size > 120) {
         demBitmapCache.delete(demBitmapCache.keys().next().value);
@@ -1328,15 +1364,7 @@
       // over to the global terrain for continuity instead of breaking ShadeMap.
       if (spec.authoritative) {
         console.warn("[Haidian Shade] official terrain tile missing; using global fallback:", error);
-        const fallback = {
-          id: "global",
-          template: config.bareTerrainTileUrl,
-          maxZoom: Math.max(0, Number(config.bareTerrainMaxZoom) || 15),
-          label: config.bareTerrainLabel || "全球地形 DEM fallback",
-          dataset: "global-fallback",
-          authoritative: false,
-          region: spec.region
-        };
+        const fallback = globalTerrainSpec(spec.region);
         try {
           const fallbackZ = Math.min(z, fallback.maxZoom);
           const factor = 1 << (z - fallbackZ);
@@ -1611,23 +1639,264 @@
     return Number.isFinite(value) ? `${value.toFixed(digits)} m` : "—";
   }
 
+  function solarPositionAt(latlng, date) {
+    const when = date instanceof Date ? date : new Date(date || Date.now());
+    const lat = Number(latlng && latlng.lat);
+    const lng = Number(latlng && latlng.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Number.isNaN(when.getTime())) {
+      return null;
+    }
+
+    // Compact SunCalc-style solar position math. The result is adequate for UI
+    // semantics (day/night + shadow-source ray direction) and does not add a
+    // second network/runtime dependency beside the existing ShadeMap SDK.
+    const rad = Math.PI / 180;
+    const dayMs = 86400000;
+    const J1970 = 2440588;
+    const J2000 = 2451545;
+    const e = rad * 23.4397;
+    const toDays = (d) => d.valueOf() / dayMs - 0.5 + J1970 - J2000;
+    const rightAscension = (l, b) => Math.atan2(
+      Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e),
+      Math.cos(l)
+    );
+    const declination = (l, b) => Math.asin(
+      Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l)
+    );
+    const azimuth = (H, phi, dec) => Math.atan2(
+      Math.sin(H),
+      Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi)
+    );
+    const altitude = (H, phi, dec) => Math.asin(
+      Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H)
+    );
+
+    const d = toDays(when);
+    const M = rad * (357.5291 + 0.98560028 * d);
+    const C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    const P = rad * 102.9372;
+    const L = M + C + P + Math.PI;
+    const dec = declination(L, 0);
+    const ra = rightAscension(L, 0);
+    const lw = rad * -lng;
+    const phi = rad * lat;
+    const H = rad * (280.16 + 360.9856235 * d) - lw - ra;
+    const altitudeRad = altitude(H, phi, dec);
+    const azimuthRad = azimuth(H, phi, dec);
+    const sunBearingDeg = ((azimuthRad + Math.PI) / rad + 360) % 360;
+
+    return {
+      altitudeRad,
+      altitudeDeg: altitudeRad / rad,
+      azimuthRad,
+      sunBearingDeg,
+      night: altitudeRad <= 0
+    };
+  }
+
+  function destinationLatLng(latlng, bearingDeg, distanceM) {
+    const R = 6371008.8;
+    const rad = Math.PI / 180;
+    const deg = 180 / Math.PI;
+    const phi1 = Number(latlng.lat) * rad;
+    const lambda1 = Number(latlng.lng) * rad;
+    const theta = Number(bearingDeg) * rad;
+    const delta = Math.max(0, Number(distanceM) || 0) / R;
+    const sinPhi1 = Math.sin(phi1);
+    const cosPhi1 = Math.cos(phi1);
+    const sinDelta = Math.sin(delta);
+    const cosDelta = Math.cos(delta);
+    const phi2 = Math.asin(
+      sinPhi1 * cosDelta + cosPhi1 * sinDelta * Math.cos(theta)
+    );
+    const lambda2 = lambda1 + Math.atan2(
+      Math.sin(theta) * sinDelta * cosPhi1,
+      cosDelta - sinPhi1 * Math.sin(phi2)
+    );
+    return {
+      lat: phi2 * deg,
+      lng: ((lambda2 * deg + 540) % 360) - 180
+    };
+  }
+
+  function buildingHeightForFeature(feature) {
+    const h = Number(feature && feature.properties && feature.properties.height);
+    return Number.isFinite(h) && h > 0 ? h : Number(config.defaultBuildingHeight) || 3.1;
+  }
+
+  function findBuildingShadowEvidence(latlng, solar) {
+    if (!solar || solar.night || state.mode === "trees" || config.buildingMode === "none") return null;
+    const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    if (!buildings.length) return null;
+
+    const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
+    const maxConfigured = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
+    const step = Math.max(1.5, Number(config.queryShadeSourceSampleStepM) || 2.5);
+    const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
+    let maxHeight = Number(config.defaultBuildingHeight) || 3.1;
+    for (const feature of buildings) maxHeight = Math.max(maxHeight, buildingHeightForFeature(feature));
+    const maxDistance = Math.min(maxConfigured, maxHeight / tanAlt + step);
+
+    for (let distance = Math.max(0.75, step / 2); distance <= maxDistance; distance += step) {
+      const sample = destinationLatLng(latlng, solar.sunBearingDeg, distance);
+      const feature = buildings.find((candidate) => pointInPolygonFeature(sample.lng, sample.lat, candidate));
+      if (!feature) continue;
+      const height = buildingHeightForFeature(feature);
+      const rayHeight = distance * tanAlt + clearance;
+      if (height > rayHeight) {
+        return { type: "building", feature, height, distance, rayHeight };
+      }
+    }
+    return null;
+  }
+
+  async function findCanopyShadowEvidence(latlng, solar) {
+    if (!solar || solar.night || state.mode === "buildings" || config.queryCanopyFromCog === false) return null;
+    const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
+    const maxConfigured = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
+    const maxCanopy = Math.max(10, Number(config.queryShadeSourceCanopyMaxHeightM) || 55);
+    const step = Math.max(1.5, Number(config.queryShadeSourceSampleStepM) || 2.5);
+    const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
+    const maxDistance = Math.min(maxConfigured, maxCanopy / tanAlt + step);
+    const samples = [];
+    const rasters = new Map();
+
+    for (let distance = 0; distance <= maxDistance; distance += step) {
+      const rayHeight = distance * tanAlt + clearance;
+      if (rayHeight > maxCanopy) break;
+      const sampleLatLng = distance === 0
+        ? { lat: Number(latlng.lat), lng: Number(latlng.lng) }
+        : destinationLatLng(latlng, solar.sunBearingDeg, distance);
+      const tile = queryTileAt(sampleLatLng);
+      samples.push({ distance, rayHeight, tile });
+      const key = tileKey(tile.x, tile.y, tile.z);
+      if (!rasters.has(key)) rasters.set(key, null);
+    }
+
+    await Promise.all(Array.from(rasters.keys()).map(async (key) => {
+      const [z, x, y] = key.split("/").map(Number);
+      const raster = await readMetaCanopyTile(x, y, z);
+      rasters.set(key, raster);
+    }));
+
+    for (const sample of samples) {
+      const key = tileKey(sample.tile.x, sample.tile.y, sample.tile.z);
+      const canopy = canopyValueFromRaster(rasters.get(key), sample.tile);
+      if (Number.isFinite(canopy) && canopy > sample.rayHeight) {
+        return {
+          type: "tree",
+          height: canopy,
+          distance: sample.distance,
+          rayHeight: sample.rayHeight
+        };
+      }
+    }
+    return null;
+  }
+
+  async function inferShadeSource(latlng, solar) {
+    if (config.queryShadeSourceEnabled === false) {
+      return { type: "unknown", reason: "陰影來源判讀已停用" };
+    }
+    if (!solar || solar.night) return { type: "night", reason: "太陽位於地平線下" };
+    const minAltitude = Math.max(0, Number(config.queryShadeSourceMinAltitudeDeg) || 1.5);
+    if (solar.altitudeDeg < minAltitude) {
+      return { type: "unknown", reason: "太陽接近地平線；遮蔽來源超出可靠判讀距離" };
+    }
+
+    const building = findBuildingShadowEvidence(latlng, solar);
+    let tree = null;
+    let treeError = "";
+    try {
+      tree = await withTimeout(
+        findCanopyShadowEvidence(latlng, solar),
+        Math.max(900, Number(config.queryShadeSourceTimeoutMs) || 3200),
+        "樹冠陰影來源"
+      );
+    } catch (error) {
+      treeError = error && error.message ? error.message : "樹冠來源讀取失敗";
+    }
+
+    if (building && tree) {
+      return {
+        type: "mixed",
+        building,
+        tree,
+        method: "依太陽方向、OSM 建築高度與 CHMv2 樹冠高度推定"
+      };
+    }
+    if (building) {
+      return {
+        type: "building",
+        building,
+        method: treeError
+          ? "依太陽方向與 OSM 建築高度推定；樹冠來源查詢未完成"
+          : "依太陽方向與 OSM 建築高度推定"
+      };
+    }
+    if (tree) {
+      return {
+        type: "tree",
+        tree,
+        method: "依太陽方向與 CHMv2 樹冠高度推定"
+      };
+    }
+    return {
+      type: "unknown",
+      reason: treeError || "目前資料無法確認是樹冠或建築物造成",
+      method: "ShadeMap 僅回傳日照／陰影；來源以可用遮蔽物資料另行推定"
+    };
+  }
+
+  async function resolvePointShadeSource(serial, model) {
+    if (!model || model.shadeSourceResolving) return;
+    const shade = model.shade;
+    if (!shade || shade.night || shade.shaded !== true) {
+      model.shadeSource = null;
+      return;
+    }
+    model.shadeSourceResolving = true;
+    model.shadeSource = undefined;
+    refreshPointQueryTooltip(serial, model);
+    try {
+      const source = await inferShadeSource(model.latlng, model.solar || shade.solar || solarPositionAt(model.latlng, state.date));
+      if (serial !== pointQuerySerial) return;
+      model.shadeSource = source || { type: "unknown", reason: "無法判讀陰影來源" };
+    } catch (error) {
+      if (serial !== pointQuerySerial) return;
+      model.shadeSource = {
+        type: "unknown",
+        reason: error && error.message ? error.message : "陰影來源判讀失敗"
+      };
+    } finally {
+      if (serial === pointQuerySerial) {
+        model.shadeSourceResolving = false;
+        refreshPointQueryTooltip(serial, model);
+      }
+    }
+  }
+
   async function shadeStatusAt(latlng) {
-    if (!shadeLayer || !mapRef) return { label: "陰影未啟用", shaded: null };
-    if (!shadeReady) return { label: "⏳ 陰影計算中…", shaded: null };
+    const solar = solarPositionAt(latlng, state.date);
+    if (solar && solar.night) {
+      return { label: "🌙 夜間", shaded: null, night: true, solar };
+    }
+    if (!shadeLayer || !mapRef) return { label: "陰影未啟用", shaded: null, night: false, solar };
+    if (!shadeReady) return { label: "⏳ 陰影計算中…", shaded: null, night: false, solar };
     const point = mapRef.latLngToContainerPoint(latlng);
     try {
       if (typeof shadeLayer.isPositionInShade === "function") {
         const shaded = await Promise.resolve(shadeLayer.isPositionInShade(point.x, point.y));
-        return { label: shaded ? "🌑 陰影" : "☀️ 日照", shaded: !!shaded };
+        return { label: shaded ? "◐ 陰影" : "☀️ 日照", shaded: !!shaded, night: false, solar };
       }
       if (typeof shadeLayer.isPositionInSun === "function") {
         const sunny = await Promise.resolve(shadeLayer.isPositionInSun(point.x, point.y));
-        return { label: sunny ? "☀️ 日照" : "🌑 陰影", shaded: !sunny };
+        return { label: sunny ? "☀️ 日照" : "◐ 陰影", shaded: !sunny, night: false, solar };
       }
-      return { label: "此 SDK 版本不支援點位判讀", shaded: null };
+      return { label: "此 SDK 版本不支援點位判讀", shaded: null, night: false, solar };
     } catch (error) {
       console.warn("[Haidian Shade] point shade query:", error);
-      return { label: "⏳ 陰影計算中…", shaded: null };
+      return { label: "⏳ 陰影計算中…", shaded: null, night: false, solar };
     }
   }
 
@@ -1714,13 +1983,29 @@
       base.searchParams.set("region", region.code);
       base.searchParams.set("dataset", region.dataset);
 
-      const response = await fetch(base.toString(), {
-        method: "GET",
-        mode: "cors",
-        credentials: "omit",
-        cache: "force-cache",
-        headers: { "Accept": "application/json" }
-      });
+      const controller = new AbortController();
+      const timeoutMs = Math.max(1000, Number(config.taiwanOfficialDtmTimeoutMs) || 5000);
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      let response;
+      try {
+        response = await fetch(base.toString(), {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "force-cache",
+          headers: { "Accept": "application/json" },
+          signal: controller.signal
+        });
+      } catch (error) {
+        if (controller.signal.aborted || (error && error.name === "AbortError")) {
+          const timeoutError = new Error(`官方 DTM timeout（${timeoutMs} ms）`);
+          timeoutError.code = "OFFICIAL_DTM_TIMEOUT";
+          throw timeoutError;
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
+      }
       if (!response.ok) throw new Error(`官方 DTM HTTP ${response.status}`);
       const payload = await response.json();
       const elevation = Number(
@@ -1748,6 +2033,28 @@
     }
   }
 
+  async function queryGlobalTerrainFallback(latlng, tile, reason = "") {
+    const region = taiwanOfficialDtmRegion(latlng);
+    const sampled = await withTimeout(
+      sampleGroundTerrainHeightAtTilePixel(tile, globalTerrainSpec(region ? region.code : null)),
+      Math.max(1000, Number(config.queryGlobalDemFallbackTimeoutMs) || 4500),
+      "全球 DEM 備援"
+    );
+    if (!sampled || !Number.isFinite(Number(sampled.height))) {
+      throw new Error("全球 DEM 備援未回傳有效高程");
+    }
+    return {
+      height: Number(sampled.height),
+      source: `${sampled.spec ? sampled.spec.label : (config.bareTerrainLabel || "全球地形 DEM")}（全球備援；非官方 DTM）`,
+      dataset: sampled.spec ? sampled.spec.dataset : "global-fallback",
+      authoritative: false,
+      withheldFallback: false,
+      fallback: true,
+      fallbackReason: String(reason || "官方 DTM 暫不可用"),
+      region: region ? region.code : null
+    };
+  }
+
   async function queryPointGround(latlng, tile) {
     const region = taiwanOfficialDtmRegion(latlng);
     if (region && officialTerrainConfigured()) {
@@ -1758,23 +2065,44 @@
         dataset: sampled && sampled.spec ? sampled.spec.dataset : (config.taiwanTerrainDatasetLabel || "official-static-tiles"),
         authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
         withheldFallback: false,
+        fallback: false,
+        fallbackReason: "",
         region: region.code
       };
     }
-    if (region) {
-      if (officialDtmProxyConfigured()) {
-        return queryOfficialTaiwanDtm(latlng);
+
+    if (region && officialDtmProxyConfigured()) {
+      try {
+        const official = await queryOfficialTaiwanDtm(latlng);
+        return Object.assign({ fallback: false, fallbackReason: "" }, official);
+      } catch (error) {
+        if (config.taiwanGlobalDemFallbackEnabled !== false) {
+          console.warn("[Haidian Shade] official DTM unavailable; using global point fallback:", error);
+          return queryGlobalTerrainFallback(
+            latlng,
+            tile,
+            error && error.message ? error.message : "官方 DTM 查詢失敗"
+          );
+        }
+        throw error;
       }
-      if (config.taiwanHideGlobalDemPointValue !== false) {
-        return {
-          height: null,
-          source: `${config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"}（尚未介接）`,
-          dataset: region.dataset,
-          authoritative: false,
-          withheldFallback: true,
-          region: region.code
-        };
-      }
+    }
+
+    if (region && config.taiwanGlobalDemFallbackEnabled !== false) {
+      return queryGlobalTerrainFallback(latlng, tile, "官方 DTM 安全代理尚未設定");
+    }
+
+    if (region && config.taiwanHideGlobalDemPointValue !== false) {
+      return {
+        height: null,
+        source: `${config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"}（尚未介接）`,
+        dataset: region.dataset,
+        authoritative: false,
+        withheldFallback: true,
+        fallback: false,
+        fallbackReason: "",
+        region: region.code
+      };
     }
 
     const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
@@ -1784,14 +2112,16 @@
       dataset: sampled && sampled.spec ? sampled.spec.dataset : "global-fallback",
       authoritative: !!(sampled && sampled.spec && sampled.spec.authoritative),
       withheldFallback: false,
+      fallback: false,
+      fallbackReason: "",
       region: region ? region.code : null
     };
   }
 
-  async function sampleGroundTerrainHeightAtTilePixel(tile) {
+  async function sampleGroundTerrainHeightAtTilePixel(tile, forcedSpec = null) {
     if (!config.metaBlendBareTerrain) return null;
 
-    const spec = groundTerrainSpecForTile(tile.x, tile.y, tile.z);
+    const spec = forcedSpec || groundTerrainSpecForTile(tile.x, tile.y, tile.z);
     const demZ = Math.min(tile.z, spec.maxZoom);
     const factor = 1 << (tile.z - demZ);
     const parentX = Math.floor(tile.x / factor);
@@ -1833,7 +2163,12 @@
       groundDataset: "",
       groundAuthoritative: false,
       groundWithheldFallback: false,
+      groundFallback: false,
+      groundFallbackReason: "",
       shade: undefined,
+      solar: solarPositionAt(latlng, state.date),
+      shadeSource: undefined,
+      shadeSourceResolving: false,
       building: findCachedBuildingAt(latlng)
     };
   }
@@ -1841,15 +2176,16 @@
   function pointQueryHtmlProgress(model) {
     const latlng = model.latlng;
     const pending = '<span class="hsq-pending">讀取中…</span>';
+    const canopyAvailable = Number.isFinite(model.canopy) && model.canopy > 0;
     const canopyText = model.canopy === undefined
       ? pending
       : model.canopyError
         ? '<span class="hsq-muted">暫不可用</span>'
         : model.canopy == null
-          ? "—"
-          : model.canopy === 0
-            ? '0 m <small>可能為 no-data</small>'
-            : escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1));
+          ? '<span class="hsq-muted">無資料</span>'
+          : canopyAvailable
+            ? escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1))
+            : '<span class="hsq-muted">未偵測</span> <small>0 / no-data</small>';
 
     const inTaiwan = !!taiwanOfficialDtmRegion(latlng);
     const groundAvailable = Number.isFinite(model.ground) && !model.groundWithheldFallback;
@@ -1859,30 +2195,95 @@
         ? escapeHtml(meters(model.ground))
         : "—";
 
-    const surface = groundAvailable && Number.isFinite(model.canopy)
+    const canopyTop = groundAvailable && canopyAvailable
       ? model.ground + model.canopy
       : null;
-    const shadeLabel = model.shade && model.shade.label ? String(model.shade.label) : "讀取中…";
-    const shadeClass = model.shade === undefined || (model.shade && model.shade.shaded == null)
-      ? "is-pending"
-      : model.shade.shaded
-        ? "is-shade"
-        : "is-sun";
+    const solar = model.solar || (model.shade && model.shade.solar) || solarPositionAt(latlng, state.date);
+    const isNight = !!(solar && solar.night);
+    const source = model.shadeSource;
+    const shade = model.shade;
+
+    let statusLabel = "讀取中…";
+    let shadeClass = "is-pending";
+    let primaryMetricLabel = "日照狀態";
+    let primaryMetricValue = pending;
+
+    if (isNight) {
+      statusLabel = "🌙 夜間";
+      shadeClass = "is-night";
+      primaryMetricValue = '🌙 夜間 <small>太陽已落下</small>';
+    } else if (shade === undefined) {
+      statusLabel = "讀取中…";
+    } else if (shade && shade.shaded === false) {
+      statusLabel = "☀️ 日照";
+      shadeClass = "is-sun";
+      primaryMetricValue = "☀️ 直接日照";
+    } else if (shade && shade.shaded === true) {
+      primaryMetricLabel = "陰影來源";
+      if (source === undefined || model.shadeSourceResolving) {
+        statusLabel = "◐ 陰影・來源判讀中";
+        shadeClass = "is-shade";
+        primaryMetricValue = '<span class="hsq-pending">判讀中…</span>';
+      } else if (source && source.type === "building") {
+        statusLabel = "🏢 建築陰影";
+        shadeClass = "is-building";
+        primaryMetricValue = '🏢 建築物 <small>推定</small>';
+      } else if (source && source.type === "tree") {
+        statusLabel = "🌳 樹蔭";
+        shadeClass = "is-tree";
+        primaryMetricValue = '🌳 樹冠 <small>推定</small>';
+      } else if (source && source.type === "mixed") {
+        statusLabel = "🌳🏢 複合遮蔽";
+        shadeClass = "is-mixed";
+        primaryMetricValue = '🌳🏢 樹冠＋建築 <small>推定</small>';
+      } else {
+        statusLabel = "◐ 陰影・來源未判定";
+        shadeClass = "is-unknown";
+        primaryMetricValue = '<span class="hsq-muted">尚未判定</span>';
+      }
+    } else if (shade && shade.shaded == null) {
+      statusLabel = String(shade.label || "陰影判讀暫不可用");
+      shadeClass = /計算|讀取/.test(statusLabel) ? "is-pending" : "is-unknown";
+      primaryMetricValue = `<span class="hsq-muted">${escapeHtml(statusLabel.replace(/^[^\s]+\s*/, ""))}</span>`;
+    }
 
     const building = model.building;
     const buildingHeight = building && Number(building.properties && building.properties.height);
+    const buildingHeightAvailable = Number.isFinite(buildingHeight) && buildingHeight > 0;
     const buildingName = building && building.properties && building.properties.name;
     const heightSource = building && building.properties && building.properties.height_source;
     const time = `${formatDateInput(state.date)} ${String(state.date.getHours()).padStart(2, "0")}:${String(state.date.getMinutes()).padStart(2, "0")}`;
 
     const secondaryRows = [];
-    if (groundAvailable) {
-      secondaryRows.push(["地面海拔", escapeHtml(meters(model.ground))]);
-      if (Number.isFinite(surface)) secondaryRows.push(["樹冠頂海拔", escapeHtml(meters(surface))]);
+    const sourceBuilding = source && source.building;
+    const sourceTree = source && source.tree;
+    if (sourceBuilding) {
+      const feature = sourceBuilding.feature;
+      const name = feature && feature.properties && feature.properties.name;
+      secondaryRows.push(["遮蔽建築", escapeHtml(name || "OSM building")]);
+      if (Number.isFinite(sourceBuilding.height)) {
+        secondaryRows.push(["遮蔽物高度", escapeHtml(meters(sourceBuilding.height))]);
+      }
+      if (Number.isFinite(sourceBuilding.distance)) {
+        secondaryRows.push(["建築遮蔽距離", escapeHtml(sourceBuilding.distance < 1 ? "點位上方" : `約 ${sourceBuilding.distance.toFixed(0)} m`)]);
+      }
     }
+    if (sourceTree) {
+      if (Number.isFinite(sourceTree.height)) {
+        secondaryRows.push(["遮蔽樹冠高度", escapeHtml(meters(sourceTree.height, sourceTree.height >= 10 ? 0 : 1))]);
+      }
+      if (Number.isFinite(sourceTree.distance)) {
+        secondaryRows.push(["樹冠遮蔽距離", escapeHtml(sourceTree.distance < 1 ? "點位上方" : `約 ${sourceTree.distance.toFixed(0)} m`)]);
+      }
+    }
+
     if (building) {
-      secondaryRows.push(["建築", escapeHtml(buildingName || "OSM building")]);
-      if (Number.isFinite(buildingHeight)) secondaryRows.push(["建築高度", escapeHtml(meters(buildingHeight))]);
+      secondaryRows.push(["點位建築", escapeHtml(buildingName || "OSM building")]);
+      if (buildingHeightAvailable) secondaryRows.push(["點位建築高度", escapeHtml(meters(buildingHeight))]);
+    }
+    if (canopyAvailable) {
+      secondaryRows.push(["點位樹冠高度", escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1))]);
+      if (Number.isFinite(canopyTop)) secondaryRows.push(["點位樹冠頂海拔", escapeHtml(meters(canopyTop))]);
     }
     secondaryRows.push(["模擬時間", escapeHtml(time)]);
 
@@ -1891,35 +2292,74 @@
           ? "官方 DTM 查詢中"
           : model.groundAuthoritative
             ? "已使用內政部官方 DTM"
-            : officialDtmProxyConfigured()
-              ? (model.groundError ? "官方 DTM 查詢失敗" : "官方 DTM 未回傳有效值")
-              : "官方 DTM 尚未啟用")
+            : model.groundFallback
+              ? "官方 DTM 暫不可用；已切全球 DEM 備援"
+              : officialDtmProxyConfigured()
+                ? (model.groundError ? "官方 DTM 查詢失敗" : "官方 DTM 未回傳有效值")
+                : "官方 DTM 尚未啟用")
       : "不在臺灣官方 DTM 範圍";
 
+    let canopyInterpretation = "查詢中";
+    if (model.canopyError) canopyInterpretation = "讀取失敗";
+    else if (model.canopy == null && model.canopy !== undefined) canopyInterpretation = "沒有可讀取資料";
+    else if (model.canopy === 0) canopyInterpretation = "0 值：可能無樹或 no-data";
+    else if (canopyAvailable) canopyInterpretation = "有效樹冠像素";
+
+    let shadeInterpretation = "讀取中";
+    if (isNight) shadeInterpretation = "夜間：太陽位於地平線下，不歸類為樹蔭或建築陰影";
+    else if (shade && shade.shaded === false) shadeInterpretation = "ShadeMap SDK：直接日照";
+    else if (shade && shade.shaded === true) shadeInterpretation = "ShadeMap SDK：陰影";
+    else if (shade && shade.label) shadeInterpretation = String(shade.label);
+
+    let sourceInterpretation = "—";
+    if (source === undefined && shade && shade.shaded === true) sourceInterpretation = "判讀中";
+    else if (source && source.type === "building") sourceInterpretation = "建築物（推定）";
+    else if (source && source.type === "tree") sourceInterpretation = "樹冠（推定）";
+    else if (source && source.type === "mixed") sourceInterpretation = "樹冠＋建築（推定）";
+    else if (source && source.type === "unknown") sourceInterpretation = "來源未判定";
+    else if (isNight) sourceInterpretation = "不適用";
+    else if (shade && shade.shaded === false) sourceInterpretation = "不適用";
+
     const detailItems = [
-      ["樹高來源", "Meta / WRI CHMv2"],
+      ["日照判讀", shadeInterpretation],
+      ["陰影來源", sourceInterpretation],
+      ["樹冠資料源", "Meta / WRI CHMv2"],
+      ["樹冠判讀", canopyInterpretation],
       ["取樣層級", `z${model.queryZoom}`],
       ["點位高程", groundAvailable ? (model.groundSource || "—") : officialStatus],
       ["陰影地形", dynamicShadowTerrainLabel(latlng)],
       ["研究模式", modeLabel(state.mode)]
     ];
-    if (groundAvailable && model.groundDataset) detailItems.splice(3, 0, ["高程資料集", model.groundDataset]);
-    if (building && heightSource) detailItems.push(["建築高度來源", heightSource]);
+    if (solar && Number.isFinite(solar.altitudeDeg)) {
+      detailItems.splice(2, 0, ["太陽高度", `${solar.altitudeDeg.toFixed(1)}°`]);
+      detailItems.splice(3, 0, ["太陽方位", `${solar.sunBearingDeg.toFixed(0)}°`]);
+    }
+    if (source && source.method) detailItems.splice(2, 0, ["來源方法", source.method]);
+    if (source && source.reason) detailItems.splice(2, 0, ["來源限制", source.reason]);
+    if (groundAvailable && model.groundDataset) detailItems.splice(detailItems.length - 2, 0, ["高程資料集", model.groundDataset]);
+    if (inTaiwan && model.groundFallback) {
+      detailItems.splice(detailItems.length - 2, 0, ["DTM 狀態", officialStatus]);
+      if (model.groundFallbackReason) detailItems.splice(detailItems.length - 2, 0, ["備援原因", model.groundFallbackReason]);
+    }
+    if (building && heightSource) detailItems.push(["點位建築高度來源", heightSource]);
+    if (sourceBuilding && sourceBuilding.feature && sourceBuilding.feature.properties && sourceBuilding.feature.properties.height_source) {
+      detailItems.push(["遮蔽建築高度來源", sourceBuilding.feature.properties.height_source]);
+    }
 
     return `
       <div class="haidian-shade-query-popup">
         <div class="hsq-head">
           <div>
-            <div class="hsq-title">🌳 樹蔭點位</div>
+            <div class="hsq-title">🌤️ 點位日照</div>
             <div class="hsq-coord">${escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)}</div>
           </div>
-          <div class="hsq-status ${shadeClass}">${escapeHtml(shadeLabel)}</div>
+          <div class="hsq-status ${shadeClass}">${escapeHtml(statusLabel)}</div>
         </div>
         <div class="hsq-main">
           <div class="hsq-metrics">
             <div class="hsq-metric">
-              <div class="hsq-metric-label">樹冠高度</div>
-              <div class="hsq-metric-value">${canopyText}</div>
+              <div class="hsq-metric-label">${escapeHtml(primaryMetricLabel)}</div>
+              <div class="hsq-metric-value">${primaryMetricValue}</div>
             </div>
             <div class="hsq-metric">
               <div class="hsq-metric-label">地面海拔</div>
@@ -1961,6 +2401,13 @@
       const shade = await shadeStatusAt(active.latlng);
       if (!activePointQuery || activePointQuery.serial !== active.serial) return;
       active.model.shade = shade;
+      active.model.solar = shade && shade.solar ? shade.solar : active.model.solar;
+      if (shade && shade.shaded === true && !shade.night) {
+        resolvePointShadeSource(active.serial, active.model);
+      } else {
+        active.model.shadeSource = null;
+        active.model.shadeSourceResolving = false;
+      }
       refreshPointQueryTooltip(active.serial, active.model);
       clearPointShadeRetry();
     } catch (_) {}
@@ -2199,8 +2646,15 @@
     shadeStatusAt(latlng).then((shade) => {
       if (serial !== pointQuerySerial) return;
       model.shade = shade;
+      model.solar = shade && shade.solar ? shade.solar : model.solar;
+      if (shade && shade.shaded === true && !shade.night) {
+        resolvePointShadeSource(serial, model);
+      } else {
+        model.shadeSource = null;
+        model.shadeSourceResolving = false;
+      }
       refreshPointQueryTooltip(serial, model);
-      if (shade && shade.shaded == null && /計算/.test(String(shade.label || ""))) {
+      if (shade && shade.shaded == null && !shade.night && /計算/.test(String(shade.label || ""))) {
         schedulePointShadeRetry(serial, activePointQuery && activePointQuery.startedAt);
       }
     }).catch(() => {
@@ -2231,7 +2685,7 @@
     // Elsewhere (or when explicitly allowed) use the global DEM fallback.
     withTimeout(
       queryPointGround(latlng, tile),
-      Math.max(Number(config.queryDemTimeoutMs) || 6000, Number(config.taiwanOfficialDtmTimeoutMs) || 6500),
+      Math.max(3000, Number(config.queryGroundTotalTimeoutMs) || 10500),
       "地面高程"
     ).then((groundResult) => {
       if (serial !== pointQuerySerial) return;
@@ -2240,6 +2694,8 @@
       model.groundDataset = groundResult ? groundResult.dataset : "";
       model.groundAuthoritative = !!(groundResult && groundResult.authoritative);
       model.groundWithheldFallback = !!(groundResult && groundResult.withheldFallback);
+      model.groundFallback = !!(groundResult && groundResult.fallback);
+      model.groundFallbackReason = groundResult && groundResult.fallbackReason ? String(groundResult.fallbackReason) : "";
       refreshPointQueryTooltip(serial, model);
     }).catch((error) => {
       if (serial !== pointQuerySerial) return;
@@ -2248,6 +2704,8 @@
         ? (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m")
         : (config.bareTerrainLabel || "全球地形 DEM");
       model.groundError = error && error.message ? error.message : "地面高程讀取失敗";
+      model.groundFallback = false;
+      model.groundFallbackReason = "";
       refreshPointQueryTooltip(serial, model);
     });
 
