@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.1
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v7.9.2
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -44,20 +44,28 @@
     queryShadeRetryMs: 250,
     queryShadeRetryTimeoutMs: 10000,
 
-    // v7.9.1: solar-ray occluder tracing for point-card shade attribution.
-    // ShadeMap exposes only sun/shade, so a shaded point casts a reverse ray
-    // toward the sun. Buildings are tested by exact footprint/ray intersection
-    // (with a small geometry tolerance corridor); CHMv2 is sampled along the
-    // same ray. Missing OSM building heights may still produce a clearly-marked
-    // probable result when the required minimum height is physically plausible.
+    // v7.9.2: solar-ray occluder tracing with spatial-consensus tolerance.
+    // ShadeMap exposes only sun/shade, so a shaded point casts reverse rays
+    // toward the sun. We keep the exact center ray, then test a narrow fan of
+    // parallel rays to absorb OSM alignment / screen quantization error. A
+    // building that is only found off-center is downgraded rather than treated
+    // as certain. CHMv2 is sampled along the center ray.
     queryShadeSourceEnabled: true,
     queryShadeSourceTimeoutMs: 3600,
     queryShadeSourceMaxDistanceM: 240,
     queryShadeSourceSampleStepM: 1.25,
     queryShadeSourceCanopyMaxHeightM: 55,
     queryShadeSourceRayClearanceM: 0.5,
-    queryShadeSourceRayWidthM: 1.5,
+    queryShadeSourceRayWidthM: 9,
+    queryShadeSourceRayStepM: 1.5,
+    queryShadeSourceCorridorMinHits: 2,
+    queryShadeSourceRayBaseToleranceM: 3.5,
+    queryShadeSourceRayAngularToleranceDeg: 3,
     queryShadeSourceUnknownBuildingMaxHeightM: 24,
+    // The building fetch must cover possible shadow casters outside the visible
+    // viewport. This padding is intentionally a little larger than the source
+    // tracing radius so edge-of-screen clicks do not lose their occluder.
+    buildingShadowFetchPaddingM: 280,
     queryShadeSourceMixedDistanceToleranceM: 3,
     queryShadeSourceMinAltitudeDeg: 1.5,
 
@@ -1809,6 +1817,18 @@
     return Number.isFinite(best) ? best : null;
   }
 
+  function shadeSourceRayOffsets() {
+    const width = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 6);
+    const step = Math.max(0.5, Math.min(width || 1.5, Number(config.queryShadeSourceRayStepM) || 1.5));
+    if (width <= 0) return [0];
+    const offsets = [0];
+    for (let d = step; d <= width + 1e-6; d += step) {
+      offsets.push(-d, d);
+    }
+    if (Math.abs(offsets[offsets.length - 1]) < width - 1e-6) offsets.push(-width, width);
+    return offsets;
+  }
+
   function findBuildingShadowEvidence(latlng, solar) {
     if (!solar || solar.night || state.mode === "trees" || config.buildingMode === "none") return null;
     const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
@@ -1817,29 +1837,71 @@
     const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
     const maxDistance = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
     const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
-    const rayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 1.5);
     const unknownMaxHeight = Math.max(6, Number(config.queryShadeSourceUnknownBuildingMaxHeightM) || 24);
-    const offsets = rayWidth > 0 ? [0, -rayWidth, rayWidth] : [0];
+    const minCorridorHits = Math.max(1, Number(config.queryShadeSourceCorridorMinHits) || 2);
+    const baseTolerance = Math.max(0, Number(config.queryShadeSourceRayBaseToleranceM) || 3.5);
+    const angularToleranceRad = Math.max(0, Number(config.queryShadeSourceRayAngularToleranceDeg) || 3) * Math.PI / 180;
+    const maxRayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 9);
+    const offsets = shadeSourceRayOffsets();
     const confirmed = [];
     const plausible = [];
 
     for (const feature of buildings) {
-      let entry = null;
-      let entryOffset = 0;
+      const hits = [];
       for (const offset of offsets) {
         const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset);
         if (!Number.isFinite(distance) || distance > maxDistance) continue;
-        if (entry == null || distance < entry) {
-          entry = distance;
-          entryOffset = offset;
+        hits.push({ distance: Math.max(0, distance), offset });
+      }
+      if (!hits.length) continue;
+
+      // Allow a slightly wider corridor for a distant caster: a small azimuth
+      // mismatch or OSM alignment error grows laterally with distance. Nearby
+      // buildings still get only a tight tolerance, while long low-sun shadows
+      // can tolerate a few additional metres without opening the full 9 m fan.
+      let admissibleHits = hits.filter((hit) => {
+        const allowed = Math.min(
+          maxRayWidth,
+          baseTolerance + hit.distance * Math.tan(angularToleranceRad)
+        );
+        return Math.abs(hit.offset) <= allowed + 1e-6;
+      });
+      if (!admissibleHits.length) continue;
+
+      // If the coarse fan catches only one off-center ray, refine immediately
+      // around that hit. This distinguishes a real polygon band from a one-pixel
+      // edge accident without globally doubling the ray count for every building.
+      const hasCenterBeforeRefine = admissibleHits.some((hit) => Math.abs(hit.offset) < 0.05);
+      if (!hasCenterBeforeRefine && admissibleHits.length < minCorridorHits) {
+        const coarse = admissibleHits[0];
+        const rayStep = Math.max(0.5, Number(config.queryShadeSourceRayStepM) || 1.5);
+        const refineOffsets = [coarse.offset - rayStep / 2, coarse.offset + rayStep / 2];
+        for (const offset of refineOffsets) {
+          if (Math.abs(offset) > maxRayWidth + 1e-6) continue;
+          if (admissibleHits.some((hit) => Math.abs(hit.offset - offset) < 1e-6)) continue;
+          const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset);
+          if (!Number.isFinite(distance) || distance > maxDistance) continue;
+          const allowed = Math.min(
+            maxRayWidth,
+            baseTolerance + distance * Math.tan(angularToleranceRad)
+          );
+          if (Math.abs(offset) <= allowed + 1e-6) admissibleHits.push({ distance: Math.max(0, distance), offset });
         }
       }
-      if (!Number.isFinite(entry)) continue;
 
+      // Prefer the center ray if it exists; otherwise use the nearest lateral
+      // probe. The number of agreeing probes is retained as spatial-consensus
+      // evidence so a single far-edge hit cannot masquerade as high confidence.
+      admissibleHits.sort((a, b) => Math.abs(a.offset) - Math.abs(b.offset) || a.distance - b.distance);
+      const centerHit = admissibleHits.find((hit) => Math.abs(hit.offset) < 0.05) || null;
+      const chosen = centerHit || admissibleHits[0];
+      const distance = chosen.distance;
+      const entryOffset = chosen.offset;
       const heightMeta = buildingHeightMeta(feature);
-      const distance = Math.max(0, entry);
       const requiredHeight = distance * tanAlt + clearance;
       const margin = heightMeta.height - requiredHeight;
+      const corridorHitCount = admissibleHits.length;
+      const corridorConsensus = !!centerHit || corridorHitCount >= minCorridorHits;
       const base = {
         type: "building",
         feature,
@@ -1850,22 +1912,26 @@
         rayHeight: requiredHeight,
         requiredHeight,
         clearanceMargin: margin,
-        corridorOffsetM: entryOffset
+        corridorOffsetM: entryOffset,
+        corridorCentralHit: !!centerHit,
+        corridorHitCount,
+        corridorProbeCount: offsets.length,
+        corridorConsensus
       };
 
-      if (margin > 0) {
+      if (margin > 0 && corridorConsensus) {
         let confidence = heightMeta.quality === "measured"
           ? "high"
           : heightMeta.quality === "levels" || heightMeta.quality === "estimated"
             ? "medium"
             : "medium";
-        if (Math.abs(entryOffset) > 0.1 && confidence === "high") confidence = "medium";
+        if (!centerHit) confidence = Math.abs(entryOffset) <= 3 ? "medium" : "possible";
         confirmed.push({ ...base, confidence, plausibleUnknownHeight: false });
-      } else if (heightMeta.quality === "default" && requiredHeight <= unknownMaxHeight) {
-        // OSM often has a footprint but no height/levels. When ShadeMap says the
-        // point is shaded and that footprint lies exactly toward the sun, retain
-        // it as a probable candidate instead of discarding it because our 3.1 m
-        // rendering fallback is not a real survey of the building.
+      } else if (heightMeta.quality === "default" && requiredHeight <= unknownMaxHeight && corridorConsensus) {
+        // A footprint with no height is useful evidence, but never high confidence.
+        // Spatial consensus lets a building survive small OSM alignment errors while
+        // the physically required height prevents a distant implausible building
+        // from being blamed for the shadow.
         plausible.push({
           ...base,
           confidence: "possible",
@@ -1875,9 +1941,15 @@
       }
     }
 
-    const byDistance = (a, b) => a.distance - b.distance || Math.abs(a.corridorOffsetM) - Math.abs(b.corridorOffsetM);
-    confirmed.sort(byDistance);
-    plausible.sort(byDistance);
+    const rank = (a, b) => {
+      if (a.corridorCentralHit !== b.corridorCentralHit) return a.corridorCentralHit ? -1 : 1;
+      if (a.corridorHitCount !== b.corridorHitCount) return b.corridorHitCount - a.corridorHitCount;
+      const offsetDelta = Math.abs(a.corridorOffsetM) - Math.abs(b.corridorOffsetM);
+      if (Math.abs(offsetDelta) > 1e-6) return offsetDelta;
+      return a.distance - b.distance;
+    };
+    confirmed.sort(rank);
+    plausible.sort(rank);
     return confirmed[0] || plausible[0] || null;
   }
 
@@ -1992,8 +2064,8 @@
         bearingDeg: solar.sunBearingDeg,
         bearingText,
         method: building.plausibleUnknownHeight
-          ? "反向太陽光線先命中 OSM 建築 footprint；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
-          : "反向太陽光線先命中 OSM 建築 footprint，且建築高度足以截斷太陽視線"
+          ? "反向太陽光線／空間容差扇形命中 OSM 建築；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
+          : "反向太陽光線／空間容差扇形命中 OSM 建築，且建築高度足以截斷太陽視線"
       };
     }
     if (building) {
@@ -2004,10 +2076,10 @@
         bearingDeg: solar.sunBearingDeg,
         bearingText,
         method: building.plausibleUnknownHeight
-          ? "反向太陽光線命中 OSM 建築 footprint；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
+          ? "反向太陽光線／空間容差扇形命中 OSM 建築；OSM 缺高度，依遮蔽所需最低高度判為可能建築"
           : (treeError
               ? "反向太陽光線命中 OSM 建築且高度足夠；樹冠來源查詢未完成"
-              : "反向太陽光線命中 OSM 建築 footprint，且建築高度足以截斷太陽視線")
+              : "反向太陽光線／空間容差扇形命中 OSM 建築，且建築高度足以截斷太陽視線")
       };
     }
     if (tree) {
@@ -2373,7 +2445,7 @@
     const groundText = model.ground === undefined
       ? pending
       : groundAvailable
-        ? escapeHtml(meters(model.ground))
+        ? `${escapeHtml(meters(model.ground))}${model.groundFallback ? ' <small>全球 DEM</small>' : ''}`
         : "—";
 
     const canopyTop = groundAvailable && canopyAvailable
@@ -2460,6 +2532,9 @@
       if (Number.isFinite(sourceBuilding.distance)) {
         secondaryRows.push(["建築遮蔽距離", escapeHtml(sourceBuilding.distance < 1 ? "點位上方" : `約 ${sourceBuilding.distance.toFixed(0)} m`)]);
       }
+      if (sourceBuilding.corridorCentralHit === false && Number.isFinite(sourceBuilding.corridorOffsetM)) {
+        secondaryRows.push(["幾何容差", escapeHtml(`偏移約 ${Math.abs(sourceBuilding.corridorOffsetM).toFixed(1)} m；鄰近光線一致`)]);
+      }
     }
     if (sourceTree) {
       if (Number.isFinite(sourceTree.height)) {
@@ -2535,7 +2610,9 @@
         : source.confidence === "medium"
           ? "中信心"
           : source.confidence === "possible"
-            ? "可能；建築高度缺資料"
+            ? (sourceBuilding && sourceBuilding.plausibleUnknownHeight
+                ? "可能；建築高度缺資料"
+                : "可能；需較大幾何容差")
             : source.confidence;
       detailItems.splice(2, 0, ["來源信心", sourceConfidence]);
     }
@@ -2543,6 +2620,7 @@
     if (groundAvailable && model.groundDataset) detailItems.splice(detailItems.length - 2, 0, ["高程資料集", model.groundDataset]);
     if (inTaiwan && model.groundFallback) {
       detailItems.splice(detailItems.length - 2, 0, ["DTM 狀態", officialStatus]);
+      detailItems.splice(detailItems.length - 2, 0, ["備援高程說明", "全球 DEM 可出現負高程；低窪區不一定是錯誤，但點位精度低於官方 DTM"]);
       if (model.groundFallbackReason) detailItems.splice(detailItems.length - 2, 0, ["備援原因", model.groundFallbackReason]);
     }
     if (building && heightSource) detailItems.push(["點位建築高度來源", heightSource]);
@@ -3175,11 +3253,28 @@
     ].join(",");
   }
 
+  function paddedBuildingBounds(bounds) {
+    const paddingM = Math.max(0, Number(config.buildingShadowFetchPaddingM) || 0);
+    if (!paddingM || !bounds) return {
+      south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast()
+    };
+    const centerLat = (bounds.getSouth() + bounds.getNorth()) / 2;
+    const latPad = paddingM / 111320;
+    const lngPad = paddingM / (111320 * Math.max(0.2, Math.cos(centerLat * Math.PI / 180)));
+    return {
+      south: bounds.getSouth() - latPad,
+      west: bounds.getWest() - lngPad,
+      north: bounds.getNorth() + latPad,
+      east: bounds.getEast() + lngPad
+    };
+  }
+
   async function loadOSMBuildings() {
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom) return [];
 
     const bounds = mapRef.getBounds();
-    const key = boundsCacheKey(bounds);
+    const padded = paddedBuildingBounds(bounds);
+    const key = [padded.south, padded.west, padded.north, padded.east].map((v) => Number(v).toFixed(3)).join(",");
 
     if (overpassCache.has(key)) {
       return overpassCache.get(key).then((features) => {
@@ -3192,8 +3287,8 @@
     const query =
       `[out:json][timeout:20];` +
       `way["building"](` +
-      `${bounds.getSouth()},${bounds.getWest()},` +
-      `${bounds.getNorth()},${bounds.getEast()}` +
+      `${padded.south},${padded.west},` +
+      `${padded.north},${padded.east}` +
       `);out tags geom;`;
 
     const promise = fetch(
