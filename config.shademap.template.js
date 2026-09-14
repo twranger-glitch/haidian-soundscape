@@ -34,9 +34,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Point-query rows update independently. Slow CHMv2/DEM sources no longer block the whole tooltip.
   queryCanopyTimeoutMs: 12000,
   queryDemTimeoutMs: 6000,
-  // v7.8.8: official Taiwan DTM gets a bounded attempt, then the point query
-  // can fall back to the same global Terrarium DEM used by the shadow engine.
-  queryGroundTotalTimeoutMs: 10500,
+  // v8.0.1: wait past the Worker's 8 s MOI upstream budget, then preserve
+  // enough total time to fall back to the global Terrarium DEM if needed.
+  queryGroundTotalTimeoutMs: 14500,
   queryGlobalDemFallbackTimeoutMs: 4500,
   // v7.5: point shade status auto-refreshes after the SDK emits idle.
   queryShadeRetryMs: 250,
@@ -96,13 +96,13 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   bareTerrainMaxZoom: 15,
   bareTerrainLabel: "Mapzen / Tilezen global terrain DEM (shadow fallback)",
 
-  // v7.7 — authoritative Taiwan point elevation.
+  // v8.0.1 — authoritative Taiwan point elevation (MOI-first with aligned timeout budget).
   // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
   // Worker and set only its public proxy URL here. v7.8.8 prefers the official value
   // but can fall back to the global Terrarium DEM, clearly labelled as non-official.
   taiwanOfficialDtmProxyUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/elevation",
   taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
-  taiwanOfficialDtmTimeoutMs: 5000,
+  taiwanOfficialDtmTimeoutMs: 9000,
   taiwanGlobalDemFallbackEnabled: true,
   taiwanHideGlobalDemPointValue: true,
 
