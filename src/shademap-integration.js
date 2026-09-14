@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.2
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.1.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -84,6 +84,15 @@
     queryCanopyBenefitMaxShadowLengthM: 90,
     queryCanopyBenefitMinSolarAltitudeDeg: 3,
     queryCanopyBenefitOverlay: true,
+
+    // v8.1.0: time-integrated daily canopy shade analysis. The selected CHMv2
+    // canopy patch is segmented once, then projected across a configurable
+    // daytime window. Results are reported as area-hours (m²·h) rather than
+    // pretending the raster patch is a surveyed individual tree.
+    queryCanopyDailyEnabled: true,
+    queryCanopyDailyStartHour: 8,
+    queryCanopyDailyEndHour: 18,
+    queryCanopyDailyStepMinutes: 30,
 
     // v7.8.6 lifecycle policy: terrain/data caches may be reused, but renderer DOM
     // ownership is single-canvas. Date/time changes stay in-place via setDate(), are
@@ -679,6 +688,9 @@
       .haidian-shade-query-popup .hsq-benefit-metric span{display:block;color:#64748b;font-size:8px;font-weight:750}
       .haidian-shade-query-popup .hsq-benefit-metric b{display:block;margin-top:1px;color:#0f172a;font-size:12px}
       .haidian-shade-query-popup .hsq-benefit-split{margin-top:6px;color:#475569;font-size:9px;font-weight:750}
+      .haidian-shade-query-popup .hsq-benefit-daily{margin-top:8px;padding-top:8px;border-top:1px dashed #a7f3d0}
+      .haidian-shade-query-popup .hsq-benefit-daily-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#92400e;font-size:9.5px;font-weight:900}
+      .haidian-shade-query-popup .hsq-benefit-daily-head small{color:#78716c;font-size:7.5px;font-weight:750;text-align:right}
       .haidian-shade-query-popup .hsq-benefit-note{margin-top:4px;color:#94a3b8;font-size:8px;line-height:1.35}
 
       .haidian-shade-query-popup details.hsq-details{
@@ -2029,23 +2041,137 @@
     };
   }
 
+  function dailyPhaseForHour(hour) {
+    const h = Number(hour);
+    if (h < 11) return "morning";
+    if (h < 14) return "midday";
+    return "afternoon";
+  }
+
+  function summarizeCanopyDailySamples(samples, stepHours, receiverKnown) {
+    const safeStep = Math.max(1 / 60, Number(stepHours) || 0.5);
+    const phases = {
+      morning: { label: "上午", areaHoursM2: 0, groundAreaHoursM2: 0, buildingAreaHoursM2: 0, analyzedHours: 0, sampleCount: 0 },
+      midday: { label: "中午", areaHoursM2: 0, groundAreaHoursM2: 0, buildingAreaHoursM2: 0, analyzedHours: 0, sampleCount: 0 },
+      afternoon: { label: "下午", areaHoursM2: 0, groundAreaHoursM2: 0, buildingAreaHoursM2: 0, analyzedHours: 0, sampleCount: 0 }
+    };
+    let areaHoursM2 = 0;
+    let groundAreaHoursM2 = 0;
+    let buildingAreaHoursM2 = 0;
+    let analyzedHours = 0;
+    let validSampleCount = 0;
+    let skippedLowSunCount = 0;
+    let peakAreaM2 = 0;
+    let peakAt = null;
+
+    for (const sample of Array.isArray(samples) ? samples : []) {
+      if (!sample || !sample.shadow || sample.shadow.unavailableReason) {
+        if (sample && sample.shadow && /太陽高度過低/.test(String(sample.shadow.unavailableReason || ""))) skippedLowSunCount += 1;
+        continue;
+      }
+      const area = Number(sample.shadow.totalAreaM2);
+      if (!Number.isFinite(area) || area <= 0) continue;
+      const ground = Number(sample.shadow.groundAreaM2);
+      const building = Number(sample.shadow.buildingAreaM2);
+      const phaseKey = sample.phase && phases[sample.phase] ? sample.phase : dailyPhaseForHour(sample.hour);
+      const phase = phases[phaseKey];
+      areaHoursM2 += area * safeStep;
+      if (receiverKnown && Number.isFinite(ground)) groundAreaHoursM2 += ground * safeStep;
+      if (receiverKnown && Number.isFinite(building)) buildingAreaHoursM2 += building * safeStep;
+      analyzedHours += safeStep;
+      validSampleCount += 1;
+      phase.areaHoursM2 += area * safeStep;
+      if (receiverKnown && Number.isFinite(ground)) phase.groundAreaHoursM2 += ground * safeStep;
+      if (receiverKnown && Number.isFinite(building)) phase.buildingAreaHoursM2 += building * safeStep;
+      phase.analyzedHours += safeStep;
+      phase.sampleCount += 1;
+      if (area > peakAreaM2) {
+        peakAreaM2 = area;
+        peakAt = sample.date instanceof Date ? new Date(sample.date.getTime()) : sample.date || null;
+      }
+    }
+
+    const averageAreaM2 = analyzedHours > 0 ? areaHoursM2 / analyzedHours : 0;
+    const groundPercent = receiverKnown && areaHoursM2 > 0 ? groundAreaHoursM2 / areaHoursM2 * 100 : null;
+    const buildingPercent = receiverKnown && areaHoursM2 > 0 ? buildingAreaHoursM2 / areaHoursM2 * 100 : null;
+    for (const phase of Object.values(phases)) {
+      phase.averageAreaM2 = phase.analyzedHours > 0 ? phase.areaHoursM2 / phase.analyzedHours : 0;
+    }
+    return {
+      areaHoursM2,
+      groundAreaHoursM2: receiverKnown ? groundAreaHoursM2 : null,
+      buildingAreaHoursM2: receiverKnown ? buildingAreaHoursM2 : null,
+      groundPercent,
+      buildingPercent,
+      analyzedHours,
+      averageAreaM2,
+      peakAreaM2,
+      peakAt,
+      validSampleCount,
+      skippedLowSunCount,
+      receiverKnown,
+      phases
+    };
+  }
+
+  function estimateCanopyDailyBenefit(patch, latlng, baseDate, buildings = null) {
+    if (config.queryCanopyDailyEnabled === false || !patch || !latlng) return null;
+    const startHour = Math.max(0, Math.min(23.5, Number(config.queryCanopyDailyStartHour) || 8));
+    const endHour = Math.max(startHour + 0.25, Math.min(24, Number(config.queryCanopyDailyEndHour) || 18));
+    const stepMinutes = Math.max(10, Math.min(120, Number(config.queryCanopyDailyStepMinutes) || 30));
+    const stepHours = stepMinutes / 60;
+    const date = baseDate instanceof Date && Number.isFinite(baseDate.getTime()) ? new Date(baseDate.getTime()) : new Date();
+    const receiverBuildings = Array.isArray(buildings) ? buildings : (Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : []);
+    const receiverKnown = buildingReceiverCoverageKnown();
+    const samples = [];
+
+    for (let hour = startHour; hour < endHour - 1e-9; hour += stepHours) {
+      const midpointHour = Math.min(endHour, hour + stepHours / 2);
+      const sampleDate = new Date(date.getTime());
+      sampleDate.setHours(0, 0, 0, 0);
+      sampleDate.setMinutes(Math.round(midpointHour * 60));
+      const solar = solarPositionAt(latlng, sampleDate);
+      const shadow = solar && !solar.night
+        ? estimateCanopyShadowContribution(patch, solar, receiverBuildings)
+        : null;
+      samples.push({
+        date: sampleDate,
+        hour: midpointHour,
+        phase: dailyPhaseForHour(midpointHour),
+        solar,
+        shadow
+      });
+    }
+
+    const summary = summarizeCanopyDailySamples(samples, stepHours, receiverKnown);
+    return {
+      startHour,
+      endHour,
+      stepMinutes,
+      samples,
+      ...summary
+    };
+  }
+
   async function analyzeCanopyBenefitAt(latlng, solar = null) {
     const sun = solar || solarPositionAt(latlng, state.date);
     const patch = await segmentLocalCanopyPatch(latlng);
     if (!patch) return { available: false, reason: "此點未形成可分析的 CHMv2 樹冠片" };
-    if (!sun || sun.night) {
-      return { available: true, patch, solar: sun, shadow: null, reason: "夜間不計算目前樹冠投影陰影" };
-    }
     let receiverBuildings = [];
     try {
       receiverBuildings = await getQueryableBuildings();
     } catch (_) {}
+    const daily = estimateCanopyDailyBenefit(patch, latlng, state.date, receiverBuildings);
+    if (!sun || sun.night) {
+      return { available: true, patch, solar: sun, shadow: null, daily, reason: "夜間不計算目前樹冠投影陰影；全天累積仍依所選日期計算" };
+    }
     const shadow = estimateCanopyShadowContribution(patch, sun, receiverBuildings);
     return {
       available: true,
       patch,
       solar: sun,
       shadow,
+      daily,
       reason: shadow && shadow.unavailableReason ? shadow.unavailableReason : ""
     };
   }
@@ -2892,6 +3018,30 @@
     } else if (shadow && !shadow.unavailableReason) {
       split = "接收面分類：目前沒有可確認的建築 coverage；先只顯示總投影面積";
     }
+    const daily = benefit.daily;
+    const areaHours = (value) => Number.isFinite(value) ? `${value < 100 ? value.toFixed(1) : value.toFixed(0)} m²·h` : "—";
+    const hours = (value) => Number.isFinite(value) ? `${value.toFixed(value < 10 ? 1 : 0)} 小時` : "—";
+    let dailyHtml = "";
+    if (daily && Number.isFinite(daily.areaHoursM2)) {
+      const dailySplit = daily.receiverKnown
+        ? `地表 ${areaHours(daily.groundAreaHoursM2)}（${daily.groundPercent.toFixed(0)}%） · 建築 ${areaHours(daily.buildingAreaHoursM2)}（${daily.buildingPercent.toFixed(0)}%）`
+        : "接收面分類：目前沒有可確認的建築 coverage；全天累積先顯示總遮蔭量";
+      const phaseText = [daily.phases && daily.phases.morning, daily.phases && daily.phases.midday, daily.phases && daily.phases.afternoon]
+        .filter(Boolean)
+        .map((phase) => `${phase.label} ${areaHours(phase.areaHoursM2)}`)
+        .join(" · ");
+      dailyHtml = `<div class="hsq-benefit-daily">
+        <div class="hsq-benefit-daily-head">☀️ 今日累積遮蔭 <small>${String(daily.startHour).padStart(2, "0")}:00–${String(daily.endHour).padStart(2, "0")}:00 · 每 ${daily.stepMinutes} 分</small></div>
+        <div class="hsq-benefit-metrics">
+          <div class="hsq-benefit-metric"><span>累積遮蔭量</span><b>${escapeHtml(areaHours(daily.areaHoursM2))}</b></div>
+          <div class="hsq-benefit-metric"><span>可估算時段</span><b>${escapeHtml(hours(daily.analyzedHours))}</b></div>
+          <div class="hsq-benefit-metric"><span>平均投影面積</span><b>${escapeHtml(area(daily.averageAreaM2))}</b></div>
+          <div class="hsq-benefit-metric"><span>峰值投影面積</span><b>${escapeHtml(area(daily.peakAreaM2))}</b></div>
+        </div>
+        <div class="hsq-benefit-split">${escapeHtml(dailySplit)}</div>
+        ${phaseText ? `<div class="hsq-benefit-note">${escapeHtml(phaseText)}</div>` : ""}
+      </div>`;
+    }
     const noteParts = [
       "CHMv2 raster 局部樹冠片，非單株樹普查",
       patch.truncated ? "樹冠片碰到範圍／像素上限，面積為下限" : "",
@@ -2905,6 +3055,7 @@
         <div class="hsq-benefit-metric"><span>目前投影陰影</span><b>${escapeHtml(shadowMetric)}</b></div>
       </div>
       ${split ? `<div class="hsq-benefit-split">${escapeHtml(split)}</div>` : ""}
+      ${dailyHtml}
       <div class="hsq-benefit-note">${escapeHtml(noteParts.join(" · "))}</div>
     </div>`;
   }
@@ -3116,6 +3267,11 @@
       detailItems.push(["樹冠片最大高度", meters(benefitPatch.maxHeight, benefitPatch.maxHeight >= 10 ? 0 : 1)]);
       detailItems.push(["樹冠片等效直徑", meters(benefitPatch.equivalentDiameterM)]);
       detailItems.push(["樹冠試算限制", "目前為 DSM 垂直柱幾何投影；尚未扣除樹冠孔隙、樹本身被建築遮住等 3D 效應"]);
+      if (model.canopyBenefit.daily) {
+        const daily = model.canopyBenefit.daily;
+        detailItems.push(["全天積分視窗", `${daily.startHour}:00–${daily.endHour}:00，每 ${daily.stepMinutes} 分鐘取樣`]);
+        detailItems.push(["全天累積單位", "m²·h（投影陰影面積 × 時間），不是單純面積或單株樹普查值"]);
+      }
     }
 
     return `
@@ -4408,6 +4564,16 @@
       const latlng = { lat: Number(lat), lng: Number(lng) };
       const when = date ? new Date(date) : state.date;
       return analyzeCanopyBenefitAt(latlng, solarPositionAt(latlng, when));
+    },
+    analyzeCanopyDayAt(lat, lng, date) {
+      const latlng = { lat: Number(lat), lng: Number(lng) };
+      const when = date ? new Date(date) : state.date;
+      return segmentLocalCanopyPatch(latlng).then(async (patch) => {
+        if (!patch) return { available: false, reason: "此點未形成可分析的 CHMv2 樹冠片" };
+        let buildings = [];
+        try { buildings = await getQueryableBuildings(); } catch (_) {}
+        return { available: true, patch, daily: estimateCanopyDailyBenefit(patch, latlng, when, buildings) };
+      });
     },
     getCanvasDiagnostics: getShadeCanvasDiagnostics
   };
