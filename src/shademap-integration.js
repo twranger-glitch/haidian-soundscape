@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.1
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -35,9 +35,9 @@
     canopyCacheTiles: 256,
     queryCanopyTimeoutMs: 12000,
     queryDemTimeoutMs: 6000,
-    // v7.8.8: total budget for point-ground resolution, including Taiwan official
-    // DTM attempt plus the clearly-labelled global Terrarium fallback.
-    queryGroundTotalTimeoutMs: 10500,
+    // v8.0.1: the browser must wait longer than the Worker's 8 s upstream budget,
+    // then still leave enough time for the clearly-labelled global fallback.
+    queryGroundTotalTimeoutMs: 14500,
     queryGlobalDemFallbackTimeoutMs: 4500,
     // v7.5: if the ShadeMap render is still busy when a point is clicked,
     // keep the tooltip alive and refresh sun/shade automatically on SDK idle.
@@ -113,9 +113,9 @@
     // fails they may use the global Terrarium DEM as an explicitly non-authoritative fallback.
     taiwanOfficialDtmProxyUrl: "",
     taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
-    // Keep this shorter than the Worker upstream timeout so the browser can fail over
-    // before the outer point-query budget expires.
-    taiwanOfficialDtmTimeoutMs: 5000,
+    // v8.0.1: the Worker may legitimately wait up to 8 s for MOI. The old 5 s
+    // browser timeout abandoned valid 5–8 s official responses too early.
+    taiwanOfficialDtmTimeoutMs: 9000,
     taiwanGlobalDemFallbackEnabled: true,
     // Legacy safety switch. When global fallback is disabled, this still controls
     // whether a non-official Taiwan value is withheld.
@@ -613,16 +613,25 @@
       }
       .leaflet-tooltip.haidian-shade-query-tooltip{
         white-space:normal!important;max-width:300px;padding:0!important;
-        background:rgba(255,255,255,.985)!important;border:1px solid #99f6e4!important;
+        background:#fff!important;border:1px solid #99f6e4!important;
         border-radius:14px!important;box-shadow:0 12px 30px rgba(15,23,42,.18)!important;
         color:#0f172a!important;overflow:hidden
       }
       .leaflet-tooltip.haidian-shade-query-tooltip:before{display:none!important}
-      .haidian-shade-query-popup{min-width:246px;line-height:1.38}
+      .haidian-shade-query-popup{min-width:246px;line-height:1.38;background:#fff;isolation:isolate}
       .haidian-shade-query-popup .hsq-head{
         display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
         padding:10px 11px 8px;border-bottom:1px solid #ecfdf5;background:#f8fffd
       }
+      .haidian-shade-query-popup .hsq-head-actions{display:flex;align-items:flex-start;gap:6px}
+      .haidian-shade-query-popup .hsq-close{
+        display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+        width:30px;height:30px;margin:-3px -4px 0 0;padding:0;border:0;border-radius:8px;
+        background:transparent;color:#64748b;font-size:20px;font-weight:800;line-height:1;
+        cursor:pointer;touch-action:manipulation
+      }
+      .haidian-shade-query-popup .hsq-close:hover{background:#ecfdf5;color:#047857}
+      .haidian-shade-query-popup .hsq-close:focus-visible{outline:2px solid #14b8a6;outline-offset:1px}
       .haidian-shade-query-popup .hsq-title{
         margin:0;font-weight:900;color:#0f766e;font-size:13px
       }
@@ -639,7 +648,7 @@
       .haidian-shade-query-popup .hsq-status.is-night{background:#f1f5f9;color:#334155}
       .haidian-shade-query-popup .hsq-status.is-unknown{background:#f8fafc;color:#475569}
       .haidian-shade-query-popup .hsq-status.is-pending{background:#f1f5f9;color:#64748b}
-      .haidian-shade-query-popup .hsq-main{padding:9px 11px 8px}
+      .haidian-shade-query-popup .hsq-main{padding:9px 11px 8px;background:#fff}
       .haidian-shade-query-popup .hsq-metrics{display:grid;grid-template-columns:1fr 1fr;gap:7px}
       .haidian-shade-query-popup .hsq-metric{
         padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff
@@ -2636,7 +2645,7 @@
       base.searchParams.set("dataset", region.dataset);
 
       const controller = new AbortController();
-      const timeoutMs = Math.max(1000, Number(config.taiwanOfficialDtmTimeoutMs) || 5000);
+      const timeoutMs = Math.max(1000, Number(config.taiwanOfficialDtmTimeoutMs) || 9000);
       const timer = window.setTimeout(() => controller.abort(), timeoutMs);
       let response;
       try {
@@ -2834,7 +2843,20 @@
 
 
   function canopyBenefitHtml(model) {
-    if (!model || (!model.canopyBenefitResolving && model.canopyBenefit === undefined && !model.canopyBenefitError)) return "";
+    if (!model) return "";
+    const minHeight = Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2);
+    const sourceTree = model.shadeSource && model.shadeSource.tree;
+    const lowSourceHeight = sourceTree && Number.isFinite(Number(sourceTree.height)) ? Number(sourceTree.height) : null;
+    const lowPointHeight = Number.isFinite(Number(model.canopy)) ? Number(model.canopy) : null;
+    const hasBenefitState = model.canopyBenefitResolving || model.canopyBenefit !== undefined || !!model.canopyBenefitError;
+    if (!hasBenefitState) {
+      const candidateHeight = lowSourceHeight > 0 ? lowSourceHeight : lowPointHeight;
+      if (Number.isFinite(candidateHeight) && candidateHeight > 0 && candidateHeight < minHeight) {
+        const targetLabel = lowSourceHeight > 0 ? "遮蔭來源樹冠" : "點選樹冠片";
+        return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div><div class="hsq-benefit-note">樹冠高度 ${escapeHtml(meters(candidateHeight, 1))}，低於遮蔭面積試算門檻（${escapeHtml(meters(minHeight, 1))}）；保留樹蔭來源判讀，但暫不計算投影面積。</div></div>`;
+      }
+      return "";
+    }
     const targetLabel = model.canopyBenefitTargetKind === "shadow-source" ? "遮蔭來源樹冠" : "點選樹冠片";
     if (model.canopyBenefitResolving) {
       return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div><div class="hsq-benefit-note">正在從 CHMv2 擷取局部樹冠片並估算目前太陽角度下的投影陰影…</div></div>`;
@@ -2843,10 +2865,17 @@
       return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗</small></div><div class="hsq-benefit-note">${escapeHtml(model.canopyBenefitError)}</div></div>`;
     }
     const benefit = model.canopyBenefit;
-    if (!benefit || !benefit.available || !benefit.patch) return "";
+    if (!benefit || !benefit.available || !benefit.patch) {
+      const reason = benefit && benefit.reason ? benefit.reason : "目前無法建立可分析的 CHMv2 樹冠片";
+      return `<div class="hsq-benefit"><div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div><div class="hsq-benefit-note">${escapeHtml(reason)}</div></div>`;
+    }
     const patch = benefit.patch;
     const shadow = benefit.shadow;
     const area = (value) => Number.isFinite(value) ? `${value < 10 ? value.toFixed(1) : value.toFixed(0)} m²` : "—";
+    let shadowMetric = "暫不估算";
+    if (!shadow && /夜間/.test(String(benefit.reason || ""))) shadowMetric = "夜間";
+    else if (shadow && !shadow.unavailableReason) shadowMetric = area(shadow.totalAreaM2);
+    else if (shadow && /太陽高度過低/.test(String(shadow.unavailableReason || ""))) shadowMetric = "太陽過低";
     let split = "";
     if (shadow && !shadow.unavailableReason && shadow.receiverKnown) {
       split = `地表 ${area(shadow.groundAreaM2)}（${shadow.groundPercent.toFixed(0)}%） · 建築 ${area(shadow.buildingAreaM2)}（${shadow.buildingPercent.toFixed(0)}%）`;
@@ -2863,7 +2892,7 @@
       <div class="hsq-benefit-head"><span>🌳 樹冠遮蔭試算</span><small>實驗 · ${escapeHtml(targetLabel)}</small></div>
       <div class="hsq-benefit-metrics">
         <div class="hsq-benefit-metric"><span>局部樹冠片</span><b>${escapeHtml(area(patch.areaM2))}</b></div>
-        <div class="hsq-benefit-metric"><span>目前投影陰影</span><b>${shadow && !shadow.unavailableReason ? escapeHtml(area(shadow.totalAreaM2)) : "—"}</b></div>
+        <div class="hsq-benefit-metric"><span>目前投影陰影</span><b>${escapeHtml(shadowMetric)}</b></div>
       </div>
       ${split ? `<div class="hsq-benefit-split">${escapeHtml(split)}</div>` : ""}
       <div class="hsq-benefit-note">${escapeHtml(noteParts.join(" · "))}</div>
@@ -3086,7 +3115,10 @@
             <div class="hsq-title">🌤️ 點位日照</div>
             <div class="hsq-coord">${escapeHtml(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)}</div>
           </div>
-          <div class="hsq-status ${shadeClass}">${escapeHtml(statusLabel)}</div>
+          <div class="hsq-head-actions">
+            <div class="hsq-status ${shadeClass}">${escapeHtml(statusLabel)}</div>
+            <button class="hsq-close" type="button" aria-label="關閉點位日照卡片" title="關閉">×</button>
+          </div>
         </div>
         <div class="hsq-main">
           <div class="hsq-metrics">
@@ -3355,6 +3387,31 @@
   }
 
   let pointQuerySerial = 0;
+
+  function closePointQueryOverlay() {
+    // Invalidate all in-flight async work so a late response cannot resurrect
+    // the marker, canopy-benefit overlay, or tooltip after the user closes it.
+    pointQuerySerial += 1;
+    removePointQueryOverlay();
+  }
+
+  function bindPointQueryTooltipControls() {
+    if (!queryPopup) return;
+    const element = typeof queryPopup.getElement === "function"
+      ? queryPopup.getElement()
+      : queryPopup._container;
+    if (!element || element.__haidianShadeQueryControlsBound || typeof element.addEventListener !== "function") return;
+    element.__haidianShadeQueryControlsBound = true;
+    element.addEventListener("click", (event) => {
+      const target = event && event.target;
+      const close = target && typeof target.closest === "function" ? target.closest(".hsq-close") : null;
+      if (!close) return;
+      if (event && typeof event.preventDefault === "function") event.preventDefault();
+      if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+      closePointQueryOverlay();
+    });
+  }
+
   async function handleMapPointQuery(event) {
     if (!state.enabled || !state.queryOnClick || !mapRef || !window.L) return;
     if (mapPointQueryShouldYield(event)) return;
@@ -3381,17 +3438,26 @@
     // Draw the exact CHMv2 sample cell immediately; it does not need network data.
     drawQuerySampleCell(tile);
 
+    // Keep the point card above the query-cell/canopy-benefit panes. Leaflet's
+    // default tooltip pane is z650, while those diagnostic overlays live at
+    // z685/z690; without a dedicated pane their polygons can paint over the card.
+    if (!mapRef.getPane("haidianShadeQueryTooltipPane")) {
+      const pane = mapRef.createPane("haidianShadeQueryTooltipPane");
+      pane.style.zIndex = "720";
+    }
     queryPopup = L.tooltip({
       permanent: true,
       direction: "top",
       offset: [0, -10],
       opacity: 1,
       interactive: true,
+      pane: "haidianShadeQueryTooltipPane",
       className: "haidian-shade-query-tooltip"
     })
       .setLatLng(latlng)
       .setContent(pointQueryHtmlProgress(model))
       .addTo(mapRef);
+    bindPointQueryTooltipControls();
 
     // 1) Shade status: independent and usually available immediately.
     shadeStatusAt(latlng).then((shade) => {
@@ -3439,7 +3505,7 @@
     // Elsewhere (or when explicitly allowed) use the global DEM fallback.
     withTimeout(
       queryPointGround(latlng, tile),
-      Math.max(3000, Number(config.queryGroundTotalTimeoutMs) || 10500),
+      Math.max(3000, Number(config.queryGroundTotalTimeoutMs) || 14500),
       "地面高程"
     ).then((groundResult) => {
       if (serial !== pointQuerySerial) return;
@@ -3485,6 +3551,12 @@
     mapRef.on("zoomlevelschange", clearQueryForNavigation);
     mapRef.on("dragend", () => { lastMapDragAt = Date.now(); });
     mapRef.on("click", handleMapPointQuery);
+    if (typeof document.addEventListener === "function") {
+      document.addEventListener("keydown", (event) => {
+        if (!queryPopup || !activePointQuery || !event || event.key !== "Escape") return;
+        closePointQueryOverlay();
+      });
+    }
   }
 
   function tileRangeForBounds(bounds, z, buffer) {
