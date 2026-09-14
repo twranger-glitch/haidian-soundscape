@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.1
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.0.2
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -2238,6 +2238,7 @@
     const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
     const unknownMaxHeight = Math.max(6, Number(config.queryShadeSourceUnknownBuildingMaxHeightM) || 24);
     const minCorridorHits = Math.max(1, Number(config.queryShadeSourceCorridorMinHits) || 2);
+    const legacyInnerTolerance = Math.max(0, Number(config.queryShadeSourceLegacyInnerToleranceM) || 1.5);
     const baseTolerance = Math.max(0, Number(config.queryShadeSourceRayBaseToleranceM) || 3.5);
     const angularToleranceRad = Math.max(0, Number(config.queryShadeSourceRayAngularToleranceDeg) || 3) * Math.PI / 180;
     const maxRayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 9);
@@ -2300,7 +2301,15 @@
       const requiredHeight = distance * tanAlt + clearance;
       const margin = heightMeta.height - requiredHeight;
       const corridorHitCount = admissibleHits.length;
-      const corridorConsensus = !!centerHit || corridorHitCount >= minCorridorHits;
+      // v8.0.2: preserve the v7.9.2 far-edge false-positive guard, but restore
+      // v7.9.1 sensitivity inside the original narrow ±1.5 m corridor. A thin
+      // or slightly shifted footprint can legitimately intersect only one probe;
+      // if that lone probe is close to the center ray, retain it as low-confidence
+      // building evidence instead of dropping the source to unknown.
+      const legacyInnerFallback = !centerHit
+        && corridorHitCount === 1
+        && Math.abs(entryOffset) <= legacyInnerTolerance + 1e-6;
+      const corridorConsensus = !!centerHit || corridorHitCount >= minCorridorHits || legacyInnerFallback;
       const base = {
         type: "building",
         feature,
@@ -2315,7 +2324,8 @@
         corridorCentralHit: !!centerHit,
         corridorHitCount,
         corridorProbeCount: offsets.length,
-        corridorConsensus
+        corridorConsensus,
+        corridorLegacyInnerFallback: legacyInnerFallback
       };
 
       if (margin > 0 && corridorConsensus) {
@@ -2324,7 +2334,7 @@
           : heightMeta.quality === "levels" || heightMeta.quality === "estimated"
             ? "medium"
             : "medium";
-        if (!centerHit) confidence = Math.abs(entryOffset) <= 3 ? "medium" : "possible";
+        if (!centerHit) confidence = legacyInnerFallback ? "possible" : (Math.abs(entryOffset) <= 3 ? "medium" : "possible");
         confirmed.push({ ...base, confidence, plausibleUnknownHeight: false });
       } else if (heightMeta.quality === "default" && requiredHeight <= unknownMaxHeight && corridorConsensus) {
         // A footprint with no height is useful evidence, but never high confidence.
