@@ -81,6 +81,15 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryCanopyBenefitMinSolarAltitudeDeg: 3,
   queryCanopyBenefitOverlay: true,
 
+  // v8.1.0 — daily time-integrated canopy shade value.
+  // Integrates the same local CHMv2 canopy patch across the daytime window
+  // and reports m²·h (shadow area × time), with ground/building receiver split
+  // when building coverage is known.
+  queryCanopyDailyEnabled: true,
+  queryCanopyDailyStartHour: 8,
+  queryCanopyDailyEndHour: 18,
+  queryCanopyDailyStepMinutes: 30,
+
   // v7.8.6 lifecycle: SDK remove() + generation gating + one active canvas owner.
   // No WEBGL_lose_context and no synchronous deletion of the current SDK-owned canvas.
   navigationRebuildDelayMs: 520,
@@ -110,9 +119,8 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   taiwanGlobalDemFallbackEnabled: true,
   taiwanHideGlobalDemPointValue: true,
 
-  // 2025 年版官方 Taiwan DTM Terrarium XYZ.
-  // Taiwan shadow terrain uses this Cloudflare Worker route;
-  // Mapzen remains the global fallback outside Taiwan or when official tiles are unavailable.
+  // v8.0.3 — official 2025 Taiwan 20 m DTM, converted to Terrarium XYZ z13.
+  // Cloudflare proxies/caches the public Hugging Face tiles; Mapzen remains the explicit fallback.
   taiwanTerrainTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/terrain/{z}/{x}/{y}.png",
   taiwanTerrainMaxZoom: 13,
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
