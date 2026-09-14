@@ -110,9 +110,10 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   taiwanGlobalDemFallbackEnabled: true,
   taiwanHideGlobalDemPointValue: true,
 
-  // Future-ready: after the official Taiwan DTM download is converted to Terrarium XYZ,
-  // set this URL and use it to replace the shadow engine's global terrain fallback.
-  taiwanTerrainTileUrl: "",
+  // 2025 年版官方 Taiwan DTM Terrarium XYZ.
+  // Taiwan shadow terrain uses this Cloudflare Worker route;
+  // Mapzen remains the global fallback outside Taiwan or when official tiles are unavailable.
+  taiwanTerrainTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/terrain/{z}/{x}/{y}.png",
   taiwanTerrainMaxZoom: 13,
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
   taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
