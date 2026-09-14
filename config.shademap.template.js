@@ -55,6 +55,10 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeSourceRayWidthM: 9,
   queryShadeSourceRayStepM: 1.5,
   queryShadeSourceCorridorMinHits: 2,
+  // v8.0.2: a lone off-center hit inside the original v7.9.1 narrow corridor
+  // is retained as low-confidence building evidence. Farther lone hits still
+  // require spatial consensus and remain rejected.
+  queryShadeSourceLegacyInnerToleranceM: 1.5,
   queryShadeSourceRayBaseToleranceM: 3.5,
   queryShadeSourceRayAngularToleranceDeg: 3,
   queryShadeSourceUnknownBuildingMaxHeightM: 24,
