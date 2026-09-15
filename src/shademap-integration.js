@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.1.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.2.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -28,6 +28,14 @@
     metaTileConcurrency: 6,
     metaMaxPreparedTiles: 180,
     metaMaxCachedTiles: 480,
+    // v8.2.0: low-risk CHMv2 cold-start acceleration. While the browser is idle
+    // before the first ShadeMap activation, prepare a small center-first subset of
+    // the current viewport into the same bounded caches used by live rendering.
+    metaWarmStartEnabled: true,
+    metaWarmStartDelayMs: 1800,
+    metaWarmStartMaxTiles: 6,
+    metaWarmStartConcurrency: 3,
+    metaMaxCachedCogs: 16,
     metaBlendBareTerrain: true,
     metaNoDataFallback: "bare-dem",
     queryCanopyFromCog: true,
@@ -212,6 +220,26 @@
   let pointShadeRetryTimer = null;
   let lastMapDragAt = 0;
   let lastLiveViewSignature = null;
+  let metaWarmStartTimer = null;
+  let metaWarmStartIdleHandle = null;
+  let metaWarmStartSerial = 0;
+  let metaWarmStartCompleted = false;
+  const metaPerf = {
+    cogOpens: 0,
+    cogCacheHits: 0,
+    canopyReads: 0,
+    canopyCacheHits: 0,
+    canopyPromiseJoins: 0,
+    surfaceBuilds: 0,
+    surfaceCacheHits: 0,
+    surfaceBuildMs: 0,
+    staleQueuedSkipped: 0,
+    warmStartRuns: 0,
+    warmStartTiles: 0,
+    warmStartLoaded: 0,
+    warmStartMs: 0,
+    lastWarmStart: null
+  };
   const overpassCache = new Map();
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
@@ -1233,28 +1261,57 @@
     return `${z}/${x}/${y}`;
   }
 
+  function monotonicNow() {
+    return typeof performance !== "undefined" && performance && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  }
+
+  function touchMapEntry(map, key) {
+    if (!map || !map.has(key)) return undefined;
+    const value = map.get(key);
+    map.delete(key);
+    map.set(key, value);
+    return value;
+  }
+
   async function openMetaCog(url) {
     let promise = metaCogCache.get(url);
-    if (!promise) {
-      promise = (async () => {
-        const tiff = await window.GeoTIFF.fromUrl(url);
-        const count = await tiff.getImageCount();
-        const levels = [];
-        const images = {};
+    if (promise) {
+      metaPerf.cogCacheHits += 1;
+      touchMapEntry(metaCogCache, url);
+      return promise;
+    }
 
-        for (let i = 0; i < count; i += 1) {
-          const image = await tiff.getImage(i);
-          images[i] = image;
-          if (image.fileDirectory.PhotometricInterpretation !== 4) {
-            levels.push({ idx: i, width: image.getWidth() });
-          }
+    metaPerf.cogOpens += 1;
+    promise = (async () => {
+      const tiff = await window.GeoTIFF.fromUrl(url);
+      const count = await tiff.getImageCount();
+      const levels = [];
+      const images = {};
+
+      for (let i = 0; i < count; i += 1) {
+        const image = await tiff.getImage(i);
+        images[i] = image;
+        if (image.fileDirectory.PhotometricInterpretation !== 4) {
+          levels.push({ idx: i, width: image.getWidth() });
         }
+      }
 
-        levels.sort((a, b) => b.width - a.width);
-        if (!levels.length) throw new Error("Meta COG 沒有可讀取的 raster overview。");
-        return { tiff, levels, images };
-      })();
-      metaCogCache.set(url, promise);
+      levels.sort((a, b) => b.width - a.width);
+      if (!levels.length) throw new Error("Meta COG 沒有可讀取的 raster overview。");
+      return { tiff, levels, images };
+    })();
+
+    // A transient CORS/range/network failure must remain retryable. Do not keep a
+    // rejected COG promise pinned in the warm-start cache for the whole session.
+    promise.catch(() => {
+      if (metaCogCache.get(url) === promise) metaCogCache.delete(url);
+    });
+    metaCogCache.set(url, promise);
+    const maxCached = Math.max(2, Number(config.metaMaxCachedCogs) || 16);
+    while (metaCogCache.size > maxCached) {
+      metaCogCache.delete(metaCogCache.keys().next().value);
     }
     return promise;
   }
@@ -1263,9 +1320,16 @@
     if (z < 10) return null;
 
     const key = tileKey(x, y, z);
-    if (canopyRasterCache.has(key)) return canopyRasterCache.get(key);
-    if (canopyRasterPromises.has(key)) return canopyRasterPromises.get(key);
+    if (canopyRasterCache.has(key)) {
+      metaPerf.canopyCacheHits += 1;
+      return touchMapEntry(canopyRasterCache, key);
+    }
+    if (canopyRasterPromises.has(key)) {
+      metaPerf.canopyPromiseJoins += 1;
+      return canopyRasterPromises.get(key);
+    }
 
+    metaPerf.canopyReads += 1;
     const promise = (async () => {
       const scaleFromZ10 = 1 << (z - 10);
       const parentX = Math.floor(x / scaleFromZ10);
@@ -1489,9 +1553,16 @@
 
   async function buildLiveSurfaceTile(x, y, z) {
     const key = tileKey(x, y, z);
-    if (metaSurfaceUrls.has(key)) return metaSurfaceUrls.get(key);
+    if (metaSurfaceUrls.has(key)) {
+      metaPerf.surfaceCacheHits += 1;
+      const cached = touchMapEntry(metaSurfaceUrls, key);
+      if (metaSurfaceMeta.has(key)) touchMapEntry(metaSurfaceMeta, key);
+      return cached;
+    }
     if (metaSurfacePromises.has(key)) return metaSurfacePromises.get(key);
 
+    metaPerf.surfaceBuilds += 1;
+    const startedAt = monotonicNow();
     const promise = (async () => {
       const canopy = await readMetaCanopyTile(x, y, z);
       const dem = await readGroundTerrainHeights(x, y, z);
@@ -1530,7 +1601,10 @@
         if (oldestUrl) URL.revokeObjectURL(oldestUrl);
       }
       return url;
-    })().finally(() => metaSurfacePromises.delete(key));
+    })().finally(() => {
+      metaPerf.surfaceBuildMs += Math.max(0, monotonicNow() - startedAt);
+      metaSurfacePromises.delete(key);
+    });
 
     metaSurfacePromises.set(key, promise);
     return promise;
@@ -3741,15 +3815,21 @@
     return snapshotCoverageSignature(captureViewSnapshot());
   }
 
-  async function runWithConcurrency(items, concurrency, task, progressSerial) {
+  async function runWithConcurrency(items, concurrency, task, progressSerial, options = {}) {
     let cursor = 0;
     let done = 0;
+    let started = 0;
     const results = [];
+    const shouldContinue = typeof options.shouldContinue === "function"
+      ? options.shouldContinue
+      : null;
     const worker = async () => {
       while (true) {
+        if (shouldContinue && !shouldContinue()) return;
         const index = cursor;
         cursor += 1;
         if (index >= items.length) return;
+        started += 1;
         try {
           const result = await task(items[index], index);
           results[index] = result;
@@ -3759,6 +3839,7 @@
         }
         done += 1;
         if (
+          options.suppressStatus !== true &&
           (done === 1 || done % 12 === 0 || done === items.length) &&
           (progressSerial == null || progressSerial === shadeRebuildSerial)
         ) {
@@ -3769,7 +3850,44 @@
 
     const count = Math.max(1, Math.min(concurrency, items.length || 1));
     await Promise.all(Array.from({ length: count }, worker));
+    metaPerf.staleQueuedSkipped += Math.max(0, items.length - started);
     return results;
+  }
+
+  function liveMetaTilesForSnapshot(view) {
+    if (!view) return { tiles: [], zooms: [] };
+    const mapZoom = view.zoom;
+    const clampZoom = (value) => Math.max(
+      config.metaMinZoom,
+      Math.min(config.metaMaxZoom, value)
+    );
+    const zooms = Array.from(new Set([
+      clampZoom(Math.floor(mapZoom)),
+      clampZoom(Math.ceil(mapZoom))
+    ]));
+    const tiles = [];
+    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
+    const bounds = snapshotBounds(view);
+    const centerLat = (view.north + view.south) / 2;
+    const centerLng = (view.east + view.west) / 2;
+
+    for (const z of zooms) {
+      const range = tileRangeForBounds(bounds, z, buffer);
+      const centerTile = lonLatToXYZ(centerLat, centerLng, z);
+      for (let x = range.minX; x <= range.maxX; x += 1) {
+        for (let y = range.minY; y <= range.maxY; y += 1) {
+          tiles.push({
+            x, y, z,
+            priority: Math.abs(x - centerTile.x) + Math.abs(y - centerTile.y)
+          });
+        }
+      }
+    }
+
+    // Center-first ordering does not change numerical results. It only means that
+    // an interrupted viewport job leaves the most useful hot tiles behind.
+    tiles.sort((a, b) => a.priority - b.priority || b.z - a.z || a.y - b.y || a.x - b.x);
+    return { tiles, zooms };
   }
 
   async function prepareLiveMetaSurface(snapshot, serial) {
@@ -3780,29 +3898,11 @@
     if (!view) throw new Error("無法取得目前地圖視野。");
 
     // Freeze zoom/bounds at rebuild start. If the user moves again, the serial
-    // becomes stale and this preparation is allowed to finish only as cache
-    // warming; it will never mount an obsolete ShadeMap layer.
-    const mapZoom = view.zoom;
-    const clampZoom = (value) => Math.max(
-      config.metaMinZoom,
-      Math.min(config.metaMaxZoom, value)
-    );
-    const zooms = Array.from(new Set([
-      clampZoom(Math.floor(mapZoom)),
-      clampZoom(Math.ceil(mapZoom))
-    ]));
-
-    const tiles = [];
-    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
-    const bounds = snapshotBounds(view);
-    for (const z of zooms) {
-      const range = tileRangeForBounds(bounds, z, buffer);
-      for (let x = range.minX; x <= range.maxX; x += 1) {
-        for (let y = range.minY; y <= range.maxY; y += 1) {
-          tiles.push({ x, y, z });
-        }
-      }
-    }
+    // becomes stale: already-running range requests may finish and warm caches,
+    // but queued obsolete tiles are no longer started and can never mount a layer.
+    const plan = liveMetaTilesForSnapshot(view);
+    const tiles = plan.tiles;
+    const zooms = plan.zooms;
 
     if (tiles.length > config.metaMaxPreparedTiles) {
       throw new Error(
@@ -3814,7 +3914,8 @@
       tiles,
       Number(config.metaTileConcurrency) || 4,
       (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
-      serial
+      serial,
+      { shouldContinue: () => serial === shadeRebuildSerial && state.enabled }
     );
     const loaded = results.filter(Boolean).length;
     if (!loaded) throw new Error("目前視野無法建立地形 surface tiles。");
@@ -3833,6 +3934,145 @@
     }, 0);
 
     return { loaded, canopyTiles, officialTerrainTiles, globalTerrainTiles, total: tiles.length, zooms, snapshot: view };
+  }
+
+  function installMetaPreconnectHints() {
+    if (!document || !document.head || typeof document.createElement !== "function") return;
+    const urls = [config.metaCogBaseUrl, config.geotiffUrl];
+    const seen = new Set();
+    for (const value of urls) {
+      if (!value) continue;
+      try {
+        const origin = new URL(value, window.location && window.location.href ? window.location.href : undefined).origin;
+        if (!origin || seen.has(origin)) continue;
+        seen.add(origin);
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = origin;
+        link.crossOrigin = "anonymous";
+        document.head.appendChild(link);
+      } catch (_) {}
+    }
+  }
+
+  function cancelMetaWarmStart() {
+    metaWarmStartSerial += 1;
+    clearTimeout(metaWarmStartTimer);
+    metaWarmStartTimer = null;
+    if (metaWarmStartIdleHandle != null && typeof window.cancelIdleCallback === "function") {
+      try { window.cancelIdleCallback(metaWarmStartIdleHandle); } catch (_) {}
+    }
+    metaWarmStartIdleHandle = null;
+  }
+
+  async function runMetaWarmStart(localSerial) {
+    if (
+      localSerial !== metaWarmStartSerial ||
+      metaWarmStartCompleted ||
+      state.enabled ||
+      state.mode === "buildings" ||
+      config.metaMode !== "live-cog" ||
+      config.metaWarmStartEnabled === false ||
+      !mapRef
+    ) return;
+
+    const view = captureViewSnapshot();
+    if (!view) return;
+    const plan = liveMetaTilesForSnapshot(view);
+    const maxTiles = Math.max(0, Number(config.metaWarmStartMaxTiles) || 0);
+    const tiles = maxTiles ? plan.tiles.slice(0, maxTiles) : [];
+    if (!tiles.length) return;
+
+    const startedAt = monotonicNow();
+    metaPerf.warmStartRuns += 1;
+    metaPerf.warmStartTiles += tiles.length;
+    try {
+      await ensureGeoTIFF();
+      if (localSerial !== metaWarmStartSerial || state.enabled) return;
+      const results = await runWithConcurrency(
+        tiles,
+        Math.max(1, Number(config.metaWarmStartConcurrency) || 2),
+        (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
+        null,
+        {
+          suppressStatus: true,
+          shouldContinue: () => localSerial === metaWarmStartSerial && !state.enabled
+        }
+      );
+      const loaded = results.filter(Boolean).length;
+      const elapsed = Math.max(0, monotonicNow() - startedAt);
+      metaPerf.warmStartLoaded += loaded;
+      metaPerf.warmStartMs += elapsed;
+      metaPerf.lastWarmStart = {
+        attempted: tiles.length,
+        loaded,
+        elapsedMs: Math.round(elapsed),
+        zooms: plan.zooms.slice(),
+        completed: localSerial === metaWarmStartSerial && !state.enabled
+      };
+      if (localSerial === metaWarmStartSerial && !state.enabled) metaWarmStartCompleted = true;
+    } catch (error) {
+      metaPerf.lastWarmStart = {
+        attempted: tiles.length,
+        loaded: 0,
+        elapsedMs: Math.round(Math.max(0, monotonicNow() - startedAt)),
+        error: error && error.message ? error.message : String(error),
+        completed: false
+      };
+      console.debug("[Haidian Shade] CHMv2 warm-start skipped:", error);
+    }
+  }
+
+  function scheduleMetaWarmStart() {
+    if (
+      metaWarmStartCompleted ||
+      config.metaWarmStartEnabled === false ||
+      config.metaMode !== "live-cog" ||
+      state.mode === "buildings" ||
+      state.enabled
+    ) return;
+
+    cancelMetaWarmStart();
+    const localSerial = metaWarmStartSerial;
+    const delayMs = Math.max(0, Number(config.metaWarmStartDelayMs) || 0);
+    metaWarmStartTimer = setTimeout(() => {
+      metaWarmStartTimer = null;
+      const invoke = () => {
+        metaWarmStartIdleHandle = null;
+        runMetaWarmStart(localSerial);
+      };
+      if (typeof window.requestIdleCallback === "function") {
+        metaWarmStartIdleHandle = window.requestIdleCallback(invoke, { timeout: 2500 });
+      } else {
+        invoke();
+      }
+    }, delayMs);
+  }
+
+  function getMetaDiagnostics() {
+    return {
+      mode: config.metaMode,
+      warmStartEnabled: config.metaWarmStartEnabled !== false,
+      warmStartCompleted: metaWarmStartCompleted,
+      counters: Object.assign({}, metaPerf, {
+        lastWarmStart: metaPerf.lastWarmStart ? Object.assign({}, metaPerf.lastWarmStart) : null
+      }),
+      cache: {
+        cogs: metaCogCache.size,
+        canopyRasters: canopyRasterCache.size,
+        canopyPending: canopyRasterPromises.size,
+        surfaceUrls: metaSurfaceUrls.size,
+        surfacePending: metaSurfacePromises.size,
+        demBitmaps: demBitmapCache.size
+      }
+    };
+  }
+
+  function resetMetaDiagnostics() {
+    for (const key of Object.keys(metaPerf)) {
+      if (key === "lastWarmStart") metaPerf[key] = null;
+      else metaPerf[key] = 0;
+    }
   }
 
   function liveMetaTerrainSource() {
@@ -4348,6 +4588,7 @@
   }
 
   async function enableShade() {
+    cancelMetaWarmStart();
     if (!mapRef) {
       setStatus("找不到 Leaflet map。", true);
       return;
@@ -4525,6 +4766,7 @@
   function boot() {
     injectStyles();
     installDesktopHeaderMinimizer();
+    installMetaPreconnectHints();
 
     let attempts = 0;
     const timer = setInterval(() => {
@@ -4537,6 +4779,7 @@
       if (mapRef && panelReady) {
         hookMapMoveRebuild();
         hookMapPointQuery();
+        scheduleMetaWarmStart();
         clearInterval(timer);
         return;
       }
@@ -4575,7 +4818,9 @@
         return { available: true, patch, daily: estimateCanopyDailyBenefit(patch, latlng, when, buildings) };
       });
     },
-    getCanvasDiagnostics: getShadeCanvasDiagnostics
+    getCanvasDiagnostics: getShadeCanvasDiagnostics,
+    getMetaDiagnostics,
+    resetMetaDiagnostics
   };
 
   if (document.readyState === "loading") {
