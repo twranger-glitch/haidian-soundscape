@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.2.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.3.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -18,6 +18,10 @@
     // xyz/static = use pre-generated Terrarium surface XYZ tiles (local or remote URL).
     metaMode: "live-cog",
     metaTileUrl: "./meta-dsm/{z}/{x}/{y}.png",
+    // Optional v8.3 hybrid accelerator. Keep metaMode="live-cog" globally and
+    // route only fully-covered priority viewports to hosted prebuilt surfaces.
+    metaPrebuiltEnabled: false,
+    metaPrebuiltRegions: [],
     metaCogBaseUrl: "https://data.source.coop/tge-labs/meta-chm-v2/chm",
     geotiffUrl: "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js",
     metaMinZoom: 14,
@@ -25,16 +29,27 @@
     // The bare-earth DEM is overzoomed above its z15 maximum; canopy stays native.
     metaMaxZoom: 17,
     metaTileBuffer: 0,
-    metaTileConcurrency: 6,
+    // v8.3.0: this is the upper bound; effective concurrency is adapted to
+    // save-data/effective-connection hints and hardwareConcurrency when available.
+    metaTileConcurrency: 8,
+    metaAdaptiveConcurrencyEnabled: true,
     metaMaxPreparedTiles: 180,
     metaMaxCachedTiles: 480,
-    // v8.2.0: low-risk CHMv2 cold-start acceleration. While the browser is idle
-    // before the first ShadeMap activation, prepare a small center-first subset of
-    // the current viewport into the same bounded caches used by live rendering.
+    // v8.3.0: warm the same center-first critical set used by the progressive
+    // first preview. Twelve tiles covers materially more of a typical ~30-tile
+    // viewport while keeping idle bandwidth bounded.
     metaWarmStartEnabled: true,
-    metaWarmStartDelayMs: 1800,
-    metaWarmStartMaxTiles: 6,
-    metaWarmStartConcurrency: 3,
+    metaWarmStartDelayMs: 1200,
+    metaWarmStartMaxTiles: 12,
+    metaWarmStartConcurrency: 4,
+    // First activation may reveal a clearly-labelled provisional shade frame after
+    // only the critical center-first surfaces are ready. The remaining CHMv2 tiles
+    // start after that renderer reaches idle, then one generation-safe rebuild
+    // upgrades the viewport to the complete surface.
+    metaProgressiveEnabled: true,
+    metaProgressiveInitialTiles: 12,
+    metaProgressiveFirstActivationOnly: true,
+    metaProgressiveUpgradeDelayMs: 120,
     metaMaxCachedCogs: 16,
     metaBlendBareTerrain: true,
     metaNoDataFallback: "bare-dem",
@@ -224,6 +239,11 @@
   let metaWarmStartIdleHandle = null;
   let metaWarmStartSerial = 0;
   let metaWarmStartCompleted = false;
+  let metaProgressiveUsed = false;
+  let pendingProgressiveUpgrade = null;
+  let progressiveCanopyOverlayDeferred = false;
+  let metaActivationStartedAt = 0;
+  let metaActivationInProgress = false;
   const metaPerf = {
     cogOpens: 0,
     cogCacheHits: 0,
@@ -238,13 +258,30 @@
     warmStartTiles: 0,
     warmStartLoaded: 0,
     warmStartMs: 0,
-    lastWarmStart: null
+    progressiveRuns: 0,
+    progressiveInitialTiles: 0,
+    progressiveBackgroundTiles: 0,
+    progressiveProvisionalTiles: 0,
+    provisionalSurfaceBuilds: 0,
+    provisionalSurfaceCacheHits: 0,
+    progressiveUpgrades: 0,
+    progressiveBackgroundMs: 0,
+    activeConcurrencyLast: 0,
+    warmConcurrencyLast: 0,
+    prebuiltChecks: 0,
+    prebuiltHits: 0,
+    prebuiltMisses: 0,
+    lastPreviewMs: 0,
+    lastCompleteMs: 0,
+    lastWarmStart: null,
+    lastProgressive: null
   };
   const overpassCache = new Map();
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
   const metaCogCache = new Map();
   const metaSurfaceUrls = new Map();
+  const metaProvisionalSurfaceUrls = new Map();
   const metaSurfacePromises = new Map();
   const metaSurfaceMeta = new Map();
   const demBitmapCache = new Map();
@@ -541,6 +578,49 @@
       getEast: () => snapshot.east,
       getWest: () => snapshot.west
     };
+  }
+
+  function prebuiltRegionForSnapshot(snapshot) {
+    if (!snapshot || config.metaPrebuiltEnabled !== true || !Array.isArray(config.metaPrebuiltRegions)) return null;
+    const zooms = Array.from(new Set([Math.floor(snapshot.zoom), Math.ceil(snapshot.zoom)]));
+    return config.metaPrebuiltRegions.find((region) => {
+      if (!region) return false;
+      const south = Number(region.south);
+      const west = Number(region.west);
+      const north = Number(region.north);
+      const east = Number(region.east);
+      if (![south, west, north, east].every(Number.isFinite)) return false;
+      const minZoom = Number.isFinite(Number(region.minZoom)) ? Number(region.minZoom) : config.metaMinZoom;
+      const maxZoom = Number.isFinite(Number(region.maxZoom)) ? Number(region.maxZoom) : config.metaMaxZoom;
+      const zoomCovered = zooms.every((z) => z >= minZoom && z <= maxZoom);
+      return zoomCovered &&
+        snapshot.south >= south && snapshot.north <= north &&
+        snapshot.west >= west && snapshot.east <= east;
+    }) || null;
+  }
+
+  async function prebuiltSurfaceAvailable(snapshot) {
+    const region = prebuiltRegionForSnapshot(snapshot);
+    if (!region || !config.metaTileUrl) return false;
+    metaPerf.prebuiltChecks += 1;
+    const centerLat = (snapshot.north + snapshot.south) / 2;
+    const centerLng = (snapshot.east + snapshot.west) / 2;
+    const regionMax = Number.isFinite(Number(region.maxZoom)) ? Number(region.maxZoom) : config.metaMaxZoom;
+    const z = Math.max(0, Math.min(regionMax, Math.ceil(snapshot.zoom)));
+    const tile = lonLatToXYZ(centerLat, centerLng, z);
+    const url = fillTemplate(config.metaTileUrl, tile.x, tile.y, z);
+    try {
+      let response = await fetch(url, { method: "HEAD", cache: "force-cache" });
+      if (!response.ok && (response.status === 405 || response.status === 501)) {
+        response = await fetch(url, { method: "GET", cache: "force-cache" });
+      }
+      if (response.ok) {
+        metaPerf.prebuiltHits += 1;
+        return true;
+      }
+    } catch (_) {}
+    metaPerf.prebuiltMisses += 1;
+    return false;
   }
 
   function snapshotCoverageSignature(snapshot) {
@@ -841,6 +921,9 @@
   function terrainSourceLabel() {
     if (["xyz", "static"].includes(config.metaMode)) {
       return "Meta CHMv2 衍生 XYZ surface tiles";
+    }
+    if (config.metaMode === "live-cog" && config.metaPrebuiltEnabled === true) {
+      return "Meta / WRI CHMv2（優先區預建 surface + live COG fallback）";
     }
     return "Meta / WRI CHMv2（live COG）";
   }
@@ -1275,6 +1358,37 @@
     return value;
   }
 
+  function effectiveMetaConcurrency(requested, purpose = "active") {
+    let limit = Math.max(1, Number(requested) || (purpose === "warm" ? 4 : 6));
+    if (config.metaAdaptiveConcurrencyEnabled === false) return limit;
+
+    const nav = typeof navigator !== "undefined" ? navigator : (window && window.navigator ? window.navigator : null);
+    const connection = nav && (nav.connection || nav.mozConnection || nav.webkitConnection);
+    if (connection && connection.saveData) limit = Math.min(limit, 2);
+    const effectiveType = connection && String(connection.effectiveType || "").toLowerCase();
+    if (effectiveType === "slow-2g" || effectiveType === "2g") limit = Math.min(limit, 2);
+    else if (effectiveType === "3g") limit = Math.min(limit, 4);
+
+    const cores = nav && Number(nav.hardwareConcurrency);
+    if (Number.isFinite(cores) && cores > 0) {
+      if (cores <= 4) limit = Math.min(limit, 4);
+      else if (cores <= 6) limit = Math.min(limit, 6);
+      else limit = Math.min(limit, 8);
+    }
+
+    return Math.max(1, Math.floor(limit));
+  }
+
+  function progressiveTileSplit(tiles) {
+    const list = Array.isArray(tiles) ? tiles : [];
+    const requested = Math.max(1, Number(config.metaProgressiveInitialTiles) || 12);
+    const count = Math.min(requested, list.length);
+    return {
+      initial: list.slice(0, count),
+      background: list.slice(count)
+    };
+  }
+
   async function openMetaCog(url) {
     let promise = metaCogCache.get(url);
     if (promise) {
@@ -1551,6 +1665,36 @@
     });
   }
 
+  async function buildProvisionalBareSurfaceTile(x, y, z) {
+    const key = tileKey(x, y, z);
+    if (metaSurfaceUrls.has(key)) return touchMapEntry(metaSurfaceUrls, key);
+    if (metaProvisionalSurfaceUrls.has(key)) {
+      metaPerf.provisionalSurfaceCacheHits += 1;
+      return touchMapEntry(metaProvisionalSurfaceUrls, key);
+    }
+
+    metaPerf.provisionalSurfaceBuilds += 1;
+    const dem = await readGroundTerrainHeights(x, y, z);
+    if (!dem) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(256, 256);
+    for (let i = 0; i < 256 * 256; i += 1) terrariumEncodeInto(image.data, i, dem[i]);
+    ctx.putImageData(image, 0, 0);
+    const url = await canvasToBlobUrl(canvas);
+    metaProvisionalSurfaceUrls.set(key, url);
+    const maxCached = Math.max(32, Math.min(192, Number(config.metaMaxCachedTiles) || 480));
+    while (metaProvisionalSurfaceUrls.size > maxCached) {
+      const oldestKey = metaProvisionalSurfaceUrls.keys().next().value;
+      const oldestUrl = metaProvisionalSurfaceUrls.get(oldestKey);
+      metaProvisionalSurfaceUrls.delete(oldestKey);
+      if (oldestUrl) URL.revokeObjectURL(oldestUrl);
+    }
+    return url;
+  }
+
   async function buildLiveSurfaceTile(x, y, z) {
     const key = tileKey(x, y, z);
     if (metaSurfaceUrls.has(key)) {
@@ -1585,6 +1729,11 @@
 
       ctx.putImageData(image, 0, 0);
       const url = await canvasToBlobUrl(canvas);
+      const provisionalUrl = metaProvisionalSurfaceUrls.get(key);
+      if (provisionalUrl) {
+        metaProvisionalSurfaceUrls.delete(key);
+        URL.revokeObjectURL(provisionalUrl);
+      }
       metaSurfaceUrls.set(key, url);
       metaSurfaceMeta.set(key, {
         hasCanopy: !!canopy,
@@ -1685,6 +1834,14 @@
   function syncCanopyOverlay() {
     if (!mapRef) return;
     const shouldShow = state.enabled && state.canopyOverlay && state.mode !== "buildings";
+
+    // v8.3: during the provisional progressive frame, do not let the Leaflet
+    // canopy overlay launch an unbounded second wave of CHMv2 reads. The overlay
+    // returns after the full surface upgrade, when its tiles should be cache hits.
+    if (progressiveCanopyOverlayDeferred) {
+      removeCanopyOverlay();
+      return;
+    }
 
     if (!shouldShow) {
       removeCanopyOverlay();
@@ -3473,6 +3630,56 @@
     );
   }
 
+  function clearPendingProgressiveUpgrade() {
+    pendingProgressiveUpgrade = null;
+  }
+
+  function armProgressiveUpgrade(terrain, serial) {
+    if (!terrain || !terrain.progressive || typeof terrain.progressiveStart !== "function") {
+      progressiveCanopyOverlayDeferred = false;
+      clearPendingProgressiveUpgrade();
+      return;
+    }
+    progressiveCanopyOverlayDeferred = true;
+    pendingProgressiveUpgrade = {
+      serial,
+      snapshotSignature: snapshotCoverageSignature(terrain.snapshot),
+      start: terrain.progressiveStart,
+      started: false
+    };
+  }
+
+  function startProgressiveUpgradeAfterPreview(serial) {
+    const pending = pendingProgressiveUpgrade;
+    if (!pending || pending.serial !== serial || pending.started) return false;
+    pending.started = true;
+    setStatus("漸進式陰影預覽已顯示；正在背景補齊周邊 CHMv2 surface tiles…");
+    Promise.resolve()
+      .then(() => pending.start())
+      .then(() => {
+        if (pendingProgressiveUpgrade !== pending) return;
+        if (!state.enabled || serial !== shadeRebuildSerial) return;
+        if (pending.snapshotSignature !== snapshotCoverageSignature(captureViewSnapshot())) return;
+        pendingProgressiveUpgrade = null;
+        metaPerf.progressiveUpgrades += 1;
+        setStatus("周邊 CHMv2 surface tiles 已補齊；正在升級為完整陰影…");
+        setTimeout(() => {
+          if (!state.enabled || serial !== shadeRebuildSerial) return;
+          rebuildShade();
+        }, Math.max(0, Number(config.metaProgressiveUpgradeDelayMs) || 0));
+      })
+      .catch((error) => {
+        if (pendingProgressiveUpgrade === pending) pendingProgressiveUpgrade = null;
+        progressiveCanopyOverlayDeferred = false;
+        console.warn("[Haidian Shade] progressive surface completion failed:", error);
+        if (state.enabled && serial === shadeRebuildSerial) {
+          syncCanopyOverlay();
+          setStatus("漸進式陰影預覽已顯示；部分周邊 CHMv2 資料未能補齊，移動地圖或重新啟用時會再嘗試。", true);
+        }
+      });
+    return true;
+  }
+
   function onActiveShadeIdle(layer, serial) {
     if (
       !state.enabled ||
@@ -3502,7 +3709,18 @@
     // Reveal only the single current-owner canvas after the CURRENT generation
     // is idle. Retired siblings stay hidden and are scrubbed after this safe point.
     setNavigationCanvasState(false);
-    setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+    const progressivePreview = startProgressiveUpgradeAfterPreview(serial);
+    if (progressivePreview) {
+      if (metaActivationInProgress && metaActivationStartedAt) {
+        metaPerf.lastPreviewMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+      }
+    } else {
+      if (metaActivationInProgress && metaActivationStartedAt) {
+        metaPerf.lastCompleteMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+        metaActivationInProgress = false;
+      }
+      setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+    }
     scheduleRetiredCanvasScrub(260);
     refreshActivePointShade();
   }
@@ -3890,7 +4108,23 @@
     return { tiles, zooms };
   }
 
-  async function prepareLiveMetaSurface(snapshot, serial) {
+  function summarizePreparedMetaTiles(tiles, zooms, view, loaded) {
+    const canopyTiles = tiles.reduce((count, tile) => {
+      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
+      return count + (info && info.hasCanopy ? 1 : 0);
+    }, 0);
+    const officialTerrainTiles = tiles.reduce((count, tile) => {
+      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
+      return count + (info && info.terrainAuthoritative ? 1 : 0);
+    }, 0);
+    const globalTerrainTiles = tiles.reduce((count, tile) => {
+      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
+      return count + (info && info.terrainId === "global" ? 1 : 0);
+    }, 0);
+    return { loaded, canopyTiles, officialTerrainTiles, globalTerrainTiles, total: tiles.length, zooms, snapshot: view };
+  }
+
+  async function prepareLiveMetaSurface(snapshot, serial, options = {}) {
     await ensureGeoTIFF();
     if (!mapRef) throw new Error("Leaflet map 尚未就緒。");
 
@@ -3910,30 +4144,110 @@
       );
     }
 
+    const activeConcurrency = effectiveMetaConcurrency(config.metaTileConcurrency, "active");
+    metaPerf.activeConcurrencyLast = activeConcurrency;
+    const shouldContinue = () => serial === shadeRebuildSerial && state.enabled;
+    const allowProgressive = options.progressive === true &&
+      config.metaProgressiveEnabled !== false &&
+      tiles.length > 1;
+
+    if (allowProgressive) {
+      const split = progressiveTileSplit(tiles);
+      if (split.background.length) {
+        metaPerf.progressiveRuns += 1;
+        metaPerf.progressiveInitialTiles += split.initial.length;
+        metaPerf.progressiveBackgroundTiles += split.background.length;
+
+        const initialResults = await runWithConcurrency(
+          split.initial,
+          activeConcurrency,
+          (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
+          serial,
+          { shouldContinue }
+        );
+        const initialLoaded = initialResults.filter(Boolean).length;
+        if (!initialLoaded) throw new Error("目前視野無法建立漸進式首幀 surface tiles。");
+
+        // Missing CHMv2 surfaces must still have a stable terrain surface for the
+        // provisional frame. Build ground-only blobs from the already-cached/low-z
+        // terrain source; this is much cheaper than additional CHMv2 range reads.
+        const provisionalResults = await runWithConcurrency(
+          split.background,
+          activeConcurrency,
+          (tile) => buildProvisionalBareSurfaceTile(tile.x, tile.y, tile.z),
+          serial,
+          { suppressStatus: true, shouldContinue }
+        );
+        const provisionalLoaded = provisionalResults.filter(Boolean).length;
+        metaPerf.progressiveProvisionalTiles += provisionalLoaded;
+        metaProgressiveUsed = true;
+
+        let backgroundPromise = null;
+        const startBackground = () => {
+          if (backgroundPromise) return backgroundPromise;
+          const startedAt = monotonicNow();
+          backgroundPromise = runWithConcurrency(
+            split.background,
+            activeConcurrency,
+            (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
+            serial,
+            { suppressStatus: true, shouldContinue }
+          ).then((results) => {
+            const backgroundLoaded = results.filter(Boolean).length;
+            const elapsed = Math.max(0, monotonicNow() - startedAt);
+            metaPerf.progressiveBackgroundMs += elapsed;
+            const summary = summarizePreparedMetaTiles(
+              tiles, zooms, view, initialLoaded + backgroundLoaded
+            );
+            metaPerf.lastProgressive = {
+              initial: split.initial.length,
+              initialLoaded,
+              provisionalLoaded,
+              background: split.background.length,
+              backgroundLoaded,
+              elapsedMs: Math.round(elapsed),
+              completed: serial === shadeRebuildSerial && state.enabled
+            };
+            return summary;
+          }).catch((error) => {
+            metaPerf.lastProgressive = {
+              initial: split.initial.length,
+              initialLoaded,
+              provisionalLoaded,
+              background: split.background.length,
+              backgroundLoaded: 0,
+              elapsedMs: Math.round(Math.max(0, monotonicNow() - startedAt)),
+              error: error && error.message ? error.message : String(error),
+              completed: false
+            };
+            throw error;
+          });
+          return backgroundPromise;
+        };
+
+        const summary = summarizePreparedMetaTiles(split.initial, zooms, view, initialLoaded);
+        return Object.assign(summary, {
+          total: tiles.length,
+          progressive: true,
+          initialTotal: split.initial.length,
+          provisionalTotal: provisionalLoaded,
+          backgroundTotal: split.background.length,
+          startBackground
+        });
+      }
+    }
+
     const results = await runWithConcurrency(
       tiles,
-      Number(config.metaTileConcurrency) || 4,
+      activeConcurrency,
       (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
       serial,
-      { shouldContinue: () => serial === shadeRebuildSerial && state.enabled }
+      { shouldContinue }
     );
     const loaded = results.filter(Boolean).length;
     if (!loaded) throw new Error("目前視野無法建立地形 surface tiles。");
 
-    const canopyTiles = tiles.reduce((count, tile) => {
-      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
-      return count + (info && info.hasCanopy ? 1 : 0);
-    }, 0);
-    const officialTerrainTiles = tiles.reduce((count, tile) => {
-      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
-      return count + (info && info.terrainAuthoritative ? 1 : 0);
-    }, 0);
-    const globalTerrainTiles = tiles.reduce((count, tile) => {
-      const info = metaSurfaceMeta.get(tileKey(tile.x, tile.y, tile.z));
-      return count + (info && info.terrainId === "global" ? 1 : 0);
-    }, 0);
-
-    return { loaded, canopyTiles, officialTerrainTiles, globalTerrainTiles, total: tiles.length, zooms, snapshot: view };
+    return summarizePreparedMetaTiles(tiles, zooms, view, loaded);
   }
 
   function installMetaPreconnectHints() {
@@ -3978,6 +4292,11 @@
 
     const view = captureViewSnapshot();
     if (!view) return;
+    if (prebuiltRegionForSnapshot(view) && await prebuiltSurfaceAvailable(view)) {
+      metaPerf.lastWarmStart = { attempted: 0, loaded: 0, elapsedMs: 0, skipped: "prebuilt-coverage", completed: true };
+      metaWarmStartCompleted = true;
+      return;
+    }
     const plan = liveMetaTilesForSnapshot(view);
     const maxTiles = Math.max(0, Number(config.metaWarmStartMaxTiles) || 0);
     const tiles = maxTiles ? plan.tiles.slice(0, maxTiles) : [];
@@ -3989,9 +4308,11 @@
     try {
       await ensureGeoTIFF();
       if (localSerial !== metaWarmStartSerial || state.enabled) return;
+      const warmConcurrency = effectiveMetaConcurrency(config.metaWarmStartConcurrency, "warm");
+      metaPerf.warmConcurrencyLast = warmConcurrency;
       const results = await runWithConcurrency(
         tiles,
-        Math.max(1, Number(config.metaWarmStartConcurrency) || 2),
+        warmConcurrency,
         (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
         null,
         {
@@ -4054,6 +4375,9 @@
       mode: config.metaMode,
       warmStartEnabled: config.metaWarmStartEnabled !== false,
       warmStartCompleted: metaWarmStartCompleted,
+      progressiveEnabled: config.metaProgressiveEnabled !== false,
+      progressiveUsed: metaProgressiveUsed,
+      progressivePending: !!pendingProgressiveUpgrade,
       counters: Object.assign({}, metaPerf, {
         lastWarmStart: metaPerf.lastWarmStart ? Object.assign({}, metaPerf.lastWarmStart) : null
       }),
@@ -4062,6 +4386,7 @@
         canopyRasters: canopyRasterCache.size,
         canopyPending: canopyRasterPromises.size,
         surfaceUrls: metaSurfaceUrls.size,
+        provisionalSurfaceUrls: metaProvisionalSurfaceUrls.size,
         surfacePending: metaSurfacePromises.size,
         demBitmaps: demBitmapCache.size
       }
@@ -4070,7 +4395,7 @@
 
   function resetMetaDiagnostics() {
     for (const key of Object.keys(metaPerf)) {
-      if (key === "lastWarmStart") metaPerf[key] = null;
+      if (key === "lastWarmStart" || key === "lastProgressive") metaPerf[key] = null;
       else metaPerf[key] = 0;
     }
   }
@@ -4080,8 +4405,11 @@
       tileSize: 256,
       maxZoom: config.metaMaxZoom,
       getSourceUrl: ({ x, y, z }) => {
-        const cached = metaSurfaceUrls.get(tileKey(x, y, z));
+        const key = tileKey(x, y, z);
+        const cached = metaSurfaceUrls.get(key);
         if (cached) return cached;
+        const provisional = metaProvisionalSurfaceUrls.get(key);
+        if (provisional) return provisional;
 
         // A miss should be rare because prepareLiveMetaSurface() builds the
         // visible tile grid + one-tile margin before ShadeMap is created.
@@ -4389,7 +4717,19 @@
     }
 
     if (config.metaMode === "live-cog") {
-      const prepared = await prepareLiveMetaSurface(view, serial);
+      if (prebuiltRegionForSnapshot(view) && await prebuiltSurfaceAvailable(view)) {
+        return {
+          source: metaTerrainSource(),
+          meta: true,
+          prebuilt: true,
+          snapshot: view,
+          warning: "目前視野已命中預建 CHMv2 surface tiles；全球其他地區仍保留 live COG fallback。"
+        };
+      }
+      const firstActivationOnly = config.metaProgressiveFirstActivationOnly !== false;
+      const allowProgressive = config.metaProgressiveEnabled !== false &&
+        (!firstActivationOnly || !metaProgressiveUsed);
+      const prepared = await prepareLiveMetaSurface(view, serial, { progressive: allowProgressive });
       const hasCanopy = prepared.canopyTiles > 0;
       const canopySummary = `${prepared.canopyTiles}/${prepared.total} canopy tiles`;
       const terrainSummary = prepared.officialTerrainTiles
@@ -4399,11 +4739,18 @@
       return {
         source: liveMetaTerrainSource(),
         meta: hasCanopy,
-        warning: hasCanopy
-          ? (config.metaBlendBareTerrain
-              ? `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}），地面來源：${terrainSummary}；移動到其他地區會自動載入當地資料。`
-              : `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}）；目前未疊加地面 DEM。`)
-          : `目前視野沒有可讀取的 CHMv2 樹冠像素；陰影以 ${terrainSummary}／建築計算。移到其他地區或放大後會重新嘗試載入。`
+        progressive: !!prepared.progressive,
+        progressiveInitial: prepared.initialTotal || 0,
+        progressiveBackground: prepared.backgroundTotal || 0,
+        progressiveStart: prepared.startBackground || null,
+        snapshot: view,
+        warning: prepared.progressive
+          ? `漸進式首幀：先準備中心 ${prepared.initialTotal}/${prepared.total} 張 surface tiles；首幀完成後會在背景補齊其餘 ${prepared.backgroundTotal} 張，再自動升級為完整陰影。`
+          : (hasCanopy
+            ? (config.metaBlendBareTerrain
+                ? `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}），地面來源：${terrainSummary}；移動到其他地區會自動載入當地資料。`
+                : `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}）；目前未疊加地面 DEM。`)
+            : `目前視野沒有可讀取的 CHMv2 樹冠像素；陰影以 ${terrainSummary}／建築計算。移到其他地區或放大後會重新嘗試載入。`)
       };
     }
 
@@ -4589,6 +4936,10 @@
 
   async function enableShade() {
     cancelMetaWarmStart();
+    metaActivationStartedAt = monotonicNow();
+    metaActivationInProgress = true;
+    metaPerf.lastPreviewMs = 0;
+    metaPerf.lastCompleteMs = 0;
     if (!mapRef) {
       setStatus("找不到 Leaflet map。", true);
       return;
@@ -4615,8 +4966,9 @@
       const layer = await mountPreparedShadeLayer(terrain, serial);
       if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
 
-      syncCanopyOverlay();
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
+      armProgressiveUpgrade(terrain, serial);
+      syncCanopyOverlay();
       // Keep the SDK canvas hidden until onActiveShadeIdle() confirms that this
       // exact renderer generation has completed its first frame.
 
@@ -4641,6 +4993,7 @@
 
   function suspendShadeForNavigation() {
     if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
+    clearPendingProgressiveUpgrade();
     shadeNavigationSuspended = true;
     setNavigationCanvasState(true);
     // v7.8.6: do NOT destroy the WebGL layer at every movestart. Keep the old
@@ -4653,6 +5006,10 @@
   }
 
   function disableShade(updateStatus = true) {
+    clearPendingProgressiveUpgrade();
+    progressiveCanopyOverlayDeferred = false;
+    metaActivationInProgress = false;
+    metaActivationStartedAt = 0;
     shadeRebuildSerial += 1;
     shadeNavigationSuspended = false;
     clearTimeout(liveMoveTimer);
@@ -4678,6 +5035,7 @@
   async function rebuildShade() {
     if (!mapRef || !state.enabled) return;
 
+    clearPendingProgressiveUpgrade();
     const serial = ++shadeRebuildSerial;
     shadeNavigationSuspended = false;
     setNavigationCanvasState(true);
@@ -4707,8 +5065,9 @@
       if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
 
       syncPointQueryCursor();
-      syncCanopyOverlay();
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
+      armProgressiveUpgrade(terrain, serial);
+      syncCanopyOverlay();
       // Remain under the navigation mask until the current-generation idle event.
 
       if (terrain.warning) {
