@@ -198,9 +198,12 @@
     // v8.4.1: keep canopy extent visible, but do not let the green diagnostic
     // wash out the ground-receiver shade calibration.
     canopyOverlayOpacity: 0.22,
+    // v8.4.2 keeps the z17 CHMv2 truth grid but softens only display overzoom.
+    // This avoids the chunky z18-z20 appearance without claiming new spatial detail.
+    canopyOverlaySmoothOverzoom: true,
     // Ground shade is split into an exact beneath-canopy core plus a sampled
-    // down-sun projection. Small one-pixel cracks in the projection are closed
-    // before compositing so dense park crowns read as continuous ground shade.
+    // down-sun projection. v8.4.2 applies conservative one-pixel gap closure
+    // to both masks, then a low-alpha one-pixel edge feather before compositing.
     groundCanopyShadeEnabled: true,
     groundCanopyShadeMinHeightM: 2,
     groundCanopyShadeMaxShadowLengthM: 120,
@@ -210,6 +213,11 @@
     groundCanopyShadeCoreOpacity: 0.72,
     groundCanopyShadeProjectedOpacity: 0.52,
     groundCanopyShadeGapFillPx: 1,
+    groundCanopyShadeCoreGapFillPx: 1,
+    groundCanopyShadeProjectedGapFillPx: 1,
+    groundCanopyShadeFeatherPx: 1,
+    groundCanopyShadeFeatherStrength: 0.32,
+    groundCanopyShadeSmoothOverzoom: true,
     groundCanopyShadeBlendMode: "multiply",
     groundCanopyShadeColor: "#172554",
     groundCanopyShadeDisplayMaxZoom: 20,
@@ -306,6 +314,9 @@
     groundCanopyShadeCorePixels: 0,
     groundCanopyShadeProjectedPixels: 0,
     groundCanopyShadeGapFillPixels: 0,
+    groundCanopyShadeCoreGapFillPixels: 0,
+    groundCanopyShadeProjectedGapFillPixels: 0,
+    groundCanopyShadeFeatherPixels: 0,
     groundCanopyShadePointOverrides: 0,
     surfaceBuilds: 0,
     surfaceCacheHits: 0,
@@ -1266,7 +1277,7 @@
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
           CHMv2 原生樹冠解析度以 z17 為基準；v8.4 可繼續放大檢視，但 z18–20 僅為原生資料 overzoom，不代表新增空間精度。
-          「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，先建立連續的樹冠下地面核心，再補上背陽投影並填補細小裂縫；用來補足 DSM 樹冠頂面不易表達的樹下／背陽地面遮蔭，仍屬模型估計。
+          「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，先建立連續的樹冠下地面核心，再補上背陽投影；v8.4.2 只做保守的一像素裂縫修補與低透明邊緣平滑，z18–20 顯示採高品質 overzoom，降低方塊感但不宣稱新增資料精度，仍屬模型估計。
           v7.7 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
           若設定官方 DTM Terrarium XYZ，臺灣的陰影地形也會改用該官方資料；未設定或 tile 缺失時才使用全球 DEM fallback。兩者不混稱為同一份資料。
           建築高度可能來自 OSM 或預設值，適合環境教育與空間比較，不取代現地測量。
@@ -1975,7 +1986,9 @@
             }
             sctx.putImageData(image, 0, 0);
             const ctx = canvas.getContext("2d");
-            ctx.imageSmoothingEnabled = false;
+            const smoothOverzoom = req.scale > 1 && config.canopyOverlaySmoothOverzoom !== false;
+            ctx.imageSmoothingEnabled = smoothOverzoom;
+            if (smoothOverzoom && "imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
             ctx.drawImage(small, 0, 0, smallSize, smallSize, 0, 0, 256, 256);
             done(null, canvas);
           } catch (error) {
@@ -2112,6 +2125,55 @@
       if (!filled) break;
     }
     return filledTotal;
+  }
+
+  function featherGroundCanopyMask(mask, width, height, radius, strength) {
+    const r = Math.max(0, Math.min(2, Math.floor(Number(radius) || 0)));
+    const mix = Math.max(0, Math.min(0.75, Number(strength) || 0));
+    if (!r || !mix || !mask || !width || !height) {
+      return { mask: mask ? mask.slice() : new Uint8Array(0), feathered: 0 };
+    }
+    const src = mask;
+    const out = mask.slice();
+    let feathered = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = y * width + x;
+        if (src[idx]) continue;
+        let occupied = 0;
+        let maxAlpha = 0;
+        let sumAlpha = 0;
+        let neighbours = 0;
+        for (let dy = -r; dy <= r; dy += 1) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= height) continue;
+          for (let dx = -r; dx <= r; dx += 1) {
+            if (!dx && !dy) continue;
+            const xx = x + dx;
+            if (xx < 0 || xx >= width) continue;
+            neighbours += 1;
+            const value = src[yy * width + xx] || 0;
+            if (!value) continue;
+            occupied += 1;
+            sumAlpha += value;
+            if (value > maxAlpha) maxAlpha = value;
+          }
+        }
+        // Require at least two supporting neighbours. This produces a soft
+        // anti-aliased edge around real shade masses without growing isolated
+        // pixels or thin noise into a broad halo.
+        if (occupied < 2 || !neighbours) continue;
+        const coverage = occupied / neighbours;
+        const meanAlpha = sumAlpha / occupied;
+        const candidate = Math.round(
+          Math.max(meanAlpha, maxAlpha * 0.8) * mix * Math.min(1, coverage * 2.4)
+        );
+        if (candidate < 6) continue;
+        out[idx] = Math.min(96, candidate);
+        feathered += 1;
+      }
+    }
+    return { mask: out, feathered };
   }
 
   function composeGroundCanopyMasks(coreMask, projectedMask, coreOpacity, projectedOpacity) {
@@ -2272,11 +2334,22 @@
       }
     }
 
-    const gapFill = fillGroundCanopySmallGaps(
+    const legacyGapFill = Math.max(0, Math.floor(Number(config.groundCanopyShadeGapFillPx) || 0));
+    const coreGapFill = fillGroundCanopySmallGaps(
+      coreMask,
+      targetW,
+      targetH,
+      config.groundCanopyShadeCoreGapFillPx == null
+        ? legacyGapFill
+        : Math.max(0, Math.floor(Number(config.groundCanopyShadeCoreGapFillPx) || 0))
+    );
+    const projectedGapFill = fillGroundCanopySmallGaps(
       projectedMask,
       targetW,
       targetH,
-      Math.max(0, Math.floor(Number(config.groundCanopyShadeGapFillPx) || 0))
+      config.groundCanopyShadeProjectedGapFillPx == null
+        ? legacyGapFill
+        : Math.max(0, Math.floor(Number(config.groundCanopyShadeProjectedGapFillPx) || 0))
     );
     if (generation !== groundCanopyShadeGeneration) return;
 
@@ -2288,7 +2361,9 @@
     }
     metaPerf.groundCanopyShadeCorePixels += corePixels;
     metaPerf.groundCanopyShadeProjectedPixels += projectedPixels;
-    metaPerf.groundCanopyShadeGapFillPixels += gapFill;
+    metaPerf.groundCanopyShadeGapFillPixels += coreGapFill + projectedGapFill;
+    metaPerf.groundCanopyShadeCoreGapFillPixels += coreGapFill;
+    metaPerf.groundCanopyShadeProjectedGapFillPixels += projectedGapFill;
 
     const legacyOpacity = Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeOpacity) || 0.56));
     const coreOpacity = config.groundCanopyShadeCoreOpacity == null
@@ -2297,7 +2372,16 @@
     const projectedOpacity = config.groundCanopyShadeProjectedOpacity == null
       ? legacyOpacity
       : Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeProjectedOpacity) || 0.52));
-    const mask = composeGroundCanopyMasks(coreMask, projectedMask, coreOpacity, projectedOpacity);
+    let mask = composeGroundCanopyMasks(coreMask, projectedMask, coreOpacity, projectedOpacity);
+    const feathered = featherGroundCanopyMask(
+      mask,
+      targetW,
+      targetH,
+      Math.max(0, Math.floor(Number(config.groundCanopyShadeFeatherPx) || 0)),
+      Math.max(0, Math.min(0.75, Number(config.groundCanopyShadeFeatherStrength) || 0))
+    );
+    mask = feathered.mask;
+    metaPerf.groundCanopyShadeFeatherPixels += feathered.feathered;
 
     const small = document.createElement("canvas");
     small.width = targetW;
@@ -2316,7 +2400,9 @@
     }
     sctx.putImageData(image, 0, 0);
     const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false;
+    const smoothOverzoom = scale > 1 && config.groundCanopyShadeSmoothOverzoom !== false;
+    ctx.imageSmoothingEnabled = smoothOverzoom;
+    if (smoothOverzoom && "imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
     ctx.clearRect(0, 0, 256, 256);
     ctx.drawImage(small, 0, 0, targetW, targetH, 0, 0, 256, 256);
     metaPerf.groundCanopyShadeTiles += 1;
