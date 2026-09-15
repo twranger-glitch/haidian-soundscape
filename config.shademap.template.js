@@ -9,25 +9,44 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // World-scale/global: moving the map to another city selects that location's COG automatically.
   // No local 1321232301.tif and no pre-generated meta-dsm folder are required.
   metaMode: "live-cog",
+  // Optional v8.3 hybrid prebuilt accelerator. Leave disabled until a priority
+  // bbox is generated/hosted. When enabled, fully-covered viewports use the
+  // hosted surface tiles while all other locations continue through live COG.
+  metaPrebuiltEnabled: false,
+  metaPrebuiltRegions: [
+    // Example only — replace with the exact generated coverage:
+    // { south: 22.98, west: 120.17, north: 23.04, east: 120.25, minZoom: 16, maxZoom: 17 }
+  ],
   metaCogBaseUrl: "https://data.source.coop/tge-labs/meta-chm-v2/chm",
   geotiffUrl: "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js",
   metaMinZoom: 14,
   metaMaxZoom: 17,
-  // v7: smaller live-COG prefetch window for faster first render.
+  // v8.3.0 — bounded/adaptive CHMv2 preparation.
   metaTileBuffer: 0,
-  metaTileConcurrency: 6,
+  // Upper bound. Effective concurrency is reduced automatically for Save-Data,
+  // 2G/3G, or low-core devices when the browser exposes those hints.
+  metaTileConcurrency: 8,
+  metaAdaptiveConcurrencyEnabled: true,
   metaMaxPreparedTiles: 180,
   metaMaxCachedTiles: 480,
 
-  // v8.2.0 — CHMv2 warm-start performance foundation.
-  // After the host map is ready, a small center-first subset of the current
-  // viewport is prepared while the browser is idle. The same bounded live-COG
-  // caches are reused when ShadeMap is enabled; obsolete queued viewport work
-  // is cancelled cooperatively after pan/zoom invalidates its generation.
+  // Warm the center-first critical set before the first activation. Twelve tiles
+  // matches the progressive preview target and covers ~40% of a typical 30-tile
+  // viewport instead of the former 6/30 (~20%).
   metaWarmStartEnabled: true,
-  metaWarmStartDelayMs: 1800,
-  metaWarmStartMaxTiles: 6,
-  metaWarmStartConcurrency: 3,
+  metaWarmStartDelayMs: 1200,
+  metaWarmStartMaxTiles: 12,
+  metaWarmStartConcurrency: 4,
+
+  // Progressive first activation: mount a clearly-labelled preview after the
+  // critical center-first surfaces are ready. Once that renderer reaches idle,
+  // prepare the remaining surfaces in the background and perform one safe rebuild
+  // so the final frame still uses the complete CHMv2 surface set.
+  metaProgressiveEnabled: true,
+  metaProgressiveInitialTiles: 12,
+  metaProgressiveFirstActivationOnly: true,
+  metaProgressiveUpgradeDelayMs: 120,
+
   metaMaxCachedCogs: 16,
 
   metaBlendBareTerrain: true,
