@@ -195,6 +195,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // v8.4.1 ground-canopy coverage calibration. Keep the green canopy extent
   // visible, but allow the darker ground-receiver shade to read on top.
   canopyOverlayOpacity: 0.22,
+  canopyOverlaySmoothOverzoom: true,
   groundCanopyShadeEnabled: true,
   groundCanopyShadeMinHeightM: 2,
   groundCanopyShadeMaxShadowLengthM: 120,
@@ -204,6 +205,11 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   groundCanopyShadeCoreOpacity: 0.72,
   groundCanopyShadeProjectedOpacity: 0.52,
   groundCanopyShadeGapFillPx: 1,
+  groundCanopyShadeCoreGapFillPx: 1,
+  groundCanopyShadeProjectedGapFillPx: 1,
+  groundCanopyShadeFeatherPx: 1,
+  groundCanopyShadeFeatherStrength: 0.32,
+  groundCanopyShadeSmoothOverzoom: true,
   groundCanopyShadeBlendMode: "multiply",
   groundCanopyShadeColor: "#172554",
   groundCanopyShadeDisplayMaxZoom: 20,
