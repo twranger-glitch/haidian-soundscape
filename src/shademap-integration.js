@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.4.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.4.1
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -195,18 +195,22 @@
     queryOnClick: false,
     canopyOverlayDefault: true,
     canopyOverlayMinHeight: 2,
-    canopyOverlayOpacity: 0.28,
-    // v8.4.0 experimental ground-receiver canopy shade. CHMv2 is a canopy-height
-    // raster, so the SDK DSM alone can miss the ground beneath / down-sun from a
-    // crown. This supplementary layer projects canopy columns onto the ground
-    // using the current solar vector. It is deliberately kept separate from the
-    // green canopy-extent overlay.
+    // v8.4.1: keep canopy extent visible, but do not let the green diagnostic
+    // wash out the ground-receiver shade calibration.
+    canopyOverlayOpacity: 0.22,
+    // Ground shade is split into an exact beneath-canopy core plus a sampled
+    // down-sun projection. Small one-pixel cracks in the projection are closed
+    // before compositing so dense park crowns read as continuous ground shade.
     groundCanopyShadeEnabled: true,
     groundCanopyShadeMinHeightM: 2,
     groundCanopyShadeMaxShadowLengthM: 120,
     groundCanopyShadeMinSolarAltitudeDeg: 2.5,
     groundCanopyShadeSampleStepPx: 2,
-    groundCanopyShadeOpacity: 0.42,
+    groundCanopyShadeOpacity: 0.56,
+    groundCanopyShadeCoreOpacity: 0.72,
+    groundCanopyShadeProjectedOpacity: 0.52,
+    groundCanopyShadeGapFillPx: 1,
+    groundCanopyShadeBlendMode: "multiply",
     groundCanopyShadeColor: "#172554",
     groundCanopyShadeDisplayMaxZoom: 20,
     // Do not clamp the Leaflet camera to CHMv2's native z17. Above z17 the
@@ -299,6 +303,9 @@
     groundCanopyShadeTiles: 0,
     groundCanopyShadeCasterTiles: 0,
     groundCanopyShadeRenderMs: 0,
+    groundCanopyShadeCorePixels: 0,
+    groundCanopyShadeProjectedPixels: 0,
+    groundCanopyShadeGapFillPixels: 0,
     groundCanopyShadePointOverrides: 0,
     surfaceBuilds: 0,
     surfaceCacheHits: 0,
@@ -1219,7 +1226,7 @@
         <label class="haidian-shade-row" style="cursor:pointer">
           <input id="haidianShadeGroundCanopy" type="checkbox"
             style="width:15px;height:15px;margin:0;accent-color:#172554">
-          <span>補足地面樹蔭（實驗）</span>
+          <span>補足地面樹蔭（校正）</span>
         </label>
 
         <label class="haidian-shade-row" style="cursor:pointer">
@@ -1259,7 +1266,7 @@
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
           CHMv2 原生樹冠解析度以 z17 為基準；v8.4 可繼續放大檢視，但 z18–20 僅為原生資料 overzoom，不代表新增空間精度。
-          「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，把樹冠垂直柱投影到地面，用來補足 DSM 樹冠頂面不易表達的樹下／背陽地面遮蔭；仍屬模型估計。
+          「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，先建立連續的樹冠下地面核心，再補上背陽投影並填補細小裂縫；用來補足 DSM 樹冠頂面不易表達的樹下／背陽地面遮蔭，仍屬模型估計。
           v7.7 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
           若設定官方 DTM Terrarium XYZ，臺灣的陰影地形也會改用該官方資料；未設定或 tile 缺失時才使用全球 DEM fallback。兩者不混稱為同一份資料。
           建築高度可能來自 OSM 或預設值，適合環境教育與空間比較，不取代現地測量。
@@ -2073,6 +2080,55 @@
     }
   }
 
+  function fillGroundCanopySmallGaps(mask, width, height, passes) {
+    const rounds = Math.max(0, Math.floor(Number(passes) || 0));
+    if (!rounds || !mask || !width || !height) return 0;
+    let filledTotal = 0;
+    for (let pass = 0; pass < rounds; pass += 1) {
+      const src = mask.slice();
+      let filled = 0;
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const idx = y * width + x;
+          if (src[idx]) continue;
+          const left = src[idx - 1];
+          const right = src[idx + 1];
+          const up = src[idx - width];
+          const down = src[idx + width];
+          const ul = src[idx - width - 1];
+          const ur = src[idx - width + 1];
+          const dl = src[idx + width - 1];
+          const dr = src[idx + width + 1];
+          const bridge = (left && right) || (up && down) || (ul && dr) || (ur && dl);
+          const neighbours = [left, right, up, down, ul, ur, dl, dr].filter(Boolean);
+          if (!bridge && neighbours.length < 3) continue;
+          let maxAlpha = 0;
+          for (const value of neighbours) if (value > maxAlpha) maxAlpha = value;
+          mask[idx] = Math.max(1, Math.round(maxAlpha * 0.9));
+          filled += 1;
+        }
+      }
+      filledTotal += filled;
+      if (!filled) break;
+    }
+    return filledTotal;
+  }
+
+  function composeGroundCanopyMasks(coreMask, projectedMask, coreOpacity, projectedOpacity) {
+    const length = Math.min(coreMask ? coreMask.length : 0, projectedMask ? projectedMask.length : 0);
+    const output = new Uint8Array(length);
+    const coreScale = Math.max(0, Math.min(1, Number(coreOpacity) || 0));
+    const projectedScale = Math.max(0, Math.min(1, Number(projectedOpacity) || 0));
+    for (let i = 0; i < length; i += 1) {
+      const core = Math.round((coreMask[i] || 0) * coreScale);
+      const projected = Math.round((projectedMask[i] || 0) * projectedScale);
+      // Alpha union: preserve a strong beneath-canopy core without double-counting
+      // overlapping projected shade into an opaque solid block.
+      output[i] = Math.min(255, core + projected - Math.round(core * projected / 255));
+    }
+    return output;
+  }
+
   function groundCanopySourcePixelBounds(targetMinX, targetMinY, targetSpan, ux, uy, maxShadowPx, worldPx) {
     const shiftedMinX = targetMinX - ux * maxShadowPx;
     const shiftedMinY = targetMinY - uy * maxShadowPx;
@@ -2138,11 +2194,45 @@
     }));
     if (generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
 
-    const mask = new Uint8Array(targetW * targetH);
+    const coreMask = new Uint8Array(targetW * targetH);
+    const projectedMask = new Uint8Array(targetW * targetH);
     const minHeight = Math.max(0.5, Number(config.groundCanopyShadeMinHeightM) || 2);
     const sampleStep = Math.max(1, Math.floor(Number(config.groundCanopyShadeSampleStepPx) || 2));
     const walkStep = Math.max(0.9, sampleStep * 0.8);
+    const targetMaxX = targetMinX + targetSpan;
+    const targetMaxY = targetMinY + targetSpan;
 
+    // v8.4.1: create an exact native-pixel ground core beneath every CHMv2
+    // canopy pixel that overlaps this display tile. This avoids the striped
+    // beneath-canopy gaps produced by using the projection sampling grid alone.
+    for (const tile of casterTiles) {
+      const raster = rasterMap.get(tileKey(tile.x, tile.y, tile.z));
+      if (!raster) continue;
+      const tileGx = tile.x * 256;
+      const tileGy = tile.y * 256;
+      const gx0 = Math.max(tileGx, Math.floor(targetMinX));
+      const gx1 = Math.min(tileGx + 255, Math.ceil(targetMaxX) - 1);
+      const gy0 = Math.max(tileGy, Math.floor(targetMinY));
+      const gy1 = Math.min(tileGy + 255, Math.ceil(targetMaxY) - 1);
+      if (gx1 < gx0 || gy1 < gy0) continue;
+      for (let gy = gy0; gy <= gy1; gy += 1) {
+        const localY = gy - tileGy;
+        const my = Math.max(0, Math.min(targetH - 1, Math.floor(gy - targetMinY)));
+        for (let gx = gx0; gx <= gx1; gx += 1) {
+          const localX = gx - tileGx;
+          const h = Number(raster[localY * 256 + localX]);
+          if (!(h >= minHeight && h < 255)) continue;
+          const mx = Math.max(0, Math.min(targetW - 1, Math.floor(gx - targetMinX)));
+          const idx = my * targetW + mx;
+          const alpha = Math.max(175, Math.min(245, Math.round(180 + Math.min(35, h) / 35 * 65)));
+          if (alpha > coreMask[idx]) coreMask[idx] = alpha;
+        }
+      }
+    }
+
+    // Project a sampled set of canopy columns down-sun. The exact core above
+    // supplies beneath-canopy coverage; this pass is intentionally bounded for
+    // speed and can include casters just outside the visible tile.
     for (const tile of casterTiles) {
       const raster = rasterMap.get(tileKey(tile.x, tile.y, tile.z));
       if (!raster) continue;
@@ -2169,27 +2259,52 @@
           const steps = Math.max(1, Math.ceil(lengthPx / walkStep));
           const sourceX = tileGx + px + Math.min(sampleStep, 2) * 0.5;
           const sourceY = tileGy + py + Math.min(sampleStep, 2) * 0.5;
-          const alpha = Math.max(110, Math.min(235, Math.round(125 + Math.min(35, h) / 35 * 95)));
-          const radius = Math.max(0, Math.floor(sampleStep / 2));
-          for (let i = 0; i <= steps; i += 1) {
+          const alpha = Math.max(125, Math.min(225, Math.round(130 + Math.min(35, h) / 35 * 95)));
+          const radius = Math.max(1, Math.floor(sampleStep / 2));
+          for (let i = 1; i <= steps; i += 1) {
             const d = Math.min(lengthPx, i * walkStep);
             const outX = sourceX + ux * d - targetMinX;
             const outY = sourceY + uy * d - targetMinY;
             if (outX < -sampleStep || outY < -sampleStep || outX >= targetSpan + sampleStep || outY >= targetSpan + sampleStep) continue;
-            markGroundCanopyMask(mask, targetW, targetH, outX, outY, radius, alpha);
+            markGroundCanopyMask(projectedMask, targetW, targetH, outX, outY, radius, alpha);
           }
         }
       }
     }
 
+    const gapFill = fillGroundCanopySmallGaps(
+      projectedMask,
+      targetW,
+      targetH,
+      Math.max(0, Math.floor(Number(config.groundCanopyShadeGapFillPx) || 0))
+    );
     if (generation !== groundCanopyShadeGeneration) return;
+
+    let corePixels = 0;
+    let projectedPixels = 0;
+    for (let i = 0; i < coreMask.length; i += 1) {
+      if (coreMask[i]) corePixels += 1;
+      if (projectedMask[i]) projectedPixels += 1;
+    }
+    metaPerf.groundCanopyShadeCorePixels += corePixels;
+    metaPerf.groundCanopyShadeProjectedPixels += projectedPixels;
+    metaPerf.groundCanopyShadeGapFillPixels += gapFill;
+
+    const legacyOpacity = Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeOpacity) || 0.56));
+    const coreOpacity = config.groundCanopyShadeCoreOpacity == null
+      ? Math.min(1, legacyOpacity * 1.25)
+      : Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeCoreOpacity) || 0.72));
+    const projectedOpacity = config.groundCanopyShadeProjectedOpacity == null
+      ? legacyOpacity
+      : Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeProjectedOpacity) || 0.52));
+    const mask = composeGroundCanopyMasks(coreMask, projectedMask, coreOpacity, projectedOpacity);
+
     const small = document.createElement("canvas");
     small.width = targetW;
     small.height = targetH;
     const sctx = small.getContext("2d");
     const image = sctx.createImageData(targetW, targetH);
     const color = parseShadeColor(config.groundCanopyShadeColor || config.defaultColor);
-    const opacity = Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeOpacity) || 0.42));
     for (let i = 0; i < mask.length; i += 1) {
       const a = mask[i];
       if (!a) continue;
@@ -2197,7 +2312,7 @@
       image.data[p] = color.r;
       image.data[p + 1] = color.g;
       image.data[p + 2] = color.b;
-      image.data[p + 3] = Math.round(a * opacity);
+      image.data[p + 3] = a;
     }
     sctx.putImageData(image, 0, 0);
     const ctx = canvas.getContext("2d");
@@ -2220,8 +2335,10 @@
     if (!window.L || !L.GridLayer || !mapRef) return null;
     if (!mapRef.getPane("haidianGroundCanopyShadePane")) {
       const pane = mapRef.createPane("haidianGroundCanopyShadePane");
-      pane.style.zIndex = "640";
+      pane.style.zIndex = "660";
       pane.style.pointerEvents = "none";
+      const blendMode = String(config.groundCanopyShadeBlendMode || "normal").trim();
+      if (blendMode && blendMode !== "normal") pane.style.mixBlendMode = blendMode;
     }
     const GroundShadeGrid = L.GridLayer.extend({
       createTile(coords, done) {
@@ -2274,8 +2391,8 @@
     try {
       if (!mapRef.hasLayer(groundCanopyShadeLayer)) groundCanopyShadeLayer.addTo(mapRef);
       if (typeof groundCanopyShadeLayer.bringToFront === "function") groundCanopyShadeLayer.bringToFront();
-      // Keep the green canopy extent above the supplementary dark ground shade.
-      if (canopyOverlayLayer && mapRef.hasLayer(canopyOverlayLayer) && typeof canopyOverlayLayer.bringToFront === "function") canopyOverlayLayer.bringToFront();
+      // v8.4.1: the ground-receiver shade pane intentionally sits above the
+      // green canopy diagnostic so valid ground shade is not visually washed out.
     } catch (error) {
       console.warn("[Haidian Shade] ground canopy shade overlay:", error);
     }
