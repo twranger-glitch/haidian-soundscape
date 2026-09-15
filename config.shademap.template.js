@@ -192,13 +192,19 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   lockMapMaxZoomToMeta: false,
   canopyOverlayDefault: true,
   canopyOverlayMinHeight: 2,
-  canopyOverlayOpacity: 0.28,
+  // v8.4.1 ground-canopy coverage calibration. Keep the green canopy extent
+  // visible, but allow the darker ground-receiver shade to read on top.
+  canopyOverlayOpacity: 0.22,
   groundCanopyShadeEnabled: true,
   groundCanopyShadeMinHeightM: 2,
   groundCanopyShadeMaxShadowLengthM: 120,
   groundCanopyShadeMinSolarAltitudeDeg: 2.5,
   groundCanopyShadeSampleStepPx: 2,
-  groundCanopyShadeOpacity: 0.42,
+  groundCanopyShadeOpacity: 0.56,
+  groundCanopyShadeCoreOpacity: 0.72,
+  groundCanopyShadeProjectedOpacity: 0.52,
+  groundCanopyShadeGapFillPx: 1,
+  groundCanopyShadeBlendMode: "multiply",
   groundCanopyShadeColor: "#172554",
   groundCanopyShadeDisplayMaxZoom: 20,
 
