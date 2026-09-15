@@ -18,6 +18,18 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   metaTileConcurrency: 6,
   metaMaxPreparedTiles: 180,
   metaMaxCachedTiles: 480,
+
+  // v8.2.0 — CHMv2 warm-start performance foundation.
+  // After the host map is ready, a small center-first subset of the current
+  // viewport is prepared while the browser is idle. The same bounded live-COG
+  // caches are reused when ShadeMap is enabled; obsolete queued viewport work
+  // is cancelled cooperatively after pan/zoom invalidates its generation.
+  metaWarmStartEnabled: true,
+  metaWarmStartDelayMs: 1800,
+  metaWarmStartMaxTiles: 6,
+  metaWarmStartConcurrency: 3,
+  metaMaxCachedCogs: 16,
+
   metaBlendBareTerrain: true,
   metaNoDataFallback: "bare-dem",
 
