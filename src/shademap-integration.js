@@ -35,19 +35,27 @@
     metaAdaptiveConcurrencyEnabled: true,
     metaMaxPreparedTiles: 180,
     metaMaxCachedTiles: 480,
-    // v8.3.0: warm the same center-first critical set used by the progressive
-    // first preview. Twelve tiles covers materially more of a typical ~30-tile
-    // viewport while keeping idle bandwidth bounded.
+    // v8.3.1: warm beyond the blocking first-preview set. Sixteen center-first
+    // tiles remains bounded, while any extra completed tiles are reused by the
+    // later background upgrade.
     metaWarmStartEnabled: true,
     metaWarmStartDelayMs: 1200,
-    metaWarmStartMaxTiles: 12,
+    metaWarmStartMaxTiles: 16,
     metaWarmStartConcurrency: 4,
     // First activation may reveal a clearly-labelled provisional shade frame after
     // only the critical center-first surfaces are ready. The remaining CHMv2 tiles
     // start after that renderer reaches idle, then one generation-safe rebuild
     // upgrades the viewport to the complete surface.
     metaProgressiveEnabled: true,
-    metaProgressiveInitialTiles: 12,
+    metaProgressiveInitialTiles: 8,
+    // v8.3.1: do not synchronously manufacture ground-only blobs for every
+    // peripheral tile before the first frame. A shared flat Terrarium placeholder
+    // makes the preview truly progressive; the complete CHMv2+DTM surface replaces
+    // it after the renderer reaches idle.
+    metaProgressiveFallbackMode: "flat-zero",
+    // Also keep OSM/custom building network work off the preview critical path.
+    // The final automatic upgrade restores the normal building source.
+    metaProgressiveDeferBuildings: true,
     metaProgressiveFirstActivationOnly: true,
     metaProgressiveUpgradeDelayMs: 120,
     metaMaxCachedCogs: 16,
@@ -262,6 +270,10 @@
     progressiveInitialTiles: 0,
     progressiveBackgroundTiles: 0,
     progressiveProvisionalTiles: 0,
+    progressiveFlatFallbackTiles: 0,
+    progressiveInitialMs: 0,
+    progressiveFallbackMs: 0,
+    progressivePreviewBuildingsDeferred: 0,
     provisionalSurfaceBuilds: 0,
     provisionalSurfaceCacheHits: 0,
     progressiveUpgrades: 0,
@@ -282,6 +294,7 @@
   const metaCogCache = new Map();
   const metaSurfaceUrls = new Map();
   const metaProvisionalSurfaceUrls = new Map();
+  let metaFlatZeroTerrariumUrl = null;
   const metaSurfacePromises = new Map();
   const metaSurfaceMeta = new Map();
   const demBitmapCache = new Map();
@@ -1663,6 +1676,19 @@
         resolve(URL.createObjectURL(blob));
       }, "image/png");
     });
+  }
+
+  function flatZeroTerrariumUrl() {
+    if (metaFlatZeroTerrariumUrl) return metaFlatZeroTerrariumUrl;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    // Terrarium encoding for elevation 0 m is rgb(128, 0, 0).
+    ctx.fillStyle = "rgb(128,0,0)";
+    ctx.fillRect(0, 0, 256, 256);
+    metaFlatZeroTerrariumUrl = canvas.toDataURL("image/png");
+    return metaFlatZeroTerrariumUrl;
   }
 
   async function buildProvisionalBareSurfaceTile(x, y, z) {
@@ -4158,6 +4184,7 @@
         metaPerf.progressiveInitialTiles += split.initial.length;
         metaPerf.progressiveBackgroundTiles += split.background.length;
 
+        const initialStartedAt = monotonicNow();
         const initialResults = await runWithConcurrency(
           split.initial,
           activeConcurrency,
@@ -4166,19 +4193,34 @@
           { shouldContinue }
         );
         const initialLoaded = initialResults.filter(Boolean).length;
+        metaPerf.progressiveInitialMs += Math.max(0, monotonicNow() - initialStartedAt);
         if (!initialLoaded) throw new Error("目前視野無法建立漸進式首幀 surface tiles。");
 
-        // Missing CHMv2 surfaces must still have a stable terrain surface for the
-        // provisional frame. Build ground-only blobs from the already-cached/low-z
-        // terrain source; this is much cheaper than additional CHMv2 range reads.
-        const provisionalResults = await runWithConcurrency(
-          split.background,
-          activeConcurrency,
-          (tile) => buildProvisionalBareSurfaceTile(tile.x, tile.y, tile.z),
-          serial,
-          { suppressStatus: true, shouldContinue }
-        );
-        const provisionalLoaded = provisionalResults.filter(Boolean).length;
+        // v8.3.1 fast preview: v8.3.0 still blocked the first frame while it
+        // synchronously created one ground-only PNG blob for every background tile.
+        // Real-browser timing showed that path dominated preview latency. By default
+        // use one shared 0 m Terrarium placeholder for peripheral tiles and let the
+        // post-idle upgrade replace them with full CHMv2+DTM surfaces. The slower
+        // ground-blob path remains available as an explicit accuracy/debug option.
+        const fallbackStartedAt = monotonicNow();
+        const fallbackMode = String(config.metaProgressiveFallbackMode || "flat-zero");
+        let provisionalLoaded = 0;
+        if (fallbackMode === "ground-blob") {
+          const provisionalResults = await runWithConcurrency(
+            split.background,
+            activeConcurrency,
+            (tile) => buildProvisionalBareSurfaceTile(tile.x, tile.y, tile.z),
+            serial,
+            { suppressStatus: true, shouldContinue }
+          );
+          provisionalLoaded = provisionalResults.filter(Boolean).length;
+        } else {
+          // Materialize once before the SDK asks synchronously for tile URLs.
+          flatZeroTerrariumUrl();
+          provisionalLoaded = split.background.length;
+          metaPerf.progressiveFlatFallbackTiles += split.background.length;
+        }
+        metaPerf.progressiveFallbackMs += Math.max(0, monotonicNow() - fallbackStartedAt);
         metaPerf.progressiveProvisionalTiles += provisionalLoaded;
         metaProgressiveUsed = true;
 
@@ -4231,6 +4273,7 @@
           progressive: true,
           initialTotal: split.initial.length,
           provisionalTotal: provisionalLoaded,
+          fallbackMode,
           backgroundTotal: split.background.length,
           startBackground
         });
@@ -4400,7 +4443,9 @@
     }
   }
 
-  function liveMetaTerrainSource() {
+  function liveMetaTerrainSource(options = {}) {
+    const useFlatFallback = options.flatFallback === true;
+    const flatUrl = useFlatFallback ? flatZeroTerrariumUrl() : null;
     return {
       tileSize: 256,
       maxZoom: config.metaMaxZoom,
@@ -4411,10 +4456,12 @@
         const provisional = metaProvisionalSurfaceUrls.get(key);
         if (provisional) return provisional;
 
-        // A miss should be rare because prepareLiveMetaSurface() builds the
-        // visible tile grid + one-tile margin before ShadeMap is created.
-        // Returning bare DEM keeps the layer valid while a later moveend rebuild
-        // prepares the newly-visible CHM tiles.
+        // Progressive preview must not block on 18+ synthesized ground blobs.
+        // A single flat tile keeps the peripheral renderer valid for a few seconds;
+        // the automatic complete rebuild replaces it with CHMv2+DTM surfaces.
+        if (flatUrl) return flatUrl;
+
+        // Non-progressive misses retain the previous bare-DEM fallback behavior.
         return fillTemplate(config.bareTerrainTileUrl, x, y, z);
       },
       getElevation: ({ r, g, b }) =>
@@ -4737,7 +4784,9 @@
           (prepared.globalTerrainTiles ? `，全球 fallback ${prepared.globalTerrainTiles}/${prepared.total}` : "")
         : `全球 DEM ${prepared.globalTerrainTiles || prepared.total}/${prepared.total} tiles`;
       return {
-        source: liveMetaTerrainSource(),
+        source: liveMetaTerrainSource({
+          flatFallback: !!prepared.progressive && prepared.fallbackMode !== "ground-blob"
+        }),
         meta: hasCanopy,
         progressive: !!prepared.progressive,
         progressiveInitial: prepared.initialTotal || 0,
@@ -4745,7 +4794,7 @@
         progressiveStart: prepared.startBackground || null,
         snapshot: view,
         warning: prepared.progressive
-          ? `漸進式首幀：先準備中心 ${prepared.initialTotal}/${prepared.total} 張 surface tiles；首幀完成後會在背景補齊其餘 ${prepared.backgroundTotal} 張，再自動升級為完整陰影。`
+          ? `漸進式首幀：中心 ${prepared.initialTotal}/${prepared.total} 張使用完整 CHMv2 surface；周邊先用快速暫存地形，首幀後背景補齊其餘 ${prepared.backgroundTotal} 張，再自動升級為完整陰影。`
           : (hasCanopy
             ? (config.metaBlendBareTerrain
                 ? `全球 CHMv2 已載入目前視野（z${prepared.zooms.join("/")}，${canopySummary}），地面來源：${terrainSummary}；移動到其他地區會自動載入當地資料。`
@@ -4809,6 +4858,32 @@
     shadeZoomConstraintApplied = false;
   }
 
+  function getPreviewBuildingsCachedOnly() {
+    if (state.mode === "trees" || config.buildingMode === "none") return [];
+    if (config.metaProgressiveDeferBuildings === false) return getBuildings();
+
+    if (config.buildingMode === "custom") {
+      const cached = Array.isArray(customBuildingsCache) ? customBuildingsCache : [];
+      if (!cached.length) metaPerf.progressivePreviewBuildingsDeferred += 1;
+      return cached;
+    }
+
+    if (config.buildingMode === "osm" && mapRef) {
+      try {
+        const padded = paddedBuildingBounds(mapRef.getBounds());
+        const key = [padded.south, padded.west, padded.north, padded.east]
+          .map((v) => Number(v).toFixed(3)).join(",");
+        if (lastBuildingCoverageKey === key && Array.isArray(lastBuildingFeatures)) {
+          return lastBuildingFeatures;
+        }
+      } catch (_) {}
+      metaPerf.progressivePreviewBuildingsDeferred += 1;
+      return [];
+    }
+
+    return [];
+  }
+
   async function mountPreparedShadeLayer(terrain, serial) {
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       throw new Error("尚未填入 ShadeMap API key。");
@@ -4832,7 +4907,9 @@
       opacity: state.opacity,
       apiKey: config.apiKey,
       terrainSource: terrain.source,
-      getFeatures: getBuildings,
+      getFeatures: terrain && terrain.progressive
+        ? getPreviewBuildingsCachedOnly
+        : getBuildings,
       debug: (message) =>
         console.debug("[Haidian ShadeMap]", message)
     });
