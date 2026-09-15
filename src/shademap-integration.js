@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.3.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.4.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -29,6 +29,15 @@
     // The bare-earth DEM is overzoomed above its z15 maximum; canopy stays native.
     metaMaxZoom: 17,
     metaTileBuffer: 0,
+    // v8.4.0: prepare a bounded upstream caster fringe in the direction of the
+    // sun. A tree just outside the viewport may still cast a long afternoon
+    // shadow into the visible map, so viewport-only CHMv2 preparation is not
+    // sufficient for fidelity.
+    metaSunCasterBufferEnabled: true,
+    metaSunCasterMinZoom: 16,
+    metaSunCasterMaxShadowLengthM: 120,
+    metaSunCasterMaxTiles: 1,
+    metaSunCasterMinSolarAltitudeDeg: 2.5,
     // v8.3.0: this is the upper bound; effective concurrency is adapted to
     // save-data/effective-connection hints and hardwareConcurrency when available.
     metaTileConcurrency: 8,
@@ -53,9 +62,14 @@
     // makes the preview truly progressive; the complete CHMv2+DTM surface replaces
     // it after the renderer reaches idle.
     metaProgressiveFallbackMode: "flat-zero",
-    // Also keep OSM/custom building network work off the preview critical path.
-    // The final automatic upgrade restores the normal building source.
+    // Keep building network work off both the preview and the CHMv2 surface-complete
+    // critical paths. v8.3.2 upgrades buildings independently after the surface frame.
     metaProgressiveDeferBuildings: true,
+    buildingProgressiveDecoupleEnabled: true,
+    buildingWarmPrefetchEnabled: true,
+    buildingWarmPrefetchDelayMs: 250,
+    buildingFetchClientTimeoutMs: 9000,
+    buildingUpgradeDelayMs: 80,
     metaProgressiveFirstActivationOnly: true,
     metaProgressiveUpgradeDelayMs: 120,
     metaMaxCachedCogs: 16,
@@ -179,10 +193,26 @@
     defaultOpacity: 0.36,
     defaultColor: "#172554",
     queryOnClick: false,
-    lockMapMaxZoomToMeta: true,
     canopyOverlayDefault: true,
     canopyOverlayMinHeight: 2,
     canopyOverlayOpacity: 0.28,
+    // v8.4.0 experimental ground-receiver canopy shade. CHMv2 is a canopy-height
+    // raster, so the SDK DSM alone can miss the ground beneath / down-sun from a
+    // crown. This supplementary layer projects canopy columns onto the ground
+    // using the current solar vector. It is deliberately kept separate from the
+    // green canopy-extent overlay.
+    groundCanopyShadeEnabled: true,
+    groundCanopyShadeMinHeightM: 2,
+    groundCanopyShadeMaxShadowLengthM: 120,
+    groundCanopyShadeMinSolarAltitudeDeg: 2.5,
+    groundCanopyShadeSampleStepPx: 2,
+    groundCanopyShadeOpacity: 0.42,
+    groundCanopyShadeColor: "#172554",
+    groundCanopyShadeDisplayMaxZoom: 20,
+    // Do not clamp the Leaflet camera to CHMv2's native z17. Above z17 the
+    // canopy/shade diagnostics are overzoomed from the native raster; no fake
+    // extra spatial resolution is claimed.
+    lockMapMaxZoomToMeta: false,
 
     sdkUrl:
       "https://unpkg.com/leaflet-shadow-simulator@0.67.0/dist/leaflet-shadow-simulator.umd.min.js",
@@ -207,7 +237,8 @@
     date: new Date(),
     opacity: config.defaultOpacity,
     queryOnClick: config.queryOnClick === true,
-    canopyOverlay: config.canopyOverlayDefault !== false
+    canopyOverlay: config.canopyOverlayDefault !== false,
+    groundCanopyShade: config.groundCanopyShadeEnabled !== false
   };
 
   let mapRef = null;
@@ -235,6 +266,8 @@
   let mapMoveHooked = false;
   let mapQueryHooked = false;
   let canopyOverlayLayer = null;
+  let groundCanopyShadeLayer = null;
+  let groundCanopyShadeGeneration = 0;
   let queryPopup = null;
   let queryPointMarker = null;
   let querySampleCell = null;
@@ -249,7 +282,12 @@
   let metaWarmStartCompleted = false;
   let metaProgressiveUsed = false;
   let pendingProgressiveUpgrade = null;
+  let pendingBuildingUpgrade = null;
   let progressiveCanopyOverlayDeferred = false;
+  let shadeLayerPhase = "full";
+  let lastBuildingFetchError = null;
+  let buildingWarmPrefetchTimer = null;
+  let buildingWarmPrefetchSerial = 0;
   let metaActivationStartedAt = 0;
   let metaActivationInProgress = false;
   const metaPerf = {
@@ -258,6 +296,10 @@
     canopyReads: 0,
     canopyCacheHits: 0,
     canopyPromiseJoins: 0,
+    groundCanopyShadeTiles: 0,
+    groundCanopyShadeCasterTiles: 0,
+    groundCanopyShadeRenderMs: 0,
+    groundCanopyShadePointOverrides: 0,
     surfaceBuilds: 0,
     surfaceCacheHits: 0,
     surfaceBuildMs: 0,
@@ -274,6 +316,14 @@
     progressiveInitialMs: 0,
     progressiveFallbackMs: 0,
     progressivePreviewBuildingsDeferred: 0,
+    buildingPrefetchRuns: 0,
+    buildingPrefetchLoaded: 0,
+    buildingFetches: 0,
+    buildingFetchErrors: 0,
+    buildingUpgradeRuns: 0,
+    buildingUpgrades: 0,
+    buildingUpgradeSkipped: 0,
+    buildingFetchMs: 0,
     provisionalSurfaceBuilds: 0,
     provisionalSurfaceCacheHits: 0,
     progressiveUpgrades: 0,
@@ -284,7 +334,11 @@
     prebuiltHits: 0,
     prebuiltMisses: 0,
     lastPreviewMs: 0,
+    lastSurfaceCompleteMs: 0,
+    lastBuildingCompleteMs: 0,
     lastCompleteMs: 0,
+    lastBuildingFetchMs: 0,
+    lastBuildingError: null,
     lastWarmStart: null,
     lastProgressive: null
   };
@@ -636,6 +690,53 @@
     return false;
   }
 
+
+  function directionalCasterExpansion(snapshot, z) {
+    const none = { left: 0, right: 0, top: 0, bottom: 0, tiles: 0 };
+    if (!snapshot || config.metaSunCasterBufferEnabled === false || state.mode === "buildings") return none;
+    if (z < Math.max(config.metaMinZoom, Number(config.metaSunCasterMinZoom) || 16)) return none;
+    const center = {
+      lat: (snapshot.north + snapshot.south) / 2,
+      lng: (snapshot.east + snapshot.west) / 2
+    };
+    const solar = solarPositionAt(center, state.date);
+    const minAltitude = Math.max(0, Number(config.metaSunCasterMinSolarAltitudeDeg) || 2.5);
+    if (!solar || solar.night || solar.altitudeDeg < minAltitude) return none;
+    const maxShadowM = Math.max(0, Number(config.metaSunCasterMaxShadowLengthM) || 120);
+    const tileM = canopyPixelSizeMeters(center.lat, z) * 256;
+    const requested = Math.ceil(maxShadowM / Math.max(1, tileM));
+    const maxTiles = Math.max(0, Number(config.metaSunCasterMaxTiles) || 1);
+    const tiles = Math.max(0, Math.min(maxTiles, requested));
+    if (!tiles) return none;
+    const theta = Number(solar.sunBearingDeg) * Math.PI / 180;
+    const east = Math.sin(theta);
+    const north = Math.cos(theta);
+    return {
+      left: east < -0.15 ? tiles : 0,
+      right: east > 0.15 ? tiles : 0,
+      top: north > 0.15 ? tiles : 0,
+      bottom: north < -0.15 ? tiles : 0,
+      tiles,
+      bearing: solar.sunBearingDeg,
+      altitude: solar.altitudeDeg
+    };
+  }
+
+  function metaTileRangeForSnapshot(snapshot, z) {
+    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
+    const bounds = snapshotBounds(snapshot);
+    const range = tileRangeForBounds(bounds, z, buffer);
+    const extra = directionalCasterExpansion(snapshot, z);
+    const max = Math.pow(2, z) - 1;
+    return {
+      minX: Math.max(0, range.minX - extra.left),
+      maxX: Math.min(max, range.maxX + extra.right),
+      minY: Math.max(0, range.minY - extra.top),
+      maxY: Math.min(max, range.maxY + extra.bottom),
+      caster: extra
+    };
+  }
+
   function snapshotCoverageSignature(snapshot) {
     if (!snapshot || config.metaMode !== "live-cog") return null;
     const clampZoom = (value) => Math.max(
@@ -646,6 +747,9 @@
       clampZoom(Math.floor(snapshot.zoom)),
       clampZoom(Math.ceil(snapshot.zoom))
     ]));
+    // Coverage signature intentionally excludes the time-dependent directional
+    // caster fringe. Timeline changes stay in-place via ShadeMap.setDate(); they
+    // must not invalidate an otherwise identical viewport generation.
     const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
     const bounds = snapshotBounds(snapshot);
     const parts = zooms.map((z) => {
@@ -1052,6 +1156,7 @@
       0
     );
     updateTimeLabel();
+    redrawGroundCanopyShadeOverlay();
     applyShadeDate(state.date, true);
   }
 
@@ -1112,6 +1217,12 @@
         </label>
 
         <label class="haidian-shade-row" style="cursor:pointer">
+          <input id="haidianShadeGroundCanopy" type="checkbox"
+            style="width:15px;height:15px;margin:0;accent-color:#172554">
+          <span>補足地面樹蔭（實驗）</span>
+        </label>
+
+        <label class="haidian-shade-row" style="cursor:pointer">
           <input id="haidianShadeQueryToggle" type="checkbox"
             style="width:15px;height:15px;margin:0;accent-color:#0f766e">
           <span>點擊地圖查詢樹高／陰影</span>
@@ -1119,7 +1230,8 @@
 
         <div class="haidian-shade-legend">
           <span><i class="haidian-shade-swatch" style="background:rgba(16,185,129,.55)"></i>樹冠範圍</span>
-          <span><i class="haidian-shade-swatch" style="background:${config.defaultColor};opacity:${Math.max(.35, state.opacity)}"></i>模擬陰影</span>
+          <span><i class="haidian-shade-swatch" style="background:${config.defaultColor};opacity:${Math.max(.35, state.opacity)}"></i>ShadeMap 陰影</span>
+          <span><i class="haidian-shade-swatch" style="background:${config.groundCanopyShadeColor || config.defaultColor};opacity:${Math.max(.25, Number(config.groundCanopyShadeOpacity) || .42)}"></i>地面樹蔭補償</span>
         </div>
 
         <div id="haidianShadeStatus" class="haidian-shade-status">
@@ -1146,7 +1258,9 @@
 
         <div class="haidian-shade-note">
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
-          高解析樹蔭建議在 z14–17 判讀。v7.7 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
+          CHMv2 原生樹冠解析度以 z17 為基準；v8.4 可繼續放大檢視，但 z18–20 僅為原生資料 overzoom，不代表新增空間精度。
+          「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，把樹冠垂直柱投影到地面，用來補足 DSM 樹冠頂面不易表達的樹下／背陽地面遮蔭；仍屬模型估計。
+          v7.7 將「點位海拔」與「陰影地形」分開標示：臺灣點位海拔可由內政部 20 m DTM 安全代理取得；
           若設定官方 DTM Terrarium XYZ，臺灣的陰影地形也會改用該官方資料；未設定或 tile 缺失時才使用全球 DEM fallback。兩者不混稱為同一份資料。
           建築高度可能來自 OSM 或預設值，適合環境教育與空間比較，不取代現地測量。
         </div>
@@ -1163,6 +1277,7 @@
     timeEl.value = Math.min(1140, Math.max(300, minutesOfDay(state.date)));
     modeEl.value = state.mode;
     document.getElementById("haidianShadeCanopyOverlay").checked = state.canopyOverlay;
+    document.getElementById("haidianShadeGroundCanopy").checked = state.groundCanopyShade;
     document.getElementById("haidianShadeQueryToggle").checked = state.queryOnClick;
     updateTimeLabel();
 
@@ -1182,6 +1297,7 @@
 
     modeEl.addEventListener("change", async () => {
       state.mode = modeEl.value;
+      redrawGroundCanopyShadeOverlay();
       if (state.enabled) await rebuildShade();
     });
 
@@ -1196,6 +1312,7 @@
         0
       );
       updateTimeLabel();
+      redrawGroundCanopyShadeOverlay();
       applyShadeDate(state.date, false);
     });
 
@@ -1213,6 +1330,13 @@
       .addEventListener("change", (event) => {
         state.canopyOverlay = !!event.target.checked;
         syncCanopyOverlay();
+      });
+
+    document
+      .getElementById("haidianShadeGroundCanopy")
+      .addEventListener("change", (event) => {
+        state.groundCanopyShade = !!event.target.checked;
+        syncGroundCanopyShadeOverlay();
       });
 
     document
@@ -1237,6 +1361,7 @@
           Math.max(300, minutesOfDay(state.date))
         );
         updateTimeLabel();
+        redrawGroundCanopyShadeOverlay();
         applyShadeDate(state.date, true);
       });
 
@@ -1806,34 +1931,45 @@
         canvas.setAttribute("aria-hidden", "true");
 
         (async () => {
-          if (coords.z < config.metaMinZoom || coords.z > config.metaMaxZoom) {
+          const displayMaxZoom = Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20);
+          if (coords.z < config.metaMinZoom || coords.z > displayMaxZoom) {
             done(null, canvas);
             return;
           }
 
           try {
             await ensureGeoTIFF();
-            const canopy = await readMetaCanopyTile(coords.x, coords.y, coords.z);
+            const req = displayCanopyRasterRequest(coords.x, coords.y, coords.z);
+            const canopy = await readMetaCanopyTile(req.parentX, req.parentY, req.nativeZ);
             if (!canopy) {
               done(null, canvas);
               return;
             }
 
-            const ctx = canvas.getContext("2d");
-            const image = ctx.createImageData(256, 256);
+            const smallSize = Math.max(1, Math.round(req.cropSize));
+            const small = document.createElement("canvas");
+            small.width = smallSize;
+            small.height = smallSize;
+            const sctx = small.getContext("2d");
+            const image = sctx.createImageData(smallSize, smallSize);
             const minHeight = Math.max(0, Number(config.canopyOverlayMinHeight) || 2);
-
-            for (let i = 0; i < canopy.length; i += 1) {
-              const h = canopy[i] > 0 && canopy[i] < 255 ? canopy[i] : 0;
-              if (h < minHeight) continue;
-              const p = i * 4;
-              image.data[p] = 16;
-              image.data[p + 1] = 185;
-              image.data[p + 2] = 129;
-              image.data[p + 3] = Math.round(145 + Math.min(h, 30) / 30 * 90);
+            for (let yy = 0; yy < smallSize; yy += 1) {
+              for (let xx = 0; xx < smallSize; xx += 1) {
+                const sx = Math.max(0, Math.min(255, Math.floor(req.cropX + xx)));
+                const sy = Math.max(0, Math.min(255, Math.floor(req.cropY + yy)));
+                const h = Number(canopy[sy * 256 + sx]);
+                if (!(h >= minHeight && h < 255)) continue;
+                const p = (yy * smallSize + xx) * 4;
+                image.data[p] = 16;
+                image.data[p + 1] = 185;
+                image.data[p + 2] = 129;
+                image.data[p + 3] = Math.round(145 + Math.min(h, 30) / 30 * 90);
+              }
             }
-
-            ctx.putImageData(image, 0, 0);
+            sctx.putImageData(image, 0, 0);
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(small, 0, 0, smallSize, smallSize, 0, 0, 256, 256);
             done(null, canvas);
           } catch (error) {
             console.warn("[Haidian Shade] canopy overlay tile:", error);
@@ -1848,7 +1984,7 @@
     return new CanopyGrid({
       tileSize: 256,
       minZoom: config.metaMinZoom,
-      maxZoom: config.metaMaxZoom,
+      maxZoom: Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20),
       opacity: Number(config.canopyOverlayOpacity) || 0.28,
       zIndex: 650,
       updateWhenIdle: true,
@@ -1884,6 +2020,264 @@
       }
     } catch (error) {
       console.warn("[Haidian Shade] canopy overlay:", error);
+    }
+  }
+
+
+  function displayCanopyRasterRequest(x, y, z) {
+    const displayZ = Math.max(0, Number(z) || 0);
+    const nativeZ = Math.min(displayZ, Number(config.metaMaxZoom) || 17);
+    if (displayZ <= nativeZ) {
+      return { nativeZ, parentX: x, parentY: y, scale: 1, cropX: 0, cropY: 0, cropSize: 256 };
+    }
+    const scale = 1 << (displayZ - nativeZ);
+    const parentX = Math.floor(x / scale);
+    const parentY = Math.floor(y / scale);
+    const cropSize = 256 / scale;
+    return {
+      nativeZ,
+      parentX,
+      parentY,
+      scale,
+      cropX: (x % scale) * cropSize,
+      cropY: (y % scale) * cropSize,
+      cropSize
+    };
+  }
+
+  function parseShadeColor(value) {
+    const raw = String(value || config.defaultColor || "#172554").trim();
+    const m = raw.match(/^#([0-9a-f]{6})$/i);
+    if (!m) return { r: 23, g: 37, b: 84 };
+    return {
+      r: parseInt(m[1].slice(0, 2), 16),
+      g: parseInt(m[1].slice(2, 4), 16),
+      b: parseInt(m[1].slice(4, 6), 16)
+    };
+  }
+
+  function markGroundCanopyMask(mask, width, height, x, y, radius, alpha) {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    const r = Math.max(0, Math.floor(radius));
+    const minX = Math.max(0, ix - r);
+    const maxX = Math.min(width - 1, ix + r);
+    const minY = Math.max(0, iy - r);
+    const maxY = Math.min(height - 1, iy + r);
+    for (let yy = minY; yy <= maxY; yy += 1) {
+      const row = yy * width;
+      for (let xx = minX; xx <= maxX; xx += 1) {
+        const idx = row + xx;
+        if (alpha > mask[idx]) mask[idx] = alpha;
+      }
+    }
+  }
+
+  function groundCanopySourcePixelBounds(targetMinX, targetMinY, targetSpan, ux, uy, maxShadowPx, worldPx) {
+    const shiftedMinX = targetMinX - ux * maxShadowPx;
+    const shiftedMinY = targetMinY - uy * maxShadowPx;
+    const shiftedMaxX = targetMinX + targetSpan - ux * maxShadowPx;
+    const shiftedMaxY = targetMinY + targetSpan - uy * maxShadowPx;
+    return {
+      minX: Math.max(0, Math.floor(Math.min(targetMinX, shiftedMinX)) - 2),
+      maxX: Math.min(worldPx - 1, Math.ceil(Math.max(targetMinX + targetSpan, shiftedMaxX)) + 2),
+      minY: Math.max(0, Math.floor(Math.min(targetMinY, shiftedMinY)) - 2),
+      maxY: Math.min(worldPx - 1, Math.ceil(Math.max(targetMinY + targetSpan, shiftedMaxY)) + 2)
+    };
+  }
+
+  async function renderGroundCanopyShadeTile(coords, canvas, generation) {
+    const startedAt = monotonicNow();
+    if (
+      config.groundCanopyShadeEnabled === false ||
+      !state.groundCanopyShade ||
+      state.mode === "buildings" ||
+      coords.z < config.metaMinZoom ||
+      coords.z > Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20)
+    ) return;
+
+    const center = tileCenterLatLng(coords.x, coords.y, coords.z);
+    const solar = solarPositionAt(center, state.date);
+    const minAltitude = Math.max(0, Number(config.groundCanopyShadeMinSolarAltitudeDeg) || 2.5);
+    if (!solar || solar.night || solar.altitudeDeg < minAltitude) return;
+
+    const req = displayCanopyRasterRequest(coords.x, coords.y, coords.z);
+    const evalZ = req.nativeZ;
+    const scale = req.scale;
+    const targetSpan = 256 / scale;
+    const targetMinX = coords.x * 256 / scale;
+    const targetMinY = coords.y * 256 / scale;
+    const targetW = Math.max(1, Math.round(targetSpan));
+    const targetH = targetW;
+    const pixelSizeM = canopyPixelSizeMeters(center.lat, evalZ);
+    const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
+    const maxShadowM = Math.max(10, Number(config.groundCanopyShadeMaxShadowLengthM) || 120);
+    const maxShadowPx = maxShadowM / Math.max(0.05, pixelSizeM);
+    const downBearing = (Number(solar.sunBearingDeg) + 180) % 360;
+    const theta = downBearing * Math.PI / 180;
+    const ux = Math.sin(theta);
+    const uy = -Math.cos(theta); // Web-Mercator tile y grows southward.
+    const worldPx = Math.pow(2, evalZ) * 256;
+    const sourceBounds = groundCanopySourcePixelBounds(
+      targetMinX, targetMinY, targetSpan, ux, uy, maxShadowPx, worldPx
+    );
+    const minTx = Math.floor(sourceBounds.minX / 256);
+    const maxTx = Math.floor(sourceBounds.maxX / 256);
+    const minTy = Math.floor(sourceBounds.minY / 256);
+    const maxTy = Math.floor(sourceBounds.maxY / 256);
+    const rasterMap = new Map();
+    const casterTiles = [];
+    for (let tx = minTx; tx <= maxTx; tx += 1) {
+      for (let ty = minTy; ty <= maxTy; ty += 1) casterTiles.push({ x: tx, y: ty, z: evalZ });
+    }
+    metaPerf.groundCanopyShadeCasterTiles += casterTiles.length;
+    await ensureGeoTIFF();
+    await Promise.all(casterTiles.map(async (tile) => {
+      const key = tileKey(tile.x, tile.y, tile.z);
+      rasterMap.set(key, await readMetaCanopyTile(tile.x, tile.y, tile.z));
+    }));
+    if (generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
+
+    const mask = new Uint8Array(targetW * targetH);
+    const minHeight = Math.max(0.5, Number(config.groundCanopyShadeMinHeightM) || 2);
+    const sampleStep = Math.max(1, Math.floor(Number(config.groundCanopyShadeSampleStepPx) || 2));
+    const walkStep = Math.max(0.9, sampleStep * 0.8);
+
+    for (const tile of casterTiles) {
+      const raster = rasterMap.get(tileKey(tile.x, tile.y, tile.z));
+      if (!raster) continue;
+      const tileGx = tile.x * 256;
+      const tileGy = tile.y * 256;
+      const lx0 = Math.max(0, Math.floor(sourceBounds.minX - tileGx));
+      const lx1 = Math.min(255, Math.ceil(sourceBounds.maxX - tileGx));
+      const ly0 = Math.max(0, Math.floor(sourceBounds.minY - tileGy));
+      const ly1 = Math.min(255, Math.ceil(sourceBounds.maxY - tileGy));
+      for (let py = ly0; py <= ly1; py += sampleStep) {
+        for (let px = lx0; px <= lx1; px += sampleStep) {
+          let h = 0;
+          const yEnd = Math.min(256, py + sampleStep);
+          const xEnd = Math.min(256, px + sampleStep);
+          for (let yy = py; yy < yEnd; yy += 1) {
+            const row = yy * 256;
+            for (let xx = px; xx < xEnd; xx += 1) {
+              const raw = Number(raster[row + xx]);
+              if (raw > h && raw > 0 && raw < 255) h = raw;
+            }
+          }
+          if (h < minHeight) continue;
+          const lengthPx = Math.min(maxShadowM, h / tanAlt) / Math.max(0.05, pixelSizeM);
+          const steps = Math.max(1, Math.ceil(lengthPx / walkStep));
+          const sourceX = tileGx + px + Math.min(sampleStep, 2) * 0.5;
+          const sourceY = tileGy + py + Math.min(sampleStep, 2) * 0.5;
+          const alpha = Math.max(110, Math.min(235, Math.round(125 + Math.min(35, h) / 35 * 95)));
+          const radius = Math.max(0, Math.floor(sampleStep / 2));
+          for (let i = 0; i <= steps; i += 1) {
+            const d = Math.min(lengthPx, i * walkStep);
+            const outX = sourceX + ux * d - targetMinX;
+            const outY = sourceY + uy * d - targetMinY;
+            if (outX < -sampleStep || outY < -sampleStep || outX >= targetSpan + sampleStep || outY >= targetSpan + sampleStep) continue;
+            markGroundCanopyMask(mask, targetW, targetH, outX, outY, radius, alpha);
+          }
+        }
+      }
+    }
+
+    if (generation !== groundCanopyShadeGeneration) return;
+    const small = document.createElement("canvas");
+    small.width = targetW;
+    small.height = targetH;
+    const sctx = small.getContext("2d");
+    const image = sctx.createImageData(targetW, targetH);
+    const color = parseShadeColor(config.groundCanopyShadeColor || config.defaultColor);
+    const opacity = Math.max(0.05, Math.min(1, Number(config.groundCanopyShadeOpacity) || 0.42));
+    for (let i = 0; i < mask.length; i += 1) {
+      const a = mask[i];
+      if (!a) continue;
+      const p = i * 4;
+      image.data[p] = color.r;
+      image.data[p + 1] = color.g;
+      image.data[p + 2] = color.b;
+      image.data[p + 3] = Math.round(a * opacity);
+    }
+    sctx.putImageData(image, 0, 0);
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.drawImage(small, 0, 0, targetW, targetH, 0, 0, 256, 256);
+    metaPerf.groundCanopyShadeTiles += 1;
+    metaPerf.groundCanopyShadeRenderMs += Math.max(0, monotonicNow() - startedAt);
+  }
+
+  function removeGroundCanopyShadeOverlay() {
+    if (!groundCanopyShadeLayer || !mapRef) return;
+    groundCanopyShadeGeneration += 1;
+    try {
+      if (mapRef.hasLayer(groundCanopyShadeLayer)) mapRef.removeLayer(groundCanopyShadeLayer);
+    } catch (_) {}
+  }
+
+  function createGroundCanopyShadeLayer() {
+    if (!window.L || !L.GridLayer || !mapRef) return null;
+    if (!mapRef.getPane("haidianGroundCanopyShadePane")) {
+      const pane = mapRef.createPane("haidianGroundCanopyShadePane");
+      pane.style.zIndex = "640";
+      pane.style.pointerEvents = "none";
+    }
+    const GroundShadeGrid = L.GridLayer.extend({
+      createTile(coords, done) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 256;
+        canvas.height = 256;
+        canvas.setAttribute("aria-hidden", "true");
+        const generation = groundCanopyShadeGeneration;
+        renderGroundCanopyShadeTile(coords, canvas, generation)
+          .then(() => done(null, canvas))
+          .catch((error) => {
+            console.warn("[Haidian Shade] ground canopy shade tile:", error);
+            done(null, canvas);
+          });
+        return canvas;
+      }
+    });
+    return new GroundShadeGrid({
+      pane: "haidianGroundCanopyShadePane",
+      tileSize: 256,
+      minZoom: config.metaMinZoom,
+      maxZoom: Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20),
+      opacity: 1,
+      updateWhenIdle: true,
+      keepBuffer: 1,
+      noWrap: true
+    });
+  }
+
+  function redrawGroundCanopyShadeOverlay() {
+    groundCanopyShadeGeneration += 1;
+    if (groundCanopyShadeLayer && typeof groundCanopyShadeLayer.redraw === "function") {
+      try { groundCanopyShadeLayer.redraw(); } catch (_) {}
+    }
+  }
+
+  function syncGroundCanopyShadeOverlay() {
+    if (!mapRef) return;
+    const shouldShow = state.enabled && state.groundCanopyShade && state.mode !== "buildings" && config.groundCanopyShadeEnabled !== false;
+    if (progressiveCanopyOverlayDeferred) {
+      removeGroundCanopyShadeOverlay();
+      return;
+    }
+    if (!shouldShow) {
+      removeGroundCanopyShadeOverlay();
+      return;
+    }
+    if (!groundCanopyShadeLayer) groundCanopyShadeLayer = createGroundCanopyShadeLayer();
+    if (!groundCanopyShadeLayer) return;
+    try {
+      if (!mapRef.hasLayer(groundCanopyShadeLayer)) groundCanopyShadeLayer.addTo(mapRef);
+      if (typeof groundCanopyShadeLayer.bringToFront === "function") groundCanopyShadeLayer.bringToFront();
+      // Keep the green canopy extent above the supplementary dark ground shade.
+      if (canopyOverlayLayer && mapRef.hasLayer(canopyOverlayLayer) && typeof canopyOverlayLayer.bringToFront === "function") canopyOverlayLayer.bringToFront();
+    } catch (error) {
+      console.warn("[Haidian Shade] ground canopy shade overlay:", error);
     }
   }
 
@@ -2941,10 +3335,24 @@
     try {
       if (typeof shadeLayer.isPositionInShade === "function") {
         const shaded = await Promise.resolve(shadeLayer.isPositionInShade(point.x, point.y));
+        if (!shaded && config.groundCanopyShadeEnabled !== false && state.groundCanopyShade && state.mode !== "buildings") {
+          const tree = await findCanopyShadowEvidence(latlng, solar);
+          if (tree) {
+            metaPerf.groundCanopyShadePointOverrides += 1;
+            return { label: "🌳 樹蔭", shaded: true, night: false, solar, groundCanopy: true, groundCanopyTree: tree };
+          }
+        }
         return { label: shaded ? "◐ 陰影" : "☀️ 日照", shaded: !!shaded, night: false, solar };
       }
       if (typeof shadeLayer.isPositionInSun === "function") {
         const sunny = await Promise.resolve(shadeLayer.isPositionInSun(point.x, point.y));
+        if (sunny && config.groundCanopyShadeEnabled !== false && state.groundCanopyShade && state.mode !== "buildings") {
+          const tree = await findCanopyShadowEvidence(latlng, solar);
+          if (tree) {
+            metaPerf.groundCanopyShadePointOverrides += 1;
+            return { label: "🌳 樹蔭", shaded: true, night: false, solar, groundCanopy: true, groundCanopyTree: tree };
+          }
+        }
         return { label: sunny ? "☀️ 日照" : "◐ 陰影", shaded: !sunny, night: false, solar };
       }
       return { label: "此 SDK 版本不支援點位判讀", shaded: null, night: false, solar };
@@ -3352,7 +3760,11 @@
     let primaryMetricLabel = "日照狀態";
     let primaryMetricValue = pending;
 
-    if (isNight) {
+    if (model.navigationUpdating) {
+      statusLabel = "⏳ 更新中";
+      shadeClass = "is-pending";
+      primaryMetricValue = '<span class="hsq-pending">地圖移動後重新計算…</span>';
+    } else if (isNight) {
       statusLabel = "🌙 夜間";
       shadeClass = "is-night";
       primaryMetricValue = '🌙 夜間 <small>太陽已落下</small>';
@@ -3591,6 +4003,7 @@
       if (!activePointQuery || activePointQuery.serial !== active.serial) return;
       active.model.shade = shade;
       active.model.solar = shade && shade.solar ? shade.solar : active.model.solar;
+      active.model.navigationUpdating = false;
       if (active.model.canopyBenefitTargetKind === "clicked-canopy" && Number.isFinite(active.model.canopy) && active.model.canopy >= Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2)) {
         active.model.canopyBenefit = undefined;
         active.model.canopyBenefitTargetKey = "";
@@ -3608,7 +4021,17 @@
         removeCanopyBenefitOverlay();
       }
       if (shade && shade.shaded === true && !shade.night) {
-        resolvePointShadeSource(active.serial, active.model);
+        if (shade.groundCanopy && shade.groundCanopyTree) {
+          active.model.shadeSource = {
+            type: "tree",
+            tree: shade.groundCanopyTree,
+            confidence: "high",
+            method: "CHMv2 地面樹蔭反向太陽光線判讀"
+          };
+          active.model.shadeSourceResolving = false;
+        } else {
+          resolvePointShadeSource(active.serial, active.model);
+        }
       } else {
         active.model.shadeSource = null;
         active.model.shadeSourceResolving = false;
@@ -3691,7 +4114,7 @@
         setStatus("周邊 CHMv2 surface tiles 已補齊；正在升級為完整陰影…");
         setTimeout(() => {
           if (!state.enabled || serial !== shadeRebuildSerial) return;
-          rebuildShade();
+          rebuildShade({ phase: "surface", buildingPolicy: "cached-only" });
         }, Math.max(0, Number(config.metaProgressiveUpgradeDelayMs) || 0));
       })
       .catch((error) => {
@@ -3700,6 +4123,7 @@
         console.warn("[Haidian Shade] progressive surface completion failed:", error);
         if (state.enabled && serial === shadeRebuildSerial) {
           syncCanopyOverlay();
+          syncGroundCanopyShadeOverlay();
           setStatus("漸進式陰影預覽已顯示；部分周邊 CHMv2 資料未能補齊，移動地圖或重新啟用時會再嘗試。", true);
         }
       });
@@ -3741,11 +4165,28 @@
         metaPerf.lastPreviewMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
       }
     } else {
-      if (metaActivationInProgress && metaActivationStartedAt) {
-        metaPerf.lastCompleteMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
-        metaActivationInProgress = false;
+      if (shadeLayerPhase === "surface" && config.buildingProgressiveDecoupleEnabled !== false) {
+        if (metaActivationInProgress && metaActivationStartedAt) {
+          metaPerf.lastSurfaceCompleteMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+        }
+        startBuildingUpgradeAfterSurface(serial);
+      } else {
+        if (metaActivationInProgress && metaActivationStartedAt) {
+          const elapsed = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+          if (!metaPerf.lastSurfaceCompleteMs) metaPerf.lastSurfaceCompleteMs = elapsed;
+          if (shadeLayerPhase === "full") {
+            metaPerf.lastBuildingCompleteMs = elapsed;
+            metaPerf.buildingUpgrades += 1;
+          }
+          metaPerf.lastCompleteMs = elapsed;
+          metaActivationInProgress = false;
+        }
+        setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
       }
-      setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+    }
+    if (!progressivePreview) {
+      syncCanopyOverlay();
+      syncGroundCanopyShadeOverlay();
     }
     scheduleRetiredCanvasScrub(260);
     refreshActivePointShade();
@@ -3949,7 +4390,17 @@
       model.shade = shade;
       model.solar = shade && shade.solar ? shade.solar : model.solar;
       if (shade && shade.shaded === true && !shade.night) {
-        resolvePointShadeSource(serial, model);
+        if (shade.groundCanopy && shade.groundCanopyTree) {
+          model.shadeSource = {
+            type: "tree",
+            tree: shade.groundCanopyTree,
+            confidence: "high",
+            method: "CHMv2 地面樹蔭反向太陽光線判讀"
+          };
+          model.shadeSourceResolving = false;
+        } else {
+          resolvePointShadeSource(serial, model);
+        }
       } else {
         model.shadeSource = null;
         model.shadeSourceResolving = false;
@@ -4021,18 +4472,20 @@
     if (!mapRef || mapQueryHooked || typeof mapRef.on !== "function") return;
     mapQueryHooked = true;
 
-    const clearQueryForNavigation = () => {
+    const markQueryForNavigation = () => {
       lastMapDragAt = Date.now();
-      pointQuerySerial += 1;
-      removePointQueryOverlay();
+      if (!activePointQuery || activePointQuery.serial !== pointQuerySerial || !queryPopup) return;
+      activePointQuery.model.navigationUpdating = true;
+      refreshPointQueryTooltip(activePointQuery.serial, activePointQuery.model);
     };
 
-    // Query markers/cells describe one exact viewport sample. They must never
-    // survive pan/zoom/view reset, regardless of ShadeMap research mode.
-    mapRef.on("movestart", clearQueryForNavigation);
-    mapRef.on("zoomstart", clearQueryForNavigation);
-    mapRef.on("viewreset", clearQueryForNavigation);
-    mapRef.on("zoomlevelschange", clearQueryForNavigation);
+    // v8.4.0: a point card is a geographic bookmark, not a viewport artifact.
+    // Keep its marker/cell/tooltip attached to the same LatLng while panning or
+    // zooming; the current renderer's idle event refreshes the sun/shade result.
+    mapRef.on("movestart", markQueryForNavigation);
+    mapRef.on("zoomstart", markQueryForNavigation);
+    mapRef.on("viewreset", markQueryForNavigation);
+    mapRef.on("zoomlevelschange", markQueryForNavigation);
     mapRef.on("dragend", () => { lastMapDragAt = Date.now(); });
     mapRef.on("click", handleMapPointQuery);
     if (typeof document.addEventListener === "function") {
@@ -4110,13 +4563,13 @@
       clampZoom(Math.ceil(mapZoom))
     ]));
     const tiles = [];
-    const buffer = Math.max(0, Number(config.metaTileBuffer) || 0);
-    const bounds = snapshotBounds(view);
     const centerLat = (view.north + view.south) / 2;
     const centerLng = (view.east + view.west) / 2;
 
+    const casterBuffers = [];
     for (const z of zooms) {
-      const range = tileRangeForBounds(bounds, z, buffer);
+      const range = metaTileRangeForSnapshot(view, z);
+      casterBuffers.push({ z, ...range.caster });
       const centerTile = lonLatToXYZ(centerLat, centerLng, z);
       for (let x = range.minX; x <= range.maxX; x += 1) {
         for (let y = range.minY; y <= range.maxY; y += 1) {
@@ -4131,7 +4584,7 @@
     // Center-first ordering does not change numerical results. It only means that
     // an interrupted viewport job leaves the most useful hot tiles behind.
     tiles.sort((a, b) => a.priority - b.priority || b.z - a.z || a.y - b.y || a.x - b.x);
-    return { tiles, zooms };
+    return { tiles, zooms, casterBuffers };
   }
 
   function summarizePreparedMetaTiles(tiles, zooms, view, loaded) {
@@ -4338,6 +4791,7 @@
     if (prebuiltRegionForSnapshot(view) && await prebuiltSurfaceAvailable(view)) {
       metaPerf.lastWarmStart = { attempted: 0, loaded: 0, elapsedMs: 0, skipped: "prebuilt-coverage", completed: true };
       metaWarmStartCompleted = true;
+      scheduleBuildingWarmPrefetch();
       return;
     }
     const plan = liveMetaTilesForSnapshot(view);
@@ -4374,7 +4828,10 @@
         zooms: plan.zooms.slice(),
         completed: localSerial === metaWarmStartSerial && !state.enabled
       };
-      if (localSerial === metaWarmStartSerial && !state.enabled) metaWarmStartCompleted = true;
+      if (localSerial === metaWarmStartSerial && !state.enabled) {
+        metaWarmStartCompleted = true;
+        scheduleBuildingWarmPrefetch();
+      }
     } catch (error) {
       metaPerf.lastWarmStart = {
         attempted: tiles.length,
@@ -4421,6 +4878,9 @@
       progressiveEnabled: config.metaProgressiveEnabled !== false,
       progressiveUsed: metaProgressiveUsed,
       progressivePending: !!pendingProgressiveUpgrade,
+      buildingUpgradePending: !!pendingBuildingUpgrade,
+      groundCanopyShadeEnabled: config.groundCanopyShadeEnabled !== false && state.groundCanopyShade,
+      shadeLayerPhase,
       counters: Object.assign({}, metaPerf, {
         lastWarmStart: metaPerf.lastWarmStart ? Object.assign({}, metaPerf.lastWarmStart) : null
       }),
@@ -4438,7 +4898,7 @@
 
   function resetMetaDiagnostics() {
     for (const key of Object.keys(metaPerf)) {
-      if (key === "lastWarmStart" || key === "lastProgressive") metaPerf[key] = null;
+      if (key === "lastWarmStart" || key === "lastProgressive" || key === "lastBuildingError") metaPerf[key] = null;
       else metaPerf[key] = 0;
     }
   }
@@ -4616,8 +5076,18 @@
       `${padded.north},${padded.east}` +
       `);out tags geom;`;
 
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const clientTimeoutMs = Math.max(1000, Number(config.buildingFetchClientTimeoutMs) || 9000);
+    const fetchStartedAt = monotonicNow();
+    metaPerf.buildingFetches += 1;
+    lastBuildingFetchError = null;
+    const timeoutId = controller ? setTimeout(() => {
+      try { controller.abort(); } catch (_) {}
+    }, clientTimeoutMs) : null;
+
     const promise = fetch(
-      `${config.overpassUrl}?data=${encodeURIComponent(query)}`
+      `${config.overpassUrl}?data=${encodeURIComponent(query)}`,
+      controller ? { signal: controller.signal } : undefined
     )
       .then((response) => {
         if (!response.ok) {
@@ -4667,11 +5137,24 @@
 
         lastBuildingFeatures = features;
         lastBuildingCoverageKey = key;
+        lastBuildingFetchError = null;
         return features;
       })
       .catch((error) => {
+        lastBuildingFetchError = error;
+        metaPerf.buildingFetchErrors += 1;
+        metaPerf.lastBuildingError = error && error.message ? error.message : String(error);
+        // Never pin a transient Overpass failure in the promise cache. A later
+        // activation/pan must be able to retry the same viewport.
+        overpassCache.delete(key);
         console.warn("[Haidian Shade] OSM buildings:", error);
         return [];
+      })
+      .finally(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+        const elapsed = Math.max(0, monotonicNow() - fetchStartedAt);
+        metaPerf.buildingFetchMs += elapsed;
+        metaPerf.lastBuildingFetchMs = Math.round(elapsed);
       });
 
     overpassCache.set(key, promise);
@@ -4824,7 +5307,7 @@
   }
 
   function shouldConstrainMapZoomForShade() {
-    return config.lockMapMaxZoomToMeta !== false && state.mode !== "buildings";
+    return config.lockMapMaxZoomToMeta === true && state.mode !== "buildings";
   }
 
   function applyShadeZoomConstraint() {
@@ -4884,7 +5367,103 @@
     return [];
   }
 
-  async function mountPreparedShadeLayer(terrain, serial) {
+  function clearPendingBuildingUpgrade() {
+    pendingBuildingUpgrade = null;
+  }
+
+  function cancelBuildingWarmPrefetch() {
+    buildingWarmPrefetchSerial += 1;
+    clearTimeout(buildingWarmPrefetchTimer);
+    buildingWarmPrefetchTimer = null;
+  }
+
+  function scheduleBuildingWarmPrefetch() {
+    if (
+      config.buildingWarmPrefetchEnabled === false ||
+      state.enabled ||
+      state.mode === "trees" ||
+      config.buildingMode === "none" ||
+      !mapRef
+    ) return;
+    cancelBuildingWarmPrefetch();
+    const localSerial = buildingWarmPrefetchSerial;
+    buildingWarmPrefetchTimer = setTimeout(() => {
+      buildingWarmPrefetchTimer = null;
+      if (localSerial !== buildingWarmPrefetchSerial || state.enabled) return;
+      metaPerf.buildingPrefetchRuns += 1;
+      Promise.resolve(getBuildings())
+        .then((features) => {
+          if (localSerial !== buildingWarmPrefetchSerial || state.enabled) return;
+          if (!lastBuildingFetchError) metaPerf.buildingPrefetchLoaded += Array.isArray(features) ? features.length : 0;
+        })
+        .catch(() => {});
+    }, Math.max(0, Number(config.buildingWarmPrefetchDelayMs) || 0));
+  }
+
+  function finishSurfaceOnlyActivation(message, isError) {
+    if (metaActivationInProgress && metaActivationStartedAt && !metaPerf.lastSurfaceCompleteMs) {
+      metaPerf.lastSurfaceCompleteMs = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+    }
+    metaActivationInProgress = false;
+    setStatus(message, !!isError);
+  }
+
+  function startBuildingUpgradeAfterSurface(serial) {
+    if (config.buildingProgressiveDecoupleEnabled === false || state.mode === "trees" || config.buildingMode === "none") {
+      if (metaActivationInProgress && metaActivationStartedAt) {
+        const elapsed = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+        if (!metaPerf.lastSurfaceCompleteMs) metaPerf.lastSurfaceCompleteMs = elapsed;
+        metaPerf.lastCompleteMs = elapsed;
+        metaActivationInProgress = false;
+      }
+      setStatus(`陰影計算完成：${modeLabel(state.mode)}。`);
+      return false;
+    }
+
+    const signature = snapshotCoverageSignature(captureViewSnapshot());
+    const pending = { serial, signature };
+    pendingBuildingUpgrade = pending;
+    metaPerf.buildingUpgradeRuns += 1;
+    setStatus("地形＋樹冠陰影已完成；建築資料正在背景載入…");
+
+    Promise.resolve(getBuildings())
+      .then((features) => {
+        if (pendingBuildingUpgrade !== pending || !state.enabled || serial !== shadeRebuildSerial) return;
+        if (signature !== snapshotCoverageSignature(captureViewSnapshot())) return;
+        pendingBuildingUpgrade = null;
+        if (lastBuildingFetchError) {
+          metaPerf.buildingUpgradeSkipped += 1;
+          finishSurfaceOnlyActivation("地形＋樹冠陰影已完成；建築資料暫時無法取得，稍後移動地圖或重新啟用會再嘗試。", true);
+          return;
+        }
+        if (!Array.isArray(features) || !features.length) {
+          metaPerf.buildingUpgradeSkipped += 1;
+          if (metaActivationInProgress && metaActivationStartedAt) {
+            const elapsed = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
+            metaPerf.lastBuildingCompleteMs = elapsed;
+            metaPerf.lastCompleteMs = elapsed;
+            metaActivationInProgress = false;
+          }
+          setStatus(`陰影計算完成：${modeLabel(state.mode)}（目前視野無可用建築資料）。`);
+          return;
+        }
+        setStatus("建築資料已載入；正在加入建築陰影…");
+        setTimeout(() => {
+          if (!state.enabled || serial !== shadeRebuildSerial) return;
+          rebuildShade({ phase: "full", buildingPolicy: "normal" });
+        }, Math.max(0, Number(config.buildingUpgradeDelayMs) || 0));
+      })
+      .catch((error) => {
+        if (pendingBuildingUpgrade !== pending) return;
+        pendingBuildingUpgrade = null;
+        metaPerf.buildingUpgradeSkipped += 1;
+        metaPerf.lastBuildingError = error && error.message ? error.message : String(error);
+        finishSurfaceOnlyActivation("地形＋樹冠陰影已完成；建築資料背景載入失敗。", true);
+      });
+    return true;
+  }
+
+  async function mountPreparedShadeLayer(terrain, serial, options = {}) {
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       throw new Error("尚未填入 ShadeMap API key。");
     }
@@ -4907,7 +5486,7 @@
       opacity: state.opacity,
       apiKey: config.apiKey,
       terrainSource: terrain.source,
-      getFeatures: terrain && terrain.progressive
+      getFeatures: options.buildingPolicy === "cached-only" || (terrain && terrain.progressive)
         ? getPreviewBuildingsCachedOnly
         : getBuildings,
       debug: (message) =>
@@ -4917,6 +5496,7 @@
     beginShadeCanvasOwnership(serial);
     shadeLayer = layer;
     shadeLayerSerial = serial;
+    shadeLayerPhase = options.phase || (terrain && terrain.progressive ? "preview" : "full");
     shadeReady = false;
     shadeAppliedDateMs = mountDate.getTime();
     if (shadePendingDate && shadePendingDate.getTime() === shadeAppliedDateMs) {
@@ -5013,10 +5593,16 @@
 
   async function enableShade() {
     cancelMetaWarmStart();
+    cancelBuildingWarmPrefetch();
+    clearPendingBuildingUpgrade();
     metaActivationStartedAt = monotonicNow();
     metaActivationInProgress = true;
     metaPerf.lastPreviewMs = 0;
+    metaPerf.lastSurfaceCompleteMs = 0;
+    metaPerf.lastBuildingCompleteMs = 0;
     metaPerf.lastCompleteMs = 0;
+    metaPerf.lastBuildingFetchMs = 0;
+    metaPerf.lastBuildingError = null;
     if (!mapRef) {
       setStatus("找不到 Leaflet map。", true);
       return;
@@ -5040,12 +5626,16 @@
       // but it is NEVER allowed to create/add a ShadeMap layer.
       if (serial !== shadeRebuildSerial || !state.enabled) return;
 
-      const layer = await mountPreparedShadeLayer(terrain, serial);
+      const layer = await mountPreparedShadeLayer(terrain, serial, {
+        phase: terrain && terrain.progressive ? "preview" : "full",
+        buildingPolicy: terrain && terrain.progressive ? "cached-only" : "normal"
+      });
       if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
 
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
       armProgressiveUpgrade(terrain, serial);
       syncCanopyOverlay();
+      syncGroundCanopyShadeOverlay();
       // Keep the SDK canvas hidden until onActiveShadeIdle() confirms that this
       // exact renderer generation has completed its first frame.
 
@@ -5078,12 +5668,17 @@
     // after navigation settles. It is never directly revealed for a changed
     // viewport, even when CHMv2 coverage tiles are unchanged.
     if (config.preserveShadeLayerDuringNavigation === false) detachShadeLayerOnly();
-    removePointQueryOverlay();
+    if (activePointQuery && activePointQuery.serial === pointQuerySerial && queryPopup) {
+      activePointQuery.model.navigationUpdating = true;
+      refreshPointQueryTooltip(activePointQuery.serial, activePointQuery.model);
+    }
     setStatus("地圖移動中：暫時隱藏陰影；停下後更新目前視野…");
   }
 
   function disableShade(updateStatus = true) {
     clearPendingProgressiveUpgrade();
+    clearPendingBuildingUpgrade();
+    cancelBuildingWarmPrefetch();
     progressiveCanopyOverlayDeferred = false;
     metaActivationInProgress = false;
     metaActivationStartedAt = 0;
@@ -5098,6 +5693,7 @@
     detachShadeLayerOnly();
     state.enabled = false;
     removeCanopyOverlay();
+    removeGroundCanopyShadeOverlay();
 
     removePointQueryOverlay();
     syncPointQueryCursor();
@@ -5109,10 +5705,11 @@
     }
   }
 
-  async function rebuildShade() {
+  async function rebuildShade(options = {}) {
     if (!mapRef || !state.enabled) return;
 
     clearPendingProgressiveUpgrade();
+    clearPendingBuildingUpgrade();
     const serial = ++shadeRebuildSerial;
     shadeNavigationSuspended = false;
     setNavigationCanvasState(true);
@@ -5138,13 +5735,17 @@
       // remove its retired DOM before the replacement renderer can be mistaken for it.
       cleanupRetiredShadeCanvases();
 
-      const layer = await mountPreparedShadeLayer(terrain, serial);
+      const layer = await mountPreparedShadeLayer(terrain, serial, {
+        phase: options.phase || (terrain && terrain.progressive ? "preview" : "full"),
+        buildingPolicy: options.buildingPolicy || (terrain && terrain.progressive ? "cached-only" : "normal")
+      });
       if (!layer || serial !== shadeRebuildSerial || !state.enabled) return;
 
       syncPointQueryCursor();
       lastLiveViewSignature = snapshotCoverageSignature(snapshot);
       armProgressiveUpgrade(terrain, serial);
       syncCanopyOverlay();
+      syncGroundCanopyShadeOverlay();
       // Remain under the navigation mask until the current-generation idle event.
 
       if (terrain.warning) {
@@ -5256,7 +5857,8 @@
     },
     getCanvasDiagnostics: getShadeCanvasDiagnostics,
     getMetaDiagnostics,
-    resetMetaDiagnostics
+    resetMetaDiagnostics,
+    redrawGroundCanopyShade: redrawGroundCanopyShadeOverlay
   };
 
   if (document.readyState === "loading") {
