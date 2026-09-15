@@ -23,6 +23,14 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   metaMaxZoom: 17,
   // v8.3.0 — bounded/adaptive CHMv2 preparation.
   metaTileBuffer: 0,
+  // v8.4.0 — add only the upstream solar caster fringe instead of a wasteful
+  // all-direction buffer. This helps afternoon shadows cast in from just outside
+  // the visible viewport.
+  metaSunCasterBufferEnabled: true,
+  metaSunCasterMinZoom: 16,
+  metaSunCasterMaxShadowLengthM: 120,
+  metaSunCasterMaxTiles: 1,
+  metaSunCasterMinSolarAltitudeDeg: 2.5,
   // Upper bound. Effective concurrency is reduced automatically for Save-Data,
   // 2G/3G, or low-core devices when the browser exposes those hints.
   metaTileConcurrency: 8,
@@ -45,6 +53,13 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   metaProgressiveInitialTiles: 8,
   metaProgressiveFallbackMode: "flat-zero",
   metaProgressiveDeferBuildings: true,
+  // v8.3.2: surface completion is no longer blocked by Overpass. Buildings are
+  // prefetched opportunistically and upgraded in a later, independent phase.
+  buildingProgressiveDecoupleEnabled: true,
+  buildingWarmPrefetchEnabled: true,
+  buildingWarmPrefetchDelayMs: 250,
+  buildingFetchClientTimeoutMs: 9000,
+  buildingUpgradeDelayMs: 80,
   metaProgressiveFirstActivationOnly: true,
   metaProgressiveUpgradeDelayMs: 120,
 
@@ -174,10 +189,18 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   pointCardTechnicalDetailsDefaultOpen: false,
   // Keep tree/full analysis at or below the native CHMv2 Web-Mercator level.
   // The host map max zoom is restored when ShadeMap is turned off (or buildings-only mode is used).
-  lockMapMaxZoomToMeta: true,
+  lockMapMaxZoomToMeta: false,
   canopyOverlayDefault: true,
   canopyOverlayMinHeight: 2,
   canopyOverlayOpacity: 0.28,
+  groundCanopyShadeEnabled: true,
+  groundCanopyShadeMinHeightM: 2,
+  groundCanopyShadeMaxShadowLengthM: 120,
+  groundCanopyShadeMinSolarAltitudeDeg: 2.5,
+  groundCanopyShadeSampleStepPx: 2,
+  groundCanopyShadeOpacity: 0.42,
+  groundCanopyShadeColor: "#172554",
+  groundCanopyShadeDisplayMaxZoom: 20,
 
   // Pin versions so a CDN "latest" update cannot silently break the site.
   sdkUrl: "https://unpkg.com/leaflet-shadow-simulator@0.67.0/dist/leaflet-shadow-simulator.umd.min.js"
