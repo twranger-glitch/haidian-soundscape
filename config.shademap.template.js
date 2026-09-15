@@ -30,12 +30,11 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   metaMaxPreparedTiles: 180,
   metaMaxCachedTiles: 480,
 
-  // Warm the center-first critical set before the first activation. Twelve tiles
-  // matches the progressive preview target and covers ~40% of a typical 30-tile
-  // viewport instead of the former 6/30 (~20%).
+  // Warm a larger center-first set before first activation. Sixteen tiles is still
+  // bounded, but leaves more full CHMv2 surfaces ready when the user pauses briefly.
   metaWarmStartEnabled: true,
   metaWarmStartDelayMs: 1200,
-  metaWarmStartMaxTiles: 12,
+  metaWarmStartMaxTiles: 16,
   metaWarmStartConcurrency: 4,
 
   // Progressive first activation: mount a clearly-labelled preview after the
@@ -43,7 +42,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // prepare the remaining surfaces in the background and perform one safe rebuild
   // so the final frame still uses the complete CHMv2 surface set.
   metaProgressiveEnabled: true,
-  metaProgressiveInitialTiles: 12,
+  metaProgressiveInitialTiles: 8,
+  metaProgressiveFallbackMode: "flat-zero",
+  metaProgressiveDeferBuildings: true,
   metaProgressiveFirstActivationOnly: true,
   metaProgressiveUpgradeDelayMs: 120,
 
