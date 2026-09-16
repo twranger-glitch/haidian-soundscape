@@ -1,4 +1,4 @@
-/* Haidian Soundscape — ShadeMap configuration v8.6.1
+/* Haidian Soundscape — ShadeMap configuration v8.6.2
  * This template is safe to commit. GitHub Actions injects the API key only into the deployed artifact.
  */
 window.HAIDIAN_SHADEMAP_CONFIG = {
@@ -185,8 +185,24 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingGeoJSONUrl: "./data/buildings.geojson",
   buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
   buildingManifestUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/manifest.json",
-  buildingTileIndexUrl: "./data/building/building-tile-index.json",
+  buildingTileIndexUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/tile-index.json",
   buildingDataVersion: "2026-08-19.0-overture-osm-haidian-smoke-v2",
+
+  // v8.6.2 named-height correction registry.
+  // Spring Fortune "學學" is publicly documented as three 15-storey towers.
+  // 46.5 m is therefore a floor-derived modelling estimate (15 × 3.1 m),
+  // NOT a surveyed/official total building height.
+  buildingHeightOverrides: {
+    "春福學學": {
+      floors: 15,
+      storeyHeightM: 3.1,
+      heightM: 46.5,
+      quality: "floors-derived",
+      force: true,
+      source: "公開建案樓層資料推估：地上15層 × 3.1 m/層 = 46.5 m（非實測總高）"
+    }
+  },
+
   buildingTileZoom: 16,
   buildingPipelineFallbackToOsm: true,
   buildingPipelineCoverageGateEnabled: true,
