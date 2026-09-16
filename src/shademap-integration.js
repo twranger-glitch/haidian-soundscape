@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.4.1
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.5.3
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -111,6 +111,11 @@
     // viewport. This padding is intentionally a little larger than the source
     // tracing radius so edge-of-screen clicks do not lose their occluder.
     buildingShadowFetchPaddingM: 280,
+    // v8.5.1: low-sun building shadows can originate well outside the viewport.
+    // Use the fixed padding as a floor and expand physically from sun altitude.
+    buildingShadowDynamicPaddingEnabled: true,
+    buildingShadowMaxCasterHeightM: 60,
+    buildingShadowFetchPaddingMaxM: 1200,
     queryShadeSourceMixedDistanceToleranceM: 3,
     queryShadeSourceMinAltitudeDeg: 1.5,
 
@@ -184,6 +189,18 @@
 
     buildingMode: "osm",
     buildingGeoJSONUrl: "",
+    // v8.5.0 foundation: production target is an offline-conflated tile set
+    // (NLSC > Overture > OSM). Keep disabled until the first tiles are hosted.
+    buildingTileUrl: "",
+    buildingTileZoom: 16,
+    buildingPipelineFallbackToOsm: true,
+    buildingTileFetchClientTimeoutMs: 5000,
+    // v8.5.3 safe pilot gate. Production may stay on OSM while a reviewer opts
+    // into the hosted pipeline by adding ?buildingPipeline=1 to the page URL.
+    // The override is ignored unless buildingTileUrl is configured.
+    buildingPilotQueryParam: "buildingPipeline",
+    buildingPilotQueryValue: "1",
+    buildingDebugOverlayDefault: false,
     buildingMinZoom: 15,
     overpassUrl: "https://overpass-api.de/api/interpreter",
     defaultBuildingHeight: 3.1,
@@ -250,13 +267,16 @@
     opacity: config.defaultOpacity,
     queryOnClick: config.queryOnClick === true,
     canopyOverlay: config.canopyOverlayDefault !== false,
-    groundCanopyShade: config.groundCanopyShadeEnabled !== false
+    groundCanopyShade: config.groundCanopyShadeEnabled !== false,
+    buildingDebugOverlay: config.buildingDebugOverlayDefault === true
   };
 
   let mapRef = null;
   let shadePreviousMaxZoom = null;
   let shadeZoomConstraintApplied = false;
   let shadeLayer = null;
+  let buildingDebugLayer = null;
+  let buildingAttributionAdded = "";
   let shadeReady = false;
   let shadeLayerSerial = 0;
   let shadeIdleHandler = null;
@@ -361,6 +381,8 @@
     lastProgressive: null
   };
   const overpassCache = new Map();
+  const buildingTileCache = new Map();
+  let lastBuildingPipelineStatus = { mode: "idle", sourceCounts: {}, tileCount: 0, error: null };
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
   const metaCogCache = new Map();
@@ -1047,10 +1069,94 @@
     }[mode] || mode;
   }
 
+  function buildingPilotRequested() {
+    const key = String(config.buildingPilotQueryParam || "").trim();
+    if (!key || !config.buildingTileUrl || !window.location) return false;
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const expected = String(config.buildingPilotQueryValue == null ? "1" : config.buildingPilotQueryValue);
+      return params.get(key) === expected;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function effectiveBuildingMode() {
+    return buildingPilotRequested() ? "pipeline" : config.buildingMode;
+  }
+
   function buildingSourceLabel() {
-    if (config.buildingMode === "custom") return "自訂 GeoJSON";
-    if (config.buildingMode === "none") return "未載入";
+    if (effectiveBuildingMode() === "custom") return "自訂 GeoJSON";
+    if (effectiveBuildingMode() === "pipeline") {
+      return buildingPilotRequested() && config.buildingMode !== "pipeline"
+        ? "NLSC → Overture → OSM（預建圖磚／測試模式）"
+        : "NLSC → Overture → OSM（預建圖磚）";
+    }
+    if (effectiveBuildingMode() === "none") return "未載入";
     return "OpenStreetMap / Overpass";
+  }
+
+  function buildingRuntimeStatusText() {
+    if (effectiveBuildingMode() === "none") return "未載入";
+    if (effectiveBuildingMode() === "pipeline") {
+      const st = lastBuildingPipelineStatus || {};
+      if (st.mode === "idle") return config.buildingTileUrl ? "等待載入預建圖磚" : "尚未設定建築圖磚 URL";
+      const counts = st.sourceCounts || {};
+      const parts = Object.keys(counts).sort().map((k) => `${k} ${counts[k]}`).join("、");
+      const tileSummary = Number.isFinite(st.successfulTileCount)
+        ? `${st.successfulTileCount}/${st.tileCount || 0} tiles`
+        : `${st.tileCount || 0} tiles`;
+      const partial = st.failedTileCount ? `，失敗 ${st.failedTileCount}` : "";
+      const fallback = st.fallback ? `；fallback ${st.fallback} ${st.fallbackFeatureCount || 0} 棟` : "";
+      return `${tileSummary}${partial}；${st.featureCount || 0} 棟${parts ? `（${parts}）` : ""}${fallback}`;
+    }
+    if (effectiveBuildingMode() === "osm") {
+      if (lastBuildingFetchError) return `Overpass 失敗：${lastBuildingFetchError.message || lastBuildingFetchError}`;
+      if (lastBuildingCoverageKey) return `Overpass 已取得 ${Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0} 棟`;
+      return "Overpass 尚未查詢";
+    }
+    return Array.isArray(lastBuildingFeatures) ? `已載入 ${lastBuildingFeatures.length} 棟` : "尚未載入";
+  }
+
+  function updateBuildingRuntimeStatus() {
+    const el = document.getElementById("haidianShadeBuildingRuntime");
+    if (el) el.textContent = buildingRuntimeStatusText();
+  }
+
+  function syncBuildingAttribution() {
+    if (!mapRef || !mapRef.attributionControl) return;
+    const desired = effectiveBuildingMode() === "pipeline"
+      ? "© OpenStreetMap contributors, Overture Maps Foundation"
+      : (effectiveBuildingMode() === "osm" ? "© OpenStreetMap contributors" : "");
+    if (buildingAttributionAdded && buildingAttributionAdded !== desired) {
+      try { mapRef.attributionControl.removeAttribution(buildingAttributionAdded); } catch (_) {}
+      buildingAttributionAdded = "";
+    }
+    if (desired && buildingAttributionAdded !== desired) {
+      try { mapRef.attributionControl.addAttribution(desired); buildingAttributionAdded = desired; } catch (_) {}
+    }
+  }
+
+  function syncBuildingDebugOverlay() {
+    if (buildingDebugLayer && mapRef) {
+      try { mapRef.removeLayer(buildingDebugLayer); } catch (_) {}
+      buildingDebugLayer = null;
+    }
+    if (!state.buildingDebugOverlay || !mapRef || !window.L || typeof L.geoJSON !== "function") return;
+    const features = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    if (!features.length) return;
+    buildingDebugLayer = L.geoJSON({ type: "FeatureCollection", features }, {
+      style: (feature) => {
+        const source = feature && feature.properties && feature.properties.building_source;
+        const color = source === "NLSC" ? "#2563eb" : source === "Overture" ? "#f97316" : "#7c3aed";
+        return { color, weight: 1.4, opacity: 0.9, fillOpacity: 0.04 };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties || {};
+        const label = `${p.building_source || "OSM"}｜${Number(p.height || p.render_height || 0).toFixed(1)} m｜${p.height_source || "height unknown"}`;
+        try { layer.bindTooltip(label, { sticky: true }); } catch (_) {}
+      }
+    }).addTo(mapRef);
   }
 
   function terrainSourceLabel() {
@@ -1261,8 +1367,15 @@
           <b>樹冠：</b>${terrainSourceLabel()}<br>
           <b>陰影地形：</b>${escapeHtml(dynamicShadowTerrainLabel(mapRef && mapRef.getCenter ? mapRef.getCenter() : null))}<br>
           <b>臺灣點位海拔：</b>${escapeHtml(officialTerrainConfigured() ? (config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ") : (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"))}${officialTerrainConfigured() ? "" : "（需安全代理）"}<br>
-          <b>建築：</b>${buildingSourceLabel()}
+          <b>建築：</b>${buildingSourceLabel()}<br>
+          <b>建築載入：</b><span id="haidianShadeBuildingRuntime">${escapeHtml(buildingRuntimeStatusText())}</span>
         </div>
+
+        <label class="haidian-shade-row" style="cursor:pointer">
+          <input id="haidianShadeBuildingDebug" type="checkbox"
+            style="width:15px;height:15px;margin:0;accent-color:#f97316">
+          <span>顯示實際送入 ShadeMap 的建築輪廓（除錯）</span>
+        </label>
 
         <div class="haidian-shade-actions">
           <button id="haidianShadeNow" class="haidian-shade-btn" type="button">
@@ -1297,7 +1410,10 @@
     document.getElementById("haidianShadeCanopyOverlay").checked = state.canopyOverlay;
     document.getElementById("haidianShadeGroundCanopy").checked = state.groundCanopyShade;
     document.getElementById("haidianShadeQueryToggle").checked = state.queryOnClick;
+    document.getElementById("haidianShadeBuildingDebug").checked = state.buildingDebugOverlay;
     updateTimeLabel();
+    updateBuildingRuntimeStatus();
+    syncBuildingAttribution();
 
     if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
       setStatus("尚未設定 ShadeMap API key；介面已整合，但陰影引擎尚不能啟動。", true);
@@ -1367,6 +1483,13 @@
         } else if (state.enabled) {
           setStatus("點位查詢已開啟：十字游標中心就是 CHMv2 取樣位置。單擊查詢，拖曳仍可移動地圖。");
         }
+      });
+
+    document
+      .getElementById("haidianShadeBuildingDebug")
+      .addEventListener("change", (event) => {
+        state.buildingDebugOverlay = !!event.target.checked;
+        syncBuildingDebugOverlay();
       });
 
     document
@@ -2532,8 +2655,8 @@
   }
 
   async function getQueryableBuildings() {
-    if (config.buildingMode === "none") return [];
-    if (config.buildingMode === "custom") {
+    if (effectiveBuildingMode() === "none") return [];
+    if (effectiveBuildingMode() === "custom") {
       try { return await loadCustomBuildings(); } catch (_) { return []; }
     }
 
@@ -2808,8 +2931,8 @@
   }
 
   function buildingReceiverCoverageKnown() {
-    if (config.buildingMode === "none" || state.mode === "trees") return false;
-    if (config.buildingMode === "custom") return Array.isArray(lastBuildingFeatures);
+    if (effectiveBuildingMode() === "none" || state.mode === "trees") return false;
+    if (effectiveBuildingMode() === "custom") return Array.isArray(lastBuildingFeatures);
     return !!lastBuildingCoverageKey;
   }
 
@@ -3209,7 +3332,7 @@
   }
 
   function findBuildingShadowEvidence(latlng, solar) {
-    if (!solar || solar.night || state.mode === "trees" || config.buildingMode === "none") return null;
+    if (!solar || solar.night || state.mode === "trees" || effectiveBuildingMode() === "none") return null;
     const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
     if (!buildings.length) return null;
 
@@ -5241,8 +5364,27 @@
     ].join(",");
   }
 
+  function currentBuildingFetchPaddingM(bounds) {
+    const base = Math.max(0, Number(config.buildingShadowFetchPaddingM) || 0);
+    if (config.buildingShadowDynamicPaddingEnabled === false || !bounds) return base;
+    try {
+      const center = mapRef && typeof mapRef.getCenter === "function"
+        ? mapRef.getCenter()
+        : { lat: (bounds.getSouth() + bounds.getNorth()) / 2, lng: (bounds.getWest() + bounds.getEast()) / 2 };
+      const solar = solarPositionAt(center, state.date);
+      if (!solar || solar.night) return base;
+      const altitude = Math.max(1.5, Number(solar.altitudeDeg) || 1.5) * Math.PI / 180;
+      const casterHeight = Math.max(3.1, Number(config.buildingShadowMaxCasterHeightM) || 60);
+      const physical = casterHeight / Math.max(0.02, Math.tan(altitude));
+      const maxPad = Math.max(base, Number(config.buildingShadowFetchPaddingMaxM) || 1200);
+      return Math.min(maxPad, Math.max(base, physical + 40));
+    } catch (_) {
+      return base;
+    }
+  }
+
   function paddedBuildingBounds(bounds) {
-    const paddingM = Math.max(0, Number(config.buildingShadowFetchPaddingM) || 0);
+    const paddingM = currentBuildingFetchPaddingM(bounds);
     if (!paddingM || !bounds) return {
       south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast()
     };
@@ -5257,6 +5399,95 @@
     };
   }
 
+
+  function normalizePipelineBuildingFeature(feature) {
+    if (!feature || !feature.geometry || !["Polygon", "MultiPolygon"].includes(feature.geometry.type)) return null;
+    feature.properties = feature.properties || {};
+    const props = feature.properties;
+    const h = Number(props.height ?? props.render_height ?? config.defaultBuildingHeight);
+    const safeHeight = Number.isFinite(h) && h > 0 ? h : config.defaultBuildingHeight;
+    props.height = safeHeight;
+    props.render_height = safeHeight;
+    props.building_source = props.building_source || props.source || "unknown";
+    props.height_source = props.height_source || "prebuilt building tile";
+    props.building_uid = props.building_uid || `${props.building_source}:${props.source_id || props.id || JSON.stringify(feature.geometry).slice(0, 80)}`;
+    return feature;
+  }
+
+  function buildingTileRangeForBounds(padded, z) {
+    const nw = lonLatToXYZ(padded.north, padded.west, z);
+    const se = lonLatToXYZ(padded.south, padded.east, z);
+    const out = [];
+    for (let x = Math.min(nw.x, se.x); x <= Math.max(nw.x, se.x); x += 1) {
+      for (let y = Math.min(nw.y, se.y); y <= Math.max(nw.y, se.y); y += 1) out.push({ x, y, z });
+    }
+    return out;
+  }
+
+  async function fetchBuildingTile(tile) {
+    const key = `${tile.z}/${tile.x}/${tile.y}`;
+    if (buildingTileCache.has(key)) return buildingTileCache.get(key);
+    if (!config.buildingTileUrl) return [];
+    const url = fillTemplate(config.buildingTileUrl, tile.x, tile.y, tile.z);
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeoutMs = Math.max(1000, Number(config.buildingTileFetchClientTimeoutMs) || 5000);
+    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_) {} }, timeoutMs) : null;
+    const promise = fetch(url, controller ? { signal: controller.signal } : undefined)
+      .then((response) => {
+        if (response.status === 404) return { type: "FeatureCollection", features: [] };
+        if (!response.ok) throw new Error(`building tile HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((collection) => (collection.features || []).map(normalizePipelineBuildingFeature).filter(Boolean))
+      .catch((error) => {
+        buildingTileCache.delete(key);
+        throw error;
+      })
+      .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+    buildingTileCache.set(key, promise);
+    if (buildingTileCache.size > 96) buildingTileCache.delete(buildingTileCache.keys().next().value);
+    return promise;
+  }
+
+  async function loadPipelineBuildings() {
+    if (!mapRef || mapRef.getZoom() < config.buildingMinZoom || !config.buildingTileUrl) return [];
+    const padded = paddedBuildingBounds(mapRef.getBounds());
+    const z = Math.max(0, Number(config.buildingTileZoom) || 16);
+    const tiles = buildingTileRangeForBounds(padded, z);
+    const settled = await Promise.allSettled(tiles.map(fetchBuildingTile));
+    const groups = [];
+    const errors = [];
+    settled.forEach((result, i) => {
+      if (result.status === "fulfilled") groups.push(result.value);
+      else errors.push({ tile: tiles[i], error: result.reason && result.reason.message ? result.reason.message : String(result.reason) });
+    });
+    const unique = new Map();
+    const sourceCounts = {};
+    for (const group of groups) {
+      for (const feature of group) {
+        const props = feature.properties || {};
+        const uid = props.building_uid || `${props.building_source || "unknown"}:${props.source_id || unique.size}`;
+        if (unique.has(uid)) continue;
+        unique.set(uid, feature);
+        const source = props.building_source || "unknown";
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      }
+    }
+    const features = Array.from(unique.values());
+    lastBuildingFeatures = features;
+    lastBuildingCoverageKey = `pipeline:${z}:${tiles.map((t) => `${t.x}/${t.y}`).join("|")}`;
+    lastBuildingPipelineStatus = {
+      mode: errors.length ? (features.length ? "pipeline-partial" : "pipeline-error") : "pipeline",
+      sourceCounts, tileCount: tiles.length, successfulTileCount: groups.length, failedTileCount: errors.length,
+      featureCount: features.length, paddingM: Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())),
+      errors: errors.slice(0, 4), error: errors.length ? errors[0].error : null
+    };
+    if (errors.length) console.warn("[Haidian Shade] some prebuilt building tiles failed", errors);
+    updateBuildingRuntimeStatus();
+    syncBuildingDebugOverlay();
+    return features;
+  }
+
   async function loadOSMBuildings() {
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom) return [];
 
@@ -5268,6 +5499,8 @@
       return overpassCache.get(key).then((features) => {
         lastBuildingFeatures = Array.isArray(features) ? features : [];
         lastBuildingCoverageKey = key;
+        updateBuildingRuntimeStatus();
+        syncBuildingDebugOverlay();
         return lastBuildingFeatures;
       });
     }
@@ -5341,6 +5574,8 @@
         lastBuildingFeatures = features;
         lastBuildingCoverageKey = key;
         lastBuildingFetchError = null;
+        updateBuildingRuntimeStatus();
+        syncBuildingDebugOverlay();
         return features;
       })
       .catch((error) => {
@@ -5351,6 +5586,7 @@
         // activation/pan must be able to retry the same viewport.
         overpassCache.delete(key);
         console.warn("[Haidian Shade] OSM buildings:", error);
+        updateBuildingRuntimeStatus();
         return [];
       })
       .finally(() => {
@@ -5372,15 +5608,26 @@
   async function getBuildings() {
     if (state.mode === "trees") return [];
 
-    if (config.buildingMode === "none") return [];
+    if (effectiveBuildingMode() === "none") return [];
 
-    if (config.buildingMode === "custom") {
+    if (effectiveBuildingMode() === "custom") {
       try {
         return await loadCustomBuildings();
       } catch (error) {
         console.warn("[Haidian Shade] custom buildings:", error);
         return [];
       }
+    }
+
+    if (effectiveBuildingMode() === "pipeline") {
+      const pipeline = await loadPipelineBuildings();
+      if (pipeline.length || config.buildingPipelineFallbackToOsm === false) return pipeline;
+      const fallback = await loadOSMBuildings();
+      lastBuildingPipelineStatus = Object.assign({}, lastBuildingPipelineStatus, {
+        fallback: "OSM", fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0
+      });
+      updateBuildingRuntimeStatus();
+      return fallback;
     }
 
     return loadOSMBuildings();
@@ -5545,16 +5792,22 @@
   }
 
   function getPreviewBuildingsCachedOnly() {
-    if (state.mode === "trees" || config.buildingMode === "none") return [];
+    if (state.mode === "trees" || effectiveBuildingMode() === "none") return [];
     if (config.metaProgressiveDeferBuildings === false) return getBuildings();
 
-    if (config.buildingMode === "custom") {
+    if (effectiveBuildingMode() === "custom") {
       const cached = Array.isArray(customBuildingsCache) ? customBuildingsCache : [];
       if (!cached.length) metaPerf.progressivePreviewBuildingsDeferred += 1;
       return cached;
     }
 
-    if (config.buildingMode === "osm" && mapRef) {
+    if (effectiveBuildingMode() === "pipeline") {
+      if (Array.isArray(lastBuildingFeatures) && lastBuildingFeatures.length) return lastBuildingFeatures;
+      metaPerf.progressivePreviewBuildingsDeferred += 1;
+      return [];
+    }
+
+    if (effectiveBuildingMode() === "osm" && mapRef) {
       try {
         const padded = paddedBuildingBounds(mapRef.getBounds());
         const key = [padded.south, padded.west, padded.north, padded.east]
@@ -5585,7 +5838,7 @@
       config.buildingWarmPrefetchEnabled === false ||
       state.enabled ||
       state.mode === "trees" ||
-      config.buildingMode === "none" ||
+      effectiveBuildingMode() === "none" ||
       !mapRef
     ) return;
     cancelBuildingWarmPrefetch();
@@ -5612,7 +5865,7 @@
   }
 
   function startBuildingUpgradeAfterSurface(serial) {
-    if (config.buildingProgressiveDecoupleEnabled === false || state.mode === "trees" || config.buildingMode === "none") {
+    if (config.buildingProgressiveDecoupleEnabled === false || state.mode === "trees" || effectiveBuildingMode() === "none") {
       if (metaActivationInProgress && metaActivationStartedAt) {
         const elapsed = Math.round(Math.max(0, monotonicNow() - metaActivationStartedAt));
         if (!metaPerf.lastSurfaceCompleteMs) metaPerf.lastSurfaceCompleteMs = elapsed;
@@ -6061,7 +6314,36 @@
     getCanvasDiagnostics: getShadeCanvasDiagnostics,
     getMetaDiagnostics,
     resetMetaDiagnostics,
-    redrawGroundCanopyShade: redrawGroundCanopyShadeOverlay
+    redrawGroundCanopyShade: redrawGroundCanopyShadeOverlay,
+    setBuildingDebugOverlay(enabled) {
+      state.buildingDebugOverlay = !!enabled;
+      const el = document.getElementById("haidianShadeBuildingDebug");
+      if (el) el.checked = state.buildingDebugOverlay;
+      syncBuildingDebugOverlay();
+      return state.buildingDebugOverlay;
+    },
+    getBuildingDiagnostics() {
+      const counts = {};
+      for (const feature of (Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [])) {
+        const source = (feature.properties && feature.properties.building_source) || "OSM/legacy";
+        counts[source] = (counts[source] || 0) + 1;
+      }
+      return {
+        mode: effectiveBuildingMode(),
+        configuredMode: config.buildingMode,
+        pilotRequested: buildingPilotRequested(),
+        pilotQueryParam: String(config.buildingPilotQueryParam || ""),
+        tileUrlConfigured: !!config.buildingTileUrl,
+        tileZoom: Number(config.buildingTileZoom) || 16,
+        effectiveFetchPaddingM: mapRef ? Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())) : null,
+        cachedTiles: buildingTileCache.size,
+        featureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+        sourceCounts: counts,
+        coverageKey: lastBuildingCoverageKey,
+        lastPipelineStatus: Object.assign({}, lastBuildingPipelineStatus),
+        lastOverpassError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError))
+      };
+    }
   };
 
   if (document.readyState === "loading") {
