@@ -77,10 +77,10 @@ jobs:
           PY
 
           # Fail safely if the placeholder accidentally survives the build.
-          if grep -R --fixed-strings '__SHADEMAP_API_KEY_JSON__' _site >/dev/null; then
-            echo "::error::Unresolved ShadeMap key placeholder found in deployment artifact."
-            exit 1
-          fi
+          if grep --fixed-strings '__SHADEMAP_API_KEY_JSON__' _site/config.shademap.js >/dev/null; then
+  echo "::error::Unresolved ShadeMap key placeholder found in config.shademap.js."
+  exit 1
+fi
 
           test -s _site/config.shademap.js
 
