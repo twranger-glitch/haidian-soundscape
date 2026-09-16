@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.1
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.2
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -197,6 +197,10 @@
     buildingManifestUrl: "",
     buildingTileIndexUrl: "",
     buildingDataVersion: "",
+    // v8.6.2: optional, data-driven corrections for named buildings whose
+    // upstream geometry is good but whose source lacks a usable height/floor tag.
+    // Overrides remain explicit provenance, never disguised as measured height.
+    buildingHeightOverrides: {},
     buildingTileZoom: 16,
     buildingPipelineFallbackToOsm: true,
     buildingPipelineCoverageGateEnabled: true,
@@ -4351,6 +4355,11 @@
       if (!activePointQuery || activePointQuery.serial !== active.serial) return;
       active.model.shade = shade;
       active.model.solar = shade && shade.solar ? shade.solar : active.model.solar;
+      // v8.6.2: a point card may have been opened while the building pipeline
+      // was still warming/falling back. Re-resolve the building against the
+      // newest cache so the card and shadow-source logic use the same geometry
+      // and corrected height after the pipeline upgrade completes.
+      active.model.building = findCachedBuildingAt(active.latlng);
       active.model.navigationUpdating = false;
       if (active.model.canopyBenefitTargetKind === "clicked-canopy" && Number.isFinite(active.model.canopy) && active.model.canopy >= Math.max(0.5, Number(config.queryCanopyBenefitMinHeightM) || 2)) {
         active.model.canopyBenefit = undefined;
@@ -4591,7 +4600,7 @@
     if (target && typeof target.closest === "function") {
       if (target.closest(
         ".leaflet-control,.leaflet-popup,.leaflet-tooltip,.leaflet-marker-icon," +
-        ".leaflet-interactive,.glass-header,.drawer-panel,.global-player," +
+        ".glass-header,.drawer-panel,.global-player," +
         ".locate-me-wrapper,#rightToolsWrapper,#drawModeHUD"
       )) return true;
     }
@@ -4685,12 +4694,22 @@
     });
   }
 
-  async function handleMapPointQuery(event) {
-    if (!state.enabled || !state.queryOnClick || !mapRef || !window.L) return;
-    if (mapPointQueryShouldYield(event)) return;
+  function closeConflictingPopupForPointQuery() {
+    if (!mapRef) return;
+    const popup = mapRef._popup;
+    if (!popup || popup === queryPopup) return;
+    try {
+      if (typeof mapRef.hasLayer === "function" && !mapRef.hasLayer(popup)) return;
+      if (typeof mapRef.closePopup === "function") mapRef.closePopup(popup);
+      else if (typeof mapRef.removeLayer === "function") mapRef.removeLayer(popup);
+    } catch (_) {}
+  }
+
+  async function runPointQueryAtLatLng(latlng) {
+    if (!latlng || !Number.isFinite(Number(latlng.lat)) || !Number.isFinite(Number(latlng.lng))) return;
+    closeConflictingPopupForPointQuery();
 
     const serial = ++pointQuerySerial;
-    const latlng = event.latlng;
     const tile = queryTileAt(latlng);
     const model = pointQueryViewModel(latlng, tile);
 
@@ -4816,6 +4835,44 @@
     refreshPointQueryTooltip(serial, model);
   }
 
+  async function handleMapPointQuery(event) {
+    if (!state.enabled || !state.queryOnClick || !mapRef || !window.L) return;
+    if (mapPointQueryShouldYield(event)) return;
+    return runPointQueryAtLatLng(event && event.latlng);
+  }
+
+  function handleInteractivePathPointQueryCapture(event) {
+    // v8.6.2: when point-query mode is enabled, clicking a Leaflet building
+    // polygon must measure that geographic point instead of opening/selecting
+    // the building layer. Capture only interactive map paths; controls, markers,
+    // popups, drawing/NIMBY/listening modes keep their original behavior.
+    if (!state.enabled || !state.queryOnClick || !mapRef || !event) return;
+    const target = event.target;
+    if (!target || typeof target.closest !== "function") return;
+    if (!target.closest(".leaflet-interactive")) return;
+    if (target.closest(".leaflet-control,.leaflet-popup,.leaflet-tooltip,.leaflet-marker-icon")) return;
+
+    const synthetic = { originalEvent: event, latlng: null };
+    if (mapPointQueryShouldYield(synthetic)) return;
+
+    let latlng = null;
+    try {
+      if (typeof mapRef.mouseEventToLatLng === "function") {
+        latlng = mapRef.mouseEventToLatLng(event);
+      } else if (typeof mapRef.containerPointToLatLng === "function" && typeof mapRef.mouseEventToContainerPoint === "function") {
+        latlng = mapRef.containerPointToLatLng(mapRef.mouseEventToContainerPoint(event));
+      }
+    } catch (_) {}
+    if (!latlng) return;
+
+    if (typeof event.preventDefault === "function") event.preventDefault();
+    if (typeof event.stopPropagation === "function") event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    Promise.resolve(runPointQueryAtLatLng(latlng)).catch((error) => {
+      console.warn("[Haidian Shade] point-query interactive-path capture:", error);
+    });
+  }
+
   function hookMapPointQuery() {
     if (!mapRef || mapQueryHooked || typeof mapRef.on !== "function") return;
     mapQueryHooked = true;
@@ -4836,6 +4893,10 @@
     mapRef.on("zoomlevelschange", markQueryForNavigation);
     mapRef.on("dragend", () => { lastMapDragAt = Date.now(); });
     mapRef.on("click", handleMapPointQuery);
+    const mapContainer = typeof mapRef.getContainer === "function" ? mapRef.getContainer() : null;
+    if (mapContainer && typeof mapContainer.addEventListener === "function") {
+      mapContainer.addEventListener("click", handleInteractivePathPointQueryCapture, true);
+    }
     if (typeof document.addEventListener === "function") {
       document.addEventListener("keydown", (event) => {
         if (!queryPopup || !activePointQuery || !event || event.key !== "Escape") return;
@@ -5521,6 +5582,58 @@
     return { status: full ? "full" : (overlaps ? "partial" : "outside"), aoi };
   }
 
+  function configuredBuildingHeightOverride(feature) {
+    const props = feature && feature.properties ? feature.properties : {};
+    const name = String(props.name || "").trim();
+    const table = config.buildingHeightOverrides;
+    if (!name || !table || typeof table !== "object") return null;
+    const raw = table[name];
+    if (!raw || typeof raw !== "object") return null;
+
+    const directHeight = Number(raw.heightM);
+    const floors = Number(raw.floors);
+    const storeyHeight = Math.max(2.4, Number(raw.storeyHeightM) || 3.1);
+    const height = Number.isFinite(directHeight) && directHeight > 0
+      ? directHeight
+      : (Number.isFinite(floors) && floors > 0 ? floors * storeyHeight : null);
+    if (!Number.isFinite(height) || height <= 0) return null;
+
+    return {
+      height: Math.round(height * 1000) / 1000,
+      floors: Number.isFinite(floors) && floors > 0 ? floors : null,
+      storeyHeight,
+      quality: String(raw.quality || (Number.isFinite(floors) && floors > 0 ? "floors-derived" : "estimated")),
+      source: String(
+        raw.source ||
+        (Number.isFinite(floors) && floors > 0
+          ? `configured public floor count: ${floors} × ${storeyHeight} m`
+          : "configured building height override")
+      ),
+      force: raw.force !== false
+    };
+  }
+
+  function applyConfiguredBuildingHeightOverride(feature) {
+    const override = configuredBuildingHeightOverride(feature);
+    if (!override) return feature;
+
+    const props = feature.properties || (feature.properties = {});
+    const existing = Number(props.height ?? props.render_height);
+    const existingQuality = String(props.height_quality || "").toLowerCase();
+    const upstreamHighConfidence = existingQuality === "direct" || existingQuality === "floors-derived";
+
+    if (override.force || !upstreamHighConfidence || !Number.isFinite(existing) || existing <= 0) {
+      props.height = override.height;
+      props.render_height = override.height;
+      props.height_source = override.source;
+      props.height_quality = override.quality;
+      props.height_override = true;
+      if (override.floors) props.height_override_floors = override.floors;
+      props.height_override_storey_m = override.storeyHeight;
+    }
+    return feature;
+  }
+
   function normalizePipelineBuildingFeature(feature) {
     if (!feature || !feature.geometry || !["Polygon", "MultiPolygon"].includes(feature.geometry.type)) return null;
     feature.properties = feature.properties || {};
@@ -5532,7 +5645,7 @@
     props.building_source = props.building_source || props.source || "unknown";
     props.height_source = props.height_source || "prebuilt building tile";
     props.building_uid = props.building_uid || `${props.building_source}:${props.source_id || props.id || JSON.stringify(feature.geometry).slice(0, 80)}`;
-    return feature;
+    return applyConfiguredBuildingHeightOverride(feature);
   }
 
   function buildingTileRangeForBounds(padded, z) {
