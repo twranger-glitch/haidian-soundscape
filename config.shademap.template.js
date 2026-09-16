@@ -1,4 +1,4 @@
-/* Haidian Soundscape — ShadeMap configuration
+/* Haidian Soundscape — ShadeMap configuration v8.6.1
  * This template is safe to commit. GitHub Actions injects the API key only into the deployed artifact.
  */
 window.HAIDIAN_SHADEMAP_CONFIG = {
@@ -176,20 +176,28 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
   taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
-  // v8.5.3 building pipeline. Production target: offline conflate
-  // NLSC > Overture > OSM, then serve lightweight versioned GeoJSON tiles.
-  // Keep "osm" until the first hosted building tiles are verified; switch to
-  // "pipeline" only after buildingTileUrl is populated.
-  buildingMode: "osm",
+  // v8.6.1 building-shadow cutover. The hosted prebuilt tiles are the
+  // preferred occluder source inside the published pilot AOI. The Worker
+  // manifest, data-version header, full padded viewport, and a static list of
+  // actually published z16 data tiles must all agree before pipeline shadows
+  // are trusted. Any mismatch or expected-tile failure falls back to OSM.
+  buildingMode: "pipeline",
   buildingGeoJSONUrl: "./data/buildings.geojson",
-  // Same existing Cloudflare Worker host as the Taiwan DTM proxy. The building
-  // route remains dormant for normal visitors while buildingMode stays "osm".
   buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
+  buildingManifestUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/manifest.json",
+  buildingTileIndexUrl: "./data/building/building-tile-index.json",
+  buildingDataVersion: "2026-08-19.0-overture-osm-haidian-smoke-v2",
   buildingTileZoom: 16,
   buildingPipelineFallbackToOsm: true,
+  buildingPipelineCoverageGateEnabled: true,
+  buildingPipelineRequireCompleteTiles: true,
+  buildingPipelineRequireTileIndex: true,
+  buildingManifestRequireVersionHeader: true,
   buildingTileFetchClientTimeoutMs: 5000,
-  // Safe reviewer pilot: append ?buildingPipeline=1 to opt into hosted tiles
-  // without switching production visitors away from OSM.
+  buildingManifestFetchClientTimeoutMs: 4000,
+  buildingTileIndexFetchClientTimeoutMs: 4000,
+  // Backward-compatible reviewer URL; no special action is required now that
+  // pipeline is the configured default.
   buildingPilotQueryParam: "buildingPipeline",
   buildingPilotQueryValue: "1",
   buildingDebugOverlayDefault: false,
