@@ -110,6 +110,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeSourceRayAngularToleranceDeg: 3,
   queryShadeSourceUnknownBuildingMaxHeightM: 24,
   buildingShadowFetchPaddingM: 280,
+  buildingShadowDynamicPaddingEnabled: true,
+  buildingShadowMaxCasterHeightM: 60,
+  buildingShadowFetchPaddingMaxM: 1200,
   queryShadeSourceMixedDistanceToleranceM: 3,
   queryShadeSourceMinAltitudeDeg: 1.5,
 
@@ -173,10 +176,23 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
   taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
-  // Prototype: fetch visible OSM building footprints at runtime.
-  // For production reliability, you can later switch to "custom" and host GeoJSON.
+  // v8.5.3 building pipeline. Production target: offline conflate
+  // NLSC > Overture > OSM, then serve lightweight versioned GeoJSON tiles.
+  // Keep "osm" until the first hosted building tiles are verified; switch to
+  // "pipeline" only after buildingTileUrl is populated.
   buildingMode: "osm",
   buildingGeoJSONUrl: "./data/buildings.geojson",
+  // Same existing Cloudflare Worker host as the Taiwan DTM proxy. The building
+  // route remains dormant for normal visitors while buildingMode stays "osm".
+  buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
+  buildingTileZoom: 16,
+  buildingPipelineFallbackToOsm: true,
+  buildingTileFetchClientTimeoutMs: 5000,
+  // Safe reviewer pilot: append ?buildingPipeline=1 to opt into hosted tiles
+  // without switching production visitors away from OSM.
+  buildingPilotQueryParam: "buildingPipeline",
+  buildingPilotQueryValue: "1",
+  buildingDebugOverlayDefault: false,
   buildingMinZoom: 15,
 
   defaultResearchMode: "full",
