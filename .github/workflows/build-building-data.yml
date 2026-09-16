@@ -40,7 +40,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install overturemaps shapely pyproj huggingface_hub
-
+          
+      - name: Ensure helper scripts are executable
+        shell: bash
+        run: |
+          chmod +x tools/*.sh
+          
       - name: Resolve Overture release
         id: overture
         shell: bash
