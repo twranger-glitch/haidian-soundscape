@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.5.3
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.1
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -187,17 +187,27 @@
     taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
     taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
-    buildingMode: "osm",
+    // v8.6.1: hosted/versioned building tiles are the preferred production
+    // shadow source. Besides full-AOI coverage, the client requires a matching
+    // Worker data-version header and a static published-tile index so a missing
+    // expected tile can never masquerade as an empty tile.
+    buildingMode: "pipeline",
     buildingGeoJSONUrl: "",
-    // v8.5.0 foundation: production target is an offline-conflated tile set
-    // (NLSC > Overture > OSM). Keep disabled until the first tiles are hosted.
     buildingTileUrl: "",
+    buildingManifestUrl: "",
+    buildingTileIndexUrl: "",
+    buildingDataVersion: "",
     buildingTileZoom: 16,
     buildingPipelineFallbackToOsm: true,
+    buildingPipelineCoverageGateEnabled: true,
+    buildingPipelineRequireCompleteTiles: true,
+    buildingPipelineRequireTileIndex: true,
+    buildingManifestRequireVersionHeader: true,
     buildingTileFetchClientTimeoutMs: 5000,
-    // v8.5.3 safe pilot gate. Production may stay on OSM while a reviewer opts
-    // into the hosted pipeline by adding ?buildingPipeline=1 to the page URL.
-    // The override is ignored unless buildingTileUrl is configured.
+    buildingManifestFetchClientTimeoutMs: 4000,
+    buildingTileIndexFetchClientTimeoutMs: 4000,
+    // Kept for backward-compatible reviewer links. When production is already
+    // pipeline mode, ?buildingPipeline=1 is simply a no-op.
     buildingPilotQueryParam: "buildingPipeline",
     buildingPilotQueryValue: "1",
     buildingDebugOverlayDefault: false,
@@ -382,6 +392,10 @@
   };
   const overpassCache = new Map();
   const buildingTileCache = new Map();
+  let buildingManifestCache = null;
+  let buildingManifestPromise = null;
+  let buildingTileIndexCache = null;
+  let buildingTileIndexPromise = null;
   let lastBuildingPipelineStatus = { mode: "idle", sourceCounts: {}, tileCount: 0, error: null };
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
@@ -1088,9 +1102,11 @@
   function buildingSourceLabel() {
     if (effectiveBuildingMode() === "custom") return "自訂 GeoJSON";
     if (effectiveBuildingMode() === "pipeline") {
+      const st = lastBuildingPipelineStatus || {};
+      if (st.fallback === "OSM") return "OpenStreetMap / Overpass（預建圖磚範圍外或不完整時自動 fallback）";
       return buildingPilotRequested() && config.buildingMode !== "pipeline"
-        ? "NLSC → Overture → OSM（預建圖磚／測試模式）"
-        : "NLSC → Overture → OSM（預建圖磚）";
+        ? "預建建物圖磚（測試模式）"
+        : "預建建物圖磚（Overture＋OSM；NLSC 待接）";
     }
     if (effectiveBuildingMode() === "none") return "未載入";
     return "OpenStreetMap / Overpass";
@@ -1101,6 +1117,10 @@
     if (effectiveBuildingMode() === "pipeline") {
       const st = lastBuildingPipelineStatus || {};
       if (st.mode === "idle") return config.buildingTileUrl ? "等待載入預建圖磚" : "尚未設定建築圖磚 URL";
+      if (st.mode === "pipeline-outside-coverage") return `預建圖磚 AOI 外；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
+      if (st.mode === "pipeline-manifest-error") return `建物 manifest／版本無法確認；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
+      if (st.mode === "pipeline-index-error") return `建物 tile 索引無法確認；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
+      if (st.mode === "pipeline-incomplete") return `預建圖磚不完整；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
       const counts = st.sourceCounts || {};
       const parts = Object.keys(counts).sort().map((k) => `${k} ${counts[k]}`).join("、");
       const tileSummary = Number.isFinite(st.successfulTileCount)
@@ -1125,9 +1145,10 @@
 
   function syncBuildingAttribution() {
     if (!mapRef || !mapRef.attributionControl) return;
-    const desired = effectiveBuildingMode() === "pipeline"
+    const pipelineFellBack = effectiveBuildingMode() === "pipeline" && lastBuildingPipelineStatus && lastBuildingPipelineStatus.fallback === "OSM";
+    const desired = effectiveBuildingMode() === "pipeline" && !pipelineFellBack
       ? "© OpenStreetMap contributors, Overture Maps Foundation"
-      : (effectiveBuildingMode() === "osm" ? "© OpenStreetMap contributors" : "");
+      : ((effectiveBuildingMode() === "osm" || pipelineFellBack) ? "© OpenStreetMap contributors" : "");
     if (buildingAttributionAdded && buildingAttributionAdded !== desired) {
       try { mapRef.attributionControl.removeAttribution(buildingAttributionAdded); } catch (_) {}
       buildingAttributionAdded = "";
@@ -3235,16 +3256,17 @@
 
   function buildingHeightMeta(feature) {
     const properties = feature && feature.properties ? feature.properties : {};
-    const height = Number(properties.height);
+    const height = Number(properties.height ?? properties.render_height);
     const source = String(properties.height_source || "");
+    const declaredQuality = String(properties.height_quality || "").toLowerCase();
     const safeHeight = Number.isFinite(height) && height > 0
       ? height
       : Number(config.defaultBuildingHeight) || 3.1;
     let quality = "default";
-    if (/^OSM height$/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
-    else if (/building:levels/i.test(source)) quality = "levels";
-    else if (source && !/預設|default/i.test(source)) quality = "estimated";
-    return { height: safeHeight, source: source || "預設估計值", quality };
+    if (declaredQuality === "direct" || /^OSM height$/i.test(source) || /direct height/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
+    else if (declaredQuality === "floors-derived" || /building:levels|num_floors/i.test(source)) quality = "levels";
+    else if (["context-inferred", "heuristic", "estimated"].includes(declaredQuality) || (source && !/預設|default/i.test(source))) quality = "estimated";
+    return { height: safeHeight, source: source || "預設估計值", quality, declaredQuality };
   }
 
   function buildingHeightForFeature(feature) {
@@ -5400,6 +5422,105 @@
   }
 
 
+  function buildingManifestAoi(manifest) {
+    const raw = manifest && manifest.latest_run && Array.isArray(manifest.latest_run.aoi)
+      ? manifest.latest_run.aoi
+      : (manifest && Array.isArray(manifest.aoi) ? manifest.aoi : null);
+    if (!raw || raw.length < 4) return null;
+    const values = raw.slice(0, 4).map(Number);
+    if (!values.every(Number.isFinite)) return null;
+    return { west: values[0], south: values[1], east: values[2], north: values[3] };
+  }
+
+  async function loadBuildingManifest() {
+    if (buildingManifestCache) return buildingManifestCache;
+    if (buildingManifestPromise) return buildingManifestPromise;
+    if (!config.buildingManifestUrl) return null;
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeoutMs = Math.max(1000, Number(config.buildingManifestFetchClientTimeoutMs) || 4000);
+    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_) {} }, timeoutMs) : null;
+    buildingManifestPromise = fetch(config.buildingManifestUrl, controller ? { signal: controller.signal } : undefined)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`building manifest HTTP ${response.status}`);
+        const workerDataVersion = String(response.headers && response.headers.get("X-Building-Data-Version") || "").trim();
+        const expectedVersion = String(config.buildingDataVersion || "").trim();
+        if (config.buildingManifestRequireVersionHeader !== false && expectedVersion && !workerDataVersion) {
+          throw new Error("building manifest missing X-Building-Data-Version");
+        }
+        if (expectedVersion && workerDataVersion && workerDataVersion !== expectedVersion) {
+          throw new Error(`building data version mismatch: worker=${workerDataVersion}, site=${expectedVersion}`);
+        }
+        const manifest = await response.json();
+        manifest.__workerDataVersion = workerDataVersion;
+        return manifest;
+      })
+      .then((manifest) => {
+        if (!buildingManifestAoi(manifest)) throw new Error("building manifest has no valid AOI");
+        buildingManifestCache = manifest;
+        return manifest;
+      })
+      .catch((error) => {
+        buildingManifestPromise = null;
+        throw error;
+      })
+      .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+    return buildingManifestPromise;
+  }
+
+  function normalizeBuildingTileKey(value) {
+    const key = String(value || "").replace(/^\/+/, "");
+    return /^\d+\/\d+\/\d+\.geojson$/.test(key) ? key : "";
+  }
+
+  async function loadBuildingTileIndex() {
+    if (buildingTileIndexCache) return buildingTileIndexCache;
+    if (buildingTileIndexPromise) return buildingTileIndexPromise;
+    if (!config.buildingTileIndexUrl) return null;
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeoutMs = Math.max(1000, Number(config.buildingTileIndexFetchClientTimeoutMs) || 4000);
+    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_) {} }, timeoutMs) : null;
+    buildingTileIndexPromise = fetch(config.buildingTileIndexUrl, controller ? { signal: controller.signal, cache: "no-store" } : { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`building tile index HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((index) => {
+        const expectedVersion = String(config.buildingDataVersion || "").trim();
+        const indexVersion = String(index && index.data_version || "").trim();
+        const indexZoom = Number(index && index.tile_zoom);
+        const configuredZoom = Number(config.buildingTileZoom) || 16;
+        if (expectedVersion && indexVersion !== expectedVersion) {
+          throw new Error(`building tile index version mismatch: index=${indexVersion || "missing"}, site=${expectedVersion}`);
+        }
+        if (!Number.isFinite(indexZoom) || indexZoom !== configuredZoom) {
+          throw new Error(`building tile index zoom ${indexZoom} != configured ${configuredZoom}`);
+        }
+        const keys = Array.isArray(index && index.tile_keys)
+          ? index.tile_keys.map(normalizeBuildingTileKey).filter(Boolean)
+          : [];
+        if (!keys.length && Number(index && index.tile_count) > 0) {
+          throw new Error("building tile index has no usable tile_keys");
+        }
+        const normalized = Object.assign({}, index, { tileKeySet: new Set(keys), tile_keys: keys });
+        buildingTileIndexCache = normalized;
+        return normalized;
+      })
+      .catch((error) => {
+        buildingTileIndexPromise = null;
+        throw error;
+      })
+      .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+    return buildingTileIndexPromise;
+  }
+
+  function buildingPipelineCoverageForBounds(padded, manifest) {
+    const aoi = buildingManifestAoi(manifest);
+    if (!aoi || !padded) return { status: "unknown", aoi };
+    const overlaps = !(padded.east < aoi.west || padded.west > aoi.east || padded.north < aoi.south || padded.south > aoi.north);
+    const full = padded.west >= aoi.west && padded.east <= aoi.east && padded.south >= aoi.south && padded.north <= aoi.north;
+    return { status: full ? "full" : (overlaps ? "partial" : "outside"), aoi };
+  }
+
   function normalizePipelineBuildingFeature(feature) {
     if (!feature || !feature.geometry || !["Polygon", "MultiPolygon"].includes(feature.geometry.type)) return null;
     feature.properties = feature.properties || {};
@@ -5434,7 +5555,6 @@
     const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_) {} }, timeoutMs) : null;
     const promise = fetch(url, controller ? { signal: controller.signal } : undefined)
       .then((response) => {
-        if (response.status === 404) return { type: "FeatureCollection", features: [] };
         if (!response.ok) throw new Error(`building tile HTTP ${response.status}`);
         return response.json();
       })
@@ -5453,14 +5573,96 @@
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom || !config.buildingTileUrl) return [];
     const padded = paddedBuildingBounds(mapRef.getBounds());
     const z = Math.max(0, Number(config.buildingTileZoom) || 16);
+
+    let manifest = null;
+    let coverage = { status: "unknown", aoi: null };
+    if (config.buildingPipelineCoverageGateEnabled !== false) {
+      try {
+        manifest = await loadBuildingManifest();
+        coverage = buildingPipelineCoverageForBounds(padded, manifest);
+      } catch (error) {
+        lastBuildingPipelineStatus = {
+          mode: "pipeline-manifest-error", sourceCounts: {}, tileCount: 0,
+          coverageComplete: false, fetchComplete: false,
+          error: error && error.message ? error.message : String(error)
+        };
+        updateBuildingRuntimeStatus();
+        return [];
+      }
+      if (!manifest || coverage.status !== "full") {
+        lastBuildingPipelineStatus = {
+          mode: "pipeline-outside-coverage", sourceCounts: {}, tileCount: 0,
+          coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+          coverageComplete: false, fetchComplete: false, error: null
+        };
+        updateBuildingRuntimeStatus();
+        return [];
+      }
+      const manifestZoom = Number(manifest && manifest.tile_zoom);
+      if (Number.isFinite(manifestZoom) && manifestZoom !== z) {
+        lastBuildingPipelineStatus = {
+          mode: "pipeline-manifest-error", sourceCounts: {}, tileCount: 0,
+          coverageComplete: false, fetchComplete: false,
+          error: `building manifest tile zoom ${manifestZoom} != configured ${z}`
+        };
+        updateBuildingRuntimeStatus();
+        return [];
+      }
+    }
+
+    let tileIndex = null;
+    if (config.buildingPipelineRequireTileIndex !== false) {
+      try {
+        tileIndex = await loadBuildingTileIndex();
+      } catch (error) {
+        lastBuildingPipelineStatus = {
+          mode: "pipeline-index-error", sourceCounts: {}, tileCount: 0,
+          coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+          coverageComplete: false, fetchComplete: false,
+          error: error && error.message ? error.message : String(error)
+        };
+        updateBuildingRuntimeStatus();
+        return [];
+      }
+      if (!tileIndex || !tileIndex.tileKeySet) {
+        lastBuildingPipelineStatus = {
+          mode: "pipeline-index-error", sourceCounts: {}, tileCount: 0,
+          coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+          coverageComplete: false, fetchComplete: false,
+          error: "building tile index unavailable"
+        };
+        updateBuildingRuntimeStatus();
+        return [];
+      }
+    }
+
     const tiles = buildingTileRangeForBounds(padded, z);
-    const settled = await Promise.allSettled(tiles.map(fetchBuildingTile));
+    const expectedTiles = tileIndex && tileIndex.tileKeySet
+      ? tiles.filter((tile) => tileIndex.tileKeySet.has(`${tile.z}/${tile.x}/${tile.y}.geojson`))
+      : tiles;
+    const knownEmptyTileCount = Math.max(0, tiles.length - expectedTiles.length);
+    const settled = await Promise.allSettled(expectedTiles.map(fetchBuildingTile));
     const groups = [];
     const errors = [];
     settled.forEach((result, i) => {
       if (result.status === "fulfilled") groups.push(result.value);
-      else errors.push({ tile: tiles[i], error: result.reason && result.reason.message ? result.reason.message : String(result.reason) });
+      else errors.push({ tile: expectedTiles[i], error: result.reason && result.reason.message ? result.reason.message : String(result.reason) });
     });
+
+    if (errors.length && config.buildingPipelineRequireCompleteTiles !== false) {
+      lastBuildingPipelineStatus = {
+        mode: "pipeline-incomplete", sourceCounts: {}, tileCount: tiles.length,
+        expectedTileCount: expectedTiles.length, knownEmptyTileCount,
+        successfulTileCount: groups.length, failedTileCount: errors.length,
+        featureCount: 0, coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+        coverageComplete: coverage.status === "full", fetchComplete: false,
+        errors: errors.slice(0, 4), error: errors[0].error
+      };
+      console.warn("[Haidian Shade] prebuilt building coverage incomplete; falling back to OSM", errors);
+      updateBuildingRuntimeStatus();
+      return [];
+    }
+
     const unique = new Map();
     const sourceCounts = {};
     for (const group of groups) {
@@ -5476,14 +5678,22 @@
     const features = Array.from(unique.values());
     lastBuildingFeatures = features;
     lastBuildingCoverageKey = `pipeline:${z}:${tiles.map((t) => `${t.x}/${t.y}`).join("|")}`;
+    lastBuildingFetchError = null;
     lastBuildingPipelineStatus = {
-      mode: errors.length ? (features.length ? "pipeline-partial" : "pipeline-error") : "pipeline",
-      sourceCounts, tileCount: tiles.length, successfulTileCount: groups.length, failedTileCount: errors.length,
+      mode: errors.length ? "pipeline-partial" : (features.length ? "pipeline" : "pipeline-empty"),
+      sourceCounts, tileCount: tiles.length, expectedTileCount: expectedTiles.length, knownEmptyTileCount,
+      successfulTileCount: groups.length, failedTileCount: errors.length,
       featureCount: features.length, paddingM: Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())),
+      coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+      coverageComplete: config.buildingPipelineCoverageGateEnabled === false || coverage.status === "full",
+      fetchComplete: !errors.length,
+      manifestBuiltAtUtc: manifest && manifest.built_at_utc ? manifest.built_at_utc : null,
+      manifestFeatureCount: manifest && Number.isFinite(Number(manifest.feature_count)) ? Number(manifest.feature_count) : null,
       errors: errors.slice(0, 4), error: errors.length ? errors[0].error : null
     };
     if (errors.length) console.warn("[Haidian Shade] some prebuilt building tiles failed", errors);
     updateBuildingRuntimeStatus();
+    syncBuildingAttribution();
     syncBuildingDebugOverlay();
     return features;
   }
@@ -5621,12 +5831,14 @@
 
     if (effectiveBuildingMode() === "pipeline") {
       const pipeline = await loadPipelineBuildings();
-      if (pipeline.length || config.buildingPipelineFallbackToOsm === false) return pipeline;
+      const pipelineComplete = !!(lastBuildingPipelineStatus && lastBuildingPipelineStatus.coverageComplete && lastBuildingPipelineStatus.fetchComplete);
+      if (pipelineComplete || config.buildingPipelineFallbackToOsm === false) return pipeline;
       const fallback = await loadOSMBuildings();
       lastBuildingPipelineStatus = Object.assign({}, lastBuildingPipelineStatus, {
         fallback: "OSM", fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0
       });
       updateBuildingRuntimeStatus();
+      syncBuildingAttribution();
       return fallback;
     }
 
@@ -6334,7 +6546,18 @@
         pilotRequested: buildingPilotRequested(),
         pilotQueryParam: String(config.buildingPilotQueryParam || ""),
         tileUrlConfigured: !!config.buildingTileUrl,
+        manifestUrlConfigured: !!config.buildingManifestUrl,
+        tileIndexUrlConfigured: !!config.buildingTileIndexUrl,
+        dataVersion: String(config.buildingDataVersion || ""),
+        workerDataVersion: buildingManifestCache && buildingManifestCache.__workerDataVersion || "",
         tileZoom: Number(config.buildingTileZoom) || 16,
+        coverageGateEnabled: config.buildingPipelineCoverageGateEnabled !== false,
+        requireCompleteTiles: config.buildingPipelineRequireCompleteTiles !== false,
+        requireTileIndex: config.buildingPipelineRequireTileIndex !== false,
+        manifestLoaded: !!buildingManifestCache,
+        tileIndexLoaded: !!buildingTileIndexCache,
+        tileIndexCount: buildingTileIndexCache && Array.isArray(buildingTileIndexCache.tile_keys) ? buildingTileIndexCache.tile_keys.length : 0,
+        manifestAoi: buildingManifestAoi(buildingManifestCache),
         effectiveFetchPaddingM: mapRef ? Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())) : null,
         cachedTiles: buildingTileCache.size,
         featureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
