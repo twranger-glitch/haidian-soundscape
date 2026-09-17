@@ -101,44 +101,89 @@ def q(value: str) -> str:
     return value.replace("'", "''")
 
 
-def overture_select_columns(kind: str, include_bbox: bool = False) -> str:
-    bbox_col = "bbox," if include_bbox else ""
+def parquet_schema(path: Path) -> dict[str, str]:
+    """Return DuckDB-visible columns for a local Parquet cache.
+
+    Overture fields are optional and an all-null optional field can be absent from
+    the physical Parquet schema for a particular release/partition.  Never bind
+    optional columns before checking the actual file schema.
+    """
+    try:
+        import duckdb
+    except Exception as exc:
+        raise RuntimeError("The Python package 'duckdb' is required to inspect the Overture cache schema") from exc
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{q(str(path.resolve()))}')"
+        ).fetchall()
+    finally:
+        con.close()
+    return {str(row[0]): str(row[1]) for row in rows}
+
+
+def _quoted_ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _optional_column(schema: dict[str, str], name: str, sql_type: str) -> str:
+    if name in schema:
+        return _quoted_ident(name)
+    return f"CAST(NULL AS {sql_type}) AS {_quoted_ident(name)}"
+
+
+def overture_cell_select_columns(kind: str, schema: dict[str, str]) -> str:
+    """Flatten only the scalar properties used by the tile builder.
+
+    The regional cache deliberately keeps the complete Overture feature (SELECT
+    *).  Here we project a stable, GeoJSON-friendly subset and synthesize NULLs
+    for optional columns that are physically absent.  This prevents DuckDB
+    BinderException failures such as `Referenced table names not found`.
+    """
+    fields: list[str] = []
+    for required in ("id",):
+        if required not in schema:
+            raise RuntimeError(f"Overture {kind} cache is missing required column: {required}")
+        fields.append(_quoted_ident(required))
+
+    # `names` is optional.  In Overture it is a struct when present; only its
+    # primary label is useful to this shadow pipeline.
+    if "names" in schema and "STRUCT" in schema["names"].upper():
+        fields.append("CAST(struct_extract(\"names\", 'primary') AS VARCHAR) AS \"name\"")
+    else:
+        fields.append('CAST(NULL AS VARCHAR) AS "name"')
+
     if kind == "building":
-        return f"""
-          id,
-          {bbox_col}
-          names.primary AS name,
-          subtype,
-          class,
-          height,
-          num_floors,
-          min_height,
-          min_floor,
-          roof_height,
-          is_underground,
-          has_parts,
-          geometry
-        """
-    return f"""
-          id,
-          {bbox_col}
-          building_id,
-          names.primary AS name,
-          height,
-          num_floors,
-          min_height,
-          min_floor,
-          roof_height,
-          is_underground,
-          geometry
-        """
+        fields.extend([
+            _optional_column(schema, "subtype", "VARCHAR"),
+            _optional_column(schema, "class", "VARCHAR"),
+        ])
+    else:
+        fields.append(_optional_column(schema, "building_id", "VARCHAR"))
+
+    for name, sql_type in (
+        ("height", "DOUBLE"),
+        ("num_floors", "INTEGER"),
+        ("min_height", "DOUBLE"),
+        ("min_floor", "INTEGER"),
+        ("roof_height", "DOUBLE"),
+        ("is_underground", "BOOLEAN"),
+    ):
+        fields.append(_optional_column(schema, name, sql_type))
+
+    if kind == "building":
+        fields.append(_optional_column(schema, "has_parts", "BOOLEAN"))
+
+    if "geometry" not in schema:
+        raise RuntimeError(f"Overture {kind} cache is missing required column: geometry")
+    fields.append('"geometry"')
+    return ",\n          ".join(fields)
 
 
 def overture_region_cache_sql(release: str, kind: str, bbox: list[float], output: Path) -> str:
     """One remote Overture scan per coverage region, saved as local GeoParquet."""
     w, s, e, n = bbox
     root = f"s3://overturemaps-us-west-2/release/{release}/theme=buildings/type={kind}/*.parquet"
-    cols = overture_select_columns(kind, include_bbox=True)
     return f"""
 INSTALL spatial;
 INSTALL httpfs;
@@ -146,7 +191,7 @@ LOAD spatial;
 LOAD httpfs;
 SET s3_region='us-west-2';
 COPY (
-  SELECT {cols}
+  SELECT *
   FROM read_parquet('{q(root)}', union_by_name=true, filename=true, hive_partitioning=false)
   WHERE bbox.xmax >= {w:.10f} AND bbox.xmin <= {e:.10f}
     AND bbox.ymax >= {s:.10f} AND bbox.ymin <= {n:.10f}
@@ -157,7 +202,8 @@ COPY (
 def overture_cell_geojson_sql(cache_path: Path, kind: str, bbox: list[float], output: Path) -> str:
     """Fast local per-cell extraction from a cached regional GeoParquet."""
     w, s, e, n = bbox
-    cols = overture_select_columns(kind, include_bbox=False)
+    schema = parquet_schema(cache_path)
+    cols = overture_cell_select_columns(kind, schema)
     return f"""
 INSTALL spatial;
 LOAD spatial;
