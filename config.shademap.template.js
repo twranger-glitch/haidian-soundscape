@@ -186,7 +186,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
   buildingManifestUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/manifest.json",
   buildingTileIndexUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/tile-index.json",
-  buildingDataVersion: "2026-08-19.0-overture-tainan-city-v1"
+  buildingDataVersion: "2026-08-19.0-overture-tainan-city-v1",
 
   // v8.6.3 — no named-building exceptions. Low-confidence heights are
   // calibrated generically from nearby direct/floor-derived buildings with
