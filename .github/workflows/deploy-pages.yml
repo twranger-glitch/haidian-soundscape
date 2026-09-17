@@ -85,6 +85,9 @@ jobs:
 
           test -s _site/config.shademap.js
 
+          # Syntax gate: never deploy a malformed runtime config.
+          node --check _site/config.shademap.js
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
