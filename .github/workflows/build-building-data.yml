@@ -1,200 +1,240 @@
-name: Build ShadeMap building tiles
+name: Build building tiles (manual)
 
 on:
   workflow_dispatch:
     inputs:
-      scope:
-        description: "Area to build"
+      preset:
+        description: Coverage preset
         required: true
-        default: "haidian-smoke"
+        default: tainan-city
         type: choice
         options:
-          - haidian-smoke
-          - tainan
-          - taiwan-all
-      deploy_hf:
-        description: "Publish validated tiles to Hugging Face Dataset"
+          - tainan-city
+          - tainan-metro
+          - taiwan
+      mode:
+        description: What to do with the built dataset
         required: true
-        default: false
-        type: boolean
+        default: build-and-publish
+        type: choice
+        options:
+          - build-and-publish
+          - build-artifact
+          - plan
+      overture_release:
+        description: Overture release
+        required: true
+        default: 2026-08-19.0
+        type: string
+      data_version:
+        description: Exact data version (blank = auto)
+        required: false
+        default: ""
+        type: string
+      max_cells:
+        description: Optional smoke-test cell limit; 0 = all cells in preset
+        required: true
+        default: "0"
+        type: string
+      hf_repo_id:
+        description: Hugging Face dataset repo (used only by build-and-publish)
+        required: true
+        default: yhzkiki/haidian-building-tiles
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: building-data-${{ inputs.preset }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 360
     env:
-      PYTHONUNBUFFERED: "1"
+      PRESET: ${{ inputs.preset }}
+      MODE: ${{ inputs.mode }}
+      OVERTURE_RELEASE: ${{ inputs.overture_release }}
+      INPUT_DATA_VERSION: ${{ inputs.data_version }}
+      MAX_CELLS: ${{ inputs.max_cells }}
+      HF_REPO_ID: ${{ inputs.hf_repo_id }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
 
-      - name: Install building pipeline dependencies
+      - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install overturemaps shapely pyproj huggingface_hub
-          
-      - name: Ensure helper scripts are executable
-        shell: bash
-        run: |
-          chmod +x tools/*.sh
-          
-      - name: Resolve Overture release
-        id: overture
-        shell: bash
-        run: |
-          set -euo pipefail
-          RELEASE="$(overturemaps releases latest | tail -n 1 | tr -d '[:space:]')"
-          test -n "$RELEASE"
-          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
-          echo "Overture release: $RELEASE"
+          python -m pip install duckdb shapely pyproj huggingface_hub
 
-      - name: Build selected area
+      - name: Resolve build variables
         shell: bash
-        env:
-          SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
-          rm -rf _building-work _building-out
-          mkdir -p _building-work _building-out
-          if [[ "$SCOPE" == "taiwan-all" ]]; then
-            for REGION in taiwan-main penghu kinmen matsu; do
-              python tools/build-building-region.py \
-                --preset "$REGION" \
-                --out _building-out \
-                --work "_building-work/$REGION" \
-                --grid-zoom 11 \
-                --tile-zoom 16 \
-                --buffer-m 250 \
-                --resume
-            done
+          if [[ -n "${INPUT_DATA_VERSION}" ]]; then
+            DATA_VERSION="${INPUT_DATA_VERSION}"
           else
-            python tools/build-building-region.py \
-              --preset "$SCOPE" \
-              --out _building-out \
-              --work "_building-work/$SCOPE" \
-              --grid-zoom 11 \
-              --tile-zoom 16 \
-              --buffer-m 250
+            DATA_VERSION="${OVERTURE_RELEASE}-overture-${PRESET}-v1"
           fi
-          python tools/check-building-dataset.py _building-out
+          echo "DATA_VERSION=${DATA_VERSION}" >> "$GITHUB_ENV"
+          echo "OUT=build-output/${DATA_VERSION}" >> "$GITHUB_ENV"
+          echo "ARCHIVE=${DATA_VERSION}.tar.gz" >> "$GITHUB_ENV"
 
-      - name: Resolve immutable dataset version
-        id: dataset
+      - name: Show runner capacity
         shell: bash
-        env:
-          RELEASE: ${{ steps.overture.outputs.release }}
-          SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
-          VERSION="${RELEASE}-overture-osm-${SCOPE}-v2"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building dataset version: $VERSION"
+          df -h
+          free -h || true
+          python --version
 
-      - name: Write deployment info
+      - name: Plan coverage
         shell: bash
-        env:
-          VERSION: ${{ steps.dataset.outputs.version }}
-          SCOPE: ${{ inputs.scope }}
-          HF_BUILDING_REPO: ${{ vars.HF_BUILDING_REPO }}
         run: |
           set -euo pipefail
-          python - <<'PYINFO'
-          import json, os
-          from pathlib import Path
-          repo = (os.environ.get("HF_BUILDING_REPO") or "").strip()
-          version = os.environ["VERSION"]
-          obj = {
-              "schema": 1,
-              "scope": os.environ["SCOPE"],
-              "building_data_version": version,
-              "hf_repo": repo or None,
-              "building_hf_base_url": f"https://huggingface.co/datasets/{repo}/resolve/main/buildings" if repo else None,
-              "worker_variables": {
-                  "BUILDING_HF_BASE_URL": f"https://huggingface.co/datasets/{repo}/resolve/main/buildings" if repo else None,
-                  "BUILDING_DATA_VERSION": version,
-                  "BUILDING_CACHE_TTL_SECONDS": "2592000",
-                  "BUILDING_BROWSER_MAX_AGE_SECONDS": "86400",
-                  "BUILDING_UPSTREAM_TIMEOUT_MS": "8000"
-              },
-              "pilot_url_suffix": "?buildingPipeline=1"
-          }
-          Path("_building-out/deployment-info.json").write_text(json.dumps(obj, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
-          PYINFO
+          ARGS=(
+            --preset "$PRESET"
+            --overture-release "$OVERTURE_RELEASE"
+            --data-version "$DATA_VERSION"
+            --out "$OUT"
+            --plan-only
+          )
+          if [[ "${MAX_CELLS}" =~ ^[1-9][0-9]*$ ]]; then
+            ARGS+=(--max-cells "$MAX_CELLS")
+          fi
+          python tools/build-building-coverage.py "${ARGS[@]}" | tee building-plan.json
 
-      - name: Upload build artifact
+      - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: building-tiles-${{ inputs.scope }}-${{ steps.dataset.outputs.version }}
-          path: |
-            _building-out/manifest.json
-            _building-out/deployment-info.json
-            _building-out/16/
-            _building-out/cell-manifests/
-          retention-days: 14
-          compression-level: 6
+          name: building-plan-${{ inputs.preset }}-${{ github.run_id }}
+          path: building-plan.json
+          retention-days: 7
 
-      - name: Publish to Hugging Face Dataset
-        if: ${{ inputs.deploy_hf }}
+      - name: Stop after plan
+        if: ${{ inputs.mode == 'plan' }}
+        run: echo "Plan-only run complete."
+
+      - name: Build versioned tiles
+        if: ${{ inputs.mode != 'plan' }}
         shell: bash
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_BUILDING_REPO: ${{ vars.HF_BUILDING_REPO }}
-          HF_BUILDING_PRIVATE: ${{ vars.HF_BUILDING_PRIVATE }}
-          VERSION: ${{ steps.dataset.outputs.version }}
         run: |
           set -euo pipefail
-          : "${HF_TOKEN:?Set the HF_TOKEN repository secret to a Hugging Face write token}"
-          : "${HF_BUILDING_REPO:?Set the HF_BUILDING_REPO repository variable, e.g. owner/haidian-building-tiles}"
-          PRIVATE="${HF_BUILDING_PRIVATE:-false}"
-          python tools/deploy-building-tiles-hf.py \
-            _building-out \
-            --repo-id "$HF_BUILDING_REPO" \
-            --version "$VERSION" \
-            --private "$PRIVATE"
-          {
-            echo "## Hugging Face building dataset published"
-            echo ""
-            echo "- Repo: \`$HF_BUILDING_REPO\`"
-            echo "- BUILDING_DATA_VERSION: \`$VERSION\`"
-            echo "- BUILDING_HF_BASE_URL: \`https://huggingface.co/datasets/$HF_BUILDING_REPO/resolve/main/buildings\`"
-            echo "- Worker manifest check: \`/buildings/manifest.json\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          ARGS=(
+            --preset "$PRESET"
+            --overture-release "$OVERTURE_RELEASE"
+            --data-version "$DATA_VERSION"
+            --out "$OUT"
+          )
+          if [[ "${MAX_CELLS}" =~ ^[1-9][0-9]*$ ]]; then
+            ARGS+=(--max-cells "$MAX_CELLS")
+          fi
+          python tools/build-building-coverage.py "${ARGS[@]}"
 
-      - name: Verify public Hugging Face manifest
-        if: ${{ inputs.deploy_hf }}
+      - name: Validate dataset
+        if: ${{ inputs.mode != 'plan' }}
         shell: bash
-        env:
-          HF_BUILDING_REPO: ${{ vars.HF_BUILDING_REPO }}
-          VERSION: ${{ steps.dataset.outputs.version }}
         run: |
           set -euo pipefail
-          URL="https://huggingface.co/datasets/${HF_BUILDING_REPO}/resolve/main/buildings/${VERSION}/manifest.json"
-          echo "Checking $URL"
-          for attempt in 1 2 3 4 5 6; do
-            if curl --fail --location --silent --show-error --max-time 30 "$URL" -o /tmp/hf-building-manifest.json; then
-              python - <<'PYVERIFY'
-          import json
+          python tools/validate-building-dataset.py --root "$OUT" --sample 120
+
+      - name: Write build summary
+        if: ${{ inputs.mode != 'plan' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
           from pathlib import Path
-          p=Path('/tmp/hf-building-manifest.json')
-          obj=json.loads(p.read_text(encoding='utf-8'))
-          if int(obj.get('tile_zoom', 0)) != 16:
-              raise SystemExit('Published manifest does not report tile_zoom=16')
-          if int(obj.get('tile_count', 0)) <= 0:
-              raise SystemExit('Published manifest has no building tiles')
-          print('HF public manifest OK:', obj.get('tile_count'), 'tiles /', obj.get('feature_count'), 'features')
-          PYVERIFY
-              exit 0
-            fi
-            sleep $((attempt * 5))
-          done
-          echo "::error::Published Hugging Face manifest was not publicly readable after retries. Check that the Dataset repo is public."
-          exit 1
+          root = Path(os.environ['OUT'])
+          m = json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+          d = json.loads((root/'deployment-info.json').read_text(encoding='utf-8'))
+          rows = [
+              '# Building dataset build',
+              '',
+              f"- preset: `{m.get('latest_run', {}).get('preset')}`",
+              f"- data version: `{m.get('data_version')}`",
+              f"- features: **{m.get('feature_count', 0):,}**",
+              f"- z16 tiles: **{m.get('tile_count', 0):,}**",
+              f"- raw tile bytes: **{m.get('bytes', 0):,}**",
+              f"- cells completed: **{m.get('latest_run', {}).get('cells_completed', 0)} / {m.get('latest_run', {}).get('cells_requested', 0)}**",
+              f"- required worker: `{d.get('required_worker_minimum')}`",
+              '',
+              'Do not switch BUILDING_DATA_VERSION until this artifact has been checked in the live site.',
+          ]
+          Path('BUILD-SUMMARY.md').write_text('\n'.join(rows) + '\n', encoding='utf-8')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write('\n'.join(rows) + '\n')
+          PY
 
+      - name: Package dataset for downloadable artifact
+        if: ${{ inputs.mode == 'build-artifact' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C build-output -czf "$ARCHIVE" "$DATA_VERSION"
+          sha256sum "$ARCHIVE" | tee "$ARCHIVE.sha256"
+          ls -lh "$ARCHIVE" "$ARCHIVE.sha256"
+
+      - name: Upload full dataset artifact
+        if: ${{ inputs.mode == 'build-artifact' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: building-dataset-${{ inputs.preset }}-${{ github.run_id }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+            BUILD-SUMMARY.md
+          retention-days: 5
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Require Hugging Face token
+        if: ${{ inputs.mode == 'build-and-publish' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${HF_TOKEN:-}" ]]; then
+            echo "::error::Missing repository secret HF_TOKEN."
+            exit 1
+          fi
+
+      - name: Publish version directory to Hugging Face
+        if: ${{ inputs.mode == 'build-and-publish' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hf upload "$HF_REPO_ID" "$OUT" "buildings/$DATA_VERSION" \
+            --repo-type dataset \
+            --token "$HF_TOKEN" \
+            --commit-message "Publish building tiles $DATA_VERSION"
+
+      - name: Upload publication metadata
+        if: ${{ inputs.mode == 'build-and-publish' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: building-publication-${{ inputs.preset }}-${{ github.run_id }}
+          path: |
+            ${{ env.OUT }}/manifest.json
+            ${{ env.OUT }}/tile-index.json
+            ${{ env.OUT }}/deployment-info.json
+            ${{ env.OUT }}/build-state.json
+            BUILD-SUMMARY.md
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Final disk report
+        if: ${{ always() }}
+        run: df -h
