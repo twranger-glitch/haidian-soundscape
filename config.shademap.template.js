@@ -1,4 +1,4 @@
-/* Haidian Soundscape — ShadeMap configuration v8.6.2
+/* Haidian Soundscape — ShadeMap configuration v8.6.3
  * This template is safe to commit. GitHub Actions injects the API key only into the deployed artifact.
  */
 window.HAIDIAN_SHADEMAP_CONFIG = {
@@ -58,7 +58,8 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingProgressiveDecoupleEnabled: true,
   buildingWarmPrefetchEnabled: true,
   buildingWarmPrefetchDelayMs: 250,
-  buildingFetchClientTimeoutMs: 9000,
+  buildingFetchClientTimeoutMs: 12000,
+  buildingFetchTotalTimeoutMs: 26000,
   buildingUpgradeDelayMs: 80,
   metaProgressiveFirstActivationOnly: true,
   metaProgressiveUpgradeDelayMs: 120,
@@ -111,8 +112,8 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   queryShadeSourceUnknownBuildingMaxHeightM: 24,
   buildingShadowFetchPaddingM: 280,
   buildingShadowDynamicPaddingEnabled: true,
-  buildingShadowMaxCasterHeightM: 60,
-  buildingShadowFetchPaddingMaxM: 1200,
+  buildingShadowMaxCasterHeightM: 120,
+  buildingShadowFetchPaddingMaxM: 1800,
   queryShadeSourceMixedDistanceToleranceM: 3,
   queryShadeSourceMinAltitudeDeg: 1.5,
 
@@ -188,20 +189,16 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingTileIndexUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/tile-index.json",
   buildingDataVersion: "2026-08-19.0-overture-osm-haidian-smoke-v2",
 
-  // v8.6.2 named-height correction registry.
-  // Spring Fortune "學學" is publicly documented as three 15-storey towers.
-  // 46.5 m is therefore a floor-derived modelling estimate (15 × 3.1 m),
-  // NOT a surveyed/official total building height.
-  buildingHeightOverrides: {
-    "春福學學": {
-      floors: 15,
-      storeyHeightM: 3.1,
-      heightM: 46.5,
-      quality: "floors-derived",
-      force: true,
-      source: "公開建案樓層資料推估：地上15層 × 3.1 m/層 = 46.5 m（非實測總高）"
-    }
-  },
+  // v8.6.3 — no named-building exceptions. Low-confidence heights are
+  // calibrated generically from nearby direct/floor-derived buildings with
+  // similar class and footprint size. If no suitable anchors exist, the
+  // semantic fallback remains explicitly labelled as an estimate.
+  buildingHeightContextRadiusM: 1200,
+  buildingHeightContextMinAnchors: 2,
+  buildingHeightContextMaxAnchors: 6,
+  buildingHeightContextAreaRatioMin: 0.45,
+  buildingHeightContextAreaRatioMax: 2.2,
+  buildingHeightContextMaxM: 80,
 
   buildingTileZoom: 16,
   buildingPipelineFallbackToOsm: true,
@@ -218,6 +215,10 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingPilotQueryValue: "1",
   buildingDebugOverlayDefault: false,
   buildingMinZoom: 15,
+  overpassUrls: [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
 
   defaultResearchMode: "full",
 
