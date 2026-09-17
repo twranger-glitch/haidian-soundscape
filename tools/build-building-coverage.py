@@ -137,7 +137,7 @@ def overture_select_columns(kind: str, include_bbox: bool = False) -> str:
 def overture_region_cache_sql(release: str, kind: str, bbox: list[float], output: Path) -> str:
     """One remote Overture scan per coverage region, saved as local GeoParquet."""
     w, s, e, n = bbox
-    root = f"s3://overturemaps-us-west-2/release/{release}/theme=buildings/type={kind}/*"
+    root = f"s3://overturemaps-us-west-2/release/{release}/theme=buildings/type={kind}/*.parquet"
     cols = overture_select_columns(kind, include_bbox=True)
     return f"""
 INSTALL spatial;
@@ -147,7 +147,7 @@ LOAD httpfs;
 SET s3_region='us-west-2';
 COPY (
   SELECT {cols}
-  FROM read_parquet('{q(root)}', filename=true, hive_partitioning=1)
+  FROM read_parquet('{q(root)}', union_by_name=true, filename=true, hive_partitioning=false)
   WHERE bbox.xmax >= {w:.10f} AND bbox.xmin <= {e:.10f}
     AND bbox.ymax >= {s:.10f} AND bbox.ymin <= {n:.10f}
 ) TO '{q(str(output.resolve()))}' (FORMAT PARQUET, COMPRESSION ZSTD);
