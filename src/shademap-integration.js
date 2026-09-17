@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.2
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.3
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -68,7 +68,7 @@
     buildingProgressiveDecoupleEnabled: true,
     buildingWarmPrefetchEnabled: true,
     buildingWarmPrefetchDelayMs: 250,
-    buildingFetchClientTimeoutMs: 9000,
+    buildingFetchClientTimeoutMs: 12000,
     buildingUpgradeDelayMs: 80,
     metaProgressiveFirstActivationOnly: true,
     metaProgressiveUpgradeDelayMs: 120,
@@ -114,8 +114,8 @@
     // v8.5.1: low-sun building shadows can originate well outside the viewport.
     // Use the fixed padding as a floor and expand physically from sun altitude.
     buildingShadowDynamicPaddingEnabled: true,
-    buildingShadowMaxCasterHeightM: 60,
-    buildingShadowFetchPaddingMaxM: 1200,
+    buildingShadowMaxCasterHeightM: 120,
+    buildingShadowFetchPaddingMaxM: 1800,
     queryShadeSourceMixedDistanceToleranceM: 3,
     queryShadeSourceMinAltitudeDeg: 1.5,
 
@@ -197,10 +197,15 @@
     buildingManifestUrl: "",
     buildingTileIndexUrl: "",
     buildingDataVersion: "",
-    // v8.6.2: optional, data-driven corrections for named buildings whose
-    // upstream geometry is good but whose source lacks a usable height/floor tag.
-    // Overrides remain explicit provenance, never disguised as measured height.
-    buildingHeightOverrides: {},
+    // v8.6.3: generic height calibration. Never special-case a named building.
+    // Low-confidence estimates may be upgraded only from nearby high-confidence
+    // direct/floor-derived buildings with compatible class and footprint size.
+    buildingHeightContextRadiusM: 1200,
+    buildingHeightContextMinAnchors: 2,
+    buildingHeightContextMaxAnchors: 6,
+    buildingHeightContextAreaRatioMin: 0.45,
+    buildingHeightContextAreaRatioMax: 2.2,
+    buildingHeightContextMaxM: 80,
     buildingTileZoom: 16,
     buildingPipelineFallbackToOsm: true,
     buildingPipelineCoverageGateEnabled: true,
@@ -217,6 +222,11 @@
     buildingDebugOverlayDefault: false,
     buildingMinZoom: 15,
     overpassUrl: "https://overpass-api.de/api/interpreter",
+    overpassUrls: [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter"
+    ],
+    buildingFetchTotalTimeoutMs: 26000,
     defaultBuildingHeight: 3.1,
     defaultStoreyHeight: 3.1,
 
@@ -1107,6 +1117,7 @@
     if (effectiveBuildingMode() === "custom") return "自訂 GeoJSON";
     if (effectiveBuildingMode() === "pipeline") {
       const st = lastBuildingPipelineStatus || {};
+      if (st.mode === "pipeline-hybrid") return "預建建物圖磚（Overture＋OSM）＋ OpenStreetMap live 補齊";
       if (st.fallback === "OSM") return "OpenStreetMap / Overpass（預建圖磚範圍外或不完整時自動 fallback）";
       return buildingPilotRequested() && config.buildingMode !== "pipeline"
         ? "預建建物圖磚（測試模式）"
@@ -1149,8 +1160,10 @@
 
   function syncBuildingAttribution() {
     if (!mapRef || !mapRef.attributionControl) return;
-    const pipelineFellBack = effectiveBuildingMode() === "pipeline" && lastBuildingPipelineStatus && lastBuildingPipelineStatus.fallback === "OSM";
-    const desired = effectiveBuildingMode() === "pipeline" && !pipelineFellBack
+    const pipelineStatus = lastBuildingPipelineStatus || {};
+    const pipelineHybrid = effectiveBuildingMode() === "pipeline" && pipelineStatus.mode === "pipeline-hybrid";
+    const pipelineFellBack = effectiveBuildingMode() === "pipeline" && pipelineStatus.fallback === "OSM" && !pipelineHybrid;
+    const desired = effectiveBuildingMode() === "pipeline" && (!pipelineFellBack || pipelineHybrid)
       ? "© OpenStreetMap contributors, Overture Maps Foundation"
       : ((effectiveBuildingMode() === "osm" || pipelineFellBack) ? "© OpenStreetMap contributors" : "");
     if (buildingAttributionAdded && buildingAttributionAdded !== desired) {
@@ -5363,7 +5376,7 @@
     );
   }
 
-  function parseHeightInfo(tags) {
+  function parseHeightInfo(tags, areaM2 = 0) {
     const t = tags || {};
 
     if (t.height != null) {
@@ -5372,7 +5385,8 @@
       if (Number.isFinite(value) && value > 0) {
         return {
           height: raw.includes("ft") || raw.includes("'") ? value * 0.3048 : value,
-          source: "OSM height"
+          source: "OSM height",
+          quality: "direct"
         };
       }
     }
@@ -5382,19 +5396,49 @@
       if (Number.isFinite(levels) && levels > 0) {
         return {
           height: levels * config.defaultStoreyHeight,
-          source: `OSM building:levels × ${config.defaultStoreyHeight} m`
+          source: `OSM building:levels × ${config.defaultStoreyHeight} m`,
+          quality: "floors-derived"
         };
       }
     }
 
-    return {
-      height: config.defaultBuildingHeight,
-      source: "預設估計值"
-    };
+    const text = `${t.building || ""} ${t["building:use"] || ""} ${t.amenity || ""} ${t.office || ""} ${t.shop || ""}`.toLowerCase();
+    let height = null;
+    let source = "";
+    if (/shed|garage|carport|hut|storage/.test(text)) {
+      height = 3.1;
+      source = "OSM semantic heuristic: ancillary structure";
+    } else if (/warehouse|industrial|factory/.test(text)) {
+      height = 7.0;
+      source = "OSM semantic heuristic: industrial/warehouse";
+    } else if (/school|education|college|university|civic|public/.test(text)) {
+      height = 12.4;
+      source = "OSM semantic heuristic: education/public building";
+    } else if (/commercial|office|retail|hospital|hotel/.test(text)) {
+      height = 12.4;
+      source = "OSM semantic heuristic: commercial/institutional building";
+    } else if (/apartments|residential/.test(text)) {
+      height = areaM2 >= 500 ? 18.6 : (areaM2 >= 180 ? 12.4 : 9.3);
+      source = "OSM semantic/footprint heuristic: residential building";
+    } else if (/house|detached|terrace/.test(text)) {
+      height = 9.3;
+      source = "OSM semantic heuristic: house/terrace";
+    } else if (areaM2 > 0) {
+      if (areaM2 < 35) height = 3.1;
+      else if (areaM2 < 180) height = 9.3;
+      else if (areaM2 < 1200) height = 12.4;
+      else height = 15.5;
+      source = "OSM footprint heuristic";
+    } else {
+      height = config.defaultBuildingHeight;
+      source = "預設估計值";
+    }
+
+    return { height, source, quality: "heuristic" };
   }
 
-  function parseHeight(tags) {
-    return parseHeightInfo(tags).height;
+  function parseHeight(tags, areaM2 = 0) {
+    return parseHeightInfo(tags, areaM2).height;
   }
 
   async function loadCustomBuildings() {
@@ -5457,9 +5501,9 @@
       const solar = solarPositionAt(center, state.date);
       if (!solar || solar.night) return base;
       const altitude = Math.max(1.5, Number(solar.altitudeDeg) || 1.5) * Math.PI / 180;
-      const casterHeight = Math.max(3.1, Number(config.buildingShadowMaxCasterHeightM) || 60);
+      const casterHeight = Math.max(3.1, Number(config.buildingShadowMaxCasterHeightM) || 120);
       const physical = casterHeight / Math.max(0.02, Math.tan(altitude));
-      const maxPad = Math.max(base, Number(config.buildingShadowFetchPaddingMaxM) || 1200);
+      const maxPad = Math.max(base, Number(config.buildingShadowFetchPaddingMaxM) || 1800);
       return Math.min(maxPad, Math.max(base, physical + 40));
     } catch (_) {
       return base;
@@ -5582,56 +5626,168 @@
     return { status: full ? "full" : (overlaps ? "partial" : "outside"), aoi };
   }
 
-  function configuredBuildingHeightOverride(feature) {
+  function buildingHeightFamily(feature) {
     const props = feature && feature.properties ? feature.properties : {};
-    const name = String(props.name || "").trim();
-    const table = config.buildingHeightOverrides;
-    if (!name || !table || typeof table !== "object") return null;
-    const raw = table[name];
-    if (!raw || typeof raw !== "object") return null;
-
-    const directHeight = Number(raw.heightM);
-    const floors = Number(raw.floors);
-    const storeyHeight = Math.max(2.4, Number(raw.storeyHeightM) || 3.1);
-    const height = Number.isFinite(directHeight) && directHeight > 0
-      ? directHeight
-      : (Number.isFinite(floors) && floors > 0 ? floors * storeyHeight : null);
-    if (!Number.isFinite(height) || height <= 0) return null;
-
-    return {
-      height: Math.round(height * 1000) / 1000,
-      floors: Number.isFinite(floors) && floors > 0 ? floors : null,
-      storeyHeight,
-      quality: String(raw.quality || (Number.isFinite(floors) && floors > 0 ? "floors-derived" : "estimated")),
-      source: String(
-        raw.source ||
-        (Number.isFinite(floors) && floors > 0
-          ? `configured public floor count: ${floors} × ${storeyHeight} m`
-          : "configured building height override")
-      ),
-      force: raw.force !== false
-    };
+    const text = `${props.class || ""} ${props.subtype || ""} ${props.building || ""} ${props.amenity || ""}`.toLowerCase();
+    if (/apartments|residential|dormitory|house|detached|terrace/.test(text)) return "residential";
+    if (/school|education|college|university|civic|public/.test(text)) return "education-public";
+    if (/commercial|office|retail|hospital|hotel/.test(text)) return "commercial-institutional";
+    if (/warehouse|industrial|factory/.test(text)) return "industrial";
+    if (/shed|garage|carport|hut|storage/.test(text)) return "ancillary";
+    return "generic";
   }
 
-  function applyConfiguredBuildingHeightOverride(feature) {
-    const override = configuredBuildingHeightOverride(feature);
-    if (!override) return feature;
+  function buildingFeatureMetrics(feature) {
+    const geometry = feature && feature.geometry;
+    if (!geometry || !["Polygon", "MultiPolygon"].includes(geometry.type)) return null;
+    const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+    let sumArea = 0;
+    let weightedLat = 0;
+    let weightedLng = 0;
 
-    const props = feature.properties || (feature.properties = {});
-    const existing = Number(props.height ?? props.render_height);
-    const existingQuality = String(props.height_quality || "").toLowerCase();
-    const upstreamHighConfidence = existingQuality === "direct" || existingQuality === "floors-derived";
-
-    if (override.force || !upstreamHighConfidence || !Number.isFinite(existing) || existing <= 0) {
-      props.height = override.height;
-      props.render_height = override.height;
-      props.height_source = override.source;
-      props.height_quality = override.quality;
-      props.height_override = true;
-      if (override.floors) props.height_override_floors = override.floors;
-      props.height_override_storey_m = override.storeyHeight;
+    for (const polygon of polygons || []) {
+      const ring = polygon && polygon[0];
+      if (!Array.isArray(ring) || ring.length < 4) continue;
+      let latMean = 0;
+      let count = 0;
+      for (const point of ring) {
+        if (!Array.isArray(point) || point.length < 2) continue;
+        latMean += Number(point[1]);
+        count += 1;
+      }
+      if (!count) continue;
+      latMean = latMean / count;
+      const cosLat = Math.max(0.1, Math.cos(latMean * Math.PI / 180));
+      const metersPerLon = 111320 * cosLat;
+      const metersPerLat = 111320;
+      let twiceArea = 0;
+      let cxNumerator = 0;
+      let cyNumerator = 0;
+      for (let i = 0; i < ring.length - 1; i += 1) {
+        const a = ring[i];
+        const b = ring[i + 1];
+        if (!a || !b) continue;
+        const ax = Number(a[0]) * metersPerLon;
+        const ay = Number(a[1]) * metersPerLat;
+        const bx = Number(b[0]) * metersPerLon;
+        const by = Number(b[1]) * metersPerLat;
+        if (![ax, ay, bx, by].every(Number.isFinite)) continue;
+        const cross = ax * by - bx * ay;
+        twiceArea += cross;
+        cxNumerator += (ax + bx) * cross;
+        cyNumerator += (ay + by) * cross;
+      }
+      const signedArea = twiceArea / 2;
+      const area = Math.abs(signedArea);
+      if (!(area > 0.5)) continue;
+      let lng = 0;
+      let lat = 0;
+      if (Math.abs(twiceArea) > 1e-9) {
+        const cx = cxNumerator / (3 * twiceArea);
+        const cy = cyNumerator / (3 * twiceArea);
+        lng = cx / metersPerLon;
+        lat = cy / metersPerLat;
+      } else {
+        const valid = ring.filter((pt) => pt && Number.isFinite(Number(pt[0])) && Number.isFinite(Number(pt[1])));
+        if (!valid.length) continue;
+        lng = valid.reduce((sum, pt) => sum + Number(pt[0]), 0) / valid.length;
+        lat = valid.reduce((sum, pt) => sum + Number(pt[1]), 0) / valid.length;
+      }
+      sumArea += area;
+      weightedLng += lng * area;
+      weightedLat += lat * area;
     }
-    return feature;
+
+    if (!(sumArea > 0)) return null;
+    return { areaM2: sumArea, lat: weightedLat / sumArea, lng: weightedLng / sumArea };
+  }
+
+  function buildingMetricDistanceM(a, b) {
+    if (!a || !b) return Infinity;
+    const rad = Math.PI / 180;
+    const lat1 = Number(a.lat) * rad;
+    const lat2 = Number(b.lat) * rad;
+    const dLat = lat2 - lat1;
+    const dLng = (Number(b.lng) - Number(a.lng)) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(Math.max(0, h))));
+  }
+
+  function weightedMedianHeight(entries) {
+    const sorted = (entries || []).slice().sort((a, b) => a.height - b.height);
+    const total = sorted.reduce((sum, item) => sum + item.weight, 0);
+    if (!(total > 0)) return null;
+    let acc = 0;
+    for (const item of sorted) {
+      acc += item.weight;
+      if (acc >= total / 2) return item.height;
+    }
+    return sorted.length ? sorted[sorted.length - 1].height : null;
+  }
+
+  function calibrateLowConfidenceBuildingHeights(features, contextFeatures) {
+    const targets = Array.isArray(features) ? features : [];
+    const context = Array.isArray(contextFeatures) ? contextFeatures : targets;
+    if (!targets.length || !context.length) return targets;
+
+    const radius = Math.max(100, Number(config.buildingHeightContextRadiusM) || 1200);
+    const minAnchors = Math.max(2, Number(config.buildingHeightContextMinAnchors) || 2);
+    const maxAnchors = Math.max(minAnchors, Number(config.buildingHeightContextMaxAnchors) || 6);
+    const minRatio = Math.max(0.1, Number(config.buildingHeightContextAreaRatioMin) || 0.45);
+    const maxRatio = Math.max(minRatio, Number(config.buildingHeightContextAreaRatioMax) || 2.2);
+    const maxHeight = Math.max(12.4, Number(config.buildingHeightContextMaxM) || 80);
+
+    const anchors = [];
+    for (const feature of context) {
+      const props = feature && feature.properties ? feature.properties : {};
+      const quality = String(props.height_quality || "").toLowerCase();
+      const height = Number(props.height ?? props.render_height);
+      if (!["direct", "floors-derived"].includes(quality) || !Number.isFinite(height) || height <= 0) continue;
+      const metrics = buildingFeatureMetrics(feature);
+      if (!metrics) continue;
+      anchors.push({ feature, props, metrics, height, family: buildingHeightFamily(feature) });
+    }
+    if (anchors.length < minAnchors) return targets;
+
+    for (const feature of targets) {
+      const props = feature && feature.properties ? feature.properties : {};
+      const quality = String(props.height_quality || "").toLowerCase();
+      if (!["heuristic", "fallback", "estimated", "missing", ""].includes(quality)) continue;
+      const metrics = buildingFeatureMetrics(feature);
+      if (!metrics) continue;
+      const family = buildingHeightFamily(feature);
+      // Do not extrapolate a generic/unknown footprint from unrelated anchor
+      // classes. Context calibration is only allowed when the building has a
+      // meaningful semantic family (residential, school, commercial, etc.).
+      if (family === "generic") continue;
+      const candidates = [];
+      for (const anchor of anchors) {
+        if (anchor.feature === feature) continue;
+        if (family !== "generic" && anchor.family !== family) continue;
+        const ratio = anchor.metrics.areaM2 / Math.max(1, metrics.areaM2);
+        if (ratio < minRatio || ratio > maxRatio) continue;
+        const distance = buildingMetricDistanceM(metrics, anchor.metrics);
+        if (!Number.isFinite(distance) || distance > radius) continue;
+        const areaPenalty = Math.abs(Math.log(Math.max(0.01, ratio)));
+        const weight = 1 / Math.max(50, distance + 180 * areaPenalty);
+        candidates.push({ height: anchor.height, distance, weight, ratio });
+      }
+      candidates.sort((a, b) => a.distance - b.distance);
+      const selected = candidates.slice(0, maxAnchors);
+      if (selected.length < minAnchors) continue;
+      const inferred = weightedMedianHeight(selected);
+      if (!Number.isFinite(inferred) || inferred <= 0) continue;
+      const height = Math.round(Math.min(maxHeight, Math.max(3.1, inferred)) * 1000) / 1000;
+      const original = Number(props.height ?? props.render_height);
+      props.height_original_estimate_m = Number.isFinite(original) ? original : null;
+      props.height = height;
+      props.render_height = height;
+      props.height_quality = "context-inferred";
+      props.height_source = `local class/footprint matched weighted median of ${selected.length} direct/floor-derived buildings within ${Math.round(radius)} m`;
+      props.height_context_anchor_count = selected.length;
+      props.height_context_family = family;
+    }
+    return targets;
   }
 
   function normalizePipelineBuildingFeature(feature) {
@@ -5644,8 +5800,9 @@
     props.render_height = safeHeight;
     props.building_source = props.building_source || props.source || "unknown";
     props.height_source = props.height_source || "prebuilt building tile";
+    props.height_quality = props.height_quality || (Number.isFinite(h) && h > 0 ? "estimated" : "fallback");
     props.building_uid = props.building_uid || `${props.building_source}:${props.source_id || props.id || JSON.stringify(feature.geometry).slice(0, 80)}`;
-    return applyConfiguredBuildingHeightOverride(feature);
+    return feature;
   }
 
   function buildingTileRangeForBounds(padded, z) {
@@ -5656,6 +5813,54 @@
       for (let y = Math.min(nw.y, se.y); y <= Math.max(nw.y, se.y); y += 1) out.push({ x, y, z });
     }
     return out;
+  }
+
+
+  function expandPlainBuildingBounds(bounds, extraM) {
+    const meters = Math.max(0, Number(extraM) || 0);
+    if (!bounds || !meters) return bounds;
+    const centerLat = (Number(bounds.south) + Number(bounds.north)) / 2;
+    const latPad = meters / 111320;
+    const lngPad = meters / (111320 * Math.max(0.2, Math.cos(centerLat * Math.PI / 180)));
+    return {
+      south: Number(bounds.south) - latPad,
+      west: Number(bounds.west) - lngPad,
+      north: Number(bounds.north) + latPad,
+      east: Number(bounds.east) + lngPad
+    };
+  }
+
+  async function loadPipelineHeightContext(baseFeatures, padded, z, tileIndex) {
+    const features = Array.isArray(baseFeatures) ? baseFeatures : [];
+    const needsContext = features.some((feature) => {
+      const props = feature && feature.properties ? feature.properties : {};
+      const quality = String(props.height_quality || "").toLowerCase();
+      return ["heuristic", "fallback", "estimated", "missing", ""].includes(quality);
+    });
+    if (!needsContext || !tileIndex || !tileIndex.tileKeySet) return features;
+
+    const radius = Math.max(0, Number(config.buildingHeightContextRadiusM) || 0);
+    if (!radius) return features;
+    const expanded = expandPlainBuildingBounds(padded, radius);
+    const contextTiles = buildingTileRangeForBounds(expanded, z)
+      .filter((tile) => tileIndex.tileKeySet.has(`${tile.z}/${tile.x}/${tile.y}.geojson`));
+
+    const settled = await Promise.allSettled(contextTiles.map(fetchBuildingTile));
+    const unique = new Map();
+    for (const feature of features) {
+      const props = feature && feature.properties ? feature.properties : {};
+      const uid = props.building_uid || `${props.building_source || "unknown"}:${props.source_id || unique.size}`;
+      unique.set(uid, feature);
+    }
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      for (const feature of result.value || []) {
+        const props = feature && feature.properties ? feature.properties : {};
+        const uid = props.building_uid || `${props.building_source || "unknown"}:${props.source_id || unique.size}`;
+        if (!unique.has(uid)) unique.set(uid, feature);
+      }
+    }
+    return Array.from(unique.values());
   }
 
   async function fetchBuildingTile(tile) {
@@ -5702,7 +5907,7 @@
         updateBuildingRuntimeStatus();
         return [];
       }
-      if (!manifest || coverage.status !== "full") {
+      if (!manifest || coverage.status === "outside") {
         lastBuildingPipelineStatus = {
           mode: "pipeline-outside-coverage", sourceCounts: {}, tileCount: 0,
           coverageStatus: coverage.status, coverageAoi: coverage.aoi,
@@ -5711,6 +5916,9 @@
         updateBuildingRuntimeStatus();
         return [];
       }
+      // v8.6.3: partial overlap is no longer thrown away. Load the published
+      // pipeline tiles that do exist, then merge them with live OSM for the
+      // uncovered part of the viewport. This prevents a hard seam at the pilot AOI.
       const manifestZoom = Number(manifest && manifest.tile_zoom);
       if (Number.isFinite(manifestZoom) && manifestZoom !== z) {
         lastBuildingPipelineStatus = {
@@ -5789,6 +5997,8 @@
       }
     }
     const features = Array.from(unique.values());
+    const contextFeatures = await loadPipelineHeightContext(features, padded, z, tileIndex);
+    calibrateLowConfidenceBuildingHeights(features, contextFeatures);
     lastBuildingFeatures = features;
     lastBuildingCoverageKey = `pipeline:${z}:${tiles.map((t) => `${t.x}/${t.y}`).join("|")}`;
     lastBuildingFetchError = null;
@@ -5809,6 +6019,49 @@
     syncBuildingAttribution();
     syncBuildingDebugOverlay();
     return features;
+  }
+
+  function overpassEndpointList() {
+    const configured = Array.isArray(config.overpassUrls) ? config.overpassUrls : [];
+    const urls = configured.concat(config.overpassUrl || []).map((value) => String(value || "").trim()).filter(Boolean);
+    return Array.from(new Set(urls));
+  }
+
+  async function fetchOverpassJson(query) {
+    const endpoints = overpassEndpointList();
+    if (!endpoints.length) throw new Error("No Overpass endpoint configured");
+    const perEndpointTimeoutMs = Math.max(3000, Number(config.buildingFetchClientTimeoutMs) || 12000);
+    const totalTimeoutMs = Math.max(perEndpointTimeoutMs, Number(config.buildingFetchTotalTimeoutMs) || 26000);
+    const deadline = Date.now() + totalTimeoutMs;
+    const errors = [];
+
+    for (const endpoint of endpoints) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      const timeoutMs = Math.max(1000, Math.min(perEndpointTimeoutMs, remaining));
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => {
+        try { controller.abort("overpass-timeout"); } catch (_) { try { controller.abort(); } catch (_) {} }
+      }, timeoutMs) : null;
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controller ? controller.signal : undefined
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        if (!json || !Array.isArray(json.elements)) throw new Error("invalid JSON payload");
+        return { json, endpoint };
+      } catch (error) {
+        const timedOut = controller && controller.signal && controller.signal.aborted;
+        errors.push(`${endpoint}: ${timedOut ? `timeout after ${timeoutMs} ms` : (error && error.message ? error.message : String(error))}`);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+    throw new Error(`Overpass unavailable (${errors.join(" | ") || "total timeout"})`);
   }
 
   async function loadOSMBuildings() {
@@ -5835,65 +6088,58 @@
       `${padded.north},${padded.east}` +
       `);out tags geom;`;
 
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const clientTimeoutMs = Math.max(1000, Number(config.buildingFetchClientTimeoutMs) || 9000);
     const fetchStartedAt = monotonicNow();
     metaPerf.buildingFetches += 1;
     lastBuildingFetchError = null;
-    const timeoutId = controller ? setTimeout(() => {
-      try { controller.abort(); } catch (_) {}
-    }, clientTimeoutMs) : null;
 
-    const promise = fetch(
-      `${config.overpassUrl}?data=${encodeURIComponent(query)}`,
-      controller ? { signal: controller.signal } : undefined
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Overpass HTTP ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((json) => {
+    const promise = fetchOverpassJson(query)
+      .then(({ json, endpoint }) => {
         const features = [];
 
         for (const element of json.elements || []) {
           if (!element.geometry || element.geometry.length < 3) continue;
 
-          const ring = element.geometry.map((point) => [
-            point.lon,
-            point.lat
-          ]);
-
+          const ring = element.geometry.map((point) => [point.lon, point.lat]);
           const first = ring[0];
           const last = ring[ring.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first.slice());
 
-          if (first[0] !== last[0] || first[1] !== last[1]) {
-            ring.push(first.slice());
-          }
-
-          const heightInfo = parseHeightInfo(element.tags);
+          const shell = {
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [ring] },
+            properties: {}
+          };
+          const metrics = buildingFeatureMetrics(shell);
+          const areaM2 = metrics ? metrics.areaM2 : 0;
+          const heightInfo = parseHeightInfo(element.tags, areaM2);
+          const tags = element.tags || {};
           const height = heightInfo.height;
 
           features.push({
             type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [ring]
-            },
+            geometry: shell.geometry,
             properties: {
               height,
               render_height: height,
               height_source: heightInfo.source,
+              height_quality: heightInfo.quality || "heuristic",
+              building_source: "OSM-live",
+              source_id: `OSM:${element.id}`,
+              source_version: "live-overpass",
               osm_id: element.id,
-              name:
-                (element.tags &&
-                  (element.tags["name:zh"] || element.tags.name)) ||
-                "OSM building"
+              name: tags["name:zh"] || tags.name || "OSM building",
+              subtype: tags.building || "",
+              class: tags["building:use"] || tags.amenity || "",
+              building: tags.building || "",
+              amenity: tags.amenity || "",
+              building_levels: tags["building:levels"] || "",
+              overpass_endpoint: endpoint,
+              building_uid: `osm-live-${element.id}`
             }
           });
         }
 
+        calibrateLowConfidenceBuildingHeights(features, features);
         lastBuildingFeatures = features;
         lastBuildingCoverageKey = key;
         lastBuildingFetchError = null;
@@ -5913,19 +6159,45 @@
         return [];
       })
       .finally(() => {
-        if (timeoutId) clearTimeout(timeoutId);
         const elapsed = Math.max(0, monotonicNow() - fetchStartedAt);
         metaPerf.buildingFetchMs += elapsed;
         metaPerf.lastBuildingFetchMs = Math.round(elapsed);
       });
 
     overpassCache.set(key, promise);
-
-    if (overpassCache.size > 10) {
-      overpassCache.delete(overpassCache.keys().next().value);
-    }
-
+    if (overpassCache.size > 10) overpassCache.delete(overpassCache.keys().next().value);
     return promise;
+  }
+
+  function featureCentroidInsideAoi(feature, aoi) {
+    if (!aoi) return false;
+    const metrics = buildingFeatureMetrics(feature);
+    if (!metrics) return false;
+    return metrics.lng >= aoi.west && metrics.lng <= aoi.east && metrics.lat >= aoi.south && metrics.lat <= aoi.north;
+  }
+
+  function mergePipelineWithOsmFallback(pipeline, fallback, aoi) {
+    const preferred = Array.isArray(pipeline) ? pipeline : [];
+    const live = Array.isArray(fallback) ? fallback : [];
+    if (!preferred.length) return live;
+    if (!live.length) return preferred;
+    const merged = preferred.slice();
+    const seen = new Set(preferred.map((feature) => {
+      const props = feature && feature.properties ? feature.properties : {};
+      return String(props.building_uid || props.source_id || "");
+    }).filter(Boolean));
+    for (const feature of live) {
+      // The published pipeline owns geometry inside its AOI. Live OSM fills the
+      // uncovered part of a partially overlapping viewport, rather than
+      // duplicating the same buildings on top of Overture/OSM prebuilt tiles.
+      if (aoi && featureCentroidInsideAoi(feature, aoi)) continue;
+      const props = feature && feature.properties ? feature.properties : {};
+      const uid = String(props.building_uid || props.source_id || "");
+      if (uid && seen.has(uid)) continue;
+      if (uid) seen.add(uid);
+      merged.push(feature);
+    }
+    return merged;
   }
 
   async function getBuildings() {
@@ -5944,11 +6216,45 @@
 
     if (effectiveBuildingMode() === "pipeline") {
       const pipeline = await loadPipelineBuildings();
-      const pipelineComplete = !!(lastBuildingPipelineStatus && lastBuildingPipelineStatus.coverageComplete && lastBuildingPipelineStatus.fetchComplete);
+      const status = lastBuildingPipelineStatus || {};
+      const pipelineComplete = !!(status.coverageComplete && status.fetchComplete);
       if (pipelineComplete || config.buildingPipelineFallbackToOsm === false) return pipeline;
+
       const fallback = await loadOSMBuildings();
-      lastBuildingPipelineStatus = Object.assign({}, lastBuildingPipelineStatus, {
-        fallback: "OSM", fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0
+      const fallbackOk = Array.isArray(fallback) && fallback.length > 0 && !lastBuildingFetchError;
+
+      // v8.6.3: when the viewport crosses the pilot AOI boundary, keep the
+      // prebuilt buildings that are valid inside the AOI and use live OSM only
+      // for the uncovered area. If live OSM fails, retain the pipeline subset
+      // instead of making all buildings disappear.
+      if (status.coverageStatus === "partial" && Array.isArray(pipeline) && pipeline.length) {
+        const merged = mergePipelineWithOsmFallback(pipeline, fallback, status.coverageAoi || null);
+        lastBuildingFeatures = merged;
+        lastBuildingCoverageKey = `hybrid:${lastBuildingCoverageKey || "partial"}`;
+        const counts = {};
+        for (const feature of merged) {
+          const source = feature && feature.properties && feature.properties.building_source || "unknown";
+          counts[source] = (counts[source] || 0) + 1;
+        }
+        lastBuildingPipelineStatus = Object.assign({}, status, {
+          mode: "pipeline-hybrid",
+          sourceCounts: counts,
+          fallback: "OSM",
+          fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0,
+          hybridFeatureCount: merged.length,
+          effectiveCoverageComplete: fallbackOk,
+          fallbackError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError)) || null
+        });
+        updateBuildingRuntimeStatus();
+        syncBuildingAttribution();
+        syncBuildingDebugOverlay();
+        return merged;
+      }
+
+      lastBuildingPipelineStatus = Object.assign({}, status, {
+        fallback: "OSM",
+        fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0,
+        fallbackError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError)) || null
       });
       updateBuildingRuntimeStatus();
       syncBuildingAttribution();
@@ -6649,9 +6955,15 @@
     },
     getBuildingDiagnostics() {
       const counts = {};
+      const heightQualityCounts = {};
+      const overpassEndpoints = {};
       for (const feature of (Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [])) {
-        const source = (feature.properties && feature.properties.building_source) || "OSM/legacy";
+        const props = feature && feature.properties ? feature.properties : {};
+        const source = props.building_source || "OSM/legacy";
         counts[source] = (counts[source] || 0) + 1;
+        const quality = props.height_quality || "unknown";
+        heightQualityCounts[quality] = (heightQualityCounts[quality] || 0) + 1;
+        if (props.overpass_endpoint) overpassEndpoints[props.overpass_endpoint] = (overpassEndpoints[props.overpass_endpoint] || 0) + 1;
       }
       return {
         mode: effectiveBuildingMode(),
@@ -6671,10 +6983,14 @@
         tileIndexLoaded: !!buildingTileIndexCache,
         tileIndexCount: buildingTileIndexCache && Array.isArray(buildingTileIndexCache.tile_keys) ? buildingTileIndexCache.tile_keys.length : 0,
         manifestAoi: buildingManifestAoi(buildingManifestCache),
+        manifestPreset: buildingManifestCache && buildingManifestCache.latest_run && buildingManifestCache.latest_run.preset || "",
+        manifestFeatureCount: buildingManifestCache && Number(buildingManifestCache.feature_count) || 0,
         effectiveFetchPaddingM: mapRef ? Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())) : null,
         cachedTiles: buildingTileCache.size,
         featureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
         sourceCounts: counts,
+        heightQualityCounts,
+        overpassEndpoints,
         coverageKey: lastBuildingCoverageKey,
         lastPipelineStatus: Object.assign({}, lastBuildingPipelineStatus),
         lastOverpassError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError))
