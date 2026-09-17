@@ -1,4 +1,4 @@
-/* Haidian Soundscape — ShadeMap configuration v8.6.3
+/* Haidian Soundscape — ShadeMap configuration v8.7.0
  * This template is safe to commit. GitHub Actions injects the API key only into the deployed artifact.
  */
 window.HAIDIAN_SHADEMAP_CONFIG = {
@@ -177,11 +177,10 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
   taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
-  // v8.6.1 building-shadow cutover. The hosted prebuilt tiles are the
-  // preferred occluder source inside the published pilot AOI. The Worker
-  // manifest, data-version header, full padded viewport, and a static list of
-  // actually published z16 data tiles must all agree before pipeline shadows
-  // are trusted. Any mismatch or expected-tile failure falls back to OSM.
+  // v8.7.0 building pipeline. The current data version is still the Haidian
+  // pilot, but the client/Worker are now ready for Tainan/Taiwan-scale static
+  // coverage using compact tile indexes and multi-region coverage manifests.
+  // Do not change buildingDataVersion until the matching hosted dataset exists.
   buildingMode: "pipeline",
   buildingGeoJSONUrl: "./data/buildings.geojson",
   buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
@@ -209,6 +208,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingTileFetchClientTimeoutMs: 5000,
   buildingManifestFetchClientTimeoutMs: 4000,
   buildingTileIndexFetchClientTimeoutMs: 4000,
+  buildingTileCacheMaxEntries: 160,
   // Backward-compatible reviewer URL; no special action is required now that
   // pipeline is the configured default.
   buildingPilotQueryParam: "buildingPipeline",
