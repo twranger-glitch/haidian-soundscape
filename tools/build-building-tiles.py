@@ -354,9 +354,45 @@ def _semantic_height(props: dict[str, Any], area_m2: float, fallback_height: flo
     return 12.4, "Taiwan heuristic: large footprint"
 
 
+def _height_family(props: dict[str, Any]) -> str:
+    text = " ".join(str(props.get(k) or "") for k in ("class", "subtype", "building", "amenity")).lower()
+    if any(k in text for k in ("apartments", "residential", "dormitory", "house", "detached", "terrace")):
+        return "residential"
+    if any(k in text for k in ("school", "education", "college", "university", "civic", "public")):
+        return "education-public"
+    if any(k in text for k in ("commercial", "office", "retail", "hospital", "hotel")):
+        return "commercial-institutional"
+    if any(k in text for k in ("warehouse", "industrial", "factory")):
+        return "industrial"
+    if any(k in text for k in ("shed", "garage", "carport", "hut", "storage")):
+        return "ancillary"
+    return "generic"
+
+
+def _weighted_median_height(rows: list[tuple[float, float]]) -> float | None:
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda row: row[0])
+    total = sum(weight for _, weight in rows)
+    if total <= 0:
+        return None
+    acc = 0.0
+    for height, weight in rows:
+        acc += weight
+        if acc >= total / 2:
+            return height
+    return rows[-1][0]
+
+
 def infer_missing_heights(
     buildings: list[Building], fallback_height: float, profile: str,
     radius_m: float = 180.0, min_neighbors: int = 3,
+    class_context_radius_m: float = 1200.0,
+    class_context_min_neighbors: int = 2,
+    class_context_max_neighbors: int = 6,
+    class_context_area_ratio_min: float = 0.45,
+    class_context_area_ratio_max: float = 2.2,
+    class_context_max_height_m: float = 80.0,
 ) -> dict[str, int]:
     stats = {"direct": 0, "floors-derived": 0, "context-inferred": 0, "heuristic": 0, "fallback": 0}
     known: list[Building] = []
@@ -389,6 +425,42 @@ def infer_missing_heights(
                 source = f"local median of {len(vals)} nearby known building heights"
                 props["height_quality"] = "context-inferred"
                 stats["context-inferred"] += 1
+        if chosen is None and tree is not None and class_context_radius_m > 0:
+            family = _height_family(props)
+            if family != "generic":
+                center = b.geom_m.centroid
+                candidates: list[tuple[float, float, float]] = []
+                for idx in tree.query(center.buffer(class_context_radius_m)):
+                    kb = known[int(idx)]
+                    kprops = kb.feature.get("properties") or {}
+                    if _height_family(kprops) != family:
+                        continue
+                    distance = center.distance(known_points[int(idx)])
+                    if distance > class_context_radius_m:
+                        continue
+                    area_ratio = kb.geom_m.area / max(1.0, b.geom_m.area)
+                    if not (class_context_area_ratio_min <= area_ratio <= class_context_area_ratio_max):
+                        continue
+                    kh = _num(kprops.get("height"))
+                    if not kh or not (2.5 <= kh <= 150):
+                        continue
+                    area_penalty = abs(math.log(max(0.01, area_ratio)))
+                    weight = 1.0 / max(50.0, distance + 180.0 * area_penalty)
+                    candidates.append((distance, kh, weight))
+                candidates.sort(key=lambda row: row[0])
+                selected = candidates[:max(class_context_min_neighbors, class_context_max_neighbors)]
+                if len(selected) >= class_context_min_neighbors:
+                    inferred = _weighted_median_height([(height, weight) for _, height, weight in selected])
+                    if inferred is not None:
+                        chosen = max(3.1, min(class_context_max_height_m, inferred))
+                        source = (
+                            f"local class/footprint matched weighted median of {len(selected)} "
+                            f"direct/floor-derived buildings within {class_context_radius_m:g} m"
+                        )
+                        props["height_quality"] = "context-inferred"
+                        props["height_context_anchor_count"] = len(selected)
+                        props["height_context_family"] = family
+                        stats["context-inferred"] += 1
         if chosen is None:
             chosen, source = _semantic_height(props, b.geom_m.area, fallback_height, profile)
             if profile == "taiwan-v1":
@@ -491,6 +563,12 @@ def main() -> None:
     ap.add_argument("--fallback-profile", choices=("constant", "taiwan-v1"), default="taiwan-v1")
     ap.add_argument("--inference-radius-m", type=float, default=180.0)
     ap.add_argument("--inference-min-neighbors", type=int, default=3)
+    ap.add_argument("--class-context-radius-m", type=float, default=1200.0)
+    ap.add_argument("--class-context-min-neighbors", type=int, default=2)
+    ap.add_argument("--class-context-max-neighbors", type=int, default=6)
+    ap.add_argument("--class-context-area-ratio-min", type=float, default=0.45)
+    ap.add_argument("--class-context-area-ratio-max", type=float, default=2.2)
+    ap.add_argument("--class-context-max-height-m", type=float, default=80.0)
     ap.add_argument("--iou", type=float, default=0.45)
     ap.add_argument("--containment", type=float, default=0.80)
     ap.add_argument("--part-remainder-min-fraction", type=float, default=0.03)
@@ -514,6 +592,12 @@ def main() -> None:
         merged, args.fallback_height, args.fallback_profile,
         radius_m=max(0.0, args.inference_radius_m),
         min_neighbors=max(1, args.inference_min_neighbors),
+        class_context_radius_m=max(0.0, args.class_context_radius_m),
+        class_context_min_neighbors=max(1, args.class_context_min_neighbors),
+        class_context_max_neighbors=max(args.class_context_min_neighbors, args.class_context_max_neighbors),
+        class_context_area_ratio_min=max(0.01, args.class_context_area_ratio_min),
+        class_context_area_ratio_max=max(args.class_context_area_ratio_min, args.class_context_area_ratio_max),
+        class_context_max_height_m=max(3.1, args.class_context_max_height_m),
     )
     owner_bbox = None
     if args.owner_bbox:
@@ -546,6 +630,12 @@ def main() -> None:
             "fallback_profile": args.fallback_profile,
             "inference_radius_m": args.inference_radius_m,
             "inference_min_neighbors": args.inference_min_neighbors,
+            "class_context_radius_m": args.class_context_radius_m,
+            "class_context_min_neighbors": args.class_context_min_neighbors,
+            "class_context_max_neighbors": args.class_context_max_neighbors,
+            "class_context_area_ratio_min": args.class_context_area_ratio_min,
+            "class_context_area_ratio_max": args.class_context_area_ratio_max,
+            "class_context_max_height_m": args.class_context_max_height_m,
             "dedupe_iou_threshold": args.iou,
             "dedupe_containment_threshold": args.containment,
             "part_remainder_min_fraction": args.part_remainder_min_fraction,
