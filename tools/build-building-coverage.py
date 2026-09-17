@@ -276,7 +276,7 @@ def aggregate_manifest(root: Path, *, preset: str, regions: list[dict[str, Any]]
         add_counts(source_counts, m.get("final_source_counts") or {})
         add_counts(quality_counts, m.get("final_height_quality") or {})
         add_counts(part_counts, m.get("overture_parts") or {})
-    tile_paths = list((root / str(tile_zoom)).glob("*/*.geojson")) if (root / str(tile_zoom).exists()) else []
+    tile_paths = list((root / str(tile_zoom)).glob("*/*.geojson")) if (root / str(tile_zoom)).exists() else []
     total_bytes = sum(p.stat().st_size for p in tile_paths)
     overall = [
         min(float(r["aoi"][0]) for r in regions),
