@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.6.3
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.7.0
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -187,10 +187,10 @@
     taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
     taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
 
-    // v8.6.1: hosted/versioned building tiles are the preferred production
-    // shadow source. Besides full-AOI coverage, the client requires a matching
-    // Worker data-version header and a static published-tile index so a missing
-    // expected tile can never masquerade as an empty tile.
+    // v8.7.0: hosted/versioned building tiles are the preferred production
+    // shadow source. The client accepts both the legacy explicit tile-key index
+    // and the compact x/y-range index used by larger Tainan/Taiwan publications.
+    // A matching Worker data-version header is still mandatory.
     buildingMode: "pipeline",
     buildingGeoJSONUrl: "",
     buildingTileUrl: "",
@@ -215,6 +215,7 @@
     buildingTileFetchClientTimeoutMs: 5000,
     buildingManifestFetchClientTimeoutMs: 4000,
     buildingTileIndexFetchClientTimeoutMs: 4000,
+    buildingTileCacheMaxEntries: 160,
     // Kept for backward-compatible reviewer links. When production is already
     // pipeline mode, ?buildingPipeline=1 is simply a no-op.
     buildingPilotQueryParam: "buildingPipeline",
@@ -1121,7 +1122,7 @@
       if (st.fallback === "OSM") return "OpenStreetMap / Overpass（預建圖磚範圍外或不完整時自動 fallback）";
       return buildingPilotRequested() && config.buildingMode !== "pipeline"
         ? "預建建物圖磚（測試模式）"
-        : "預建建物圖磚（Overture＋OSM；NLSC 待接）";
+        : "預建建物圖磚（Overture＋OSM；可擴展至全臺）";
     }
     if (effectiveBuildingMode() === "none") return "未載入";
     return "OpenStreetMap / Overpass";
@@ -5527,14 +5528,53 @@
   }
 
 
-  function buildingManifestAoi(manifest) {
-    const raw = manifest && manifest.latest_run && Array.isArray(manifest.latest_run.aoi)
+  function normalizeBuildingCoverageRegion(raw, fallbackId = "coverage") {
+    let values = null;
+    let id = fallbackId;
+    let label = "";
+    if (Array.isArray(raw)) {
+      values = raw.slice(0, 4).map(Number);
+    } else if (raw && typeof raw === "object") {
+      if (Array.isArray(raw.aoi)) values = raw.aoi.slice(0, 4).map(Number);
+      else values = [raw.west, raw.south, raw.east, raw.north].map(Number);
+      id = String(raw.id || raw.code || fallbackId);
+      label = String(raw.label || raw.name || "");
+    }
+    if (!values || values.length < 4 || !values.every(Number.isFinite)) return null;
+    if (!(values[0] < values[2] && values[1] < values[3])) return null;
+    return { id, label, west: values[0], south: values[1], east: values[2], north: values[3] };
+  }
+
+  function buildingManifestCoverageRegions(manifest) {
+    const rawRegions = manifest && Array.isArray(manifest.coverage_regions)
+      ? manifest.coverage_regions
+      : (manifest && manifest.latest_run && Array.isArray(manifest.latest_run.coverage_regions)
+        ? manifest.latest_run.coverage_regions
+        : null);
+    const regions = [];
+    if (rawRegions) {
+      rawRegions.forEach((raw, i) => {
+        const region = normalizeBuildingCoverageRegion(raw, `coverage-${i + 1}`);
+        if (region) regions.push(region);
+      });
+    }
+    if (regions.length) return regions;
+    const legacyRaw = manifest && manifest.latest_run && Array.isArray(manifest.latest_run.aoi)
       ? manifest.latest_run.aoi
       : (manifest && Array.isArray(manifest.aoi) ? manifest.aoi : null);
-    if (!raw || raw.length < 4) return null;
-    const values = raw.slice(0, 4).map(Number);
-    if (!values.every(Number.isFinite)) return null;
-    return { west: values[0], south: values[1], east: values[2], north: values[3] };
+    const legacy = normalizeBuildingCoverageRegion(legacyRaw, "legacy-aoi");
+    return legacy ? [legacy] : [];
+  }
+
+  function buildingManifestAoi(manifest) {
+    const regions = buildingManifestCoverageRegions(manifest);
+    if (!regions.length) return null;
+    return {
+      west: Math.min(...regions.map((r) => r.west)),
+      south: Math.min(...regions.map((r) => r.south)),
+      east: Math.max(...regions.map((r) => r.east)),
+      north: Math.max(...regions.map((r) => r.north))
+    };
   }
 
   async function loadBuildingManifest() {
@@ -5577,6 +5617,67 @@
     return /^\d+\/\d+\/\d+\.geojson$/.test(key) ? key : "";
   }
 
+  function normalizeBuildingTileIndex(index) {
+    const expectedVersion = String(config.buildingDataVersion || "").trim();
+    const indexVersion = String(index && index.data_version || "").trim();
+    const indexZoom = Number(index && index.tile_zoom);
+    const configuredZoom = Number(config.buildingTileZoom) || 16;
+    if (expectedVersion && indexVersion !== expectedVersion) {
+      throw new Error(`building tile index version mismatch: index=${indexVersion || "missing"}, site=${expectedVersion}`);
+    }
+    if (!Number.isFinite(indexZoom) || indexZoom !== configuredZoom) {
+      throw new Error(`building tile index zoom ${indexZoom} != configured ${configuredZoom}`);
+    }
+
+    const keys = Array.isArray(index && index.tile_keys)
+      ? index.tile_keys.map(normalizeBuildingTileKey).filter(Boolean)
+      : [];
+    const tileKeySet = keys.length ? new Set(keys) : null;
+
+    const rowRangeMap = new Map();
+    const rows = index && Array.isArray(index.x_ranges) ? index.x_ranges : [];
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length < 3) continue;
+      const x = Number(row[0]);
+      if (!Number.isSafeInteger(x)) continue;
+      const ranges = [];
+      for (let i = 1; i + 1 < row.length; i += 2) {
+        const y0 = Number(row[i]);
+        const y1 = Number(row[i + 1]);
+        if (!Number.isSafeInteger(y0) || !Number.isSafeInteger(y1)) continue;
+        ranges.push([Math.min(y0, y1), Math.max(y0, y1)]);
+      }
+      if (ranges.length) rowRangeMap.set(x, ranges);
+    }
+
+    const declaredCount = Number(index && index.tile_count);
+    const hasCompact = rowRangeMap.size > 0;
+    if (!tileKeySet && !hasCompact && declaredCount > 0) {
+      throw new Error("building tile index has no usable tile_keys or x_ranges");
+    }
+    return Object.assign({}, index, {
+      tileKeySet,
+      tile_keys: keys,
+      rowRangeMap,
+      indexEncoding: hasCompact ? String(index.encoding || "x-y-ranges-v1") : "tile-keys-v1"
+    });
+  }
+
+  function buildingTileIndexHas(index, tile) {
+    if (!index || !tile) return false;
+    const z = Number(tile.z);
+    const x = Number(tile.x);
+    const y = Number(tile.y);
+    if (![z, x, y].every(Number.isSafeInteger)) return false;
+    if (index.tileKeySet) return index.tileKeySet.has(`${z}/${x}/${y}.geojson`);
+    if (index.rowRangeMap instanceof Map) {
+      const ranges = index.rowRangeMap.get(x);
+      if (!ranges) return false;
+      return ranges.some((pair) => y >= pair[0] && y <= pair[1]);
+    }
+    return false;
+  }
+
   async function loadBuildingTileIndex() {
     if (buildingTileIndexCache) return buildingTileIndexCache;
     if (buildingTileIndexPromise) return buildingTileIndexPromise;
@@ -5590,23 +5691,7 @@
         return response.json();
       })
       .then((index) => {
-        const expectedVersion = String(config.buildingDataVersion || "").trim();
-        const indexVersion = String(index && index.data_version || "").trim();
-        const indexZoom = Number(index && index.tile_zoom);
-        const configuredZoom = Number(config.buildingTileZoom) || 16;
-        if (expectedVersion && indexVersion !== expectedVersion) {
-          throw new Error(`building tile index version mismatch: index=${indexVersion || "missing"}, site=${expectedVersion}`);
-        }
-        if (!Number.isFinite(indexZoom) || indexZoom !== configuredZoom) {
-          throw new Error(`building tile index zoom ${indexZoom} != configured ${configuredZoom}`);
-        }
-        const keys = Array.isArray(index && index.tile_keys)
-          ? index.tile_keys.map(normalizeBuildingTileKey).filter(Boolean)
-          : [];
-        if (!keys.length && Number(index && index.tile_count) > 0) {
-          throw new Error("building tile index has no usable tile_keys");
-        }
-        const normalized = Object.assign({}, index, { tileKeySet: new Set(keys), tile_keys: keys });
+        const normalized = normalizeBuildingTileIndex(index);
         buildingTileIndexCache = normalized;
         return normalized;
       })
@@ -5619,11 +5704,24 @@
   }
 
   function buildingPipelineCoverageForBounds(padded, manifest) {
+    const regions = buildingManifestCoverageRegions(manifest);
     const aoi = buildingManifestAoi(manifest);
-    if (!aoi || !padded) return { status: "unknown", aoi };
-    const overlaps = !(padded.east < aoi.west || padded.west > aoi.east || padded.north < aoi.south || padded.south > aoi.north);
-    const full = padded.west >= aoi.west && padded.east <= aoi.east && padded.south >= aoi.south && padded.north <= aoi.north;
-    return { status: full ? "full" : (overlaps ? "partial" : "outside"), aoi };
+    if (!regions.length || !padded) return { status: "unknown", aoi, regions: [], matchedRegions: [] };
+    const overlaps = regions.filter((region) => !(
+      padded.east < region.west || padded.west > region.east ||
+      padded.north < region.south || padded.south > region.north
+    ));
+    const fullRegion = regions.find((region) => (
+      padded.west >= region.west && padded.east <= region.east &&
+      padded.south >= region.south && padded.north <= region.north
+    ));
+    return {
+      status: fullRegion ? "full" : (overlaps.length ? "partial" : "outside"),
+      aoi,
+      regions,
+      matchedRegions: overlaps.map((region) => region.id),
+      fullRegion: fullRegion ? fullRegion.id : ""
+    };
   }
 
   function buildingHeightFamily(feature) {
@@ -5837,13 +5935,13 @@
       const quality = String(props.height_quality || "").toLowerCase();
       return ["heuristic", "fallback", "estimated", "missing", ""].includes(quality);
     });
-    if (!needsContext || !tileIndex || !tileIndex.tileKeySet) return features;
+    if (!needsContext || !tileIndex) return features;
 
     const radius = Math.max(0, Number(config.buildingHeightContextRadiusM) || 0);
     if (!radius) return features;
     const expanded = expandPlainBuildingBounds(padded, radius);
     const contextTiles = buildingTileRangeForBounds(expanded, z)
-      .filter((tile) => tileIndex.tileKeySet.has(`${tile.z}/${tile.x}/${tile.y}.geojson`));
+      .filter((tile) => buildingTileIndexHas(tileIndex, tile));
 
     const settled = await Promise.allSettled(contextTiles.map(fetchBuildingTile));
     const unique = new Map();
@@ -5883,7 +5981,8 @@
       })
       .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
     buildingTileCache.set(key, promise);
-    if (buildingTileCache.size > 96) buildingTileCache.delete(buildingTileCache.keys().next().value);
+    const cacheLimit = Math.max(32, Number(config.buildingTileCacheMaxEntries) || 160);
+    if (buildingTileCache.size > cacheLimit) buildingTileCache.delete(buildingTileCache.keys().next().value);
     return promise;
   }
 
@@ -5945,7 +6044,7 @@
         updateBuildingRuntimeStatus();
         return [];
       }
-      if (!tileIndex || !tileIndex.tileKeySet) {
+      if (!tileIndex || (!tileIndex.tileKeySet && !(tileIndex.rowRangeMap instanceof Map))) {
         lastBuildingPipelineStatus = {
           mode: "pipeline-index-error", sourceCounts: {}, tileCount: 0,
           coverageStatus: coverage.status, coverageAoi: coverage.aoi,
@@ -5958,8 +6057,8 @@
     }
 
     const tiles = buildingTileRangeForBounds(padded, z);
-    const expectedTiles = tileIndex && tileIndex.tileKeySet
-      ? tiles.filter((tile) => tileIndex.tileKeySet.has(`${tile.z}/${tile.x}/${tile.y}.geojson`))
+    const expectedTiles = tileIndex
+      ? tiles.filter((tile) => buildingTileIndexHas(tileIndex, tile))
       : tiles;
     const knownEmptyTileCount = Math.max(0, tiles.length - expectedTiles.length);
     const settled = await Promise.allSettled(expectedTiles.map(fetchBuildingTile));
@@ -6008,6 +6107,11 @@
       successfulTileCount: groups.length, failedTileCount: errors.length,
       featureCount: features.length, paddingM: Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())),
       coverageStatus: coverage.status, coverageAoi: coverage.aoi,
+      coverageRegions: Array.isArray(coverage.regions) ? coverage.regions.length : 0,
+      coverageRegionBoxes: Array.isArray(coverage.regions) ? coverage.regions.map((region) => ({
+        id: region.id, west: region.west, south: region.south, east: region.east, north: region.north
+      })) : [],
+      matchedCoverageRegions: Array.isArray(coverage.matchedRegions) ? coverage.matchedRegions : [],
       coverageComplete: config.buildingPipelineCoverageGateEnabled === false || coverage.status === "full",
       fetchComplete: !errors.length,
       manifestBuiltAtUtc: manifest && manifest.built_at_utc ? manifest.built_at_utc : null,
@@ -6176,7 +6280,13 @@
     return metrics.lng >= aoi.west && metrics.lng <= aoi.east && metrics.lat >= aoi.south && metrics.lat <= aoi.north;
   }
 
-  function mergePipelineWithOsmFallback(pipeline, fallback, aoi) {
+  function featureCentroidInsideCoverageRegions(feature, regions, fallbackAoi = null) {
+    const list = Array.isArray(regions) ? regions : [];
+    if (!list.length) return featureCentroidInsideAoi(feature, fallbackAoi);
+    return list.some((region) => featureCentroidInsideAoi(feature, region));
+  }
+
+  function mergePipelineWithOsmFallback(pipeline, fallback, coverageRegions, fallbackAoi = null) {
     const preferred = Array.isArray(pipeline) ? pipeline : [];
     const live = Array.isArray(fallback) ? fallback : [];
     if (!preferred.length) return live;
@@ -6187,10 +6297,10 @@
       return String(props.building_uid || props.source_id || "");
     }).filter(Boolean));
     for (const feature of live) {
-      // The published pipeline owns geometry inside its AOI. Live OSM fills the
-      // uncovered part of a partially overlapping viewport, rather than
-      // duplicating the same buildings on top of Overture/OSM prebuilt tiles.
-      if (aoi && featureCentroidInsideAoi(feature, aoi)) continue;
+      // The published pipeline owns geometry only inside its actual coverage
+      // regions. This matters for Taiwan's disjoint main-island/offshore-island
+      // publication: the overall envelope must not suppress live OSM in gaps.
+      if (featureCentroidInsideCoverageRegions(feature, coverageRegions, fallbackAoi)) continue;
       const props = feature && feature.properties ? feature.properties : {};
       const uid = String(props.building_uid || props.source_id || "");
       if (uid && seen.has(uid)) continue;
@@ -6228,7 +6338,9 @@
       // for the uncovered area. If live OSM fails, retain the pipeline subset
       // instead of making all buildings disappear.
       if (status.coverageStatus === "partial" && Array.isArray(pipeline) && pipeline.length) {
-        const merged = mergePipelineWithOsmFallback(pipeline, fallback, status.coverageAoi || null);
+        const merged = mergePipelineWithOsmFallback(
+          pipeline, fallback, status.coverageRegionBoxes || [], status.coverageAoi || null
+        );
         lastBuildingFeatures = merged;
         lastBuildingCoverageKey = `hybrid:${lastBuildingCoverageKey || "partial"}`;
         const counts = {};
@@ -6981,8 +7093,10 @@
         requireTileIndex: config.buildingPipelineRequireTileIndex !== false,
         manifestLoaded: !!buildingManifestCache,
         tileIndexLoaded: !!buildingTileIndexCache,
-        tileIndexCount: buildingTileIndexCache && Array.isArray(buildingTileIndexCache.tile_keys) ? buildingTileIndexCache.tile_keys.length : 0,
+        tileIndexCount: buildingTileIndexCache ? Number(buildingTileIndexCache.tile_count || (buildingTileIndexCache.tile_keys || []).length || 0) : 0,
+        tileIndexEncoding: buildingTileIndexCache && buildingTileIndexCache.indexEncoding || "",
         manifestAoi: buildingManifestAoi(buildingManifestCache),
+        coverageRegionCount: buildingManifestCoverageRegions(buildingManifestCache).length,
         manifestPreset: buildingManifestCache && buildingManifestCache.latest_run && buildingManifestCache.latest_run.preset || "",
         manifestFeatureCount: buildingManifestCache && Number(buildingManifestCache.feature_count) || 0,
         effectiveFetchPaddingM: mapRef ? Math.round(currentBuildingFetchPaddingM(mapRef.getBounds())) : null,
