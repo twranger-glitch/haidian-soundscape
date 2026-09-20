@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev5 Fine-grained Shade Routing
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev7 History-safe Label Routing
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev5";
+  const VERSION = "v9.0.0-dev7";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1268,11 +1268,11 @@
     }
     if (snapshot.snapA) {
       window.L.circleMarker(snapshot.snapA, { radius: 7, weight: 3, color: "#2563eb", fillColor: "#dbeafe", fillOpacity: 1 })
-        .bindTooltip(`A 吸附點・誤差 ${Math.round(snapshot.snapA.distanceM || 0)} m`, { permanent: false }).addTo(graphDebugLayer);
+        .bindTooltip(`A edge 吸附・誤差 ${Math.round(snapshot.snapA.distanceM || 0)} m${snapshot.snapA.highway ? `<br>${escapeHtml(snapshot.snapA.highway)}` : ""}`, { permanent: false }).addTo(graphDebugLayer);
     }
     if (snapshot.snapB) {
       window.L.circleMarker(snapshot.snapB, { radius: 7, weight: 3, color: "#dc2626", fillColor: "#fee2e2", fillOpacity: 1 })
-        .bindTooltip(`B 吸附點・誤差 ${Math.round(snapshot.snapB.distanceM || 0)} m`, { permanent: false }).addTo(graphDebugLayer);
+        .bindTooltip(`B edge 吸附・誤差 ${Math.round(snapshot.snapB.distanceM || 0)} m${snapshot.snapB.highway ? `<br>${escapeHtml(snapshot.snapB.highway)}` : ""}`, { permanent: false }).addTo(graphDebugLayer);
     }
     graphDebugVisible = true;
     return true;
@@ -1385,7 +1385,7 @@
     const graphDebugAvailable = Boolean(bundle.graphDebugAvailable);
     let graphNote = "";
     if (graphDiag) {
-      graphNote = `<div class="re-graph-note"><b>v9 OSM Graph 已啟用 · 細緻搜尋</b><span>原始決策 graph ${Math.round(graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.contractedEdges || 0)} edge，已切細成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge；目前最長 fine edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋模式：距離上限內最小直接日照（Pareto labels）；已展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態、評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>v9 OSM Graph 已啟用 · 細緻搜尋</b><span>原始決策 graph ${Math.round(graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.contractedEdges || 0)} edge，已切細成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge；目前最長 fine edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。A、B edge 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m（${escapeHtml(graphDiag.snapA?.highway || graphDiag.snapA?.snapType || "edge")}／${escapeHtml(graphDiag.snapB?.highway || graphDiag.snapB?.snapType || "edge")}）。</span><span>搜尋模式：距離上限內最小直接日照（history-safe labels；不任意截斷 nondominated labels）；已展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態、評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }

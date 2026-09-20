@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev5 Fine-grained Shade Routing
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev7 History-safe Label Routing
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev5";
+  const VERSION = "v9.0.0-dev7";
 
   const DEFAULTS = {
     enabled: true,
@@ -25,6 +25,7 @@
     bboxMarginM: 420,
     maxBboxSideM: 2800,
     snapMaxM: 120,
+    snapEndpointToleranceM: 1.5,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
     maxFineNodes: 12000,
@@ -34,7 +35,7 @@
     shadeTimeBucketSec: 60,
     maxFineEdgeM: 85,
     pathMaxFineEdgeM: 55,
-    maxLabelsPerState: 5,
+    maxLabelsPerState: 5, // legacy compatibility only; dev7 no longer truncates nondominated labels
     shadeSampleSpacingM: 18,
     shadeMaxSamplesPerEdge: 5,
     diagnosticMatchThresholdM: 16,
@@ -736,7 +737,6 @@
     const shadeTimeBucketSec = Math.max(30, Number(options.shadeTimeBucketSec || config.shadeTimeBucketSec));
     const maxStates = Math.max(500, Number(options.maxExpandedStates || config.maxExpandedStates));
     const maxShadeEvals = Math.max(100, Number(options.maxShadeEdgeEvaluations || config.maxShadeEdgeEvaluations));
-    const maxLabelsPerState = Math.max(2, Math.min(12, Number(options.maxLabelsPerState || config.maxLabelsPerState || 5)));
     const shadeCache = new Map();
     let shadeEvals = 0;
     let expanded = 0;
@@ -756,8 +756,41 @@
     function stateKey(label) {
       return `${label.node}|${Math.floor(label.walkS / timeBucketSec)}`;
     }
+    // dev7 correctness rule: because pathHasNode() makes future legality depend
+    // on the entire visited-node history, two labels with identical scalar
+    // costs are NOT interchangeable unless the would-be dominating label has
+    // visited no additional nodes. Time-dependent shade also means an earlier
+    // arrival cannot safely dominate a later one (or vice versa) unless the
+    // arrival time itself is effectively identical.
+    const visitedSetCache = new WeakMap();
+    function visitedSetForLabel(label) {
+      if (!label || typeof label !== "object") return new Set();
+      const cached = visitedSetCache.get(label);
+      if (cached) return cached;
+      const set = new Set();
+      let cur = label;
+      let guard = 0;
+      while (cur && guard++ < 10000) {
+        set.add(String(cur.node));
+        cur = cur.parent || null;
+      }
+      visitedSetCache.set(label, set);
+      return set;
+    }
+    function visitedSubset(a, b) {
+      const A = visitedSetForLabel(a);
+      const B = visitedSetForLabel(b);
+      if (A.size > B.size) return false;
+      for (const node of A) if (!B.has(node)) return false;
+      return true;
+    }
     function weaklyDominates(a, b) {
-      return a.walkS <= b.walkS + 0.25 && a.sunS <= b.sunS + 0.05;
+      // Equal arrival time preserves downstream time-dependent edge costs.
+      // A subset of visited nodes preserves every simple-path continuation
+      // still available to b.  The small epsilon is only numeric noise.
+      return Math.abs(a.walkS - b.walkS) <= 1e-9 &&
+        a.sunS <= b.sunS + 1e-9 &&
+        visitedSubset(a, b);
     }
     function insertLabel(label) {
       const key = stateKey(label);
@@ -775,15 +808,14 @@
           dominanceRemoved += 1;
         } else if (old.active !== false) kept.push(old);
       }
+      // IMPORTANT: dev7 intentionally has no arbitrary "top N labels" cap.
+      // Search safety is enforced by maxExpandedStates/maxShadeEdgeEvaluations;
+      // hitting either limit is reported as an incomplete search, never as an
+      // optimum.  This trades some performance for correctness.
       kept.push(label);
       kept.sort((a, b) => (a.sunS - b.sunS) || (a.walkS - b.walkS));
-      while (kept.length > maxLabelsPerState) {
-        const dropped = kept.pop();
-        if (dropped && dropped !== label) dropped.active = false;
-        else if (dropped === label) { label.active = false; dominanceRejected += 1; }
-      }
       labelsByState.set(key, kept);
-      return label.active !== false;
+      return true;
     }
 
     insertLabel(startLabel);
@@ -796,7 +828,7 @@
       const bucket = Math.floor(atMs / 1000 / shadeTimeBucketSec);
       const key = `${edge.id}|${fromId}|${bucket}`;
       if (shadeCache.has(key)) return shadeCache.get(key);
-      if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 日照評估已達安全上限 ${maxShadeEvals} 條 edge；請縮短 A→B 距離或調高 graph 安全上限。`);
+      if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 搜尋未完整完成：日照評估已達安全上限 ${maxShadeEvals} 條 edge；目前結果不可視為真正最不曬。`);
       shadeEvals += 1;
       const promise = Promise.resolve(provider(edge, fromId, new Date(atMs), {
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
@@ -830,7 +862,7 @@
       const cur = heap.pop();
       if (!cur || cur.active === false) continue;
       expanded += 1;
-      if (expanded > maxStates) throw new Error(`OSM Graph 搜尋已達 ${maxStates} 個狀態安全上限。`);
+      if (expanded > maxStates) throw new Error(`OSM Graph 搜尋未完整完成：已達 ${maxStates} 個狀態安全上限；目前結果不可視為真正最不曬。`);
       if (expanded % yieldEveryExpanded === 0) await cooperativeYield();
       if (expanded === 1 || expanded % Math.max(1, Number(config.progressEvery || 20)) === 0) {
         options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在做細緻 graph 搜尋：${expanded} 個狀態／${shadeEvals} 條 edge 日照` });
@@ -985,8 +1017,8 @@
       version: VERSION,
       bbox: state.bbox,
       overpassEndpoint: state.endpoint,
-      snapA: state.snapA ? { id: state.snapA.id, lat: state.snapA.node.lat, lng: state.snapA.node.lng, distanceM: state.snapA.distanceM } : null,
-      snapB: state.snapB ? { id: state.snapB.id, lat: state.snapB.node.lat, lng: state.snapB.node.lng, distanceM: state.snapB.distanceM } : null,
+      snapA: state.snapA ? { id: state.snapA.id, lat: state.snapA.node.lat, lng: state.snapA.node.lng, distanceM: state.snapA.distanceM, snapType: state.snapA.snapType || "node", highway: state.snapA.sourceHighway || null, wayId: state.snapA.sourceWayId || null } : null,
+      snapB: state.snapB ? { id: state.snapB.id, lat: state.snapB.node.lat, lng: state.snapB.node.lng, distanceM: state.snapB.distanceM, snapType: state.snapB.snapType || "node", highway: state.snapB.sourceHighway || null, wayId: state.snapB.sourceWayId || null } : null,
       edges,
       connectors,
       stats: graphStats(graph)
@@ -1078,6 +1110,124 @@
     return best;
   }
 
+  function cloneRawGraph(raw) {
+    const nodes = new Map();
+    for (const [id, node] of raw?.nodes || []) nodes.set(String(id), Object.assign({}, node));
+    const adjacency = new Map();
+    for (const [id, neighbors] of raw?.adjacency || []) {
+      const next = new Map();
+      for (const [to, meta] of neighbors || []) next.set(String(to), Object.assign({}, meta));
+      adjacency.set(String(id), next);
+    }
+    return {
+      nodes,
+      adjacency,
+      rawSegments: Number(raw?.rawSegments || 0),
+      wayMeta: raw?.wayMeta || new Map()
+    };
+  }
+
+  function removeRawNeighbor(adjacency, a, b) {
+    const map = adjacency.get(String(a));
+    if (!map) return;
+    map.delete(String(b));
+    if (!map.size) adjacency.delete(String(a));
+  }
+
+  async function nearestRawEdgeResponsive(raw, point, maxM = Infinity, options = {}) {
+    const P = asLatLng(point);
+    if (!P) return null;
+    const cooperativeYield = makeCooperativeYielder(options);
+    const seen = new Set();
+    let best = null;
+    let scanned = 0;
+    for (const [aId, neighbors] of raw?.adjacency || []) {
+      const a = raw.nodes.get(String(aId));
+      if (!a) continue;
+      for (const [bId] of neighbors || []) {
+        const key = undirectedKey(aId, bId);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const b = raw.nodes.get(String(bId));
+        if (!b) continue;
+        const hit = projectPointToSegmentM(P, a, b);
+        if (hit && hit.distanceM <= maxM && (!best || hit.distanceM < best.distanceM)) {
+          const forwardMeta = raw.adjacency.get(String(aId))?.get(String(bId)) || null;
+          const reverseMeta = raw.adjacency.get(String(bId))?.get(String(aId)) || null;
+          const meta = forwardMeta || reverseMeta || null;
+          best = Object.assign({}, hit, {
+            aId: String(aId),
+            bId: String(bId),
+            a, b,
+            forwardMeta, reverseMeta,
+            wayId: meta?.wayId || null,
+            tags: meta?.tags || {}
+          });
+        }
+        scanned += 1;
+        if (scanned % 600 === 0) await cooperativeYield();
+      }
+    }
+    return best;
+  }
+
+  function splitRawEdgeAtPoint(raw, hit, label, options = {}) {
+    if (!raw || !hit) return null;
+    const endpointToleranceM = Math.max(0.5, Number(options.snapEndpointToleranceM || config.snapEndpointToleranceM || 1.5));
+    const aId = String(hit.aId), bId = String(hit.bId);
+    const a = raw.nodes.get(aId), b = raw.nodes.get(bId);
+    if (!a || !b) return null;
+    const projected = asLatLng(hit.point);
+    if (!projected) return null;
+    const da = haversineM(projected, a);
+    const db = haversineM(projected, b);
+    const sourceMeta = hit.forwardMeta || hit.reverseMeta || {};
+    const common = {
+      distanceM: Number(hit.distanceM || 0),
+      snapType: 'edge',
+      sourceA: aId,
+      sourceB: bId,
+      sourceWayId: sourceMeta.wayId || hit.wayId || null,
+      sourceHighway: normalizedTag(sourceMeta.tags?.highway || hit.tags?.highway || '') || null,
+      projectionT: Number(hit.t || 0)
+    };
+    if (da <= endpointToleranceM) return Object.assign({ id: aId, node: a }, common, { snapType: 'edge-endpoint', distanceM: haversineM(options.inputPoint || projected, a) });
+    if (db <= endpointToleranceM) return Object.assign({ id: bId, node: b }, common, { snapType: 'edge-endpoint', distanceM: haversineM(options.inputPoint || projected, b) });
+
+    let id = `snap:${String(label || 'P')}`;
+    let serial = 1;
+    while (raw.nodes.has(id)) id = `snap:${String(label || 'P')}:${++serial}`;
+    const node = { id, lat: projected.lat, lng: projected.lng, virtualSnap: true, snapLabel: String(label || 'P') };
+    raw.nodes.set(id, node);
+
+    const forward = raw.adjacency.get(aId)?.get(bId) || null;
+    const reverse = raw.adjacency.get(bId)?.get(aId) || null;
+    removeRawNeighbor(raw.adjacency, aId, bId);
+    removeRawNeighbor(raw.adjacency, bId, aId);
+
+    const distA = Math.max(0.05, haversineM(a, node));
+    const distB = Math.max(0.05, haversineM(node, b));
+    if (forward) {
+      addRawNeighbor(raw.adjacency, aId, id, Object.assign({}, forward, { distanceM: distA }));
+      addRawNeighbor(raw.adjacency, id, bId, Object.assign({}, forward, { distanceM: distB }));
+    }
+    if (reverse) {
+      addRawNeighbor(raw.adjacency, bId, id, Object.assign({}, reverse, { distanceM: distB }));
+      addRawNeighbor(raw.adjacency, id, aId, Object.assign({}, reverse, { distanceM: distA }));
+    }
+    raw.rawSegments = Number(raw.rawSegments || 0) + 1;
+    return Object.assign({ id, node, distanceM: Number(hit.distanceM || 0) }, common);
+  }
+
+  async function snapPointIntoRawGraph(raw, point, label, maxM = Infinity, options = {}) {
+    const P = asLatLng(point);
+    if (!P) return null;
+    const hit = await nearestRawEdgeResponsive(raw, P, maxM, options);
+    if (hit) return splitRawEdgeAtPoint(raw, hit, label, Object.assign({}, options, { inputPoint: P }));
+    const node = await nearestNodeResponsive(raw, P, maxM, options);
+    return node ? Object.assign({}, node, { snapType: 'node-fallback', sourceHighway: null }) : null;
+  }
+
   async function buildGraphForAB(a, b, options = {}) {
     const cooperativeYield = makeCooperativeYielder(options);
     const bbox = bboxForAB(a, b, options.bboxMarginM || config.bboxMarginM);
@@ -1098,15 +1248,20 @@
       if (graphCache.size > 4) graphCache.delete(graphCache.keys().next().value);
     }
 
-    options.onProgress?.({ stage: "graph-snap", message: "正在把 A、B 對齊步行路網…" });
-    const snapA = await nearestNodeResponsive(cached.raw, a, Number(options.snapMaxM || config.snapMaxM), options);
-    const snapB = await nearestNodeResponsive(cached.raw, b, Number(options.snapMaxM || config.snapMaxM), options);
-    if (!snapA) throw new Error(`A 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行節點。`);
-    if (!snapB) throw new Error(`B 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行節點。`);
+    options.onProgress?.({ stage: "graph-snap", message: "正在把 A、B 投影到最近的可步行 edge（不是只找最近節點）…" });
+    // v9.0.0-dev6: snap terminals to the nearest walkable EDGE and split that
+    // edge with a virtual terminal.  The old nearest-node snap could put A on
+    // a parallel road even when a riverbank cycleway passed only a few metres
+    // away, simply because the cycleway's next OSM node was farther away.
+    const workingRaw = cloneRawGraph(cached.raw);
+    const snapA = await snapPointIntoRawGraph(workingRaw, a, 'A', Number(options.snapMaxM || config.snapMaxM), options);
+    const snapB = await snapPointIntoRawGraph(workingRaw, b, 'B', Number(options.snapMaxM || config.snapMaxM), options);
+    if (!snapA) throw new Error(`A 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行 edge。`);
+    if (!snapB) throw new Error(`B 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行 edge。`);
 
     options.onProgress?.({ stage: "graph", message: "正在建立本地 pedestrian graph…" });
     await cooperativeYield(true);
-    const contracted = contractGraph(cached.raw, [snapA.id, snapB.id]);
+    const contracted = contractGraph(workingRaw, [snapA.id, snapB.id]);
     await cooperativeYield(true);
     if (contracted.nodes.size > Number(config.maxContractedNodes || 5000)) throw new Error(`步行 graph 有 ${contracted.nodes.size} 個交會節點，超過目前安全上限。`);
 
@@ -1176,7 +1331,6 @@
       canopyTimeoutMs: options.canopyTimeoutMs,
       maxExpandedStates: options.maxExpandedStates,
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
-      maxLabelsPerState: options.maxLabelsPerState,
       cooperativeYieldMs: options.cooperativeYieldMs,
       yieldEveryExpanded: options.yieldEveryExpanded,
       onProgress: options.onProgress,
@@ -1222,8 +1376,8 @@
       fineEdges: graph.edges.size,
       maxFineEdgeM: graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM,
       pathMaxFineEdgeM: graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM,
-      snapA: { distanceM: snapA.distanceM, nodeId: snapA.id },
-      snapB: { distanceM: snapB.distanceM, nodeId: snapB.id },
+      snapA: { distanceM: snapA.distanceM, nodeId: snapA.id, snapType: snapA.snapType || "node", highway: snapA.sourceHighway || null, wayId: snapA.sourceWayId || null },
+      snapB: { distanceM: snapB.distanceM, nodeId: snapB.id, snapType: snapB.snapType || "node", highway: snapB.sourceHighway || null, wayId: snapB.sourceWayId || null },
       fastestSeconds: fastestTime,
       detourPct,
       detourLimitSeconds: detourLimitS,
@@ -1232,7 +1386,8 @@
       dominanceRejected: minSun.dominanceRejected || 0,
       dominanceRemoved: minSun.dominanceRemoved || 0,
       candidateCount: candidates.length,
-      searchMode: "resource-constrained-pareto",
+      searchMode: "resource-constrained-history-safe-labels",
+      labelPruningMode: "equal-arrival + visited-subset dominance; no arbitrary label cap",
       responsiveScheduling: true,
       graphStats: graphStats(graph)
     };
@@ -1265,6 +1420,10 @@
       splitGeometryByMaxLength,
       nearestNode,
       nearestNodeResponsive,
+      cloneRawGraph,
+      nearestRawEdgeResponsive,
+      splitRawEdgeAtPoint,
+      snapPointIntoRawGraph,
       dijkstraTimes,
       dijkstraTimesResponsive,
       reconstructDijkstra,
