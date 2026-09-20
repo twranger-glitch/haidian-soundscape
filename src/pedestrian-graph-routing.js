@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev8 Pedestrian-first Snap + Manual Graph Replay
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev9 Ordered Manual Map Matching
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev8";
+  const VERSION = "v9.0.0-dev9";
 
   const DEFAULTS = {
     enabled: true,
@@ -235,7 +235,7 @@
     return "road";
   }
 
-  // v9.0.0-dev8: terminal snapping is walking-first, not motor-road-first.
+  // v9.0.0-dev9: terminal snapping is walking-first, not motor-road-first.
   // Distance remains a hard local constraint: pedestrian preference only breaks
   // ties among edges within a small slack of the geometrically nearest edge.
   function pedestrianSnapRank(tags = {}) {
@@ -961,6 +961,65 @@
     return best;
   }
 
+
+  function projectPointToPolylineProgressM(point, geometry) {
+    const route = (geometry || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) return null;
+    let best = null;
+    let walked = 0;
+    for (let i = 1; i < route.length; i += 1) {
+      const segLen = haversineM(route[i - 1], route[i]);
+      const hit = projectPointToSegmentM(point, route[i - 1], route[i]);
+      if (hit) {
+        const candidate = {
+          point: hit.point,
+          distanceM: hit.distanceM,
+          segmentIndex: i - 1,
+          progressM: walked + segLen * hit.t
+        };
+        if (!best || candidate.distanceM < best.distanceM) best = candidate;
+      }
+      walked += segLen;
+    }
+    if (best) best.routeLengthM = walked;
+    return best;
+  }
+
+  function orderedEdgeMatch(edge, fromId, route, sampleCount = 4) {
+    const geometry = edgeGeometryFor(edge, fromId);
+    if (!geometry || geometry.length < 2) return null;
+    const mids = shadeSamplePoints(geometry, Math.max(8, edge.distanceM / Math.max(2, sampleCount)), sampleCount);
+    const samples = [geometry[0], ...mids, geometry[geometry.length - 1]].filter(Boolean);
+    const hits = samples.map((p) => projectPointToPolylineProgressM(p, route));
+    if (hits.some((h) => !h)) return null;
+    const distances = hits.map((h) => h.distanceM);
+    const progress = hits.map((h) => h.progressM);
+    const startProgressM = progress[0];
+    const endProgressM = progress[progress.length - 1];
+    const progressGainM = endProgressM - startProgressM;
+    return {
+      avgDistanceM: distances.reduce((a,b)=>a+b,0) / distances.length,
+      maxDistanceM: Math.max(...distances),
+      startProgressM,
+      endProgressM,
+      progressGainM,
+      minProgressM: Math.min(...progress),
+      maxProgressM: Math.max(...progress)
+    };
+  }
+
+  function pathCoverageAgainstRoute(pathPoints, route, thresholdM = 12, spacingM = 10) {
+    const samples = samplePolyline(route, spacingM);
+    if (!samples.length || !pathPoints?.length) return { coverageRatio: 0, averageDistanceM: Infinity, maxDistanceM: Infinity };
+    let matched = 0, sum = 0, maxD = 0;
+    for (const p of samples) {
+      const hit = nearestPointOnGeometry(p, pathPoints);
+      const d = hit?.distanceM ?? Infinity;
+      if (d <= thresholdM) matched += 1;
+      if (Number.isFinite(d)) { sum += d; maxD = Math.max(maxD, d); }
+    }
+    return { coverageRatio: matched / samples.length, averageDistanceM: sum / samples.length, maxDistanceM: maxD, samples: samples.length };
+  }
   function samplePolyline(points, spacingM) {
     const pts = (points || []).map(asLatLng).filter(Boolean);
     if (pts.length < 2) return pts;
@@ -1137,6 +1196,77 @@
     return maxD;
   }
 
+
+  async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
+    const backwardToleranceM = Math.max(4, Number(options.manualReplayBacktrackToleranceM || 12));
+    const lateralWeight = Math.max(0.5, Number(options.manualReplayLateralWeight || 4));
+    const routeLen = routeDistanceM(route);
+    const dist = new Map([[String(startId), 0]]);
+    const time = new Map([[String(startId), 0]]);
+    const prev = new Map();
+    const heap = new MinHeap((a, b) => a.score - b.score);
+    const matchCache = new Map();
+    const cooperativeYield = makeCooperativeYielder(options);
+    let expanded = 0;
+    heap.push({ node: String(startId), score: 0 });
+
+    while (heap.size) {
+      if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      const cur = heap.pop();
+      if (!cur || cur.score !== dist.get(cur.node)) continue;
+      if (cur.node === String(endId)) break;
+      expanded += 1;
+      if ((expanded % 100) === 0) await cooperativeYield();
+
+      for (const ref of graph.adjacency.get(cur.node) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge) continue;
+        const key = `${edge.id}|${cur.node}`;
+        let match = matchCache.get(key);
+        if (!match) {
+          match = orderedEdgeMatch(edge, cur.node, route, 4);
+          matchCache.set(key, match || false);
+        }
+        if (!match || match === false) continue;
+        if (match.maxDistanceM > thresholdM) continue;
+        if (match.progressGainM < -backwardToleranceM) continue;
+        // Reject graph shortcuts that jump far ahead along a meandering hand-drawn route.
+        if (match.progressGainM > edge.distanceM + thresholdM * 2 + 18) continue;
+        // Do not let a path leave the manual route's A→B progress envelope.
+        if (match.maxProgressM < -backwardToleranceM || match.minProgressM > routeLen + backwardToleranceM) continue;
+
+        const next = String(ref.to);
+        const edgeTime = edge.distanceM / speedMps;
+        const lateralFactor = 1 + lateralWeight * Math.min(1.5, match.avgDistanceM / Math.max(4, thresholdM));
+        const stagnantPenalty = Math.max(0, Math.min(edge.distanceM, 20) - Math.max(0, match.progressGainM)) * 2;
+        const score = cur.score + edge.distanceM * lateralFactor + stagnantPenalty;
+        if (score + 1e-9 < (dist.get(next) ?? Infinity)) {
+          dist.set(next, score);
+          time.set(next, (time.get(cur.node) || 0) + edgeTime);
+          prev.set(next, { node: cur.node, edgeId: edge.id, match });
+          heap.push({ node: next, score });
+        }
+      }
+    }
+
+    if (!Number.isFinite(dist.get(String(endId)))) return null;
+    const steps = [];
+    let cur = String(endId);
+    let guard = 0;
+    while (cur !== String(startId) && guard++ < 10000) {
+      const step = prev.get(cur);
+      if (!step) return null;
+      steps.push({ edgeId: step.edgeId, from: step.node, to: cur, match: step.match });
+      cur = step.node;
+    }
+    steps.reverse();
+    const path = pathFromEdgeSteps(graph, steps);
+    path.walkSeconds = time.get(String(endId));
+    path.steps = steps;
+    path.mapMatchScore = dist.get(String(endId));
+    path.coverage = pathCoverageAgainstRoute(path.points, route, Math.min(14, thresholdM), 10);
+    return path;
+  }
   async function corridorDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
     const dist = new Map([[String(startId), 0]]);
     const prev = new Map();
@@ -1202,11 +1332,12 @@
     let path = null;
     let usedThresholdM = null;
     for (const thresholdM of thresholds) {
-      path = await corridorDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
-      if (path) { usedThresholdM = thresholdM; break; }
+      path = await orderedMapMatchDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
+      if (path && (path.coverage?.coverageRatio || 0) >= 0.88) { usedThresholdM = thresholdM; break; }
+      path = null;
     }
     if (!path) {
-      return { available: true, connected: false, reason: "no-connected-path-in-manual-corridor", triedCorridorM: thresholds };
+      return { available: true, connected: false, reason: "no-ordered-map-match-in-manual-corridor", triedCorridorM: thresholds };
     }
     let walkS = 0;
     let sunS = 0;
@@ -1237,12 +1368,13 @@
     const autoSunS = Number(lastDiagnostics?.minSunEstimatedDirectSunSeconds);
     const withinDetour = walkS <= detourLimitS + 0.5;
     const searchMissConfirmed = withinDetour && Number.isFinite(autoSunS) && sunS + 0.5 < autoSunS;
-    let interpretation = "手繪 corridor 已能在 OSM graph 中重建成連通 A→B 路徑。";
-    if (!withinDetour) interpretation = "手繪 corridor 在 OSM graph 中連通，但依 graph 步行時間已超過目前繞路上限。";
-    else if (searchMissConfirmed) interpretation = "已確認搜尋漏解：同一 OSM graph、同一日照成本模型中，手繪 corridor 存在符合繞路上限且直接日照更少的連通路徑。";
-    else if (Number.isFinite(autoSunS)) interpretation = "手繪 corridor 在 graph 中連通，但用搜尋器自己的 edge 日照模型計分後，未證明比目前自動解更少曬；應檢查 graph edge shade 與最終高精度 ShadeMap 評分差異。";
+    let interpretation = "手繪路線已按前進順序 map-match 成 OSM graph 的連通 A→B edge path。";
+    if (!withinDetour) interpretation = "手繪 ordered map-match 路徑在 OSM graph 中連通，但依 graph 步行時間已超過目前繞路上限。";
+    else if (searchMissConfirmed) interpretation = "已確認搜尋漏解：同一 OSM graph、同一日照成本模型中，手繪 ordered map-match 路徑符合繞路上限且直接日照更少。";
+    else if (Number.isFinite(autoSunS)) interpretation = "手繪 ordered map-match 路徑在 graph 中連通，但用搜尋器自己的 edge 日照模型計分後，未證明比目前自動解更少曬；此時才應檢查 graph edge shade 與最終高精度 ShadeMap 評分差異。";
     return {
-      available: true, connected: true, corridorM: usedThresholdM, distanceM: path.distanceM, walkSeconds: walkS,
+      available: true, connected: true, mapMatched: true, corridorM: usedThresholdM, distanceM: path.distanceM, walkSeconds: walkS,
+      mapMatchCoverageRatio: path.coverage?.coverageRatio ?? null, mapMatchAverageDistanceM: path.coverage?.averageDistanceM ?? null, mapMatchMaxDistanceM: path.coverage?.maxDistanceM ?? null,
       directSunSeconds: sunS, directSunFraction: walkS > 0 ? sunS / walkS : null,
       withinDetour, detourPct, detourLimitSeconds: detourLimitS, fastestSeconds: fastestS,
       autoEstimatedDirectSunSeconds: Number.isFinite(autoSunS) ? autoSunS : null,

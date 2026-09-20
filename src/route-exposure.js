@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev8 Pedestrian-first Snap + Manual Graph Replay
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev9 Ordered Manual Map Matching
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev8";
+  const VERSION = "v9.0.0-dev9";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1302,11 +1302,11 @@
     if (diagnosis.replay) {
       const r = diagnosis.replay;
       if (r.connected) {
-        replay = `<span><strong>Graph 路徑重播：</strong>已在手繪 corridor（±${Math.round(r.corridorM || 0)} m）內重建連通 A→B；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
-          (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；手繪 corridor 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
+        replay = `<span><strong>Ordered Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
+          (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else {
-        replay = `<span><strong>Graph 路徑重播：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m corridor 內仍無法重建連通 A→B。幾何貼近 graph 不等於拓樸連通。</span>`;
+        replay = `<span><strong>Ordered Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內仍無法依手繪前進順序重建 A→B；幾何貼近 graph 不等於同一路徑。</span>`;
       }
     }
     return `<div class="re-graph-diagnosis ${cls}"><b>手繪路線 ↔ OSM Graph 對照</b>` +
@@ -1332,7 +1332,7 @@
     const box = panel?.querySelector("[data-re-graph-diagnosis]");
     if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
     if (api.replayPolyline && aPoint && bPoint) {
-      setStatus("正在用 OSM Graph 自己的 edge 成本重播你的手繪 A→B…", "drawing");
+      setStatus("正在依手繪線前進順序做 ordered OSM Graph map-match，並用同一 edge 日照模型重算…", "drawing");
       try {
         diagnosis.replay = await api.replayPolyline(replayPoints, {
           departure: departureDateFromPanel(),
@@ -1345,7 +1345,7 @@
         });
         lastManualGraphDiagnosis = diagnosis;
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
-        setStatus(diagnosis.replay?.searchMissConfirmed ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的手繪 corridor；搜尋器仍有漏解。" : "手繪 Graph 路徑重播完成；可直接看診斷卡判斷是拓樸、edge 日照成本或搜尋漏解。", diagnosis.replay?.searchMissConfirmed ? "warning" : "ok");
+        setStatus(diagnosis.replay?.searchMissConfirmed ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的 ordered 手繪 edge path；搜尋器仍有漏解。" : "Ordered 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。", diagnosis.replay?.searchMissConfirmed ? "warning" : "ok");
       } catch (error) {
         diagnosis.replay = { available: true, connected: false, reason: error?.message || String(error) };
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
