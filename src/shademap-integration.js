@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.7.1
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.7.1 base + v8.9.0-dev1 Route Exposure Foundation
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -434,6 +434,22 @@
     lastWarmStart: null,
     lastProgressive: null
   };
+  const routeModelPerf = {
+    calls: 0,
+    shaded: 0,
+    sun: 0,
+    night: 0,
+    building: 0,
+    tree: 0,
+    mixed: 0,
+    partial: 0,
+    errors: 0,
+    totalMs: 0,
+    maxMs: 0,
+    lastMs: 0,
+    lastResult: null
+  };
+
   const overpassCache = new Map();
   const buildingTileCache = new Map();
   let buildingManifestCache = null;
@@ -7207,10 +7223,236 @@
     }, 500);
   }
 
+  function compactRouteBuildingEvidence(evidence) {
+    if (!evidence) return null;
+    const feature = evidence.feature || {};
+    const props = feature.properties || {};
+    return {
+      distanceM: Number.isFinite(evidence.distance) ? evidence.distance : null,
+      heightM: Number.isFinite(evidence.height) ? evidence.height : null,
+      requiredHeightM: Number.isFinite(evidence.requiredHeight) ? evidence.requiredHeight : null,
+      clearanceMarginM: Number.isFinite(evidence.clearanceMargin) ? evidence.clearanceMargin : null,
+      heightSource: evidence.heightSource || props.height_source || "",
+      heightQuality: evidence.heightQuality || props.height_quality || "",
+      buildingSource: props.building_source || "",
+      confidence: evidence.confidence || "",
+      plausibleUnknownHeight: evidence.plausibleUnknownHeight === true
+    };
+  }
+
+  function compactRouteTreeEvidence(evidence) {
+    if (!evidence) return null;
+    return {
+      distanceM: Number.isFinite(evidence.distance) ? evidence.distance : null,
+      heightM: Number.isFinite(evidence.height) ? evidence.height : null,
+      rayHeightM: Number.isFinite(evidence.rayHeight) ? evidence.rayHeight : null,
+      clearanceMarginM: Number.isFinite(evidence.clearanceMargin) ? evidence.clearanceMargin : null,
+      sampleLatLng: evidence.sampleLatLng
+        ? { lat: Number(evidence.sampleLatLng.lat), lng: Number(evidence.sampleLatLng.lng) }
+        : null,
+      confidence: evidence.confidence || "high"
+    };
+  }
+
+  function routeBuildingModelReady() {
+    if (state.mode === "trees" || effectiveBuildingMode() === "none") return true;
+    if (Array.isArray(lastBuildingFeatures) && lastBuildingFeatures.length) return true;
+    if (lastBuildingCoverageKey) return true;
+    if (lastBuildingPipelineStatus && Number(lastBuildingPipelineStatus.tileCount) > 0) return true;
+    if (effectiveBuildingMode() === "custom" && Array.isArray(customBuildingsCache)) return true;
+    return false;
+  }
+
+  function routePerfFinish(startedAt, result, error) {
+    const endedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const elapsed = Math.max(0, endedAt - startedAt);
+    routeModelPerf.lastMs = elapsed;
+    routeModelPerf.totalMs += elapsed;
+    routeModelPerf.maxMs = Math.max(routeModelPerf.maxMs, elapsed);
+    if (error) {
+      routeModelPerf.errors += 1;
+      routeModelPerf.lastResult = { error: error && error.message ? error.message : String(error) };
+      return;
+    }
+    if (!result) return;
+    if (result.state === "night") routeModelPerf.night += 1;
+    else if (result.shaded === true) routeModelPerf.shaded += 1;
+    else if (result.shaded === false) routeModelPerf.sun += 1;
+    if (result.sourceType === "building") routeModelPerf.building += 1;
+    else if (result.sourceType === "tree") routeModelPerf.tree += 1;
+    else if (result.sourceType === "mixed") routeModelPerf.mixed += 1;
+    if (result.reliability === "partial") routeModelPerf.partial += 1;
+    routeModelPerf.lastResult = {
+      state: result.state,
+      sourceType: result.sourceType,
+      reliability: result.reliability,
+      solarAltitudeDeg: result.solar && Number.isFinite(result.solar.altitudeDeg)
+        ? result.solar.altitudeDeg
+        : null
+    };
+  }
+
+  async function analyzeShadeModelAt(lat, lng, date, options = {}) {
+    const startedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    routeModelPerf.calls += 1;
+    try {
+      const latlng = { lat: Number(lat), lng: Number(lng) };
+      const when = date instanceof Date ? new Date(date.getTime()) : new Date(date || Date.now());
+      if (!Number.isFinite(latlng.lat) || !Number.isFinite(latlng.lng) || Number.isNaN(when.getTime())) {
+        throw new Error("Invalid route shade coordinate/date");
+      }
+
+      const solar = solarPositionAt(latlng, when);
+      if (!solar) throw new Error("Solar position unavailable");
+      if (solar.night) {
+        const result = {
+          ok: true,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          date: when.toISOString(),
+          state: "night",
+          shaded: null,
+          directSun: false,
+          sourceType: "night",
+          source: null,
+          solar,
+          reliability: "daylight-only",
+          caveat: "太陽位於地平線下；夜間不計入遮蔭比例。"
+        };
+        routePerfFinish(startedAt, result, null);
+        return result;
+      }
+
+      const buildingReady = routeBuildingModelReady();
+      let building = null;
+      let tree = null;
+      let canopyQueryFailed = false;
+      if (options.buildings !== false) {
+        building = findBuildingShadowEvidence(latlng, solar);
+      }
+      if (options.canopy !== false && state.mode !== "buildings") {
+        const timeoutMs = Math.max(700, Number(options.canopyTimeoutMs) || 4200);
+        try {
+          tree = await withTimeout(findCanopyShadowEvidence(latlng, solar), timeoutMs, "路線樹冠陰影");
+        } catch (_) {
+          tree = null;
+          canopyQueryFailed = true;
+        }
+      }
+
+      let sourceType = "sun";
+      let source = null;
+      if (building && tree) {
+        const tolerance = Math.max(1, Number(config.queryShadeSourceMixedDistanceToleranceM) || 3);
+        if (Math.abs(building.distance - tree.distance) <= tolerance) {
+          sourceType = "mixed";
+          source = {
+            building: compactRouteBuildingEvidence(building),
+            tree: compactRouteTreeEvidence(tree)
+          };
+        } else if (tree.distance < building.distance) {
+          sourceType = "tree";
+          source = compactRouteTreeEvidence(tree);
+        } else {
+          sourceType = "building";
+          source = compactRouteBuildingEvidence(building);
+        }
+      } else if (building) {
+        sourceType = "building";
+        source = compactRouteBuildingEvidence(building);
+      } else if (tree) {
+        sourceType = "tree";
+        source = compactRouteTreeEvidence(tree);
+      }
+
+      const shaded = sourceType !== "sun";
+      const lowSun = solar.altitudeDeg < Math.max(0, Number(config.queryShadeSourceMinAltitudeDeg) || 1.5);
+      const reliability = (!buildingReady && state.mode !== "trees" && effectiveBuildingMode() !== "none") || lowSun || canopyQueryFailed
+        ? "partial"
+        : "model";
+      const caveats = [];
+      if (!buildingReady && state.mode !== "trees" && effectiveBuildingMode() !== "none") {
+        caveats.push("目前建築快取尚未就緒，結果可能低估建築陰影；請先讓目前視窗的建築資料完成載入。");
+      }
+      if (lowSun) caveats.push("太陽接近地平線，遠距遮蔽物可能超出目前路線模型的可靠追蹤距離。");
+      if (canopyQueryFailed) caveats.push("本次樹冠查詢逾時或失敗，可能低估樹蔭。");
+      caveats.push("v8.9.0-dev1 非視覺路線模型目前以 CHMv2 樹冠與已載入建築反向光線判讀；地形遠距遮蔽仍由畫面 ShadeMap 引擎較完整。");
+
+      const result = {
+        ok: true,
+        lat: latlng.lat,
+        lng: latlng.lng,
+        date: when.toISOString(),
+        state: shaded ? "shade" : "sun",
+        shaded,
+        directSun: !shaded,
+        sourceType,
+        source,
+        solar,
+        reliability,
+        model: "route-ray-v1",
+        buildingModelReady: buildingReady,
+        caveat: caveats.join(" ").trim()
+      };
+      routePerfFinish(startedAt, result, null);
+      return result;
+    } catch (error) {
+      routePerfFinish(startedAt, null, error);
+      throw error;
+    }
+  }
+
+  function getRouteDiagnostics() {
+    return {
+      version: "v8.9.0-dev1",
+      calls: routeModelPerf.calls,
+      shaded: routeModelPerf.shaded,
+      sun: routeModelPerf.sun,
+      night: routeModelPerf.night,
+      building: routeModelPerf.building,
+      tree: routeModelPerf.tree,
+      mixed: routeModelPerf.mixed,
+      partial: routeModelPerf.partial,
+      errors: routeModelPerf.errors,
+      totalMs: routeModelPerf.totalMs,
+      meanMs: routeModelPerf.calls ? routeModelPerf.totalMs / routeModelPerf.calls : 0,
+      maxMs: routeModelPerf.maxMs,
+      lastMs: routeModelPerf.lastMs,
+      lastResult: routeModelPerf.lastResult,
+      buildingModelReady: routeBuildingModelReady(),
+      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+      canopyRasterCacheSize: canopyRasterCache.size,
+      canopyRasterPromiseCount: canopyRasterPromises.size,
+      mode: state.mode
+    };
+  }
+
+  function resetRouteDiagnostics() {
+    Object.assign(routeModelPerf, {
+      calls: 0,
+      shaded: 0,
+      sun: 0,
+      night: 0,
+      building: 0,
+      tree: 0,
+      mixed: 0,
+      partial: 0,
+      errors: 0,
+      totalMs: 0,
+      maxMs: 0,
+      lastMs: 0,
+      lastResult: null
+    });
+    return getRouteDiagnostics();
+  }
+
   window.HaidianShade = {
     enable: enableShade,
     disable: disableShade,
     rebuild: rebuildShade,
+    analyzeShadeModelAt,
+    getRouteDiagnostics,
+    resetRouteDiagnostics,
     get state() {
       return Object.assign({}, state);
     },
