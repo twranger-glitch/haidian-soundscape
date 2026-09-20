@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev4 Route Snap
+ * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev6 Flow & Quality
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v8.9.0-dev5";
+  const VERSION = "v8.9.0-dev6";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -36,12 +36,12 @@
     // dev5 route-quality guard: shaded dead-ends / out-and-back loops never count as a benefit.
     routeQualityEnabled: true,
     routeQualitySampleM: 8,
-    routeQualityLoopReturnRadiusM: 10,
-    routeQualityMinLoopExcursionM: 45,
-    routeQualityRepeatedCorridorRadiusM: 9,
-    routeQualityRepeatedCorridorMinSeparationM: 32,
-    routeQualityMaxRepeatedCorridorM: 24,
-    routeQualityMaxBacktrackM: 65
+    routeQualityLoopReturnRadiusM: 5,
+    routeQualityMinLoopExcursionM: 70,
+    routeQualityRepeatedCorridorRadiusM: 5,
+    routeQualityRepeatedCorridorMinSeparationM: 40,
+    routeQualityMaxRepeatedCorridorM: 32,
+    routeQualityOppositeHeadingDeg: 155
   };
 
   const config = Object.assign({}, DEFAULTS, window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {});
@@ -76,6 +76,52 @@
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function localInputParts(value) {
+    const text = String(value || "");
+    const [date = "", time = ""] = text.split("T");
+    return { date, time: time.slice(0, 5) };
+  }
+
+  function formatDepartureSummary(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "時間未設定";
+    return new Intl.DateTimeFormat("zh-TW", {
+      month: "numeric", day: "numeric", weekday: "short",
+      hour: "2-digit", minute: "2-digit", hour12: false
+    }).format(date);
+  }
+
+  function setDepartureDate(date) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime()) || !panel) return;
+    const pad = (n) => String(n).padStart(2, "0");
+    const value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const hidden = panel.querySelector("[data-re-departure]");
+    const dateInput = panel.querySelector("[data-re-date]");
+    const timeInput = panel.querySelector("[data-re-time]");
+    const parts = localInputParts(value);
+    if (hidden) hidden.value = value;
+    if (dateInput) dateInput.value = parts.date;
+    if (timeInput) timeInput.value = parts.time;
+    syncUiState();
+  }
+
+  function syncDepartureFromParts() {
+    if (!panel) return;
+    const date = panel.querySelector("[data-re-date]")?.value;
+    const time = panel.querySelector("[data-re-time]")?.value;
+    const hidden = panel.querySelector("[data-re-departure]");
+    if (!date || !time || !hidden) return;
+    hidden.value = `${date}T${time}`;
+    syncUiState();
+  }
+
+  function setDeparturePreset(minutesFromNow) {
+    const d = new Date(Date.now() + Number(minutesFromNow || 0) * 60000);
+    d.setSeconds(0, 0);
+    setDepartureDate(d);
   }
 
   function escapeHtml(value) {
@@ -304,11 +350,30 @@
       ? "我已經知道想走哪一條路，看看沿途會曬多久。"
       : "我只知道起點和終點，讓系統比較可取得的步行候選。";
 
+
+    const departureValue = panel.querySelector("[data-re-departure]")?.value || nowLocalInputValue();
+    const departureSummary = panel.querySelector("[data-re-departure-summary]");
+    if (departureSummary) departureSummary.textContent = formatDepartureSummary(departureValue);
+    const nextFromTime = panel.querySelector("[data-re-time-next]");
+    if (nextFromTime) {
+      nextFromTime.textContent = uiMode === "draw" ? "下一步：開始畫路線 →" : "下一步：設定 A → B →";
+      nextFromTime.disabled = busy;
+    }
+    const timeHint = panel.querySelector("[data-re-time-hint]");
+    if (timeHint) timeHint.textContent = uiMode === "draw"
+      ? "時間選好後按上面的「下一步」，系統會直接進入畫路線模式。"
+      : "時間選好後按上面的「下一步」，接著到地圖點 A 起點、B 終點。";
+
     const drawProgress = panel.querySelector("[data-re-draw-progress]");
     if (drawProgress) {
       if (!drawPoints.length) drawProgress.textContent = "尚未開始畫路線";
       else if (drawPoints.length === 1) drawProgress.textContent = "已放 1 個節點，請至少再點 1 個";
       else drawProgress.textContent = `已放 ${drawPoints.length} 個節點，可繼續加點或直接分析`;
+    }
+    const drawWarning = panel.querySelector("[data-re-draw-warning]");
+    if (drawWarning) {
+      drawWarning.hidden = drawPoints.length !== 2;
+      if (drawPoints.length === 2) drawWarning.textContent = "目前只有 2 個點，系統會用直線連接，可能穿過建築物。若實際道路會轉彎、走河堤或小巷，請沿路再加幾個節點。";
     }
     const drawStart = panel.querySelector("[data-re-draw-start]");
     const drawAnalyze = panel.querySelector("[data-re-analyze-draw]");
@@ -361,6 +426,24 @@
     if (exports) exports.hidden = !lastAnalysis || !hasRenderedResult;
   }
 
+  function advanceFromTime() {
+    if (!panel) return;
+    if (uiMode === "draw") {
+      const target = panel.querySelector("[data-re-draw-step]");
+      if (!drawPoints.length && !savedDrawnRoute.length) startDrawMode({ reset: true });
+      else {
+        if (drawMode !== "route" && drawPoints.length < 2) startDrawMode({ reset: false });
+        target?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+      }
+      return;
+    }
+    if (uiMode === "ab") {
+      const target = panel.querySelector("[data-re-ab-step]");
+      if (!aPoint || !bPoint) startABMode();
+      target?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    }
+  }
+
   function setUiMode(mode) {
     const next = ["home", "draw", "ab"].includes(mode) ? mode : "home";
     if (uiMode === "draw" && next !== "draw") captureDrawnRouteIfValid();
@@ -377,10 +460,10 @@
     } else if (next === "draw") {
       drawPoints = savedDrawnRoute.map((p) => ({ lat: p.lat, lng: p.lng }));
       drawEditableRoute();
-      setStatus(drawPoints.length >= 2 ? "這條手繪路線已保留，可重新分析或重新畫。" : "按「開始畫路線」，再依序點選地圖上的路線節點。", "");
+      setStatus(drawPoints.length >= 2 ? "這條手繪路線已保留，可重新分析或重新畫。" : "先確認出發時間，再按「下一步：開始畫路線」。", "");
     } else {
       renderSavedDrawnReference();
-      setStatus(aPoint && bPoint ? "A、B 已設定，可以開始比較候選路線。" : "先在地圖設定 A 起點與 B 終點。", "");
+      setStatus(aPoint && bPoint ? "A、B 已設定，可以開始比較候選路線。" : "先確認出發時間，再按「下一步：設定 A → B」。", "");
     }
     syncUiState();
   }
@@ -949,8 +1032,11 @@
       return { valid: true, reasons: [], loopExcursionM: 0, repeatedCorridorM: 0, maxBacktrackM: 0 };
     }
 
-    const loopRadius = clamp(config.routeQualityLoopReturnRadiusM, 4, 25, 10);
-    const minLoopPath = clamp(config.routeQualityMinLoopExcursionM, 25, 160, 45);
+    // dev6: reject only real geometric waste.  A route may temporarily move
+    // sideways or slightly away from B to follow the street network; that is
+    // NOT by itself a reason to reject it.
+    const loopRadius = clamp(config.routeQualityLoopReturnRadiusM, 3, 12, 5);
+    const minLoopPath = clamp(config.routeQualityMinLoopExcursionM, 40, 220, 70);
     let loopExcursionM = 0;
     for (let i = 0; i < samples.length - 2; i += 1) {
       for (let j = i + 2; j < samples.length; j += 1) {
@@ -962,14 +1048,18 @@
       }
     }
 
-    const corridorRadius = clamp(config.routeQualityRepeatedCorridorRadiusM, 4, 20, 9);
-    const corridorSep = clamp(config.routeQualityRepeatedCorridorMinSeparationM, 20, 120, 32);
+    // Detect the same physical corridor traversed again in the opposite
+    // direction.  Keep the radius tight so nearby parallel streets / lanes
+    // are not mistaken for an out-and-back.
+    const corridorRadius = clamp(config.routeQualityRepeatedCorridorRadiusM, 3, 10, 5);
+    const corridorSep = clamp(config.routeQualityRepeatedCorridorMinSeparationM, 25, 160, 40);
+    const oppositeDeg = clamp(config.routeQualityOppositeHeadingDeg, 140, 180, 155);
     const repeatedIndexes = new Set();
     for (let j = 1; j < samples.length; j += 1) {
       for (let i = 0; i < j - 1; i += 1) {
         if (samples[j].cumulativeM - samples[i].cumulativeM < corridorSep) continue;
         if (haversineM(samples[i].point, samples[j].point) > corridorRadius) continue;
-        if (headingDifferenceDeg(samples[i].heading, samples[j].heading) >= 135) {
+        if (headingDifferenceDeg(samples[i].heading, samples[j].heading) >= oppositeDeg) {
           repeatedIndexes.add(j);
           break;
         }
@@ -978,6 +1068,9 @@
     let repeatedCorridorM = 0;
     for (const index of repeatedIndexes) repeatedCorridorM += samples[index]?.lengthM || 0;
 
+    // Keep AB-projection backtracking only as a diagnostic.  City streets can
+    // legitimately run sideways/backward before reconnecting; dev5 used this
+    // as a hard gate and rejected too many normal candidates.
     const A = points[0];
     const B = points[points.length - 1];
     const directM = haversineM(A, B);
@@ -1000,9 +1093,8 @@
     }
 
     const reasons = [];
-    if (loopExcursionM >= minLoopPath) reasons.push('loop-return');
-    if (repeatedCorridorM > clamp(config.routeQualityMaxRepeatedCorridorM, 8, 100, 24)) reasons.push('repeated-corridor');
-    if (maxBacktrackM > clamp(config.routeQualityMaxBacktrackM, 25, 180, 65)) reasons.push('major-backtrack');
+    if (loopExcursionM >= minLoopPath) reasons.push("loop-return");
+    if (repeatedCorridorM > clamp(config.routeQualityMaxRepeatedCorridorM, 16, 120, 32)) reasons.push("repeated-corridor");
     return { valid: reasons.length === 0, reasons, loopExcursionM, repeatedCorridorM, maxBacktrackM, sampleCount: samples.length };
   }
 
@@ -1148,13 +1240,13 @@
 
     const rejectedCount = bundle.rejectedQuality?.length || 0;
     const qualityNote = rejectedCount > 0
-      ? `<div class="re-quality-note">已自動淘汰 ${rejectedCount} 條有明顯折返／重複走廊的候選；走進無尾巷再原路走回，不會因為多經過綠蔭而獲得更高評價。</div>`
+      ? `<div class="re-quality-note">已自動淘汰 ${rejectedCount} 條真正返回同一位置／反向重走同一走廊的候選。一般街廓轉彎、平行街繞行不會只因短暫朝反方向就被淘汰。</div>`
       : "";
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${manualState}${qualityNote}${rows}
-      <div class="re-method-note">評選以「直接日照時間」為核心，不以提高遮蔭百分比為目的。任何走進無尾巷再原路走回、重複同一走廊或明顯折返的候選都會先淘汰；只有持續朝 B 前進的合理繞路才會交給 ShadeMap 比較。</div>
+      <div class="re-method-note">評選以「直接日照時間」為核心，不以提高遮蔭百分比為目的。走進無尾巷再原路走回、或反向重走同一條實體走廊會先淘汰；一般街廓轉彎與合理側向繞行仍可參加比較。</div>
     </section>`;
   }
 
@@ -1433,6 +1525,12 @@
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
       .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-time-step{border-color:#99d9cf;background:linear-gradient(145deg,#f0fdfa,#ffffff)}
+      .re-time-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin-bottom:9px;border-radius:11px;background:#fff;border:1px solid #cce8e3}.re-time-summary span{color:#64748b;font-size:12.5px;font-weight:800}.re-time-summary strong{color:#075a63;font-size:16px;font-weight:950}
+      .re-time-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:9px}.re-time-quick button{min-height:38px;border:1px solid #b8d9d4;border-radius:10px;background:#fff;color:#0f766e;font-size:13px;font-weight:900;cursor:pointer}.re-time-quick button:hover{background:#ecfdf5;border-color:#5eead4}
+      .re-time-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:8px;margin-bottom:10px}.re-time-grid label{display:grid;gap:5px;color:#64748b;font-size:12px;font-weight:850}.re-time-grid input{width:100%;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#123f46;font-size:14px;font-weight:800}
+      .re-time-next{margin-top:2px;box-shadow:0 7px 18px rgba(15,118,110,.18)}.re-time-hint{margin:8px 1px 0;color:#64748b;font-size:12px;line-height:1.5;font-weight:700}
+      .re-draw-warning{margin:8px 0 10px;padding:10px 11px;border:1px solid #fdba74;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:12.5px;line-height:1.55;font-weight:800}
       .route-exposure-drawing{cursor:crosshair!important}
       @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:82vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
     `;
@@ -1458,15 +1556,28 @@
         <section data-re-workflow hidden>
           <div class="re-workflow-top"><button type="button" class="re-back" data-re-back>‹ 返回</button><div><h3 data-re-mode-title></h3><p data-re-mode-desc></p></div></div>
 
-          <div class="re-step">
-            <div class="re-step-head"><span class="re-step-no">1</span><b>出發時間</b></div>
-            <div class="re-field"><input data-re-departure aria-label="出發日期與時間" type="datetime-local" value="${nowLocalInputValue()}"></div>
+          <div class="re-step re-time-step">
+            <div class="re-step-head"><span class="re-step-no">1</span><b>先選出發時間</b></div>
+            <div class="re-time-summary"><span>目前設定</span><strong data-re-departure-summary></strong></div>
+            <div class="re-time-quick" aria-label="快速選擇出發時間">
+              <button type="button" data-re-time-preset="0">現在</button>
+              <button type="button" data-re-time-preset="30">30 分後</button>
+              <button type="button" data-re-time-preset="60">1 小時後</button>
+            </div>
+            <div class="re-time-grid">
+              <label>日期<input data-re-date type="date" aria-label="出發日期"></label>
+              <label>時間<input data-re-time type="time" step="300" aria-label="出發時間"></label>
+            </div>
+            <input data-re-departure type="hidden" value="${nowLocalInputValue()}">
+            <button type="button" class="re-primary re-time-next" data-re-time-next></button>
+            <p class="re-time-hint" data-re-time-hint></p>
           </div>
 
           <section data-re-screen="draw" hidden>
-            <div class="re-step">
+            <div class="re-step" data-re-draw-step>
               <div class="re-step-head"><span class="re-step-no">2</span><b>畫出你想走的路線</b></div>
               <div class="re-progress" data-re-draw-progress></div>
+              <div class="re-draw-warning" data-re-draw-warning hidden></div>
               <button type="button" class="re-primary" data-re-draw-start>開始畫路線</button>
               <button type="button" class="re-primary" data-re-analyze-draw hidden>分析這條路線</button>
               <button type="button" class="re-secondary" data-re-redraw hidden>重新畫</button>
@@ -1474,7 +1585,7 @@
           </section>
 
           <section data-re-screen="ab" hidden>
-            <div class="re-step">
+            <div class="re-step" data-re-ab-step>
               <div class="re-step-head"><span class="re-step-no">2</span><b>設定起點與終點</b></div>
               <div class="re-endpoints" data-re-endpoint-state></div>
               <button type="button" class="re-primary" data-re-ab>在地圖設定 A → B</button>
@@ -1509,6 +1620,10 @@
     node.querySelector("[data-re-mode-draw]").addEventListener("click", () => setUiMode("draw"));
     node.querySelector("[data-re-mode-ab]").addEventListener("click", () => setUiMode("ab"));
     node.querySelector("[data-re-back]").addEventListener("click", () => setUiMode("home"));
+    node.querySelectorAll("[data-re-time-preset]").forEach((preset) => preset.addEventListener("click", () => setDeparturePreset(Number(preset.dataset.reTimePreset || 0))));
+    node.querySelector("[data-re-date]").addEventListener("change", syncDepartureFromParts);
+    node.querySelector("[data-re-time]").addEventListener("change", syncDepartureFromParts);
+    node.querySelector("[data-re-time-next]").addEventListener("click", advanceFromTime);
     node.querySelector("[data-re-draw-start]").addEventListener("click", () => startDrawMode({ reset: true }));
     node.querySelector("[data-re-redraw]").addEventListener("click", () => startDrawMode({ reset: true }));
     node.querySelector("[data-re-analyze-draw]").addEventListener("click", () => void analyzeDrawnRoute());
@@ -1535,6 +1650,9 @@
       window.L.DomEvent.disableClickPropagation(node);
       window.L.DomEvent.disableScrollPropagation(node);
     } catch (_) {}
+    const initialDeparture = localInputParts(node.querySelector("[data-re-departure]")?.value || nowLocalInputValue());
+    if (node.querySelector("[data-re-date]")) node.querySelector("[data-re-date]").value = initialDeparture.date;
+    if (node.querySelector("[data-re-time]")) node.querySelector("[data-re-time]").value = initialDeparture.time;
     syncUiState();
     return node;
   }
@@ -1632,7 +1750,7 @@
       setEndpointMarker(bPoint, "B", "#e11d48");
       drawMode = "idle";
       map.getContainer().classList.remove("route-exposure-drawing");
-      setStatus("A、B 都設定好了。確認繞路上限後，按「開始找『最不曬』」。", "ok");
+      setStatus("A、B 都設定好了。下一步選擇最多願意多走多少，再按「開始找『最不曬』」。", "ok");
       syncUiState();
     }
   }
