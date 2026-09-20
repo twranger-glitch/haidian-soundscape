@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev3 Graph Reveal + Drag-safe Endpoints
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev4 Graph Reveal + Drag-safe Endpoints
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev3";
+  const VERSION = "v9.0.0-dev4";
 
   const DEFAULTS = {
     sampleSpacingM: 10,

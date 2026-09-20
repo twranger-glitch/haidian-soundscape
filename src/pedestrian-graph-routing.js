@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev3 Diagnostics
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev4 Responsive
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev3";
+  const VERSION = "v9.0.0-dev4";
 
   const DEFAULTS = {
     enabled: true,
@@ -37,7 +37,10 @@
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
     canopyTimeoutMs: 4200,
-    progressEvery: 20
+    progressEvery: 20,
+    cooperativeYieldMs: 12,
+    yieldEveryExpanded: 8,
+    yieldEveryDijkstra: 180
   };
 
   const globalConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
@@ -80,6 +83,34 @@
   function clamp(value, min, max, fallback) {
     const n = Number(value);
     return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+  }
+
+  function perfNow() {
+    return typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  }
+
+  function yieldToBrowser() {
+    return new Promise((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  function makeCooperativeYielder(options = {}) {
+    const budgetMs = Math.max(4, Number(options.cooperativeYieldMs || config.cooperativeYieldMs || 12));
+    let last = perfNow();
+    return async function cooperativeYield(force = false) {
+      const now = perfNow();
+      if (!force && now - last < budgetMs) return false;
+      await yieldToBrowser();
+      last = perfNow();
+      return true;
+    };
   }
 
   function bboxForAB(a, b, marginM) {
@@ -284,16 +315,9 @@
   }
 
   function contractGraph(raw, forcedTerminals = []) {
-    const degree = new Map();
-    for (const [id, neighbors] of raw.adjacency) {
-      // Count unique pedestrian neighbors. Directed foot-only ways may be degree 1 and should remain terminals.
-      const unique = new Set(neighbors.keys());
-      for (const [other, others] of raw.adjacency) if (others.has(id)) unique.add(other);
-      degree.set(id, unique.size);
-    }
-    const terminals = new Set(forcedTerminals.map(String));
-    for (const [id, d] of degree) if (d !== 2) terminals.add(id);
-
+    // v9.0.0-dev4: build the undirected topology once.  The old code scanned
+    // every adjacency list for every node to discover incoming links (O(V²)),
+    // which could freeze the browser on denser Overpass responses.
     const undirectedAdj = new Map();
     function ensureUndirected(id) { if (!undirectedAdj.has(id)) undirectedAdj.set(id, new Set()); }
     for (const [a, neighbors] of raw.adjacency) {
@@ -305,7 +329,12 @@
       }
     }
 
-    // Pure cycles have no degree != 2 nodes. Seed one terminal per remaining component.
+    const terminals = new Set(forcedTerminals.map(String));
+    for (const [id, neighbors] of undirectedAdj) {
+      if (neighbors.size !== 2) terminals.add(id);
+    }
+
+    // Pure cycles have no degree != 2 nodes. Seed one terminal per component.
     const seenComponent = new Set();
     for (const id of undirectedAdj.keys()) {
       if (seenComponent.has(id)) continue;
@@ -317,7 +346,9 @@
         const cur = stack.pop();
         component.push(cur);
         if (terminals.has(cur)) hasTerminal = true;
-        for (const n of undirectedAdj.get(cur) || []) if (!seenComponent.has(n)) { seenComponent.add(n); stack.push(n); }
+        for (const n of undirectedAdj.get(cur) || []) {
+          if (!seenComponent.has(n)) { seenComponent.add(n); stack.push(n); }
+        }
       }
       if (!hasTerminal && component.length) terminals.add(component[0]);
     }
@@ -362,9 +393,9 @@
         let cur = first;
         let guard = 0;
         while (!terminals.has(cur) && guard++ < 10000) {
-          const options = Array.from(undirectedAdj.get(cur) || []).filter((n) => n !== prev);
-          if (!options.length) break;
-          const next = options[0];
+          const choices = Array.from(undirectedAdj.get(cur) || []).filter((n) => n !== prev);
+          if (!choices.length) break;
+          const next = choices[0];
           const key = undirectedKey(cur, next);
           if (visitedRaw.has(key)) break;
           const meta = raw.adjacency.get(cur)?.get(next) || raw.adjacency.get(next)?.get(cur);
@@ -440,6 +471,39 @@
     return { dist, prev, reverse };
   }
 
+  async function dijkstraTimesResponsive(graph, startId, speedMps, reverse = false, options = {}) {
+    const dist = new Map([[String(startId), 0]]);
+    const prev = new Map();
+    const heap = new MinHeap((a, b) => a.t - b.t);
+    const cooperativeYield = makeCooperativeYielder(options);
+    const every = Math.max(40, Number(options.yieldEveryDijkstra || config.yieldEveryDijkstra || 180));
+    let popped = 0;
+    heap.push({ node: String(startId), t: 0 });
+    while (heap.size) {
+      if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      const cur = heap.pop();
+      if (cur.t !== dist.get(cur.node)) continue;
+      popped += 1;
+      if (popped % every === 0) {
+        options.onProgress?.({ stage: reverse ? "fastest-reverse" : "fastest", message: "正在整理最短路徑網路…", expanded: popped });
+        await cooperativeYield();
+      }
+      for (const ref of graph.adjacency.get(cur.node) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge) continue;
+        const next = ref.to;
+        const t = cur.t + edge.distanceM / speedMps;
+        if (t + 1e-9 < (dist.get(next) ?? Infinity)) {
+          dist.set(next, t);
+          prev.set(next, { node: cur.node, edgeId: edge.id });
+          heap.push({ node: next, t });
+        }
+      }
+    }
+    await cooperativeYield(true);
+    return { dist, prev, reverse };
+  }
+
   function edgeGeometryFor(edge, fromId) {
     if (!edge) return [];
     return String(fromId) === String(edge.a) ? edge.geometry.slice() : edge.geometry.slice().reverse();
@@ -512,6 +576,7 @@
         const i = cursor++;
         if (i >= items.length) return;
         out[i] = await worker(items[i], i);
+        if ((i & 1) === 1) await yieldToBrowser();
       }
     });
     await Promise.all(runners);
@@ -575,6 +640,8 @@
     const shadeCache = new Map();
     let shadeEvals = 0;
     let expanded = 0;
+    const cooperativeYield = makeCooperativeYielder(options);
+    const yieldEveryExpanded = Math.max(2, Number(options.yieldEveryExpanded || config.yieldEveryExpanded || 8));
 
     const heap = new MinHeap((a, b) => (a.sunS - b.sunS) || (a.walkS - b.walkS));
     const startLabel = { node: String(startId), walkS: 0, sunS: 0, parent: null, viaEdgeId: null };
@@ -616,6 +683,7 @@
       const cur = heap.pop();
       expanded += 1;
       if (expanded > maxStates) throw new Error(`OSM Graph 搜尋已達 ${maxStates} 個狀態安全上限。`);
+      if (expanded % yieldEveryExpanded === 0) await cooperativeYield();
       if (expanded === 1 || expanded % Math.max(1, Number(config.progressEvery || 20)) === 0) {
         options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在搜尋步行 graph：${expanded} 個狀態／${shadeEvals} 條日照 edge` });
       }
@@ -642,6 +710,7 @@
         if (Number.isFinite(detourLimitS) && nextWalk + optimisticRemain > detourLimitS + 0.5) continue;
 
         const shade = await sunForEdge(edge, cur.node, cur.walkS);
+        if (shadeEvals > 0 && shadeEvals % 6 === 0) await cooperativeYield();
         const sunFraction = clamp(shade?.directSunFraction, 0, 1, 0);
         const nextSun = cur.sunS + edgeTime * sunFraction;
         const bucket = Math.floor(nextWalk / timeBucketSec);
@@ -848,28 +917,52 @@
     };
   }
 
+  async function nearestNodeResponsive(raw, point, maxM = Infinity, options = {}) {
+    const P = asLatLng(point);
+    if (!P) return null;
+    const cooperativeYield = makeCooperativeYielder(options);
+    let best = null;
+    let scanned = 0;
+    for (const [id, node] of raw.nodes) {
+      if (!raw.adjacency.has(id)) continue;
+      const distanceM = haversineM(P, node);
+      if (distanceM <= maxM && (!best || distanceM < best.distanceM)) best = { id, node, distanceM };
+      scanned += 1;
+      if (scanned % 600 === 0) await cooperativeYield();
+    }
+    return best;
+  }
+
   async function buildGraphForAB(a, b, options = {}) {
+    const cooperativeYield = makeCooperativeYielder(options);
     const bbox = bboxForAB(a, b, options.bboxMarginM || config.bboxMarginM);
     const key = bboxKey(bbox);
     let cached = graphCache.get(key);
     if (!cached) {
       const { payload, endpoint } = await fetchOverpass(bbox, options);
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      options.onProgress?.({ stage: "graph-parse", message: "正在整理 OSM 步行資料…" });
+      await cooperativeYield(true);
       const parsed = parseOverpass(payload);
       if (parsed.nodes.size > Number(config.maxRawNodes || 18000)) throw new Error(`OSM 範圍含 ${parsed.nodes.size} 個節點，超過瀏覽器安全上限。`);
+      await cooperativeYield(true);
       const raw = buildRawGraph(parsed);
+      await cooperativeYield(true);
       cached = { bbox, parsed, raw, endpoint, cachedAt: Date.now() };
       graphCache.set(key, cached);
       if (graphCache.size > 4) graphCache.delete(graphCache.keys().next().value);
     }
 
-    const snapA = nearestNode(cached.raw, a, Number(options.snapMaxM || config.snapMaxM));
-    const snapB = nearestNode(cached.raw, b, Number(options.snapMaxM || config.snapMaxM));
+    options.onProgress?.({ stage: "graph-snap", message: "正在把 A、B 對齊步行路網…" });
+    const snapA = await nearestNodeResponsive(cached.raw, a, Number(options.snapMaxM || config.snapMaxM), options);
+    const snapB = await nearestNodeResponsive(cached.raw, b, Number(options.snapMaxM || config.snapMaxM), options);
     if (!snapA) throw new Error(`A 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行節點。`);
     if (!snapB) throw new Error(`B 點附近 ${config.snapMaxM} m 內找不到 OSM 可步行節點。`);
 
     options.onProgress?.({ stage: "graph", message: "正在建立本地 pedestrian graph…" });
+    await cooperativeYield(true);
     const graph = contractGraph(cached.raw, [snapA.id, snapB.id]);
+    await cooperativeYield(true);
     if (graph.nodes.size > Number(config.maxContractedNodes || 5000)) throw new Error(`步行 graph 有 ${graph.nodes.size} 個交會節點，超過目前安全上限。`);
     lastGraphDebug = { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint, builtAt: Date.now() };
     return { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint };
@@ -902,8 +995,12 @@
     if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
 
     options.onProgress?.({ stage: "fastest", message: "正在計算 graph 最快路線與可接受繞路範圍…" });
-    const fromA = dijkstraTimes(graph, snapA.id, speedMps);
-    const toB = dijkstraTimes(graph, snapB.id, speedMps, true);
+    const fromA = await dijkstraTimesResponsive(graph, snapA.id, speedMps, false, {
+      onProgress: options.onProgress, shouldCancel: options.shouldCancel, cooperativeYieldMs: options.cooperativeYieldMs
+    });
+    const toB = await dijkstraTimesResponsive(graph, snapB.id, speedMps, true, {
+      onProgress: options.onProgress, shouldCancel: options.shouldCancel, cooperativeYieldMs: options.cooperativeYieldMs
+    });
     const fastestTime = fromA.dist.get(String(snapB.id));
     if (!Number.isFinite(fastestTime)) throw new Error("OSM pedestrian graph 中 A 與 B 目前沒有連通路徑。 ");
     const fastestPath = reconstructDijkstra(graph, fromA.prev, snapA.id, snapB.id);
@@ -926,6 +1023,8 @@
       canopyTimeoutMs: options.canopyTimeoutMs,
       maxExpandedStates: options.maxExpandedStates,
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
+      cooperativeYieldMs: options.cooperativeYieldMs,
+      yieldEveryExpanded: options.yieldEveryExpanded,
       onProgress: options.onProgress,
       shouldCancel: options.shouldCancel
     });
@@ -973,6 +1072,7 @@
       searchExpandedStates: minSun.expanded,
       shadeEdgeEvaluations: minSun.shadeEvals,
       candidateCount: candidates.length,
+      responsiveScheduling: true,
       graphStats: graphStats(graph)
     };
     return { available: true, candidates, diagnostics: lastDiagnostics };
@@ -1001,7 +1101,9 @@
       buildRawGraph,
       contractGraph,
       nearestNode,
+      nearestNodeResponsive,
       dijkstraTimes,
+      dijkstraTimesResponsive,
       reconstructDijkstra,
       searchMinSun,
       bboxForAB,
