@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev3 */
+/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev4 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -8,11 +8,12 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routingBase: "https://routing.openstreetmap.de/routed-foot/route/v1/driving",
   routingTimeoutMs: 15000,
   routingAlternatives: true,
-  detourCapPct: 20,
+  detourCapPct: 30,
   maxDrawPoints: 80,
   maxRouteSamples: 420,
   autoEnableShade: true,
   fitCandidateRoute: true,
+  manualRouteSnapToleranceM: 120,
   manualEndpointToleranceM: 120,
   exploreCandidates: true,
   exploreMaxRoutes: 6,
