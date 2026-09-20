@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev4 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev5 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev4: responsive local OSM graph + diagnostics; heavy work yields to the UI thread.
+  // v9.0.0-dev5: fine-grained responsive graph + Pareto constrained shade routing.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -38,12 +38,16 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     bboxMarginM: 420,
     maxBboxSideM: 2800,
     snapMaxM: 120,
-    maxExpandedStates: 5000,
-    maxShadeEdgeEvaluations: 700,
-    timeBucketSec: 60,
-    shadeTimeBucketSec: 120,
-    shadeSampleSpacingM: 30,
-    shadeMaxSamplesPerEdge: 8,
+    maxFineNodes: 12000,
+    maxExpandedStates: 12000,
+    maxShadeEdgeEvaluations: 1400,
+    timeBucketSec: 30,
+    shadeTimeBucketSec: 60,
+    maxFineEdgeM: 85,
+    pathMaxFineEdgeM: 55,
+    maxLabelsPerState: 5,
+    shadeSampleSpacingM: 18,
+    shadeMaxSamplesPerEdge: 5,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,
