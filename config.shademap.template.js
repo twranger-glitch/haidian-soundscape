@@ -1,4 +1,4 @@
-/* Haidian Soundscape — ShadeMap configuration v8.7.0
+/* Haidian Soundscape — ShadeMap configuration v8.7.1
  * This template is safe to commit. GitHub Actions injects the API key only into the deployed artifact.
  */
 window.HAIDIAN_SHADEMAP_CONFIG = {
@@ -61,8 +61,19 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   buildingFetchClientTimeoutMs: 12000,
   buildingFetchTotalTimeoutMs: 26000,
   buildingUpgradeDelayMs: 80,
-  metaProgressiveFirstActivationOnly: true,
+  // v8.7.1 forest-performance: normal map moves always use the fast progressive
+  // path when the viewport is large enough. Surface/building upgrade phases are
+  // forced to full mode internally, preventing a progressive rebuild loop.
+  metaProgressiveFirstActivationOnly: false,
+  metaProgressiveMinTiles: 12,
+  metaProgressiveBackgroundConcurrency: 3,
+  metaProgressiveBackgroundStartDelayMs: 160,
   metaProgressiveUpgradeDelayMs: 120,
+  metaSurfaceEncodeYieldRows: 64,
+  // Decode compressed CHMv2 COG blocks off the main thread when GeoTIFF.js
+  // worker pools are allowed by the browser/CSP. Runtime falls back safely.
+  metaGeoTiffWorkerPoolEnabled: true,
+  metaGeoTiffWorkerPoolSize: 2,
 
   metaMaxCachedCogs: 16,
 
@@ -242,6 +253,11 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   groundCanopyShadeMaxShadowLengthM: 120,
   groundCanopyShadeMinSolarAltitudeDeg: 2.5,
   groundCanopyShadeSampleStepPx: 2,
+  // Keep final tree-shadow geometry unchanged, but schedule dense-forest work in
+  // bounded chunks so the map/UI can keep responding.
+  groundCanopyShadeMaxConcurrentTiles: 2,
+  groundCanopyShadeYieldRows: 8,
+  canopyOverlayYieldRows: 32,
   groundCanopyShadeOpacity: 0.56,
   groundCanopyShadeCoreOpacity: 0.72,
   groundCanopyShadeProjectedOpacity: 0.52,
