@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v8.9.0-dev4";
+  const VERSION = "v8.9.0-dev5";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -32,7 +32,16 @@
     manualEndpointToleranceM: 120,
     exploreCandidates: true,
     exploreMaxRoutes: 6,
-    maxScoredCandidates: 10
+    maxScoredCandidates: 10,
+    // dev5 route-quality guard: shaded dead-ends / out-and-back loops never count as a benefit.
+    routeQualityEnabled: true,
+    routeQualitySampleM: 8,
+    routeQualityLoopReturnRadiusM: 10,
+    routeQualityMinLoopExcursionM: 45,
+    routeQualityRepeatedCorridorRadiusM: 9,
+    routeQualityRepeatedCorridorMinSeparationM: 32,
+    routeQualityMaxRepeatedCorridorM: 24,
+    routeQualityMaxBacktrackM: 65
   };
 
   const config = Object.assign({}, DEFAULTS, window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {});
@@ -910,6 +919,99 @@
     return buildManualCandidateFromRoute(savedDrawnRoute, a, b, speedMps);
   }
 
+  function headingDifferenceDeg(a, b) {
+    return Math.abs((((Number(a) || 0) - (Number(b) || 0) + 540) % 360) - 180);
+  }
+
+  function routeQualitySamples(points, spacingM) {
+    return buildSampleSegments(points, clamp(spacingM, 5, 20, 8)).map((seg) => ({
+      point: seg.sample,
+      cumulativeM: seg.cumulativeMidM,
+      lengthM: seg.lengthM,
+      heading: bearingDeg(seg.start, seg.end)
+    }));
+  }
+
+  /*
+   * dev5 hard rule: a shaded dead-end / out-and-back excursion is never a
+   * valid shade benefit.  Geometry quality is checked BEFORE ShadeMap scoring.
+   */
+  function evaluateRouteQuality(candidateOrPoints) {
+    const points = Array.isArray(candidateOrPoints)
+      ? candidateOrPoints.map(asLatLng).filter(Boolean)
+      : (candidateOrPoints?.points || []).map(asLatLng).filter(Boolean);
+    if (config.routeQualityEnabled === false || points.length < 2) {
+      return { valid: true, reasons: [], loopExcursionM: 0, repeatedCorridorM: 0, maxBacktrackM: 0 };
+    }
+
+    const samples = routeQualitySamples(points, config.routeQualitySampleM);
+    if (samples.length < 3) {
+      return { valid: true, reasons: [], loopExcursionM: 0, repeatedCorridorM: 0, maxBacktrackM: 0 };
+    }
+
+    const loopRadius = clamp(config.routeQualityLoopReturnRadiusM, 4, 25, 10);
+    const minLoopPath = clamp(config.routeQualityMinLoopExcursionM, 25, 160, 45);
+    let loopExcursionM = 0;
+    for (let i = 0; i < samples.length - 2; i += 1) {
+      for (let j = i + 2; j < samples.length; j += 1) {
+        const pathSep = samples[j].cumulativeM - samples[i].cumulativeM;
+        if (pathSep < minLoopPath) continue;
+        if (haversineM(samples[i].point, samples[j].point) <= loopRadius) {
+          loopExcursionM = Math.max(loopExcursionM, pathSep);
+        }
+      }
+    }
+
+    const corridorRadius = clamp(config.routeQualityRepeatedCorridorRadiusM, 4, 20, 9);
+    const corridorSep = clamp(config.routeQualityRepeatedCorridorMinSeparationM, 20, 120, 32);
+    const repeatedIndexes = new Set();
+    for (let j = 1; j < samples.length; j += 1) {
+      for (let i = 0; i < j - 1; i += 1) {
+        if (samples[j].cumulativeM - samples[i].cumulativeM < corridorSep) continue;
+        if (haversineM(samples[i].point, samples[j].point) > corridorRadius) continue;
+        if (headingDifferenceDeg(samples[i].heading, samples[j].heading) >= 135) {
+          repeatedIndexes.add(j);
+          break;
+        }
+      }
+    }
+    let repeatedCorridorM = 0;
+    for (const index of repeatedIndexes) repeatedCorridorM += samples[index]?.lengthM || 0;
+
+    const A = points[0];
+    const B = points[points.length - 1];
+    const directM = haversineM(A, B);
+    let maxBacktrackM = 0;
+    if (directM > 20) {
+      const lat0 = ((A.lat + B.lat) / 2) * Math.PI / 180;
+      const mx = 111320 * Math.max(0.2, Math.cos(lat0));
+      const my = 110540;
+      const vx = (B.lng - A.lng) * mx;
+      const vy = (B.lat - A.lat) * my;
+      const denom = vx * vx + vy * vy;
+      let maxProgress = 0;
+      for (const sample of samples) {
+        const px = (sample.point.lng - A.lng) * mx;
+        const py = (sample.point.lat - A.lat) * my;
+        const progressM = denom > 1e-9 ? ((px * vx + py * vy) / denom) * directM : 0;
+        maxProgress = Math.max(maxProgress, progressM);
+        maxBacktrackM = Math.max(maxBacktrackM, maxProgress - progressM);
+      }
+    }
+
+    const reasons = [];
+    if (loopExcursionM >= minLoopPath) reasons.push('loop-return');
+    if (repeatedCorridorM > clamp(config.routeQualityMaxRepeatedCorridorM, 8, 100, 24)) reasons.push('repeated-corridor');
+    if (maxBacktrackM > clamp(config.routeQualityMaxBacktrackM, 25, 180, 65)) reasons.push('major-backtrack');
+    return { valid: reasons.length === 0, reasons, loopExcursionM, repeatedCorridorM, maxBacktrackM, sampleCount: samples.length };
+  }
+
+  function applyRouteQuality(candidates) {
+    return (candidates || []).map((candidate) => Object.assign({}, candidate, {
+      routeQuality: evaluateRouteQuality(candidate)
+    }));
+  }
+
   function candidateWithinDetour(candidate, fastest, detourPct) {
     const limit = 1 + Math.max(0, detourPct) / 100;
     const baseDistance = fastest?.distanceM > 0 ? fastest.distanceM : null;
@@ -922,15 +1024,19 @@
   async function scoreCandidates(candidates, options = {}) {
     if (!Array.isArray(candidates) || !candidates.length) throw new Error("沒有候選路線。");
     const serial = options.serial ?? analysisSerial;
-    const baselineCandidates = candidates.filter((c) => c?.kind !== "manual");
-    const fastest = (baselineCandidates.length ? baselineCandidates : candidates).reduce((best, c) => {
+    const qualityChecked = applyRouteQuality(candidates);
+    const qualityValid = qualityChecked.filter((c) => c?.routeQuality?.valid !== false);
+    const rejectedQuality = qualityChecked.filter((c) => c?.routeQuality?.valid === false);
+    if (!qualityValid.length) throw new Error("候選路線都有明顯折返或重複走廊，已全部淘汰。請重新設定 A、B。");
+    const baselineCandidates = qualityValid.filter((c) => c?.kind !== "manual");
+    const fastest = (baselineCandidates.length ? baselineCandidates : qualityValid).reduce((best, c) => {
       if (!best) return c;
       const d = Number(c.distanceM) || Infinity;
       const bestD = Number(best.distanceM) || Infinity;
       return d < bestD ? c : best;
     }, null);
     const detourPct = clamp(options.detourPct, 0, 60, detourCapFromPanel());
-    let eligible = candidates.filter((c) => candidateWithinDetour(c, fastest, detourPct));
+    let eligible = qualityValid.filter((c) => candidateWithinDetour(c, fastest, detourPct));
     const maxScored = clamp(config.maxScoredCandidates, 2, 14, 10);
     if (eligible.length > maxScored) {
       const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual").map((c) => c.id)].filter(Boolean));
@@ -946,7 +1052,7 @@
     // Even when a hand-drawn route is just outside the detour cap, score it once
     // so the user can inspect it and understand the trade-off instead of having
     // it silently disappear from the comparison UI.
-    const manualOutside = candidates.filter((c) => c?.kind === "manual" && !eligibleIds.has(c.id));
+    const manualOutside = qualityChecked.filter((c) => c?.kind === "manual" && c?.routeQuality?.valid !== false && !eligibleIds.has(c.id));
     const scoringPool = eligible.concat(manualOutside);
     const scored = [];
     for (let i = 0; i < scoringPool.length; i += 1) {
@@ -982,7 +1088,8 @@
       best: selected,
       activeCandidateId: selected?.id || null,
       detourPct,
-      comparisonValid: eligibleScored.length >= 2
+      comparisonValid: eligibleScored.length >= 2,
+      rejectedQuality
     };
   }
 
@@ -1039,10 +1146,15 @@
       manualState = `<div class="re-note">偵測到手繪路線，但整條線本身仍沒有靠近目前的 A 或 B（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），因此沒有當成同一趟 A→B。</div>`;
     }
 
+    const rejectedCount = bundle.rejectedQuality?.length || 0;
+    const qualityNote = rejectedCount > 0
+      ? `<div class="re-quality-note">已自動淘汰 ${rejectedCount} 條有明顯折返／重複走廊的候選；走進無尾巷再原路走回，不會因為多經過綠蔭而獲得更高評價。</div>`
+      : "";
+
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
-      ${notice}${manualState}${rows}
-      <div class="re-method-note">除了 routing provider 的替代路線，本版也會主動用 A→B 走廊兩側的 waypoint 探索更多步行候選，再交給 ShadeMap 逐段評分；仍不是全道路網的數學全域最佳解。</div>
+      ${notice}${manualState}${qualityNote}${rows}
+      <div class="re-method-note">評選以「直接日照時間」為核心，不以提高遮蔭百分比為目的。任何走進無尾巷再原路走回、重複同一走廊或明顯折返的候選都會先淘汰；只有持續朝 B 前進的合理繞路才會交給 ShadeMap 比較。</div>
     </section>`;
   }
 
@@ -1320,7 +1432,7 @@
       .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:12px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
-      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .route-exposure-drawing{cursor:crosshair!important}
       @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:82vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
     `;
@@ -1565,7 +1677,9 @@
       buildManualCandidate,
       buildManualCandidateFromRoute,
       dedupeCandidates,
-      fetchExploratoryCandidates
+      fetchExploratoryCandidates,
+      evaluateRouteQuality,
+      applyRouteQuality
     }
   };
 
