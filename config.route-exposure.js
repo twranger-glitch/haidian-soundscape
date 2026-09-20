@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev8 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev9 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev8: edge snapping + fine graph + history-safe constrained shade routing.
+  // v9.0.0-dev9: pedestrian-first edge snapping + ordered manual map matching + history-safe constrained shade routing.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -42,6 +42,8 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     pedestrianSnapSlackM: 12,
     manualReplayCorridorM: 16,
     manualReplayMaxCorridorM: 36,
+    manualReplayBacktrackToleranceM: 12,
+    manualReplayLateralWeight: 4,
     maxFineNodes: 12000,
     maxExpandedStates: 12000,
     maxShadeEdgeEvaluations: 1400,
