@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev7 History-safe Label Routing
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev8 Pedestrian-first Snap + Manual Graph Replay
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev7";
+  const VERSION = "v9.0.0-dev8";
 
   const DEFAULTS = {
     enabled: true,
@@ -26,6 +26,9 @@
     maxBboxSideM: 2800,
     snapMaxM: 120,
     snapEndpointToleranceM: 1.5,
+    pedestrianSnapSlackM: 12,
+    manualReplayCorridorM: 16,
+    manualReplayMaxCorridorM: 36,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
     maxFineNodes: 12000,
@@ -230,6 +233,32 @@
     if (["footway", "path", "pedestrian", "steps", "cycleway", "track"].includes(h)) return "path";
     if (["service", "living_street", "residential", "unclassified", "road"].includes(h)) return "local-road";
     return "road";
+  }
+
+  // v9.0.0-dev8: terminal snapping is walking-first, not motor-road-first.
+  // Distance remains a hard local constraint: pedestrian preference only breaks
+  // ties among edges within a small slack of the geometrically nearest edge.
+  function pedestrianSnapRank(tags = {}) {
+    const h = normalizedTag(tags.highway);
+    const foot = normalizedTag(tags.foot);
+    if (["yes", "designated", "permissive"].includes(foot) && ["cycleway", "track", "service", "residential", "unclassified", "tertiary", "secondary", "primary"].includes(h)) return 0;
+    if (["footway", "path", "pedestrian", "steps"].includes(h)) return 0;
+    if (h === "cycleway") return 1;
+    if (h === "track") return 2;
+    if (["living_street", "service", "residential"].includes(h)) return 3;
+    if (["unclassified", "road", "tertiary", "tertiary_link"].includes(h)) return 4;
+    if (["secondary", "secondary_link"].includes(h)) return 5;
+    if (["primary", "primary_link"].includes(h)) return 6;
+    return 7;
+  }
+
+  function pedestrianSnapLabel(tags = {}) {
+    const h = normalizedTag(tags.highway) || "unknown";
+    const rank = pedestrianSnapRank(tags);
+    if (rank <= 0) return `${h} · 行人優先`;
+    if (rank === 1) return `${h} · 共享步行優先`;
+    if (rank <= 3) return `${h} · 慢速/地方道路`;
+    return `${h} · 一般道路`;
   }
 
   function isPedestrianWay(tags = {}) {
@@ -1017,8 +1046,8 @@
       version: VERSION,
       bbox: state.bbox,
       overpassEndpoint: state.endpoint,
-      snapA: state.snapA ? { id: state.snapA.id, lat: state.snapA.node.lat, lng: state.snapA.node.lng, distanceM: state.snapA.distanceM, snapType: state.snapA.snapType || "node", highway: state.snapA.sourceHighway || null, wayId: state.snapA.sourceWayId || null } : null,
-      snapB: state.snapB ? { id: state.snapB.id, lat: state.snapB.node.lat, lng: state.snapB.node.lng, distanceM: state.snapB.distanceM, snapType: state.snapB.snapType || "node", highway: state.snapB.sourceHighway || null, wayId: state.snapB.sourceWayId || null } : null,
+      snapA: state.snapA ? { id: state.snapA.id, lat: state.snapA.node.lat, lng: state.snapA.node.lng, distanceM: state.snapA.distanceM, snapType: state.snapA.snapType || "node", highway: state.snapA.sourceHighway || null, wayId: state.snapA.sourceWayId || null, pedestrianRank: state.snapA.pedestrianRank ?? null, pedestrianLabel: state.snapA.pedestrianLabel || null, geometricNearestDistanceM: state.snapA.geometricNearestDistanceM ?? state.snapA.distanceM, extraSnapDistanceM: state.snapA.extraSnapDistanceM || 0 } : null,
+      snapB: state.snapB ? { id: state.snapB.id, lat: state.snapB.node.lat, lng: state.snapB.node.lng, distanceM: state.snapB.distanceM, snapType: state.snapB.snapType || "node", highway: state.snapB.sourceHighway || null, wayId: state.snapB.sourceWayId || null, pedestrianRank: state.snapB.pedestrianRank ?? null, pedestrianLabel: state.snapB.pedestrianLabel || null, geometricNearestDistanceM: state.snapB.geometricNearestDistanceM ?? state.snapB.distanceM, extraSnapDistanceM: state.snapB.extraSnapDistanceM || 0 } : null,
       edges,
       connectors,
       stats: graphStats(graph)
@@ -1094,6 +1123,133 @@
     };
   }
 
+  function edgeDistanceToPolylineM(edge, route, sampleCount = 5) {
+    const geometry = edge?.geometry || [];
+    if (geometry.length < 2 || route.length < 2) return Infinity;
+    const pts = shadeSamplePoints(geometry, Math.max(8, edge.distanceM / Math.max(2, sampleCount)), sampleCount);
+    const samples = [geometry[0], ...pts, geometry[geometry.length - 1]].filter(Boolean);
+    let maxD = 0;
+    for (const p of samples) {
+      const hit = nearestPointOnGeometry(p, route);
+      if (!hit) return Infinity;
+      maxD = Math.max(maxD, hit.distanceM);
+    }
+    return maxD;
+  }
+
+  async function corridorDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
+    const dist = new Map([[String(startId), 0]]);
+    const prev = new Map();
+    const heap = new MinHeap((a, b) => a.t - b.t);
+    const edgeDistanceCache = new Map();
+    const cooperativeYield = makeCooperativeYielder(options);
+    let expanded = 0;
+    heap.push({ node: String(startId), t: 0 });
+    while (heap.size) {
+      if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      const cur = heap.pop();
+      if (!cur || cur.t !== dist.get(cur.node)) continue;
+      if (cur.node === String(endId)) break;
+      expanded += 1;
+      if ((expanded % 120) === 0) await cooperativeYield();
+      for (const ref of graph.adjacency.get(cur.node) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge) continue;
+        let corridorD = edgeDistanceCache.get(edge.id);
+        if (corridorD == null) {
+          corridorD = edgeDistanceToPolylineM(edge, route, 5);
+          edgeDistanceCache.set(edge.id, corridorD);
+        }
+        if (!(corridorD <= thresholdM)) continue;
+        const next = String(ref.to);
+        const t = cur.t + edge.distanceM / speedMps;
+        if (t + 1e-9 < (dist.get(next) ?? Infinity)) {
+          dist.set(next, t);
+          prev.set(next, { node: cur.node, edgeId: edge.id });
+          heap.push({ node: next, t });
+        }
+      }
+    }
+    const endT = dist.get(String(endId));
+    if (!Number.isFinite(endT)) return null;
+    const steps = [];
+    let cur = String(endId);
+    let guard = 0;
+    while (cur !== String(startId) && guard++ < 10000) {
+      const step = prev.get(cur);
+      if (!step) return null;
+      steps.push({ edgeId: step.edgeId, from: step.node, to: cur });
+      cur = step.node;
+    }
+    steps.reverse();
+    const path = pathFromEdgeSteps(graph, steps);
+    path.walkSeconds = endT;
+    path.steps = steps;
+    return path;
+  }
+
+  async function replayPolyline(points, options = {}) {
+    const state = lastGraphDebug;
+    if (!state?.graph || !state.snapA || !state.snapB) return { available: false, reason: "no-graph" };
+    const route = (points || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) return { available: false, reason: "route-too-short" };
+    const graph = state.graph;
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    const baseThreshold = Math.max(6, Number(options.corridorM || config.manualReplayCorridorM || 16));
+    const maxThreshold = Math.max(baseThreshold, Number(options.maxCorridorM || config.manualReplayMaxCorridorM || 36));
+    const thresholds = Array.from(new Set([baseThreshold, Math.min(maxThreshold, baseThreshold + 8), Math.min(maxThreshold, baseThreshold + 16), maxThreshold])).sort((a,b)=>a-b);
+    let path = null;
+    let usedThresholdM = null;
+    for (const thresholdM of thresholds) {
+      path = await corridorDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
+      if (path) { usedThresholdM = thresholdM; break; }
+    }
+    if (!path) {
+      return { available: true, connected: false, reason: "no-connected-path-in-manual-corridor", triedCorridorM: thresholds };
+    }
+    let walkS = 0;
+    let sunS = 0;
+    const edgeSun = [];
+    const cooperativeYield = makeCooperativeYielder(options);
+    for (let i = 0; i < path.steps.length; i += 1) {
+      const step = path.steps[i];
+      const edge = graph.edges.get(step.edgeId);
+      if (!edge) continue;
+      const edgeTime = edge.distanceM / speedMps;
+      const at = new Date(departure.getTime() + (walkS + edgeTime / 2) * 1000);
+      const shade = await defaultEdgeSunProvider(edge, step.from, at, {
+        shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
+        shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
+        shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
+        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+      });
+      const directSunFraction = clamp(shade?.directSunFraction, 0, 1, 0);
+      const edgeSunSeconds = edgeTime * directSunFraction;
+      sunS += edgeSunSeconds;
+      walkS += edgeTime;
+      edgeSun.push({ edgeId: edge.id, highway: primaryHighway(edge), distanceM: edge.distanceM, directSunFraction, directSunSeconds: edgeSunSeconds });
+      if ((i % 3) === 2) await cooperativeYield();
+    }
+    const fastestS = Number(lastDiagnostics?.fastestSeconds);
+    const detourPct = Number.isFinite(Number(options.detourPct)) ? Number(options.detourPct) : Number(lastDiagnostics?.detourPct || 30);
+    const detourLimitS = Number.isFinite(fastestS) ? fastestS * (1 + Math.max(0, detourPct) / 100) : Infinity;
+    const autoSunS = Number(lastDiagnostics?.minSunEstimatedDirectSunSeconds);
+    const withinDetour = walkS <= detourLimitS + 0.5;
+    const searchMissConfirmed = withinDetour && Number.isFinite(autoSunS) && sunS + 0.5 < autoSunS;
+    let interpretation = "手繪 corridor 已能在 OSM graph 中重建成連通 A→B 路徑。";
+    if (!withinDetour) interpretation = "手繪 corridor 在 OSM graph 中連通，但依 graph 步行時間已超過目前繞路上限。";
+    else if (searchMissConfirmed) interpretation = "已確認搜尋漏解：同一 OSM graph、同一日照成本模型中，手繪 corridor 存在符合繞路上限且直接日照更少的連通路徑。";
+    else if (Number.isFinite(autoSunS)) interpretation = "手繪 corridor 在 graph 中連通，但用搜尋器自己的 edge 日照模型計分後，未證明比目前自動解更少曬；應檢查 graph edge shade 與最終高精度 ShadeMap 評分差異。";
+    return {
+      available: true, connected: true, corridorM: usedThresholdM, distanceM: path.distanceM, walkSeconds: walkS,
+      directSunSeconds: sunS, directSunFraction: walkS > 0 ? sunS / walkS : null,
+      withinDetour, detourPct, detourLimitSeconds: detourLimitS, fastestSeconds: fastestS,
+      autoEstimatedDirectSunSeconds: Number.isFinite(autoSunS) ? autoSunS : null,
+      searchMissConfirmed, edgeIds: path.edgeIds, points: path.points, edgeSun, interpretation
+    };
+  }
+
   async function nearestNodeResponsive(raw, point, maxM = Infinity, options = {}) {
     const P = asLatLng(point);
     if (!P) return null;
@@ -1139,7 +1295,8 @@
     if (!P) return null;
     const cooperativeYield = makeCooperativeYielder(options);
     const seen = new Set();
-    let best = null;
+    const choices = [];
+    let nearestDistanceM = Infinity;
     let scanned = 0;
     for (const [aId, neighbors] of raw?.adjacency || []) {
       const a = raw.nodes.get(String(aId));
@@ -1151,23 +1308,33 @@
         const b = raw.nodes.get(String(bId));
         if (!b) continue;
         const hit = projectPointToSegmentM(P, a, b);
-        if (hit && hit.distanceM <= maxM && (!best || hit.distanceM < best.distanceM)) {
+        if (hit && hit.distanceM <= maxM) {
           const forwardMeta = raw.adjacency.get(String(aId))?.get(String(bId)) || null;
           const reverseMeta = raw.adjacency.get(String(bId))?.get(String(aId)) || null;
           const meta = forwardMeta || reverseMeta || null;
-          best = Object.assign({}, hit, {
-            aId: String(aId),
-            bId: String(bId),
-            a, b,
+          const tags = meta?.tags || {};
+          const candidate = Object.assign({}, hit, {
+            aId: String(aId), bId: String(bId), a, b,
             forwardMeta, reverseMeta,
-            wayId: meta?.wayId || null,
-            tags: meta?.tags || {}
+            wayId: meta?.wayId || null, tags,
+            pedestrianRank: pedestrianSnapRank(tags),
+            pedestrianLabel: pedestrianSnapLabel(tags)
           });
+          choices.push(candidate);
+          nearestDistanceM = Math.min(nearestDistanceM, hit.distanceM);
         }
         scanned += 1;
         if (scanned % 600 === 0) await cooperativeYield();
       }
     }
+    if (!choices.length) return null;
+    const slackM = Math.max(0, Number(options.pedestrianSnapSlackM ?? config.pedestrianSnapSlackM ?? 12));
+    const eligible = choices.filter((c) => c.distanceM <= nearestDistanceM + slackM + 1e-9);
+    eligible.sort((x, y) => (x.pedestrianRank - y.pedestrianRank) || (x.distanceM - y.distanceM));
+    const best = eligible[0] || choices.sort((x, y) => x.distanceM - y.distanceM)[0];
+    best.geometricNearestDistanceM = nearestDistanceM;
+    best.preferenceSlackM = slackM;
+    best.extraSnapDistanceM = Math.max(0, best.distanceM - nearestDistanceM);
     return best;
   }
 
@@ -1189,7 +1356,11 @@
       sourceB: bId,
       sourceWayId: sourceMeta.wayId || hit.wayId || null,
       sourceHighway: normalizedTag(sourceMeta.tags?.highway || hit.tags?.highway || '') || null,
-      projectionT: Number(hit.t || 0)
+      projectionT: Number(hit.t || 0),
+      pedestrianRank: Number.isFinite(Number(hit.pedestrianRank)) ? Number(hit.pedestrianRank) : pedestrianSnapRank(hit.tags || {}),
+      pedestrianLabel: hit.pedestrianLabel || pedestrianSnapLabel(hit.tags || {}),
+      geometricNearestDistanceM: Number.isFinite(Number(hit.geometricNearestDistanceM)) ? Number(hit.geometricNearestDistanceM) : Number(hit.distanceM || 0),
+      extraSnapDistanceM: Number(hit.extraSnapDistanceM || 0)
     };
     if (da <= endpointToleranceM) return Object.assign({ id: aId, node: a }, common, { snapType: 'edge-endpoint', distanceM: haversineM(options.inputPoint || projected, a) });
     if (db <= endpointToleranceM) return Object.assign({ id: bId, node: b }, common, { snapType: 'edge-endpoint', distanceM: haversineM(options.inputPoint || projected, b) });
@@ -1248,7 +1419,7 @@
       if (graphCache.size > 4) graphCache.delete(graphCache.keys().next().value);
     }
 
-    options.onProgress?.({ stage: "graph-snap", message: "正在把 A、B 投影到最近的可步行 edge（不是只找最近節點）…" });
+    options.onProgress?.({ stage: "graph-snap", message: "正在把 A、B 投影到附近最適合行人的可步行 edge…" });
     // v9.0.0-dev6: snap terminals to the nearest walkable EDGE and split that
     // edge with a virtual terminal.  The old nearest-node snap could put A on
     // a parallel road even when a riverbank cycleway passed only a few metres
@@ -1376,9 +1547,12 @@
       fineEdges: graph.edges.size,
       maxFineEdgeM: graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM,
       pathMaxFineEdgeM: graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM,
-      snapA: { distanceM: snapA.distanceM, nodeId: snapA.id, snapType: snapA.snapType || "node", highway: snapA.sourceHighway || null, wayId: snapA.sourceWayId || null },
-      snapB: { distanceM: snapB.distanceM, nodeId: snapB.id, snapType: snapB.snapType || "node", highway: snapB.sourceHighway || null, wayId: snapB.sourceWayId || null },
+      snapA: { distanceM: snapA.distanceM, nodeId: snapA.id, snapType: snapA.snapType || "node", highway: snapA.sourceHighway || null, wayId: snapA.sourceWayId || null, pedestrianRank: snapA.pedestrianRank ?? null, pedestrianLabel: snapA.pedestrianLabel || null, geometricNearestDistanceM: snapA.geometricNearestDistanceM ?? snapA.distanceM, extraSnapDistanceM: snapA.extraSnapDistanceM || 0 },
+      snapB: { distanceM: snapB.distanceM, nodeId: snapB.id, snapType: snapB.snapType || "node", highway: snapB.sourceHighway || null, wayId: snapB.sourceWayId || null, pedestrianRank: snapB.pedestrianRank ?? null, pedestrianLabel: snapB.pedestrianLabel || null, geometricNearestDistanceM: snapB.geometricNearestDistanceM ?? snapB.distanceM, extraSnapDistanceM: snapB.extraSnapDistanceM || 0 },
       fastestSeconds: fastestTime,
+      fastestDistanceM: fastestPath.distanceM,
+      minSunEstimatedDirectSunSeconds: minSun.path?.directSunSeconds ?? null,
+      minSunDistanceM: minSun.path?.distanceM ?? null,
       detourPct,
       detourLimitSeconds: detourLimitS,
       searchExpandedStates: minSun.expanded,
@@ -1409,6 +1583,7 @@
     buildGraphForAB,
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
+    replayPolyline,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -1434,8 +1609,11 @@
       edgeGeometryFor,
       nearestGraphEdge,
       diagnosePolyline,
+      replayPolyline,
       primaryHighway,
       highwayFamily,
+      pedestrianSnapRank,
+      pedestrianSnapLabel,
       graphStats,
       MinHeap
     }
