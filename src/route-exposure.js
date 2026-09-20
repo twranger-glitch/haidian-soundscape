@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev4 Graph Reveal + Drag-safe Endpoints
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev5 Fine-grained Shade Routing
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -7,12 +7,12 @@
  * - nearby realtime heat-risk context for near-now departures;
  * - guided two-mode UX plus A→B candidate comparison with optional user-drawn route.
  *
- * Important: this is candidate-route scoring, not full-network shade-optimal routing.
+ * Important: v9 uses local OSM pedestrian-graph routing plus final high-precision ShadeMap scoring; provider/manual candidates remain for comparison.
  */
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev4";
+  const VERSION = "v9.0.0-dev5";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1225,7 +1225,7 @@
     const tag = (key) => Array.isArray(tags[key]) ? tags[key].join(" / ") : "";
     const shade = edge?.shadeEstimate;
     const shadeText = shade && Number.isFinite(shade.directSunFraction)
-      ? `<br>graph 估計：直接日照 ${Math.round(shade.directSunFraction * 100)}%・遮蔭 ${Math.round((shade.shadedFraction || 0) * 100)}%・${Math.round(shade.samples || 0)} samples`
+      ? `<br>graph 估計：直接日照 ${Math.round(shade.directSunFraction * 100)}%・遮蔭 ${Math.round((shade.shadedFraction || 0) * 100)}%・約 ${Number(shade.directSunSeconds || 0).toFixed(1)} 秒日照成本・${Math.round(shade.samples || 0)} samples`
       : "<br>此 edge 尚未被 shade search 評估";
     return `<b>OSM Graph edge ${escapeHtml(edge?.id || "")}</b><br>` +
       `highway=${escapeHtml(edge?.highway || "unknown")}・長度 ${Math.round(edge?.distanceM || 0)} m` +
@@ -1385,7 +1385,7 @@
     const graphDebugAvailable = Boolean(bundle.graphDebugAvailable);
     let graphNote = "";
     if (graphDiag) {
-      graphNote = `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。最長 contracted edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>v9 OSM Graph 已啟用 · 細緻搜尋</b><span>原始決策 graph ${Math.round(graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.contractedEdges || 0)} edge，已切細成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge；目前最長 fine edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋模式：距離上限內最小直接日照（Pareto labels）；已展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態、評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -1393,7 +1393,7 @@
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${graphNote}${manualState}${qualityNote}${rows}
-      <div class="re-method-note">評選以「直接日照時間」為核心，不以提高遮蔭百分比為目的。走進無尾巷再原路走回、或反向重走同一條實體走廊會先淘汰；一般街廓轉彎與合理側向繞行仍可參加比較。</div>
+      <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
 

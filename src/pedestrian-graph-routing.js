@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev4 Responsive
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev5 Fine-grained Shade Routing
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev4";
+  const VERSION = "v9.0.0-dev5";
 
   const DEFAULTS = {
     enabled: true,
@@ -27,12 +27,16 @@
     snapMaxM: 120,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
-    maxExpandedStates: 5000,
-    maxShadeEdgeEvaluations: 700,
-    timeBucketSec: 60,
-    shadeTimeBucketSec: 120,
-    shadeSampleSpacingM: 30,
-    shadeMaxSamplesPerEdge: 8,
+    maxFineNodes: 12000,
+    maxExpandedStates: 12000,
+    maxShadeEdgeEvaluations: 1400,
+    timeBucketSec: 30,
+    shadeTimeBucketSec: 60,
+    maxFineEdgeM: 85,
+    pathMaxFineEdgeM: 55,
+    maxLabelsPerState: 5,
+    shadeSampleSpacingM: 18,
+    shadeMaxSamplesPerEdge: 5,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -413,6 +417,101 @@
     return { nodes, adjacency, edges, terminals, rawNodeCount: raw.nodes.size, rawSegmentCount: raw.rawSegments };
   }
 
+  function interpolatePoint(a, b, fraction) {
+    const f = Math.max(0, Math.min(1, Number(fraction) || 0));
+    return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
+  }
+
+  function splitGeometryByMaxLength(geometry, maxEdgeM) {
+    const pts = (geometry || []).map(asLatLng).filter(Boolean);
+    if (pts.length < 2) return [];
+    const limit = Math.max(15, Number(maxEdgeM) || 80);
+    const chunks = [];
+    let current = [{ lat: pts[0].lat, lng: pts[0].lng }];
+    let currentLen = 0;
+
+    for (let i = 1; i < pts.length; i += 1) {
+      let start = { lat: pts[i - 1].lat, lng: pts[i - 1].lng };
+      const end = { lat: pts[i].lat, lng: pts[i].lng };
+      let remaining = haversineM(start, end);
+      let guard = 0;
+      while (remaining > 0.01 && guard++ < 10000) {
+        const room = limit - currentLen;
+        if (remaining <= room + 0.01) {
+          current.push(end);
+          currentLen += remaining;
+          remaining = 0;
+        } else {
+          const cut = interpolatePoint(start, end, room / remaining);
+          current.push(cut);
+          if (current.length >= 2) chunks.push(current);
+          current = [cut];
+          currentLen = 0;
+          start = cut;
+          remaining = haversineM(start, end);
+        }
+      }
+    }
+    if (current.length >= 2 && routeDistanceM(current) > 0.2) chunks.push(current);
+    return chunks;
+  }
+
+  function refineGraph(contracted, options = {}) {
+    const generalMax = Math.max(30, Number(options.maxFineEdgeM || config.maxFineEdgeM || 85));
+    const pathMax = Math.max(25, Number(options.pathMaxFineEdgeM || config.pathMaxFineEdgeM || 55));
+    const nodes = new Map();
+    const adjacency = new Map();
+    const edges = new Map();
+    let virtualCounter = 0;
+    let edgeCounter = 0;
+
+    function addNode(id, point, meta = {}) {
+      const key = String(id);
+      if (!nodes.has(key)) nodes.set(key, Object.assign({ id: key, lat: point.lat, lng: point.lng }, meta));
+      if (!adjacency.has(key)) adjacency.set(key, []);
+      return key;
+    }
+    function addEdge(aId, bId, geometry, source) {
+      const distanceM = routeDistanceM(geometry);
+      if (!(distanceM > 0.2)) return;
+      const id = `f${++edgeCounter}`;
+      const edge = {
+        id, a: String(aId), b: String(bId), geometry: geometry.map((p) => ({ lat: p.lat, lng: p.lng })),
+        distanceM, wayIds: (source.wayIds || []).slice(), tagsSummary: source.tagsSummary || {},
+        sourceEdgeId: source.id, sourceDistanceM: source.distanceM
+      };
+      edges.set(id, edge);
+      adjacency.get(String(aId)).push({ edgeId: id, to: String(bId) });
+      adjacency.get(String(bId)).push({ edgeId: id, to: String(aId) });
+    }
+
+    for (const [id, node] of contracted.nodes) addNode(id, node, { sourceNodeId: id });
+
+    for (const edge of contracted.edges.values()) {
+      const family = highwayFamily(primaryHighway(edge));
+      const limit = family === "path" ? pathMax : generalMax;
+      const chunks = splitGeometryByMaxLength(edge.geometry, limit);
+      if (!chunks.length) continue;
+      let fromId = String(edge.a);
+      for (let ci = 0; ci < chunks.length; ci += 1) {
+        const chunk = chunks[ci];
+        const isLast = ci === chunks.length - 1;
+        const endPoint = chunk[chunk.length - 1];
+        const toId = isLast ? String(edge.b) : `v:${edge.id}:${++virtualCounter}`;
+        if (!isLast) addNode(toId, endPoint, { virtual: true, sourceEdgeId: edge.id });
+        addEdge(fromId, toId, chunk, edge);
+        fromId = toId;
+      }
+    }
+
+    return {
+      nodes, adjacency, edges, terminals: contracted.terminals,
+      rawNodeCount: contracted.rawNodeCount, rawSegmentCount: contracted.rawSegmentCount,
+      contractedNodeCount: contracted.nodes.size, contractedEdgeCount: contracted.edges.size,
+      refinement: { generalMaxEdgeM: generalMax, pathMaxEdgeM: pathMax }
+    };
+  }
+
   class MinHeap {
     constructor(compare) { this.data = []; this.compare = compare || ((a, b) => a.priority - b.priority); }
     get size() { return this.data.length; }
@@ -633,28 +732,71 @@
     const toEnd = options.fastestToEnd?.dist || options.fastestToEnd || new Map();
     const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
     const provider = options.edgeSunProvider || defaultEdgeSunProvider;
-    const timeBucketSec = Math.max(20, Number(options.timeBucketSec || config.timeBucketSec));
+    const timeBucketSec = Math.max(15, Number(options.timeBucketSec || config.timeBucketSec));
     const shadeTimeBucketSec = Math.max(30, Number(options.shadeTimeBucketSec || config.shadeTimeBucketSec));
-    const maxStates = Math.max(200, Number(options.maxExpandedStates || config.maxExpandedStates));
-    const maxShadeEvals = Math.max(50, Number(options.maxShadeEdgeEvaluations || config.maxShadeEdgeEvaluations));
+    const maxStates = Math.max(500, Number(options.maxExpandedStates || config.maxExpandedStates));
+    const maxShadeEvals = Math.max(100, Number(options.maxShadeEdgeEvaluations || config.maxShadeEdgeEvaluations));
+    const maxLabelsPerState = Math.max(2, Math.min(12, Number(options.maxLabelsPerState || config.maxLabelsPerState || 5)));
     const shadeCache = new Map();
     let shadeEvals = 0;
     let expanded = 0;
+    let dominanceRejected = 0;
+    let dominanceRemoved = 0;
     const cooperativeYield = makeCooperativeYielder(options);
     const yieldEveryExpanded = Math.max(2, Number(options.yieldEveryExpanded || config.yieldEveryExpanded || 8));
 
+    // Resource-constrained label-setting search.  A single "best sun" value per
+    // node/time bucket can incorrectly erase a slightly sunnier-but-earlier
+    // arrival that later reaches a much shadier corridor.  Keep a tiny Pareto
+    // frontier of (walk time, direct-sun time) labels instead.
     const heap = new MinHeap((a, b) => (a.sunS - b.sunS) || (a.walkS - b.walkS));
-    const startLabel = { node: String(startId), walkS: 0, sunS: 0, parent: null, viaEdgeId: null };
+    const startLabel = { node: String(startId), walkS: 0, sunS: 0, parent: null, viaEdgeId: null, active: true };
+    const labelsByState = new Map();
+
+    function stateKey(label) {
+      return `${label.node}|${Math.floor(label.walkS / timeBucketSec)}`;
+    }
+    function weaklyDominates(a, b) {
+      return a.walkS <= b.walkS + 0.25 && a.sunS <= b.sunS + 0.05;
+    }
+    function insertLabel(label) {
+      const key = stateKey(label);
+      const list = labelsByState.get(key) || [];
+      for (const old of list) {
+        if (old.active !== false && weaklyDominates(old, label)) {
+          dominanceRejected += 1;
+          return false;
+        }
+      }
+      const kept = [];
+      for (const old of list) {
+        if (old.active !== false && weaklyDominates(label, old)) {
+          old.active = false;
+          dominanceRemoved += 1;
+        } else if (old.active !== false) kept.push(old);
+      }
+      kept.push(label);
+      kept.sort((a, b) => (a.sunS - b.sunS) || (a.walkS - b.walkS));
+      while (kept.length > maxLabelsPerState) {
+        const dropped = kept.pop();
+        if (dropped && dropped !== label) dropped.active = false;
+        else if (dropped === label) { label.active = false; dominanceRejected += 1; }
+      }
+      labelsByState.set(key, kept);
+      return label.active !== false;
+    }
+
+    insertLabel(startLabel);
     heap.push(startLabel);
-    const bestByState = new Map([[`${startLabel.node}|0`, 0]]);
     let bestGoal = null;
 
     async function sunForEdge(edge, fromId, walkS) {
-      const atMs = departure.getTime() + (walkS + edge.distanceM / speedMps / 2) * 1000;
+      const edgeTime = edge.distanceM / speedMps;
+      const atMs = departure.getTime() + (walkS + edgeTime / 2) * 1000;
       const bucket = Math.floor(atMs / 1000 / shadeTimeBucketSec);
       const key = `${edge.id}|${fromId}|${bucket}`;
       if (shadeCache.has(key)) return shadeCache.get(key);
-      if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 日照評估已達安全上限 ${maxShadeEvals} 條 edge；請縮短 A→B 距離或提高繞路限制的精準度。`);
+      if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 日照評估已達安全上限 ${maxShadeEvals} 條 edge；請縮短 A→B 距離或調高 graph 安全上限。`);
       shadeEvals += 1;
       const promise = Promise.resolve(provider(edge, fromId, new Date(atMs), {
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
@@ -665,33 +807,36 @@
       shadeCache.set(key, promise);
       try {
         const result = await promise;
-        const debug = lastShadeDebug.get(edge.id) || { count: 0, samples: 0, directSunFractionSum: 0, shadedFractionSum: 0, lastAt: null };
+        const sunFraction = clamp(result?.directSunFraction, 0, 1, 0);
+        const debug = lastShadeDebug.get(edge.id) || { count: 0, samples: 0, directSunFractionSum: 0, shadedFractionSum: 0, directSunSecondsSum: 0, lastAt: null };
         debug.count += 1;
         debug.samples += Number(result?.samples || 0);
-        debug.directSunFractionSum += Number(result?.directSunFraction || 0);
+        debug.directSunFractionSum += sunFraction;
         debug.shadedFractionSum += Number(result?.shadedFraction || 0);
+        debug.directSunSecondsSum += edgeTime * sunFraction;
+        debug.lastDirectSunSeconds = edgeTime * sunFraction;
         debug.lastAt = new Date(atMs).toISOString();
         debug.lastFromId = String(fromId);
         lastShadeDebug.set(edge.id, debug);
         return result;
+      } catch (error) {
+        shadeCache.delete(key);
+        throw error;
       }
-      catch (error) { shadeCache.delete(key); throw error; }
     }
 
     while (heap.size) {
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
       const cur = heap.pop();
+      if (!cur || cur.active === false) continue;
       expanded += 1;
       if (expanded > maxStates) throw new Error(`OSM Graph 搜尋已達 ${maxStates} 個狀態安全上限。`);
       if (expanded % yieldEveryExpanded === 0) await cooperativeYield();
       if (expanded === 1 || expanded % Math.max(1, Number(config.progressEvery || 20)) === 0) {
-        options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在搜尋步行 graph：${expanded} 個狀態／${shadeEvals} 條日照 edge` });
+        options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在做細緻 graph 搜尋：${expanded} 個狀態／${shadeEvals} 條 edge 日照` });
       }
 
-      if (bestGoal && (cur.sunS > bestGoal.sunS + 0.01 || (Math.abs(cur.sunS - bestGoal.sunS) < 0.01 && cur.walkS >= bestGoal.walkS))) {
-        // Heap is lexicographic (sun, time); nothing after this can beat the goal.
-        break;
-      }
+      if (bestGoal && (cur.sunS > bestGoal.sunS + 0.01 || (Math.abs(cur.sunS - bestGoal.sunS) < 0.01 && cur.walkS >= bestGoal.walkS))) break;
       if (cur.node === String(endId)) {
         bestGoal = cur;
         continue;
@@ -700,30 +845,28 @@
       const outgoing = graph.adjacency.get(cur.node) || [];
       for (const ref of outgoing) {
         const next = String(ref.to);
-        if (pathHasNode(cur, next)) continue; // simple path: no dead-end in/out or loop games.
+        if (pathHasNode(cur, next)) continue; // simple path: no shaded dead-end score games.
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
         const edgeTime = edge.distanceM / speedMps;
         const nextWalk = cur.walkS + edgeTime;
         const optimisticRemain = Number(toEnd.get(next));
         if (!Number.isFinite(optimisticRemain)) continue;
+        // Exact resource bound: only prune when even the shortest possible
+        // continuation would exceed the user's detour cap.
         if (Number.isFinite(detourLimitS) && nextWalk + optimisticRemain > detourLimitS + 0.5) continue;
 
         const shade = await sunForEdge(edge, cur.node, cur.walkS);
         if (shadeEvals > 0 && shadeEvals % 6 === 0) await cooperativeYield();
         const sunFraction = clamp(shade?.directSunFraction, 0, 1, 0);
         const nextSun = cur.sunS + edgeTime * sunFraction;
-        const bucket = Math.floor(nextWalk / timeBucketSec);
-        const stateKey = `${next}|${bucket}`;
-        const previous = bestByState.get(stateKey);
-        if (previous != null && previous <= nextSun + 0.05) continue;
-        bestByState.set(stateKey, nextSun);
-        heap.push({ node: next, walkS: nextWalk, sunS: nextSun, parent: cur, viaEdgeId: edge.id });
+        const label = { node: next, walkS: nextWalk, sunS: nextSun, parent: cur, viaEdgeId: edge.id, active: true };
+        if (insertLabel(label)) heap.push(label);
       }
     }
 
-    if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheSize: shadeCache.size };
-    return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheSize: shadeCache.size };
+    if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved };
+    return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved };
   }
 
   function routeSignature(points) {
@@ -816,6 +959,8 @@
           samples: shade.samples,
           directSunFraction: shade.count ? shade.directSunFractionSum / shade.count : null,
           shadedFraction: shade.count ? shade.shadedFractionSum / shade.count : null,
+          directSunSeconds: shade.count ? shade.directSunSecondsSum / shade.count : null,
+          lastDirectSunSeconds: shade.lastDirectSunSeconds,
           lastAt: shade.lastAt
         } : null
       });
@@ -961,9 +1106,17 @@
 
     options.onProgress?.({ stage: "graph", message: "正在建立本地 pedestrian graph…" });
     await cooperativeYield(true);
-    const graph = contractGraph(cached.raw, [snapA.id, snapB.id]);
+    const contracted = contractGraph(cached.raw, [snapA.id, snapB.id]);
     await cooperativeYield(true);
-    if (graph.nodes.size > Number(config.maxContractedNodes || 5000)) throw new Error(`步行 graph 有 ${graph.nodes.size} 個交會節點，超過目前安全上限。`);
+    if (contracted.nodes.size > Number(config.maxContractedNodes || 5000)) throw new Error(`步行 graph 有 ${contracted.nodes.size} 個交會節點，超過目前安全上限。`);
+
+    options.onProgress?.({ stage: "graph-refine", message: "正在把過長道路 edge 切細，保留河堤/步道的局部日照差異…" });
+    const graph = refineGraph(contracted, {
+      maxFineEdgeM: options.maxFineEdgeM || config.maxFineEdgeM,
+      pathMaxFineEdgeM: options.pathMaxFineEdgeM || config.pathMaxFineEdgeM
+    });
+    await cooperativeYield(true);
+    if (graph.nodes.size > Number(config.maxFineNodes || 12000)) throw new Error(`細緻步行 graph 有 ${graph.nodes.size} 個節點，超過目前安全上限。`);
     lastGraphDebug = { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint, builtAt: Date.now() };
     return { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint };
   }
@@ -1023,6 +1176,7 @@
       canopyTimeoutMs: options.canopyTimeoutMs,
       maxExpandedStates: options.maxExpandedStates,
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
+      maxLabelsPerState: options.maxLabelsPerState,
       cooperativeYieldMs: options.cooperativeYieldMs,
       yieldEveryExpanded: options.yieldEveryExpanded,
       onProgress: options.onProgress,
@@ -1062,8 +1216,12 @@
       bbox: built.bbox,
       rawNodes: graph.rawNodeCount,
       rawSegments: graph.rawSegmentCount,
-      contractedNodes: graph.nodes.size,
-      contractedEdges: graph.edges.size,
+      contractedNodes: graph.contractedNodeCount || graph.nodes.size,
+      contractedEdges: graph.contractedEdgeCount || graph.edges.size,
+      fineNodes: graph.nodes.size,
+      fineEdges: graph.edges.size,
+      maxFineEdgeM: graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM,
+      pathMaxFineEdgeM: graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM,
       snapA: { distanceM: snapA.distanceM, nodeId: snapA.id },
       snapB: { distanceM: snapB.distanceM, nodeId: snapB.id },
       fastestSeconds: fastestTime,
@@ -1071,7 +1229,10 @@
       detourLimitSeconds: detourLimitS,
       searchExpandedStates: minSun.expanded,
       shadeEdgeEvaluations: minSun.shadeEvals,
+      dominanceRejected: minSun.dominanceRejected || 0,
+      dominanceRemoved: minSun.dominanceRemoved || 0,
       candidateCount: candidates.length,
+      searchMode: "resource-constrained-pareto",
       responsiveScheduling: true,
       graphStats: graphStats(graph)
     };
@@ -1100,6 +1261,8 @@
       parseOverpass,
       buildRawGraph,
       contractGraph,
+      refineGraph,
+      splitGeometryByMaxLength,
       nearestNode,
       nearestNodeResponsive,
       dijkstraTimes,
