@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev3 Candidate Compare
+ * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev4 Route Snap
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,6 +12,8 @@
 (function () {
   "use strict";
 
+  const VERSION = "v8.9.0-dev4";
+
   const DEFAULTS = {
     sampleSpacingM: 10,
     walkingSpeedKmh: 4.5,
@@ -21,11 +23,12 @@
     routingBase: "https://routing.openstreetmap.de/routed-foot/route/v1/driving",
     routingTimeoutMs: 15000,
     routingAlternatives: true,
-    detourCapPct: 20,
+    detourCapPct: 30,
     maxDrawPoints: 80,
     maxRouteSamples: 420,
     autoEnableShade: true,
     fitCandidateRoute: true,
+    manualRouteSnapToleranceM: 120,
     manualEndpointToleranceM: 120,
     exploreCandidates: true,
     exploreMaxRoutes: 6,
@@ -115,6 +118,56 @@
     let total = 0;
     for (let i = 1; i < points.length; i += 1) total += haversineM(points[i - 1], points[i]);
     return total;
+  }
+
+  function projectPointToSegment(target, a, b, segmentIndex = 0) {
+    const P = asLatLng(target);
+    const A = asLatLng(a);
+    const B = asLatLng(b);
+    if (!P || !A || !B) return null;
+    const lat0 = ((P.lat + A.lat + B.lat) / 3) * Math.PI / 180;
+    const mx = 111320 * Math.max(0.2, Math.cos(lat0));
+    const my = 110540;
+    const bx = (B.lng - A.lng) * mx;
+    const by = (B.lat - A.lat) * my;
+    const px = (P.lng - A.lng) * mx;
+    const py = (P.lat - A.lat) * my;
+    const denom = bx * bx + by * by;
+    const t = denom > 1e-9 ? Math.max(0, Math.min(1, (px * bx + py * by) / denom)) : 0;
+    const point = interpolateLatLng(A, B, t);
+    return {
+      point,
+      distanceM: haversineM(P, point),
+      segmentIndex,
+      t,
+      position: segmentIndex + t
+    };
+  }
+
+  function nearestPointOnRoute(routePoints, target) {
+    const route = (routePoints || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) return null;
+    let best = null;
+    for (let i = 0; i < route.length - 1; i += 1) {
+      const hit = projectPointToSegment(target, route[i], route[i + 1], i);
+      if (!hit) continue;
+      if (!best || hit.distanceM < best.distanceM) best = hit;
+    }
+    return best;
+  }
+
+  function routeSliceBetweenSnaps(routePoints, startSnap, endSnap) {
+    const route = (routePoints || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2 || !startSnap || !endSnap) return [];
+    if (startSnap.position > endSnap.position) return [];
+    const points = [startSnap.point];
+    for (let i = startSnap.segmentIndex + 1; i <= endSnap.segmentIndex; i += 1) {
+      const vertex = route[i];
+      if (vertex && haversineM(points[points.length - 1], vertex) > 0.2) points.push(vertex);
+    }
+    if (haversineM(points[points.length - 1], endSnap.point) > 0.2) points.push(endSnap.point);
+    else points[points.length - 1] = endSnap.point;
+    return points;
   }
 
   function buildSampleSegments(points, spacingM) {
@@ -456,7 +509,7 @@
     const summary = aggregateExposure(results, speedMps);
     const heat = options.includeHeat === false ? null : await maybeHeatContext(route, departure, serial);
     return {
-      version: "v8.9.0-dev3",
+      version: VERSION,
       route,
       departure: departure.toISOString(),
       sampleSpacingM: spacingM,
@@ -773,37 +826,73 @@
   }
 
   function buildManualCandidateFromRoute(routePoints, a, b, speedMps) {
-    const route = Array.isArray(routePoints) ? routePoints.map(asLatLng).filter(Boolean) : [];
+    let route = Array.isArray(routePoints) ? routePoints.map(asLatLng).filter(Boolean) : [];
     if (route.length < 2) return { available: false, reason: "none" };
     const A = asLatLng(a);
     const B = asLatLng(b);
     if (!A || !B) return { available: true, matched: false, reason: "missing-endpoints" };
-    const first = route[0];
-    const last = route[route.length - 1];
-    const forward = { startGapM: haversineM(first, A), endGapM: haversineM(last, B), reversed: false };
-    const reverse = { startGapM: haversineM(last, A), endGapM: haversineM(first, B), reversed: true };
-    const best = (forward.startGapM + forward.endGapM) <= (reverse.startGapM + reverse.endGapM) ? forward : reverse;
-    const tolerance = clamp(config.manualEndpointToleranceM, 20, 220, 120);
-    if (best.startGapM > tolerance || best.endGapM > tolerance) {
-      return { available: true, matched: false, toleranceM: tolerance, ...best };
+
+    // dev4: match A/B to the entire hand-drawn polyline, not only its first/last
+    // vertices. A user may deliberately draw beyond A or B (for example along a
+    // river levee); only the A→B portion should be compared.
+    let snapA = nearestPointOnRoute(route, A);
+    let snapB = nearestPointOnRoute(route, B);
+    if (!snapA || !snapB) return { available: true, matched: false, reason: "snap-failed" };
+
+    let reversed = false;
+    if (snapA.position > snapB.position) {
+      route = route.slice().reverse();
+      reversed = true;
+      snapA = nearestPointOnRoute(route, A);
+      snapB = nearestPointOnRoute(route, B);
     }
-    const rawPoints = best.reversed ? route.slice().reverse() : route.slice();
-    const points = rawPoints.slice();
-    // Snap short endpoint gaps to the actual A/B used for this comparison.
-    // This prevents a hand-drawn route from disappearing merely because the
-    // user tapped A or B a few metres away from the first/last drawn vertex.
-    if (haversineM(points[0], A) > 2) points.unshift({ lat: A.lat, lng: A.lng });
+
+    const tolerance = clamp(
+      config.manualRouteSnapToleranceM ?? config.manualEndpointToleranceM,
+      20,
+      300,
+      120
+    );
+    const startGapM = snapA?.distanceM ?? Infinity;
+    const endGapM = snapB?.distanceM ?? Infinity;
+    if (startGapM > tolerance || endGapM > tolerance) {
+      return {
+        available: true,
+        matched: false,
+        reason: "route-too-far-from-endpoints",
+        toleranceM: tolerance,
+        startGapM,
+        endGapM,
+        reversed,
+        matchMode: "nearest-on-polyline"
+      };
+    }
+
+    const middle = routeSliceBetweenSnaps(route, snapA, snapB);
+    if (middle.length < 2) {
+      return { available: true, matched: false, reason: "route-slice-too-short", toleranceM: tolerance };
+    }
+
+    const points = middle.slice();
+    // Connect the actual selected A/B to the nearest points on the user's line.
+    // These short connectors are included in distance/exposure, so comparison is
+    // still apples-to-apples with provider routes that start exactly at A and B.
+    if (haversineM(A, points[0]) > 2) points.unshift({ lat: A.lat, lng: A.lng });
     else points[0] = { lat: A.lat, lng: A.lng };
     if (haversineM(points[points.length - 1], B) > 2) points.push({ lat: B.lat, lng: B.lng });
     else points[points.length - 1] = { lat: B.lat, lng: B.lng };
+
     const distanceM = routeDistanceM(points);
     const safeSpeed = Math.max(0.4, Number(speedMps) || config.walkingSpeedKmh / 3.6);
     return {
       available: true,
       matched: true,
       toleranceM: tolerance,
-      startGapM: best.startGapM,
-      endGapM: best.endGapM,
+      startGapM,
+      endGapM,
+      reversed,
+      matchMode: "nearest-on-polyline",
+      trimmed: true,
       candidate: {
         id: "manual-drawn",
         kind: "manual",
@@ -943,11 +1032,11 @@
 
     let manualState = '';
     if (bundle.manualMatch?.matched && bundle.manualEligible) {
-      manualState = '<div class="re-note re-note--manual">✓ 你的紅色手繪路線已正式加入比較；可直接點「我的手繪路線」查看。</div>';
+      manualState = '<div class="re-note re-note--manual">✓ 已在你的整條手繪線上對準 A、B，並自動截取 A→B 區段加入比較；畫在 A/B 外面的延伸不會被算進繞路。</div>';
     } else if (bundle.manualMatch?.matched && !bundle.manualEligible) {
       manualState = '<div class="re-note re-note--manual">你的手繪路線已完成分析，但超過目前設定的繞路上限；仍保留在下方供你點選比較。</div>';
     } else if (bundle.manualMatch?.available && !bundle.manualMatch?.matched) {
-      manualState = `<div class="re-note">偵測到手繪路線，但它的起終點和目前 A、B 距離較遠（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），因此沒有當成同一趟 A→B。</div>`;
+      manualState = `<div class="re-note">偵測到手繪路線，但整條線本身仍沒有靠近目前的 A 或 B（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），因此沒有當成同一趟 A→B。</div>`;
     }
 
     return `<section class="re-candidates">
@@ -1191,7 +1280,7 @@
         model: item.model
       }))
     });
-    downloadBlob("haidian-route-exposure-v8.9.0-dev3.json", JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
+    downloadBlob(`haidian-route-exposure-${VERSION}.json`, JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }
 
   function exportCsv() {
@@ -1210,7 +1299,7 @@
         Number.isFinite(item.model.solar?.altitudeDeg) ? item.model.solar.altitudeDeg.toFixed(2) : ""
       ]);
     }
-    downloadBlob("haidian-route-exposure-v8.9.0-dev3.csv", rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
+    downloadBlob(`haidian-route-exposure-${VERSION}.csv`, rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
   }
 
   function addStyles() {
@@ -1244,7 +1333,7 @@
     node.className = "re-panel";
     node.setAttribute("aria-label", "路線曝曬分析");
     node.innerHTML = `
-      <header class="re-head"><div><small>v8.9.0-dev2・Route Exposure</small><h2>路線曝曬分析</h2></div><button type="button" class="re-close" data-re-close aria-label="關閉">${icon.close}</button></header>
+      <header class="re-head"><div><small>${VERSION}・Route Exposure</small><h2>路線曝曬分析</h2></div><button type="button" class="re-close" data-re-close aria-label="關閉">${icon.close}</button></header>
       <div class="re-body">
         <section data-re-home>
           <p class="re-home-intro">先選你現在要做的事。兩種模式會分開顯示，不需要猜哪一顆按鈕先按。</p>
@@ -1454,7 +1543,7 @@
   }
 
   window.HaidianRouteExposure = {
-    version: "v8.9.0-dev3",
+    version: VERSION,
     get config() { return Object.assign({}, config); },
     analyzeRoute,
     fetchRouteCandidates,
