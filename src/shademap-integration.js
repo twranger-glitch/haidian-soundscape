@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.7.0
+ * Haidian Soundscape — ShadeMap × Meta CHMv2 live integration v8.7.1
  *
  * Research modes:
  *   full      = live Meta CHMv2 canopy surface + buildings
@@ -70,8 +70,21 @@
     buildingWarmPrefetchDelayMs: 250,
     buildingFetchClientTimeoutMs: 12000,
     buildingUpgradeDelayMs: 80,
-    metaProgressiveFirstActivationOnly: true,
+    // v8.7.1 forest-performance: use progressive rendering on every normal
+    // viewport navigation, not only the first activation. Upgrade/full phases
+    // explicitly bypass progressive mode to avoid rebuild loops.
+    metaProgressiveFirstActivationOnly: false,
+    metaProgressiveMinTiles: 12,
+    metaProgressiveBackgroundConcurrency: 3,
+    metaProgressiveBackgroundStartDelayMs: 160,
     metaProgressiveUpgradeDelayMs: 120,
+    // Yield while encoding CHMv2+DEM Terrarium tiles so dense forest views do
+    // not monopolize the browser main thread during a 100+ tile background fill.
+    metaSurfaceEncodeYieldRows: 64,
+    // GeoTIFF.js can decode compressed COG blocks in Web Workers. Keep the pool
+    // intentionally small so decoding leaves CPU headroom for Leaflet/WebGL.
+    metaGeoTiffWorkerPoolEnabled: true,
+    metaGeoTiffWorkerPoolSize: 2,
     metaMaxCachedCogs: 16,
     metaBlendBareTerrain: true,
     metaNoDataFallback: "bare-dem",
@@ -251,6 +264,12 @@
     groundCanopyShadeMaxShadowLengthM: 120,
     groundCanopyShadeMinSolarAltitudeDeg: 2.5,
     groundCanopyShadeSampleStepPx: 2,
+    // v8.7.1 forest-performance: bound the expensive dense-canopy receiver
+    // renderer and cooperatively yield between row batches. Final quality stays
+    // unchanged; only scheduling is throttled.
+    groundCanopyShadeMaxConcurrentTiles: 2,
+    groundCanopyShadeYieldRows: 8,
+    canopyOverlayYieldRows: 32,
     groundCanopyShadeOpacity: 0.56,
     groundCanopyShadeCoreOpacity: 0.72,
     groundCanopyShadeProjectedOpacity: 0.52,
@@ -317,6 +336,8 @@
   let enginePromise = null;
   let customBuildingsCache = null;
   let geoTiffPromise = null;
+  let geoTiffWorkerPool = null;
+  let geoTiffWorkerPoolDisabled = false;
   let liveMoveTimer = null;
   let shadeRebuildSerial = 0;
   let shadeNavigationSuspended = false;
@@ -325,6 +346,8 @@
   let canopyOverlayLayer = null;
   let groundCanopyShadeLayer = null;
   let groundCanopyShadeGeneration = 0;
+  let groundCanopyShadeActiveRenders = 0;
+  const groundCanopyShadeRenderQueue = [];
   let queryPopup = null;
   let queryPointMarker = null;
   let querySampleCell = null;
@@ -363,6 +386,11 @@
     groundCanopyShadeProjectedGapFillPixels: 0,
     groundCanopyShadeFeatherPixels: 0,
     groundCanopyShadePointOverrides: 0,
+    groundCanopyShadeActivePeak: 0,
+    groundCanopyShadeQueuedPeak: 0,
+    cooperativeYields: 0,
+    geoTiffPoolCreates: 0,
+    geoTiffPoolFallbacks: 0,
     surfaceBuilds: 0,
     surfaceCacheHits: 0,
     surfaceBuildMs: 0,
@@ -392,6 +420,7 @@
     progressiveUpgrades: 0,
     progressiveBackgroundMs: 0,
     activeConcurrencyLast: 0,
+    progressiveBackgroundConcurrencyLast: 0,
     warmConcurrencyLast: 0,
     prebuiltChecks: 0,
     prebuiltHits: 0,
@@ -1646,6 +1675,41 @@
     return geoTiffPromise;
   }
 
+  function getGeoTiffWorkerPool() {
+    if (config.metaGeoTiffWorkerPoolEnabled === false || geoTiffWorkerPoolDisabled) return null;
+    if (geoTiffWorkerPool) return geoTiffWorkerPool;
+    if (!window.GeoTIFF || typeof window.GeoTIFF.Pool !== "function") {
+      geoTiffWorkerPoolDisabled = true;
+      return null;
+    }
+    try {
+      const size = Math.max(1, Math.floor(Number(config.metaGeoTiffWorkerPoolSize) || 2));
+      geoTiffWorkerPool = new window.GeoTIFF.Pool(size);
+      metaPerf.geoTiffPoolCreates += 1;
+      return geoTiffWorkerPool;
+    } catch (error) {
+      geoTiffWorkerPoolDisabled = true;
+      console.warn("[Haidian Shade] GeoTIFF worker pool unavailable; falling back to main-thread decode:", error);
+      return null;
+    }
+  }
+
+  async function readMetaRasterWindow(image, options) {
+    const pool = getGeoTiffWorkerPool();
+    if (!pool) return image.readRasters(options);
+    try {
+      return await image.readRasters(Object.assign({}, options, { pool }));
+    } catch (error) {
+      // Some CSP/browser combinations can reject worker construction even though
+      // GeoTIFF.Pool exists. Retry once without the pool instead of losing canopy.
+      geoTiffWorkerPoolDisabled = true;
+      geoTiffWorkerPool = null;
+      metaPerf.geoTiffPoolFallbacks += 1;
+      console.warn("[Haidian Shade] GeoTIFF worker decode failed; retrying without pool:", error);
+      return image.readRasters(options);
+    }
+  }
+
   function tileToQuadkey(x, y, z) {
     let qk = "";
     for (let i = z; i > 0; i -= 1) {
@@ -1666,6 +1730,63 @@
     return typeof performance !== "undefined" && performance && typeof performance.now === "function"
       ? performance.now()
       : Date.now();
+  }
+
+  async function yieldToBrowser() {
+    metaPerf.cooperativeYields += 1;
+    const schedulerApi = typeof globalThis !== "undefined" ? globalThis.scheduler : null;
+    if (schedulerApi && typeof schedulerApi.yield === "function") {
+      await schedulerApi.yield();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function groundCanopyShadeConcurrencyLimit() {
+    return Math.max(1, Math.floor(Number(config.groundCanopyShadeMaxConcurrentTiles) || 2));
+  }
+
+  function releaseGroundCanopyShadeRenderSlot() {
+    groundCanopyShadeActiveRenders = Math.max(0, groundCanopyShadeActiveRenders - 1);
+    while (groundCanopyShadeRenderQueue.length) {
+      const waiter = groundCanopyShadeRenderQueue.shift();
+      if (!waiter) continue;
+      if (
+        waiter.generation !== groundCanopyShadeGeneration ||
+        !state.enabled ||
+        !state.groundCanopyShade ||
+        state.mode === "buildings"
+      ) {
+        waiter.resolve(null);
+        continue;
+      }
+      groundCanopyShadeActiveRenders += 1;
+      metaPerf.groundCanopyShadeActivePeak = Math.max(
+        metaPerf.groundCanopyShadeActivePeak,
+        groundCanopyShadeActiveRenders
+      );
+      waiter.resolve(releaseGroundCanopyShadeRenderSlot);
+      break;
+    }
+  }
+
+  async function acquireGroundCanopyShadeRenderSlot(generation) {
+    const limit = groundCanopyShadeConcurrencyLimit();
+    if (groundCanopyShadeActiveRenders < limit) {
+      groundCanopyShadeActiveRenders += 1;
+      metaPerf.groundCanopyShadeActivePeak = Math.max(
+        metaPerf.groundCanopyShadeActivePeak,
+        groundCanopyShadeActiveRenders
+      );
+      return releaseGroundCanopyShadeRenderSlot;
+    }
+    return new Promise((resolve) => {
+      groundCanopyShadeRenderQueue.push({ generation, resolve });
+      metaPerf.groundCanopyShadeQueuedPeak = Math.max(
+        metaPerf.groundCanopyShadeQueuedPeak,
+        groundCanopyShadeRenderQueue.length
+      );
+    });
   }
 
   function touchMapEntry(map, key) {
@@ -1789,7 +1910,7 @@
       const py = (y % scaleFromZ10) * side;
 
       try {
-        const bands = await cog.images[level.idx].readRasters({
+        const bands = await readMetaRasterWindow(cog.images[level.idx], {
           window: [
             Math.round(px),
             Math.round(py),
@@ -2012,7 +2133,15 @@
     canvas.height = 256;
     const ctx = canvas.getContext("2d");
     const image = ctx.createImageData(256, 256);
-    for (let i = 0; i < 256 * 256; i += 1) terrariumEncodeInto(image.data, i, dem[i]);
+    const yieldRows = Math.max(0, Math.floor(Number(config.metaSurfaceEncodeYieldRows) || 0));
+    for (let y = 0; y < 256; y += 1) {
+      const row = y * 256;
+      for (let x = 0; x < 256; x += 1) {
+        const i = row + x;
+        terrariumEncodeInto(image.data, i, dem[i]);
+      }
+      if (yieldRows && (y + 1) % yieldRows === 0 && y < 255) await yieldToBrowser();
+    }
     ctx.putImageData(image, 0, 0);
     const url = await canvasToBlobUrl(canvas);
     metaProvisionalSurfaceUrls.set(key, url);
@@ -2050,12 +2179,17 @@
       const ctx = canvas.getContext("2d");
       const image = ctx.createImageData(256, 256);
 
-      const length = 256 * 256;
-      for (let i = 0; i < length; i += 1) {
-        const raw = canopy ? canopy[i] : 0;
-        const chm = raw > 0 && raw < 255 ? raw : 0;
-        const ground = dem ? dem[i] : 0;
-        terrariumEncodeInto(image.data, i, ground + chm);
+      const yieldRows = Math.max(0, Math.floor(Number(config.metaSurfaceEncodeYieldRows) || 0));
+      for (let y = 0; y < 256; y += 1) {
+        const row = y * 256;
+        for (let x = 0; x < 256; x += 1) {
+          const i = row + x;
+          const raw = canopy ? canopy[i] : 0;
+          const chm = raw > 0 && raw < 255 ? raw : 0;
+          const ground = dem ? dem[i] : 0;
+          terrariumEncodeInto(image.data, i, ground + chm);
+        }
+        if (yieldRows && (y + 1) % yieldRows === 0 && y < 255) await yieldToBrowser();
       }
 
       ctx.putImageData(image, 0, 0);
@@ -2133,6 +2267,7 @@
             const sctx = small.getContext("2d");
             const image = sctx.createImageData(smallSize, smallSize);
             const minHeight = Math.max(0, Number(config.canopyOverlayMinHeight) || 2);
+            const overlayYieldRows = Math.max(0, Math.floor(Number(config.canopyOverlayYieldRows) || 0));
             for (let yy = 0; yy < smallSize; yy += 1) {
               for (let xx = 0; xx < smallSize; xx += 1) {
                 const sx = Math.max(0, Math.min(255, Math.floor(req.cropX + xx)));
@@ -2144,6 +2279,9 @@
                 image.data[p + 1] = 185;
                 image.data[p + 2] = 129;
                 image.data[p + 3] = Math.round(145 + Math.min(h, 30) / 30 * 90);
+              }
+              if (overlayYieldRows && (yy + 1) % overlayYieldRows === 0 && yy < smallSize - 1) {
+                await yieldToBrowser();
               }
             }
             sctx.putImageData(image, 0, 0);
@@ -2376,6 +2514,11 @@
       coords.z > Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20)
     ) return;
 
+    const releaseRenderSlot = await acquireGroundCanopyShadeRenderSlot(generation);
+    if (!releaseRenderSlot) return;
+    try {
+    if (generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
+
     const center = tileCenterLatLng(coords.x, coords.y, coords.z);
     const solar = solarPositionAt(center, state.date);
     const minAltitude = Math.max(0, Number(config.groundCanopyShadeMinSolarAltitudeDeg) || 2.5);
@@ -2425,6 +2568,16 @@
     const walkStep = Math.max(0.9, sampleStep * 0.8);
     const targetMaxX = targetMinX + targetSpan;
     const targetMaxY = targetMinY + targetSpan;
+    const shadeYieldRows = Math.max(0, Math.floor(Number(config.groundCanopyShadeYieldRows) || 0));
+    let shadeRowsSinceYield = 0;
+    const maybeYieldGroundShade = async () => {
+      if (!shadeYieldRows) return true;
+      shadeRowsSinceYield += 1;
+      if (shadeRowsSinceYield < shadeYieldRows) return true;
+      shadeRowsSinceYield = 0;
+      await yieldToBrowser();
+      return generation === groundCanopyShadeGeneration && state.enabled && state.groundCanopyShade;
+    };
 
     // v8.4.1: create an exact native-pixel ground core beneath every CHMv2
     // canopy pixel that overlaps this display tile. This avoids the striped
@@ -2451,6 +2604,7 @@
           const alpha = Math.max(175, Math.min(245, Math.round(180 + Math.min(35, h) / 35 * 65)));
           if (alpha > coreMask[idx]) coreMask[idx] = alpha;
         }
+        if (!await maybeYieldGroundShade()) return;
       }
     }
 
@@ -2493,6 +2647,7 @@
             markGroundCanopyMask(projectedMask, targetW, targetH, outX, outY, radius, alpha);
           }
         }
+        if (!await maybeYieldGroundShade()) return;
       }
     }
 
@@ -2569,6 +2724,9 @@
     ctx.drawImage(small, 0, 0, targetW, targetH, 0, 0, 256, 256);
     metaPerf.groundCanopyShadeTiles += 1;
     metaPerf.groundCanopyShadeRenderMs += Math.max(0, monotonicNow() - startedAt);
+    } finally {
+      releaseRenderSlot();
+    }
   }
 
   function removeGroundCanopyShadeOverlay() {
@@ -4474,9 +4632,15 @@
     if (!pending || pending.serial !== serial || pending.started) return false;
     pending.started = true;
     setStatus("漸進式陰影預覽已顯示；正在背景補齊周邊 CHMv2 surface tiles…");
-    Promise.resolve()
-      .then(() => pending.start())
+    const backgroundStartDelay = Math.max(0, Number(config.metaProgressiveBackgroundStartDelayMs) || 0);
+    delay(backgroundStartDelay)
       .then(() => {
+        if (pendingProgressiveUpgrade !== pending) return null;
+        if (!state.enabled || serial !== shadeRebuildSerial) return null;
+        return pending.start();
+      })
+      .then((summary) => {
+        if (!summary) return;
         if (pendingProgressiveUpgrade !== pending) return;
         if (!state.enabled || serial !== shadeRebuildSerial) return;
         if (pending.snapshotSignature !== snapshotCoverageSignature(captureViewSnapshot())) return;
@@ -4958,6 +5122,9 @@
           console.warn("[Haidian Shade] tile build failed:", items[index], error);
         }
         done += 1;
+        if (options.yieldBetweenTasks === true && index < items.length - 1) {
+          await yieldToBrowser();
+        }
         if (
           options.suppressStatus !== true &&
           (done === 1 || done % 12 === 0 || done === items.length) &&
@@ -5049,9 +5216,10 @@
     const activeConcurrency = effectiveMetaConcurrency(config.metaTileConcurrency, "active");
     metaPerf.activeConcurrencyLast = activeConcurrency;
     const shouldContinue = () => serial === shadeRebuildSerial && state.enabled;
+    const progressiveMinTiles = Math.max(2, Math.floor(Number(config.metaProgressiveMinTiles) || 2));
     const allowProgressive = options.progressive === true &&
       config.metaProgressiveEnabled !== false &&
-      tiles.length > 1;
+      tiles.length >= progressiveMinTiles;
 
     if (allowProgressive) {
       const split = progressiveTileSplit(tiles);
@@ -5101,15 +5269,20 @@
         metaProgressiveUsed = true;
 
         let backgroundPromise = null;
+        const backgroundConcurrency = effectiveMetaConcurrency(
+          Number(config.metaProgressiveBackgroundConcurrency) || Math.min(4, activeConcurrency),
+          "background"
+        );
+        metaPerf.progressiveBackgroundConcurrencyLast = backgroundConcurrency;
         const startBackground = () => {
           if (backgroundPromise) return backgroundPromise;
           const startedAt = monotonicNow();
           backgroundPromise = runWithConcurrency(
             split.background,
-            activeConcurrency,
+            backgroundConcurrency,
             (tile) => buildLiveSurfaceTile(tile.x, tile.y, tile.z),
             serial,
-            { suppressStatus: true, shouldContinue }
+            { suppressStatus: true, shouldContinue, yieldBetweenTasks: true }
           ).then((results) => {
             const backgroundLoaded = results.filter(Boolean).length;
             const elapsed = Math.max(0, monotonicNow() - startedAt);
@@ -5302,6 +5475,8 @@
       progressiveUsed: metaProgressiveUsed,
       progressivePending: !!pendingProgressiveUpgrade,
       buildingUpgradePending: !!pendingBuildingUpgrade,
+      geoTiffWorkerPoolEnabled: config.metaGeoTiffWorkerPoolEnabled !== false,
+      geoTiffWorkerPoolActive: !!geoTiffWorkerPool && !geoTiffWorkerPoolDisabled,
       groundCanopyShadeEnabled: config.groundCanopyShadeEnabled !== false && state.groundCanopyShade,
       shadeLayerPhase,
       counters: Object.assign({}, metaPerf, {
@@ -6419,7 +6594,7 @@
     }
   }
 
-  async function selectTerrainSource(snapshot, serial) {
+  async function selectTerrainSource(snapshot, serial, options = {}) {
     const view = snapshot || captureViewSnapshot();
     if (state.mode === "buildings") {
       return {
@@ -6450,7 +6625,8 @@
         };
       }
       const firstActivationOnly = config.metaProgressiveFirstActivationOnly !== false;
-      const allowProgressive = config.metaProgressiveEnabled !== false &&
+      const allowProgressive = options.progressive !== false &&
+        config.metaProgressiveEnabled !== false &&
         (!firstActivationOnly || !metaProgressiveUsed);
       const prepared = await prepareLiveMetaSurface(view, serial, { progressive: allowProgressive });
       const hasCanopy = prepared.canopyTiles > 0;
@@ -6819,7 +6995,7 @@
 
     try {
       setStatus("正在載入陰影模擬所需的 CHMv2／地形資料…");
-      const terrain = await selectTerrainSource(snapshot, serial);
+      const terrain = await selectTerrainSource(snapshot, serial, { progressive: true });
 
       // Critical v7.5 rule: a stale async terrain preparation may warm caches,
       // but it is NEVER allowed to create/add a ShadeMap layer.
@@ -6921,8 +7097,10 @@
       applyShadeZoomConstraint();
 
       // Prepare only data first. No SDK layer is mounted until we know this
-      // rebuild is still the newest requested viewport.
-      const terrain = await selectTerrainSource(snapshot, serial);
+      // rebuild is still the newest requested viewport. Upgrade phases already
+      // have all CHMv2 surfaces cached and must not re-enter progressive mode.
+      const upgradePhase = options.phase === "surface" || options.phase === "full";
+      const terrain = await selectTerrainSource(snapshot, serial, { progressive: !upgradePhase });
       if (serial !== shadeRebuildSerial || !state.enabled) return;
 
       // Swap instances only after replacement terrain is ready. This minimizes
