@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev2 UX Flow
+ * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev3 Candidate Compare
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -26,7 +26,10 @@
     maxRouteSamples: 420,
     autoEnableShade: true,
     fitCandidateRoute: true,
-    manualEndpointToleranceM: 60
+    manualEndpointToleranceM: 120,
+    exploreCandidates: true,
+    exploreMaxRoutes: 6,
+    maxScoredCandidates: 10
   };
 
   const config = Object.assign({}, DEFAULTS, window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {});
@@ -36,6 +39,7 @@
   let drawLayer = null;
   let resultLayer = null;
   let endpointsLayer = null;
+  let comparisonLayer = null;
   let drawMode = "idle";
   let drawPoints = [];
   let aPoint = null;
@@ -301,6 +305,7 @@
     stopDrawMode();
     uiMode = next;
     clearLayer(resultLayer);
+    clearLayer(comparisonLayer);
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
     lastCandidateBundle = null;
@@ -451,7 +456,7 @@
     const summary = aggregateExposure(results, speedMps);
     const heat = options.includeHeat === false ? null : await maybeHeatContext(route, departure, serial);
     return {
-      version: "v8.9.0-dev2",
+      version: "v8.9.0-dev3",
       route,
       departure: departure.toISOString(),
       sampleSpacingM: spacingM,
@@ -627,6 +632,146 @@
     }
   }
 
+  function bearingDeg(a, b) {
+    const A = asLatLng(a);
+    const B = asLatLng(b);
+    if (!A || !B) return 0;
+    const rad = Math.PI / 180;
+    const y = Math.sin((B.lng - A.lng) * rad) * Math.cos(B.lat * rad);
+    const x = Math.cos(A.lat * rad) * Math.sin(B.lat * rad) -
+      Math.sin(A.lat * rad) * Math.cos(B.lat * rad) * Math.cos((B.lng - A.lng) * rad);
+    return (Math.atan2(y, x) / rad + 360) % 360;
+  }
+
+  function destinationPoint(origin, bearing, distanceM) {
+    const O = asLatLng(origin);
+    if (!O) return null;
+    const R = 6371000;
+    const d = Math.max(0, Number(distanceM) || 0) / R;
+    const br = Number(bearing) * Math.PI / 180;
+    const lat1 = O.lat * Math.PI / 180;
+    const lon1 = O.lng * Math.PI / 180;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(br));
+    const lon2 = lon1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    return { lat: lat2 * 180 / Math.PI, lng: ((lon2 * 180 / Math.PI + 540) % 360) - 180 };
+  }
+
+  function interpolatePoint(a, b, fraction) {
+    const A = asLatLng(a);
+    const B = asLatLng(b);
+    const t = clamp(fraction, 0, 1, 0.5);
+    if (!A || !B) return null;
+    return { lat: A.lat + (B.lat - A.lat) * t, lng: A.lng + (B.lng - A.lng) * t };
+  }
+
+  async function fetchViaRouteCandidate(a, via, b, id) {
+    const A = asLatLng(a);
+    const V = asLatLng(via);
+    const B = asLatLng(b);
+    if (!A || !V || !B) return null;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), Number(config.routingTimeoutMs || 15000));
+    try {
+      const coords = [A, V, B].map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(';');
+      const base = String(config.routingBase || '').replace(/\/$/, '');
+      const url = new URL(`${base}/${coords}`);
+      url.searchParams.set('alternatives', 'false');
+      url.searchParams.set('steps', 'false');
+      url.searchParams.set('geometries', 'geojson');
+      url.searchParams.set('overview', 'full');
+      const response = await fetch(url.href, {
+        method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store',
+        headers: { Accept: 'application/json' }, signal: controller.signal
+      });
+      const payload = await response.json().catch(() => null);
+      const route = payload?.routes?.[0];
+      if (!response.ok || payload?.code !== 'Ok' || !route) return null;
+      const points = (route.geometry?.coordinates || [])
+        .map((c) => ({ lat: Number(c[1]), lng: Number(c[0]) }))
+        .filter(asLatLng);
+      if (points.length < 2) return null;
+      return {
+        id,
+        kind: 'explore',
+        providerIndex: null,
+        distanceM: Number(route.distance) || routeDistanceM(points),
+        durationS: Number(route.duration) || 0,
+        points,
+        raw: route,
+        via: V
+      };
+    } catch (_) {
+      return null;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  function routeSimilarityM(a, b) {
+    const A = a?.points || [];
+    const B = b?.points || [];
+    if (A.length < 2 || B.length < 2) return Infinity;
+    const fractions = [0.2, 0.5, 0.8];
+    let total = 0;
+    for (const f of fractions) {
+      const ai = A[Math.min(A.length - 1, Math.round((A.length - 1) * f))];
+      const bi = B[Math.min(B.length - 1, Math.round((B.length - 1) * f))];
+      total += haversineM(ai, bi);
+    }
+    return total / fractions.length;
+  }
+
+  function dedupeCandidates(candidates) {
+    const out = [];
+    for (const candidate of candidates || []) {
+      if (!candidate?.points?.length) continue;
+      if (candidate.kind === 'manual') { out.push(candidate); continue; }
+      const duplicate = out.some((existing) => {
+        if (existing.kind === 'manual') return false;
+        const distanceClose = Math.abs((Number(existing.distanceM) || 0) - (Number(candidate.distanceM) || 0)) < 25;
+        return distanceClose && routeSimilarityM(existing, candidate) < 35;
+      });
+      if (!duplicate) out.push(candidate);
+    }
+    return out;
+  }
+
+  async function fetchExploratoryCandidates(a, b) {
+    if (config.exploreCandidates === false) return [];
+    const A = asLatLng(a);
+    const B = asLatLng(b);
+    if (!A || !B) return [];
+    const directM = Math.max(250, haversineM(A, B));
+    const axisBearing = bearingDeg(A, B);
+    // These via points deliberately probe both sides of the A→B corridor.
+    // They are not claimed to be globally optimal; they simply give the shade
+    // scorer materially different walkable alternatives instead of relying on
+    // an OSRM server returning one or two near-identical alternatives.
+    const specs = [
+      [0.35, -1, 0.18], [0.35, 1, 0.18],
+      [0.68, -1, 0.18], [0.68, 1, 0.18],
+      [0.72, -1, 0.28], [0.72, 1, 0.28]
+    ].slice(0, clamp(config.exploreMaxRoutes, 0, 8, 6));
+    const jobs = specs.map(([fraction, side, ratio], index) => {
+      const center = interpolatePoint(A, B, fraction);
+      const offsetM = Math.min(240, Math.max(70, directM * ratio));
+      const via = destinationPoint(center, axisBearing + side * 90, offsetM);
+      return { via, id: `explore-${index + 1}` };
+    }).filter((job) => job.via);
+
+    const results = new Array(jobs.length).fill(null);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < jobs.length) {
+        const index = cursor++;
+        const job = jobs[index];
+        results[index] = await fetchViaRouteCandidate(A, job.via, B, job.id);
+      }
+    }
+    await Promise.all([worker(), worker()]);
+    return results.filter(Boolean);
+  }
+
   function buildManualCandidateFromRoute(routePoints, a, b, speedMps) {
     const route = Array.isArray(routePoints) ? routePoints.map(asLatLng).filter(Boolean) : [];
     if (route.length < 2) return { available: false, reason: "none" };
@@ -638,11 +783,19 @@
     const forward = { startGapM: haversineM(first, A), endGapM: haversineM(last, B), reversed: false };
     const reverse = { startGapM: haversineM(last, A), endGapM: haversineM(first, B), reversed: true };
     const best = (forward.startGapM + forward.endGapM) <= (reverse.startGapM + reverse.endGapM) ? forward : reverse;
-    const tolerance = clamp(config.manualEndpointToleranceM, 10, 200, 60);
+    const tolerance = clamp(config.manualEndpointToleranceM, 20, 220, 120);
     if (best.startGapM > tolerance || best.endGapM > tolerance) {
       return { available: true, matched: false, toleranceM: tolerance, ...best };
     }
-    const points = best.reversed ? route.slice().reverse() : route.slice();
+    const rawPoints = best.reversed ? route.slice().reverse() : route.slice();
+    const points = rawPoints.slice();
+    // Snap short endpoint gaps to the actual A/B used for this comparison.
+    // This prevents a hand-drawn route from disappearing merely because the
+    // user tapped A or B a few metres away from the first/last drawn vertex.
+    if (haversineM(points[0], A) > 2) points.unshift({ lat: A.lat, lng: A.lng });
+    else points[0] = { lat: A.lat, lng: A.lng };
+    if (haversineM(points[points.length - 1], B) > 2) points.push({ lat: B.lat, lng: B.lng });
+    else points[points.length - 1] = { lat: B.lat, lng: B.lng };
     const distanceM = routeDistanceM(points);
     const safeSpeed = Math.max(0.4, Number(speedMps) || config.walkingSpeedKmh / 3.6);
     return {
@@ -688,22 +841,40 @@
       return d < bestD ? c : best;
     }, null);
     const detourPct = clamp(options.detourPct, 0, 60, detourCapFromPanel());
-    const eligible = candidates.filter((c) => candidateWithinDetour(c, fastest, detourPct));
+    let eligible = candidates.filter((c) => candidateWithinDetour(c, fastest, detourPct));
+    const maxScored = clamp(config.maxScoredCandidates, 2, 14, 10);
+    if (eligible.length > maxScored) {
+      const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual").map((c) => c.id)].filter(Boolean));
+      const chosen = [];
+      for (const c of eligible) if (mustKeep.has(c.id) && !chosen.some((x) => x.id === c.id)) chosen.push(c);
+      for (const c of eligible) {
+        if (chosen.length >= maxScored) break;
+        if (!chosen.some((x) => x.id === c.id)) chosen.push(c);
+      }
+      eligible = chosen;
+    }
+    const eligibleIds = new Set(eligible.map((c) => c.id));
+    // Even when a hand-drawn route is just outside the detour cap, score it once
+    // so the user can inspect it and understand the trade-off instead of having
+    // it silently disappear from the comparison UI.
+    const manualOutside = candidates.filter((c) => c?.kind === "manual" && !eligibleIds.has(c.id));
+    const scoringPool = eligible.concat(manualOutside);
     const scored = [];
-    for (let i = 0; i < eligible.length; i += 1) {
+    for (let i = 0; i < scoringPool.length; i += 1) {
       if (serial !== analysisSerial) throw new Error("ROUTE_ANALYSIS_CANCELLED");
-      setStatus(`正在比較第 ${i + 1}/${eligible.length} 條路線…`, "loading");
-      const analysis = await analyzeRoute(eligible[i].points, {
+      setStatus(`正在比較第 ${i + 1}/${scoringPool.length} 條路線…`, "loading");
+      const analysis = await analyzeRoute(scoringPool[i].points, {
         departure: options.departure,
         sampleSpacingM: options.sampleSpacingM,
         speedMps: options.speedMps,
         serial,
         includeHeat: false,
-        onProgress: (done, total) => setStatus(`候選 ${i + 1}/${eligible.length}：陰影採樣 ${done}/${total}`, "loading")
+        onProgress: (done, total) => setStatus(`候選 ${i + 1}/${scoringPool.length}：陰影採樣 ${done}/${total}`, "loading")
       });
-      scored.push(Object.assign({}, eligible[i], { analysis }));
+      scored.push(Object.assign({}, scoringPool[i], { analysis, eligible: eligibleIds.has(scoringPool[i].id) }));
     }
-    const selected = scored.slice().sort((a, b) => {
+    const eligibleScored = scored.filter((c) => c.eligible !== false);
+    const selected = eligibleScored.slice().sort((a, b) => {
       const sunA = a.analysis.summary.directSunSeconds;
       const sunB = b.analysis.summary.directSunSeconds;
       if (Math.abs(sunA - sunB) > 0.5) return sunA - sunB;
@@ -716,10 +887,13 @@
     return {
       fastest,
       eligible,
+      eligibleScored,
       scored,
       selected,
+      best: selected,
+      activeCandidateId: selected?.id || null,
       detourPct,
-      comparisonValid: scored.length >= 2
+      comparisonValid: eligibleScored.length >= 2
     };
   }
 
@@ -732,59 +906,100 @@
   function candidateName(candidate, bundle) {
     if (candidate?.kind === "manual") return "我的手繪路線";
     if (candidate?.id === bundle.fastest?.id) return "最快";
-    const index = bundle.scored.findIndex((c) => c.id === candidate.id);
-    return `候選 ${index + 1}`;
+    if (candidate?.kind === "explore") {
+      const explored = bundle.scored.filter((c) => c.kind === "explore");
+      return `探索路線 ${explored.findIndex((c) => c.id === candidate.id) + 1}`;
+    }
+    const providers = bundle.scored.filter((c) => c.kind !== "manual" && c.kind !== "explore" && c.id !== bundle.fastest?.id);
+    return `替代路線 ${providers.findIndex((c) => c.id === candidate.id) + 1}`;
   }
 
   function candidatesHtml(bundle) {
-    const selectedId = bundle.selected?.id;
+    const activeId = bundle.activeCandidateId || bundle.best?.id || bundle.selected?.id;
+    const bestId = bundle.best?.id || bundle.selected?.id;
     const rows = bundle.scored.map((c) => {
       const s = c.analysis.summary;
       const detour = candidateDetourPct(c, bundle);
-      const selectedLabel = c.id === selectedId
-        ? (bundle.comparisonValid ? '<em class="best">最不曬</em>' : '<em>目前唯一候選</em>')
-        : "";
-      const source = c.kind === "manual" ? '<em class="manual">手繪</em>' : "";
-      return `<div class="re-candidate${c.id === selectedId ? " is-selected" : ""}">
-        <div class="re-candidate-title"><b>${candidateName(c, bundle)}</b><span>${source}${selectedLabel}</span></div>
+      const badges = [];
+      if (c.kind === 'manual') badges.push('<em class="manual">手繪</em>');
+      if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
+      if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">最不曬</em>');
+      if (c.eligible === false) badges.push('<em class="over">超過上限</em>');
+      if (c.id === activeId) badges.push('<em class="viewing">目前顯示</em>');
+      return `<button type="button" class="re-candidate${c.id === activeId ? " is-selected" : ""}" data-re-candidate-id="${escapeHtml(c.id)}" aria-pressed="${c.id === activeId ? "true" : "false"}">
+        <div class="re-candidate-title"><b>${escapeHtml(candidateName(c, bundle))}</b><span>${badges.join('')}</span></div>
         <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
-        <small>${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"}</small>
-      </div>`;
-    }).join("");
+        <small>${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
+      </button>`;
+    }).join('');
 
-    let notice = "";
+    let notice = '';
     if (!bundle.comparisonValid) {
-      notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線</b><span>已完成這條路的曝曬分析，但還不能判定真正的「最不曬」。你可以先畫一條你認為更好的路線，再回來比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
+      notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線（符合繞路上限）</b><span>已完成曝曬分析，但還不能判定真正的「最不曬」。手繪路線即使略超過上限，也會顯示在下方供你點選比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
     } else {
-      const selectedName = candidateName(bundle.selected, bundle);
-      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.scored.length} 條候選</b><span>目前候選中直接日照最少的是「${escapeHtml(selectedName)}」。</span></div>`;
+      const selectedName = candidateName(bundle.best, bundle);
+      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.eligibleScored?.length || bundle.eligible?.length || 0} 條符合上限的候選</b><span>目前直接日照最少的是「${escapeHtml(selectedName)}」。下方每張路線卡都可以點選切換。</span></div>`;
     }
 
-    let manualState = "";
+    let manualState = '';
     if (bundle.manualMatch?.matched && bundle.manualEligible) {
-      manualState = '<div class="re-note re-note--manual">✓ 已把你的手繪路線加入這次比較。</div>';
+      manualState = '<div class="re-note re-note--manual">✓ 你的紅色手繪路線已正式加入比較；可直接點「我的手繪路線」查看。</div>';
     } else if (bundle.manualMatch?.matched && !bundle.manualEligible) {
-      manualState = '<div class="re-note">你的手繪路線起終點符合 A、B，但超過目前的繞路上限，因此這次沒有進入評分。</div>';
+      manualState = '<div class="re-note re-note--manual">你的手繪路線已完成分析，但超過目前設定的繞路上限；仍保留在下方供你點選比較。</div>';
     } else if (bundle.manualMatch?.available && !bundle.manualMatch?.matched) {
-      manualState = `<div class="re-note">你的手繪路線起終點沒有靠近目前 A、B（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），所以這次沒有納入比較。</div>`;
+      manualState = `<div class="re-note">偵測到手繪路線，但它的起終點和目前 A、B 距離較遠（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），因此沒有當成同一趟 A→B。</div>`;
     }
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${manualState}${rows}
-      <div class="re-method-note">這一版比較 routing provider 提供的候選，以及符合 A/B 的手繪路線；尚不是全道路網的全域最佳解。</div>
+      <div class="re-method-note">除了 routing provider 的替代路線，本版也會主動用 A→B 走廊兩側的 waypoint 探索更多步行候選，再交給 ShadeMap 逐段評分；仍不是全道路網的數學全域最佳解。</div>
     </section>`;
   }
 
-  function renderCandidateBundle(bundle) {
-    const el = panel?.querySelector("[data-re-results]");
-    if (!el || !bundle.selected) return;
-    const selectedName = candidateName(bundle.selected, bundle);
-    const title = bundle.comparisonValid ? `目前候選中最不曬：${selectedName}` : "目前唯一可分析的候選路線";
-    const eyebrow = bundle.comparisonValid ? `已比較 ${bundle.scored.length} 條候選` : "候選不足，先顯示曝曬分析";
-    el.innerHTML = resultHtml(bundle.selected.analysis, { title, eyebrow }) + candidatesHtml(bundle);
-    renderAnalyzedRoute(bundle.selected.analysis, { fit: config.fitCandidateRoute !== false, weight: 7 });
+  function renderCandidateOutlines(bundle, activeId) {
+    if (!comparisonLayer) comparisonLayer = createLayerGroup();
+    clearLayer(comparisonLayer);
+    for (const candidate of bundle.scored || []) {
+      if (!candidate?.points?.length || candidate.id === activeId) continue;
+      const isManual = candidate.kind === 'manual';
+      window.L.polyline(candidate.points, {
+        color: isManual ? '#be123c' : '#64748b',
+        weight: isManual ? 4 : 3,
+        opacity: isManual ? 0.48 : 0.28,
+        dashArray: isManual ? '8 7' : '5 7',
+        interactive: false
+      }).addTo(comparisonLayer);
+    }
+  }
+
+  function renderCandidateBundle(bundle, options = {}) {
+    const el = panel?.querySelector('[data-re-results]');
+    if (!el || !bundle.best) return;
+    const activeId = bundle.activeCandidateId || bundle.best.id;
+    const active = bundle.scored.find((c) => c.id === activeId) || bundle.best;
+    bundle.activeCandidateId = active.id;
+    const activeName = candidateName(active, bundle);
+    const isBest = active.id === bundle.best.id && bundle.comparisonValid;
+    const title = isBest ? `最不曬：${activeName}` : `正在查看：${activeName}`;
+    const eyebrow = bundle.comparisonValid ? `已分析 ${bundle.scored.length} 條路線 · 點下方卡片切換` : '候選不足，先顯示曝曬分析';
+    el.innerHTML = resultHtml(active.analysis, { title, eyebrow }) + candidatesHtml(bundle);
+    clearLayer(drawLayer);
+    renderCandidateOutlines(bundle, active.id);
+    renderAnalyzedRoute(active.analysis, { fit: options.fit !== false && config.fitCandidateRoute !== false, weight: 7 });
+    lastSelectedCandidate = active;
+    lastAnalysis = active.analysis;
     syncUiState();
+  }
+
+  function selectCandidate(candidateId) {
+    const bundle = lastCandidateBundle;
+    if (!bundle || !candidateId) return;
+    const candidate = bundle.scored.find((c) => c.id === candidateId);
+    if (!candidate) return;
+    bundle.activeCandidateId = candidate.id;
+    renderCandidateBundle(bundle, { fit: true });
+    setStatus(`目前顯示「${candidateName(candidate, bundle)}」；可再點其他候選互相比較。`, 'ok');
   }
 
   function setEndpointMarker(point, label, color) {
@@ -862,6 +1077,7 @@
     clearLayer(drawLayer);
     clearLayer(resultLayer);
     clearLayer(endpointsLayer);
+    clearLayer(comparisonLayer);
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
     if (clearStatus) setStatus("已重新開始。", "");
@@ -910,12 +1126,17 @@
     const serial = analysisSerial;
     setBusy(true);
     try {
-      setStatus("正在取得步行候選路線…", "loading");
+      setStatus("正在取得步行候選，並探索 A→B 走廊兩側的替代路線…", "loading");
       const providerCandidates = await fetchRouteCandidates(aPoint, bPoint);
+      if (serial !== analysisSerial) return;
+      let exploratoryCandidates = [];
+      try {
+        exploratoryCandidates = await fetchExploratoryCandidates(aPoint, bPoint);
+      } catch (_) { exploratoryCandidates = []; }
       if (serial !== analysisSerial) return;
       const speedMps = speedMpsFromPanel();
       const manualMatch = buildManualCandidate(aPoint, bPoint, speedMps);
-      const candidates = providerCandidates.slice();
+      const candidates = dedupeCandidates(providerCandidates.concat(exploratoryCandidates));
       if (manualMatch?.matched && manualMatch.candidate) candidates.push(manualMatch.candidate);
       lastCandidates = candidates;
       const bundle = await scoreCandidates(candidates, {
@@ -927,13 +1148,13 @@
       });
       if (serial !== analysisSerial) return;
       bundle.manualMatch = manualMatch;
-      bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn");
+      bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn" && candidate.eligible !== false);
       lastCandidateBundle = bundle;
-      lastSelectedCandidate = bundle.selected;
-      lastAnalysis = bundle.selected?.analysis || null;
+      lastSelectedCandidate = bundle.best;
+      lastAnalysis = bundle.best?.analysis || null;
       renderCandidateBundle(bundle);
       if (bundle.comparisonValid) {
-        setStatus(`完成：已比較 ${bundle.scored.length} 條符合繞路限制的候選。`, "ok");
+        setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選；下方可逐條點選切換地圖。`, "ok");
       } else {
         setStatus("目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。", "warning");
       }
@@ -970,7 +1191,7 @@
         model: item.model
       }))
     });
-    downloadBlob("haidian-route-exposure-v8.9.0-dev2.json", JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
+    downloadBlob("haidian-route-exposure-v8.9.0-dev3.json", JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }
 
   function exportCsv() {
@@ -989,7 +1210,7 @@
         Number.isFinite(item.model.solar?.altitudeDeg) ? item.model.solar.altitudeDeg.toFixed(2) : ""
       ]);
     }
-    downloadBlob("haidian-route-exposure-v8.9.0-dev2.csv", rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
+    downloadBlob("haidian-route-exposure-v8.9.0-dev3.csv", rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
   }
 
   function addStyles() {
@@ -1003,16 +1224,16 @@
       #rightToolsWrapper .route-exposure-tool svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
       body.haidian-v4 #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-idle #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-walk #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-data #rightToolsWrapper>.route-exposure-tool{pointer-events:auto!important}
       @media(min-width:601px){#rightToolsWrapper>.route-exposure-tool{order:3!important;width:52px!important;min-width:52px!important;height:52px!important;min-height:52px!important;margin:0!important;flex:0 0 52px!important;align-self:flex-end!important;z-index:4504!important}#rightToolsWrapper>.tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}#rightToolsWrapper>.tools-menu-container{order:5!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>button.route-exposure-tool{order:3!important;position:relative!important;inset:auto!important;width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important;margin:0!important;padding:0!important;flex:0 0 32px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;color:#12333b!important;background:rgba(255,255,255,.98)!important;border:1px solid #b7d8d4!important;border-radius:10px!important;box-shadow:0 5px 14px rgba(13,47,53,.14)!important;pointer-events:auto!important;transform:none!important;z-index:4516!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>.tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>#rightToolsCompactClose{order:5!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>.tools-menu-container{order:6!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>button.route-exposure-tool svg{width:16px!important;height:16px!important;max-width:16px!important;max-height:16px!important;pointer-events:none!important}}
-      .re-panel{position:absolute;top:86px;right:74px;z-index:4600;width:min(390px,calc(100vw - 96px));max-height:calc(100dvh - 110px);overflow:auto;box-sizing:border-box;color:#153d47;background:rgba(255,255,255,.98);border:1px solid rgba(15,118,110,.18);border-radius:22px;box-shadow:0 24px 64px rgba(15,23,42,.24);font-family:"Helvetica Neue",Arial,"Microsoft JhengHei",sans-serif;opacity:0;visibility:hidden;transform:translateY(-8px) scale(.985);transition:.18s ease;pointer-events:none}
-      .re-panel.is-open{opacity:1;visibility:visible;transform:none;pointer-events:auto}.re-panel[hidden],[hidden]{display:none!important}.re-head{position:sticky;top:0;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:15px 17px 12px;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);border-bottom:1px solid #e7efee}.re-head small{display:block;color:#0f766e;font-size:9.5px;font-weight:900;letter-spacing:.08em}.re-head h2{margin:3px 0 0;font-size:17px}.re-close{width:34px;height:34px;display:grid;place-items:center;border:1px solid #d8e5e3;border-radius:11px;background:#fff;color:#31545b;cursor:pointer}.re-close svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2}.re-body{padding:15px 17px 18px}
-      .re-home-intro{margin:0 0 12px;color:#64748b;font-size:12px;line-height:1.55}.re-mode-grid{display:grid;gap:10px}.re-mode-card{width:100%;display:grid;grid-template-columns:42px 1fr auto;gap:11px;align-items:center;padding:14px;text-align:left;border:1px solid #dbe8e6;border-radius:16px;background:#fff;cursor:pointer;transition:.18s}.re-mode-card:hover{border-color:#6ee7b7;box-shadow:0 10px 24px rgba(15,118,110,.1);transform:translateY(-1px)}.re-mode-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#ecfdf5;font-size:20px}.re-mode-copy b{display:block;color:#134e4a;font-size:14px}.re-mode-copy span{display:block;margin-top:3px;color:#64748b;font-size:11px;line-height:1.35}.re-mode-arrow{color:#94a3b8;font-size:20px}
-      .re-workflow-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}.re-back{border:0;background:#f1f5f9;color:#475569;border-radius:9px;padding:7px 9px;font-weight:900;cursor:pointer}.re-workflow-top h3{margin:0;color:#123f46;font-size:15px}.re-workflow-top p{margin:3px 0 0;color:#64748b;font-size:10.5px;line-height:1.4}.re-step{margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.re-step-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}.re-step-no{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:#0f766e;color:#fff;font-size:11px;font-weight:950}.re-step-head b{font-size:12px;color:#334155}.re-field label{display:block;margin:0 0 5px;color:#64748b;font-size:10px;font-weight:850}.re-field input{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#163d44;font-weight:750}.re-progress{margin:7px 0 10px;padding:8px 9px;border-radius:9px;background:#f8fafc;color:#64748b;font-size:10.5px;font-weight:750}.re-primary,.re-secondary,.re-link-btn,.re-chip,.re-export button,.re-candidate-alert button{border-radius:11px;font-weight:900;cursor:pointer}.re-primary{width:100%;min-height:42px;border:1px solid #0f766e;background:#0f766e;color:#fff;padding:9px 11px}.re-secondary{width:100%;min-height:38px;margin-top:7px;border:1px solid #99c7c1;background:#fff;color:#0f766e}.re-primary:disabled,.re-secondary:disabled,.re-link-btn:disabled{opacity:.45;cursor:not-allowed}.re-endpoints{padding:9px 10px;margin-bottom:9px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:10.5px;font-weight:800}.re-endpoints span{display:inline-flex;padding:2px 6px;border-radius:999px;background:#e2e8f0;color:#475569}.re-endpoints span.ok{background:#dcfce7;color:#166534}.re-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.re-chip{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#475569}.re-chip.is-active{border-color:#0f766e;background:#ecfdf5;color:#047857}.re-detour-custom{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center;margin-top:8px;color:#64748b;font-size:10px;font-weight:750}.re-detour-custom input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d7e2e0;border-radius:9px}.re-manual-note{margin-top:8px;padding:8px 9px;border-radius:9px;background:#fff1f2;color:#9f1239;font-size:10px;font-weight:750;line-height:1.4}
-      .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:10.5px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:10.5px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
-      .re-status{margin:12px 0 0;padding:9px 10px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:750;line-height:1.45}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
-      .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:9.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:4px 0 11px;color:#123f46;font-size:15px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:10px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:10px 0 0;color:#475569;font-size:11px;line-height:1.5}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:10.5px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:9.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:12px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:9px 10px;border-radius:10px;font-size:10.5px;line-height:1.45;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
-      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px;color:#334155;font-size:11px}.re-candidate-head span{color:#64748b;font-size:9.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:4px;padding:10px;border-radius:11px;font-size:10.5px;line-height:1.45}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{display:grid;gap:4px;padding:10px;margin-top:7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-candidate.is-selected{border-color:#34d399;background:#f0fdf4}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:11px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:8.5px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:8px;color:#475569;font-size:10px}.re-candidate small{color:#64748b;font-size:9.5px}.re-method-note{margin-top:8px;color:#94a3b8;font-size:9px;line-height:1.45}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-panel{position:absolute;top:86px;right:74px;z-index:4600;width:min(430px,calc(100vw - 96px));max-height:calc(100dvh - 110px);overflow:auto;box-sizing:border-box;color:#153d47;background:rgba(255,255,255,.98);border:1px solid rgba(15,118,110,.18);border-radius:22px;box-shadow:0 24px 64px rgba(15,23,42,.24);font-family:"Helvetica Neue",Arial,"Microsoft JhengHei",sans-serif;opacity:0;visibility:hidden;transform:translateY(-8px) scale(.985);transition:.18s ease;pointer-events:none}
+      .re-panel.is-open{opacity:1;visibility:visible;transform:none;pointer-events:auto}.re-panel[hidden],[hidden]{display:none!important}.re-head{position:sticky;top:0;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:15px 17px 12px;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);border-bottom:1px solid #e7efee}.re-head small{display:block;color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.07em}.re-head h2{margin:3px 0 0;font-size:20px}.re-close{width:34px;height:34px;display:grid;place-items:center;border:1px solid #d8e5e3;border-radius:11px;background:#fff;color:#31545b;cursor:pointer}.re-close svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2}.re-body{padding:15px 17px 18px}
+      .re-home-intro{margin:0 0 14px;color:#475569;font-size:14px;line-height:1.65}.re-mode-grid{display:grid;gap:10px}.re-mode-card{width:100%;display:grid;grid-template-columns:42px 1fr auto;gap:11px;align-items:center;padding:14px;text-align:left;border:1px solid #dbe8e6;border-radius:16px;background:#fff;cursor:pointer;transition:.18s}.re-mode-card:hover{border-color:#6ee7b7;box-shadow:0 10px 24px rgba(15,118,110,.1);transform:translateY(-1px)}.re-mode-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#ecfdf5;font-size:20px}.re-mode-copy b{display:block;color:#134e4a;font-size:16px}.re-mode-copy span{display:block;margin-top:4px;color:#64748b;font-size:13px;line-height:1.5}.re-mode-arrow{color:#94a3b8;font-size:20px}
+      .re-workflow-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}.re-back{border:0;background:#f1f5f9;color:#475569;border-radius:9px;padding:7px 9px;font-weight:900;cursor:pointer}.re-workflow-top h3{margin:0;color:#123f46;font-size:17px}.re-workflow-top p{margin:4px 0 0;color:#64748b;font-size:13px;line-height:1.5}.re-step{margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.re-step-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}.re-step-no{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:#0f766e;color:#fff;font-size:11px;font-weight:950}.re-step-head b{font-size:14px;color:#334155}.re-field label{display:block;margin:0 0 6px;color:#64748b;font-size:12.5px;font-weight:850}.re-field input{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#163d44;font-weight:750;font-size:13px}.re-progress{margin:8px 0 11px;padding:9px 10px;border-radius:9px;background:#f8fafc;color:#475569;font-size:12.5px;font-weight:750}.re-primary,.re-secondary,.re-link-btn,.re-chip,.re-export button,.re-candidate-alert button{border-radius:11px;font-weight:900;cursor:pointer}.re-primary{width:100%;min-height:44px;border:1px solid #0f766e;background:#0f766e;color:#fff;padding:10px 12px;font-size:14px}.re-secondary{width:100%;min-height:40px;margin-top:7px;border:1px solid #99c7c1;background:#fff;color:#0f766e;font-size:13px}.re-primary:disabled,.re-secondary:disabled,.re-link-btn:disabled{opacity:.45;cursor:not-allowed}.re-endpoints{padding:10px 11px;margin-bottom:10px;border-radius:10px;background:#f8fafc;color:#475569;font-size:12.5px;font-weight:800}.re-endpoints span{display:inline-flex;padding:2px 6px;border-radius:999px;background:#e2e8f0;color:#475569}.re-endpoints span.ok{background:#dcfce7;color:#166534}.re-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.re-chip{min-height:38px;border:1px solid #cfdedc;background:#fff;color:#475569;font-size:13px}.re-chip.is-active{border-color:#0f766e;background:#ecfdf5;color:#047857}.re-detour-custom{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center;margin-top:8px;color:#64748b;font-size:12px;font-weight:750}.re-detour-custom input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d7e2e0;border-radius:9px}.re-manual-note{margin-top:9px;padding:9px 10px;border-radius:9px;background:#fff1f2;color:#9f1239;font-size:12px;font-weight:750;line-height:1.5}
+      .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:12px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
+      .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
+      .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
+      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .route-exposure-drawing{cursor:crosshair!important}
-      @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:78vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
+      @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:82vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
     `;
     document.head.appendChild(style);
   }
@@ -1099,6 +1320,11 @@
     node.querySelector("[data-re-json]").addEventListener("click", exportJson);
     node.querySelector("[data-re-csv]").addEventListener("click", exportCsv);
     node.addEventListener("click", (event) => {
+      const candidate = event.target?.closest?.("[data-re-candidate-id]");
+      if (candidate) {
+        selectCandidate(candidate.dataset.reCandidateId);
+        return;
+      }
       const action = event.target?.closest?.("[data-re-result-draw]");
       if (!action) return;
       setUiMode("draw");
@@ -1228,7 +1454,7 @@
   }
 
   window.HaidianRouteExposure = {
-    version: "v8.9.0-dev2",
+    version: "v8.9.0-dev3",
     get config() { return Object.assign({}, config); },
     analyzeRoute,
     fetchRouteCandidates,
@@ -1248,7 +1474,9 @@
       routeToGeoJsonCoords,
       candidateWithinDetour,
       buildManualCandidate,
-      buildManualCandidateFromRoute
+      buildManualCandidateFromRoute,
+      dedupeCandidates,
+      fetchExploratoryCandidates
     }
   };
 
