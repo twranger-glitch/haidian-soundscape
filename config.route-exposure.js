@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev2 */
+/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev3 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -13,5 +13,8 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   maxRouteSamples: 420,
   autoEnableShade: true,
   fitCandidateRoute: true,
-  manualEndpointToleranceM: 60
+  manualEndpointToleranceM: 120,
+  exploreCandidates: true,
+  exploreMaxRoutes: 6,
+  maxScoredCandidates: 10
 };
