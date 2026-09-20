@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev1
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev2 Diagnostics
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev1";
+  const VERSION = "v9.0.0-dev2";
 
   const DEFAULTS = {
     enabled: true,
@@ -31,8 +31,10 @@
     maxShadeEdgeEvaluations: 700,
     timeBucketSec: 60,
     shadeTimeBucketSec: 120,
-    shadeSampleSpacingM: 28,
-    shadeMaxSamplesPerEdge: 4,
+    shadeSampleSpacingM: 30,
+    shadeMaxSamplesPerEdge: 8,
+    diagnosticMatchThresholdM: 16,
+    diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
     canopyTimeoutMs: 4200,
     progressEvery: 20
@@ -42,6 +44,9 @@
   const config = Object.assign({}, DEFAULTS, globalConfig.graphRouting || {});
 
   let lastDiagnostics = null;
+  let lastGraphDebug = null;
+  let lastRouteEdges = { fastest: new Set(), minSun: new Set() };
+  const lastShadeDebug = new Map();
   const graphCache = new Map();
 
   function asLatLng(value) {
@@ -152,6 +157,45 @@
     return String(value || "").trim().toLowerCase();
   }
 
+
+  function compactTagSummary(tags = {}) {
+    const keys = ["highway", "foot", "access", "name", "surface", "lit", "bridge", "tunnel", "layer", "incline", "steps"];
+    const out = {};
+    for (const key of keys) {
+      const value = tags?.[key];
+      if (value != null && String(value).trim() !== "") out[key] = String(value);
+    }
+    return out;
+  }
+
+  function mergeWayTagSummaries(wayIds, wayMeta) {
+    const values = {};
+    for (const wayId of wayIds || []) {
+      const tags = wayMeta?.get(String(wayId))?.tags || {};
+      for (const [key, value] of Object.entries(compactTagSummary(tags))) {
+        if (!values[key]) values[key] = new Set();
+        values[key].add(value);
+      }
+    }
+    const out = {};
+    for (const [key, set] of Object.entries(values)) out[key] = Array.from(set).slice(0, 6);
+    return out;
+  }
+
+  function primaryHighway(edge) {
+    const values = edge?.tagsSummary?.highway || [];
+    const priority = ["footway", "path", "pedestrian", "steps", "cycleway", "track", "living_street", "service", "residential", "unclassified", "tertiary", "secondary", "primary"];
+    for (const item of priority) if (values.includes(item)) return item;
+    return values[0] || "unknown";
+  }
+
+  function highwayFamily(highway) {
+    const h = normalizedTag(highway);
+    if (["footway", "path", "pedestrian", "steps", "cycleway", "track"].includes(h)) return "path";
+    if (["service", "living_street", "residential", "unclassified", "road"].includes(h)) return "local-road";
+    return "road";
+  }
+
   function isPedestrianWay(tags = {}) {
     const highway = normalizedTag(tags.highway);
     if (!highway || highway === "construction" || highway === "proposed" || highway === "raceway") return false;
@@ -194,8 +238,10 @@
 
   function buildRawGraph(parsed) {
     const adjacency = new Map();
+    const wayMeta = new Map();
     let rawSegments = 0;
     for (const way of parsed.ways) {
+      wayMeta.set(String(way.id), { id: String(way.id), tags: Object.assign({}, way.tags || {}) });
       for (let i = 1; i < way.nodes.length; i += 1) {
         const aId = way.nodes[i - 1];
         const bId = way.nodes[i];
@@ -218,7 +264,7 @@
         rawSegments += 1;
       }
     }
-    return { nodes: parsed.nodes, adjacency, rawSegments };
+    return { nodes: parsed.nodes, adjacency, rawSegments, wayMeta };
   }
 
   function nearestNode(raw, point, maxM = Infinity) {
@@ -295,7 +341,8 @@
       addContractedNode(aId);
       addContractedNode(bId);
       const id = `g${++edgeCounter}`;
-      const edge = { id, a: aId, b: bId, geometry, distanceM, wayIds: Array.from(wayIds || []) };
+      const ids = Array.from(wayIds || []);
+      const edge = { id, a: aId, b: bId, geometry, distanceM, wayIds: ids, tagsSummary: mergeWayTagSummaries(ids, raw.wayMeta) };
       edges.set(id, edge);
       adjacency.get(aId).push({ edgeId: id, to: bId });
       adjacency.get(bId).push({ edgeId: id, to: aId });
@@ -549,7 +596,18 @@
         canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       }));
       shadeCache.set(key, promise);
-      try { return await promise; }
+      try {
+        const result = await promise;
+        const debug = lastShadeDebug.get(edge.id) || { count: 0, samples: 0, directSunFractionSum: 0, shadedFractionSum: 0, lastAt: null };
+        debug.count += 1;
+        debug.samples += Number(result?.samples || 0);
+        debug.directSunFractionSum += Number(result?.directSunFraction || 0);
+        debug.shadedFractionSum += Number(result?.shadedFraction || 0);
+        debug.lastAt = new Date(atMs).toISOString();
+        debug.lastFromId = String(fromId);
+        lastShadeDebug.set(edge.id, debug);
+        return result;
+      }
       catch (error) { shadeCache.delete(key); throw error; }
     }
 
@@ -606,6 +664,190 @@
     return sampleIdx.map((i) => `${pts[i].lat.toFixed(4)},${pts[i].lng.toFixed(4)}`).join("|");
   }
 
+
+  function projectPointToSegmentM(point, a, b) {
+    const P = asLatLng(point), A = asLatLng(a), B = asLatLng(b);
+    if (!P || !A || !B) return null;
+    const lat0 = ((P.lat + A.lat + B.lat) / 3) * Math.PI / 180;
+    const mx = 111320 * Math.max(0.2, Math.cos(lat0));
+    const my = 110540;
+    const bx = (B.lng - A.lng) * mx, by = (B.lat - A.lat) * my;
+    const px = (P.lng - A.lng) * mx, py = (P.lat - A.lat) * my;
+    const denom = bx * bx + by * by;
+    const t = denom > 1e-9 ? Math.max(0, Math.min(1, (px * bx + py * by) / denom)) : 0;
+    const projected = { lat: A.lat + (B.lat - A.lat) * t, lng: A.lng + (B.lng - A.lng) * t };
+    return { point: projected, t, distanceM: haversineM(P, projected) };
+  }
+
+  function nearestPointOnGeometry(point, geometry) {
+    let best = null;
+    for (let i = 1; i < (geometry || []).length; i += 1) {
+      const hit = projectPointToSegmentM(point, geometry[i - 1], geometry[i]);
+      if (hit && (!best || hit.distanceM < best.distanceM)) best = Object.assign({ segmentIndex: i - 1 }, hit);
+    }
+    return best;
+  }
+
+  function samplePolyline(points, spacingM) {
+    const pts = (points || []).map(asLatLng).filter(Boolean);
+    if (pts.length < 2) return pts;
+    const total = routeDistanceM(pts);
+    const count = Math.max(2, Math.ceil(total / Math.max(5, Number(spacingM) || 18)) + 1);
+    const out = [];
+    for (let i = 0; i < count; i += 1) out.push(pointAlongPolyline(pts, total * (i / (count - 1))));
+    return out.filter(Boolean);
+  }
+
+  function nearestGraphEdge(graph, point) {
+    let best = null;
+    for (const edge of graph?.edges?.values?.() || []) {
+      const hit = nearestPointOnGeometry(point, edge.geometry);
+      if (hit && (!best || hit.distanceM < best.distanceM)) best = Object.assign({ edge }, hit);
+    }
+    return best;
+  }
+
+  function graphStats(graph) {
+    const types = {};
+    const lengths = [];
+    for (const edge of graph?.edges?.values?.() || []) {
+      const h = primaryHighway(edge);
+      types[h] = (types[h] || 0) + 1;
+      lengths.push(Number(edge.distanceM) || 0);
+    }
+    lengths.sort((a, b) => a - b);
+    return {
+      typeCounts: types,
+      longestEdgeM: lengths.length ? lengths[lengths.length - 1] : 0,
+      medianEdgeM: lengths.length ? lengths[Math.floor(lengths.length / 2)] : 0
+    };
+  }
+
+  function debugSnapshot() {
+    const state = lastGraphDebug;
+    if (!state?.graph) return null;
+    const graph = state.graph;
+    const edges = [];
+    for (const edge of graph.edges.values()) {
+      const shade = lastShadeDebug.get(edge.id);
+      edges.push({
+        id: edge.id,
+        a: edge.a,
+        b: edge.b,
+        distanceM: edge.distanceM,
+        geometry: edge.geometry.map((p) => ({ lat: p.lat, lng: p.lng })),
+        wayIds: edge.wayIds.slice(),
+        tagsSummary: edge.tagsSummary || {},
+        highway: primaryHighway(edge),
+        family: highwayFamily(primaryHighway(edge)),
+        inFastest: lastRouteEdges.fastest.has(edge.id),
+        inMinSun: lastRouteEdges.minSun.has(edge.id),
+        shadeEstimate: shade ? {
+          evaluations: shade.count,
+          samples: shade.samples,
+          directSunFraction: shade.count ? shade.directSunFractionSum / shade.count : null,
+          shadedFraction: shade.count ? shade.shadedFractionSum / shade.count : null,
+          lastAt: shade.lastAt
+        } : null
+      });
+    }
+    const connectors = [];
+    for (const [nodeId, refs] of graph.adjacency) {
+      const families = new Set();
+      const highways = new Set();
+      for (const ref of refs || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge) continue;
+        const h = primaryHighway(edge);
+        highways.add(h);
+        families.add(highwayFamily(h));
+      }
+      if (families.size >= 2) {
+        const node = graph.nodes.get(nodeId);
+        if (node) connectors.push({ id: nodeId, lat: node.lat, lng: node.lng, highways: Array.from(highways), degree: refs.length });
+      }
+    }
+    return {
+      version: VERSION,
+      bbox: state.bbox,
+      overpassEndpoint: state.endpoint,
+      snapA: state.snapA ? { id: state.snapA.id, lat: state.snapA.node.lat, lng: state.snapA.node.lng, distanceM: state.snapA.distanceM } : null,
+      snapB: state.snapB ? { id: state.snapB.id, lat: state.snapB.node.lat, lng: state.snapB.node.lng, distanceM: state.snapB.distanceM } : null,
+      edges,
+      connectors,
+      stats: graphStats(graph)
+    };
+  }
+
+  function diagnosePolyline(points, options = {}) {
+    const state = lastGraphDebug;
+    if (!state?.graph) return { available: false, reason: "no-graph" };
+    const route = (points || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) return { available: false, reason: "route-too-short" };
+    const spacingM = Math.max(5, Number(options.sampleSpacingM || config.diagnosticSampleSpacingM || 18));
+    const thresholdM = Math.max(4, Number(options.thresholdM || config.diagnosticMatchThresholdM || 16));
+    const samples = samplePolyline(route, spacingM);
+    const hits = [];
+    const edgeUse = new Map();
+    let matched = 0;
+    let distanceSum = 0;
+    let maxDistance = 0;
+    let longestGapSamples = 0;
+    let currentGap = 0;
+    for (const point of samples) {
+      const hit = nearestGraphEdge(state.graph, point);
+      const distanceM = Number(hit?.distanceM ?? Infinity);
+      const ok = distanceM <= thresholdM;
+      if (ok) {
+        matched += 1;
+        currentGap = 0;
+        const edge = hit.edge;
+        edgeUse.set(edge.id, (edgeUse.get(edge.id) || 0) + 1);
+      } else {
+        currentGap += 1;
+        longestGapSamples = Math.max(longestGapSamples, currentGap);
+      }
+      if (Number.isFinite(distanceM)) {
+        distanceSum += distanceM;
+        maxDistance = Math.max(maxDistance, distanceM);
+      }
+      hits.push({
+        lat: point.lat, lng: point.lng, matched: ok, distanceM,
+        edgeId: hit?.edge?.id || null,
+        highway: hit?.edge ? primaryHighway(hit.edge) : null,
+        nearest: hit?.point || null
+      });
+    }
+    const matchedEdges = Array.from(edgeUse.entries()).sort((a, b) => b[1] - a[1]).map(([edgeId, count]) => {
+      const edge = state.graph.edges.get(edgeId);
+      return { edgeId, count, highway: edge ? primaryHighway(edge) : "unknown", wayIds: edge?.wayIds?.slice?.() || [] };
+    });
+    const selectedEdges = lastRouteEdges.minSun.size ? lastRouteEdges.minSun : lastRouteEdges.fastest;
+    const overlapCount = matchedEdges.reduce((sum, item) => sum + (selectedEdges.has(item.edgeId) ? item.count : 0), 0);
+    const coverageRatio = samples.length ? matched / samples.length : 0;
+    const overlapRatio = matched ? overlapCount / matched : 0;
+    let interpretation = "手繪線與目前 graph 的關係尚不明確。";
+    if (coverageRatio >= 0.8 && overlapRatio < 0.35) interpretation = "手繪路線大多存在於 OSM graph，但目前自動最不曬路線沒有使用這些 edge；應優先檢查 edge 日照成本與搜尋剪枝，而不是再補路網。";
+    else if (coverageRatio >= 0.8) interpretation = "手繪路線大多存在於 OSM graph，而且與目前自動路線有明顯重疊；差異可能集中在少數入口／出口或 shade-cost 細節。";
+    else if (coverageRatio < 0.5) interpretation = "手繪路線有大段不在目前 OSM graph 附近；應優先檢查河堤／步道是否缺 way、缺 connector，或圖資拓樸沒有接起來。";
+    else interpretation = "手繪路線部分存在於 graph，但仍有明顯缺口；可能是入口／出口 connector 缺失或局部 OSM 拓樸斷線。";
+    return {
+      available: true,
+      thresholdM,
+      sampleSpacingM: spacingM,
+      totalSamples: samples.length,
+      matchedSamples: matched,
+      coverageRatio,
+      averageDistanceM: samples.length ? distanceSum / samples.length : null,
+      maxDistanceM: maxDistance,
+      longestGapApproxM: longestGapSamples * spacingM,
+      overlapWithSelectedRatio: overlapRatio,
+      matchedEdges: matchedEdges.slice(0, 20),
+      hits,
+      interpretation
+    };
+  }
+
   async function buildGraphForAB(a, b, options = {}) {
     const bbox = bboxForAB(a, b, options.bboxMarginM || config.bboxMarginM);
     const key = bboxKey(bbox);
@@ -629,6 +871,7 @@
     options.onProgress?.({ stage: "graph", message: "正在建立本地 pedestrian graph…" });
     const graph = contractGraph(cached.raw, [snapA.id, snapB.id]);
     if (graph.nodes.size > Number(config.maxContractedNodes || 5000)) throw new Error(`步行 graph 有 ${graph.nodes.size} 個交會節點，超過目前安全上限。`);
+    lastGraphDebug = { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint, builtAt: Date.now() };
     return { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint };
   }
 
@@ -644,6 +887,8 @@
     const detourPct = clamp(options.detourPct, 0, 80, 30);
     const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
     if (Number.isNaN(departure.getTime())) throw new Error("出發時間不正確。 ");
+    lastShadeDebug.clear();
+    lastRouteEdges = { fastest: new Set(), minSun: new Set() };
 
     const built = await buildGraphForAB(A, B, {
       bboxMarginM: options.bboxMarginM,
@@ -685,6 +930,9 @@
       shouldCancel: options.shouldCancel
     });
 
+    lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
+    lastRouteEdges.minSun = new Set(minSun.path?.edgeIds || []);
+
     const candidates = [];
     candidates.push({
       id: "graph-fastest",
@@ -724,7 +972,8 @@
       detourLimitSeconds: detourLimitS,
       searchExpandedStates: minSun.expanded,
       shadeEdgeEvaluations: minSun.shadeEvals,
-      candidateCount: candidates.length
+      candidateCount: candidates.length,
+      graphStats: graphStats(graph)
     };
     return { available: true, candidates, diagnostics: lastDiagnostics };
   }
@@ -732,6 +981,9 @@
   function clearCache() {
     graphCache.clear();
     lastDiagnostics = null;
+    lastGraphDebug = null;
+    lastRouteEdges = { fastest: new Set(), minSun: new Set() };
+    lastShadeDebug.clear();
   }
 
   window.HaidianPedestrianGraph = {
@@ -739,6 +991,8 @@
     get config() { return Object.assign({}, config); },
     findRoutes,
     buildGraphForAB,
+    getDebugSnapshot: debugSnapshot,
+    diagnosePolyline,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -754,6 +1008,11 @@
       routeDistanceM,
       pathFromEdgeSteps,
       edgeGeometryFor,
+      nearestGraphEdge,
+      diagnosePolyline,
+      primaryHighway,
+      highwayFamily,
+      graphStats,
       MinHeap
     }
   };

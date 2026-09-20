@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev1 Local Graph
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev2 Graph Diagnostics
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev1";
+  const VERSION = "v9.0.0-dev2";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -52,6 +52,9 @@
   let resultLayer = null;
   let endpointsLayer = null;
   let comparisonLayer = null;
+  let graphDebugLayer = null;
+  let graphDebugVisible = false;
+  let lastManualGraphDiagnosis = null;
   let drawMode = "idle";
   let drawPoints = [];
   let aPoint = null;
@@ -451,6 +454,8 @@
     uiMode = next;
     clearLayer(resultLayer);
     clearLayer(comparisonLayer);
+    clearGraphDiagnostics();
+    lastManualGraphDiagnosis = null;
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
     lastCandidateBundle = null;
@@ -1204,6 +1209,133 @@
     return `替代路線 ${providers.findIndex((c) => c.id === candidate.id) + 1}`;
   }
 
+
+  function graphEdgeColor(edge) {
+    if (edge?.inMinSun) return "#7c3aed";
+    if (edge?.inFastest) return "#0f766e";
+    if (edge?.family === "path") return "#8b5cf6";
+    if (edge?.family === "local-road") return "#64748b";
+    return "#94a3b8";
+  }
+
+  function graphEdgeLabel(edge) {
+    const tags = edge?.tagsSummary || {};
+    const tag = (key) => Array.isArray(tags[key]) ? tags[key].join(" / ") : "";
+    const shade = edge?.shadeEstimate;
+    const shadeText = shade && Number.isFinite(shade.directSunFraction)
+      ? `<br>graph 估計：直接日照 ${Math.round(shade.directSunFraction * 100)}%・遮蔭 ${Math.round((shade.shadedFraction || 0) * 100)}%・${Math.round(shade.samples || 0)} samples`
+      : "<br>此 edge 尚未被 shade search 評估";
+    return `<b>OSM Graph edge ${escapeHtml(edge?.id || "")}</b><br>` +
+      `highway=${escapeHtml(edge?.highway || "unknown")}・長度 ${Math.round(edge?.distanceM || 0)} m` +
+      `${tag("name") ? `<br>name=${escapeHtml(tag("name"))}` : ""}` +
+      `${tag("foot") ? `<br>foot=${escapeHtml(tag("foot"))}` : ""}` +
+      `${tag("access") ? `<br>access=${escapeHtml(tag("access"))}` : ""}` +
+      `${tag("surface") ? `<br>surface=${escapeHtml(tag("surface"))}` : ""}` +
+      `<br>way id：${escapeHtml((edge?.wayIds || []).join(", ") || "—")}` +
+      `${edge?.inMinSun ? "<br><b>✓ 目前 OSM Graph 最不曬路線使用</b>" : ""}` +
+      `${edge?.inFastest ? "<br>✓ OSM Graph 最快路線使用" : ""}` + shadeText;
+  }
+
+  function clearGraphDiagnostics() {
+    graphDebugVisible = false;
+    clearLayer(graphDebugLayer);
+  }
+
+  function renderGraphDiagnostics() {
+    const api = window.HaidianPedestrianGraph;
+    const snapshot = api?.getDebugSnapshot?.();
+    if (!snapshot?.edges?.length) {
+      setStatus("目前沒有可顯示的 OSM Graph；請先跑一次 A→B。", "warning");
+      return false;
+    }
+    if (!graphDebugLayer) graphDebugLayer = createLayerGroup();
+    clearLayer(graphDebugLayer);
+    for (const edge of snapshot.edges) {
+      const line = window.L.polyline(edge.geometry, {
+        color: graphEdgeColor(edge),
+        weight: edge.inMinSun ? 5 : edge.inFastest ? 4 : edge.family === "path" ? 3.2 : 2.2,
+        opacity: edge.inMinSun || edge.inFastest ? 0.9 : edge.family === "path" ? 0.72 : 0.38,
+        interactive: true
+      }).addTo(graphDebugLayer);
+      line.bindPopup(graphEdgeLabel(edge), { maxWidth: 330 });
+    }
+    for (const connector of snapshot.connectors || []) {
+      window.L.circleMarker(connector, {
+        radius: 4.5, weight: 2, color: "#a16207", fillColor: "#fde047", fillOpacity: 0.92, interactive: true
+      }).bindTooltip(`可能的步道/道路轉換點<br>${escapeHtml((connector.highways || []).join(" + "))}`, { direction: "top" }).addTo(graphDebugLayer);
+    }
+    if (snapshot.snapA) {
+      window.L.circleMarker(snapshot.snapA, { radius: 7, weight: 3, color: "#2563eb", fillColor: "#dbeafe", fillOpacity: 1 })
+        .bindTooltip(`A 吸附點・誤差 ${Math.round(snapshot.snapA.distanceM || 0)} m`, { permanent: false }).addTo(graphDebugLayer);
+    }
+    if (snapshot.snapB) {
+      window.L.circleMarker(snapshot.snapB, { radius: 7, weight: 3, color: "#dc2626", fillColor: "#fee2e2", fillOpacity: 1 })
+        .bindTooltip(`B 吸附點・誤差 ${Math.round(snapshot.snapB.distanceM || 0)} m`, { permanent: false }).addTo(graphDebugLayer);
+    }
+    graphDebugVisible = true;
+    return true;
+  }
+
+  function toggleGraphDiagnostics() {
+    if (graphDebugVisible) {
+      clearGraphDiagnostics();
+      const button = panel?.querySelector("[data-re-graph-toggle]");
+      if (button) button.textContent = "顯示 OSM Graph";
+      return;
+    }
+    if (renderGraphDiagnostics()) {
+      const button = panel?.querySelector("[data-re-graph-toggle]");
+      if (button) button.textContent = "隱藏 OSM Graph";
+      setStatus("OSM Graph 診斷圖層已開啟：紫色為 footway/path 類步行廊道，黃色圓點是道路/步道類型的轉換節點。點任一 edge 可看 OSM tag 與 graph shade 估計。", "");
+    }
+  }
+
+  function graphDiagnosisHtml(diagnosis) {
+    if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
+    const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
+    const overlap = Math.round((diagnosis.overlapWithSelectedRatio || 0) * 100);
+    const cls = coverage >= 80 ? "is-good" : coverage < 50 ? "is-bad" : "is-warning";
+    const types = (diagnosis.matchedEdges || []).slice(0, 5).map((e) => `${escapeHtml(e.highway)} (${e.count})`).join("、") || "—";
+    return `<div class="re-graph-diagnosis ${cls}"><b>手繪路線 ↔ OSM Graph 對照</b>` +
+      `<span>約 <strong>${coverage}%</strong> 的手繪採樣點落在 graph ${Math.round(diagnosis.thresholdM)} m 內；與目前自動路線 edge 重疊約 <strong>${overlap}%</strong>。</span>` +
+      `<span>平均離 graph ${Number(diagnosis.averageDistanceM || 0).toFixed(1)} m；最長疑似缺口約 ${Math.round(diagnosis.longestGapApproxM || 0)} m。</span>` +
+      `<span>主要對應：${types}</span><p>${escapeHtml(diagnosis.interpretation || "")}</p></div>`;
+  }
+
+  function diagnoseSavedManualRoute() {
+    if (!savedDrawnRoute?.length || savedDrawnRoute.length < 2) {
+      setStatus("還沒有手繪路線。請先用『分析我自己的路線』沿河堤/道路畫一條，再回來跑 A→B。", "warning");
+      return;
+    }
+    const api = window.HaidianPedestrianGraph;
+    if (!api?.diagnosePolyline) {
+      setStatus("目前版本沒有 OSM Graph 手繪診斷 API。", "error");
+      return;
+    }
+    const diagnosis = api.diagnosePolyline(savedDrawnRoute);
+    lastManualGraphDiagnosis = diagnosis;
+    const box = panel?.querySelector("[data-re-graph-diagnosis]");
+    if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
+    if (diagnosis?.available) {
+      renderGraphDiagnostics();
+      if (graphDebugLayer) {
+        let missIndex = 0;
+        for (const hit of diagnosis.hits || []) {
+          if (hit.matched) continue;
+          missIndex += 1;
+          const marker = window.L.circleMarker([hit.lat, hit.lng], { radius: 4.5, weight: 2, color: "#be123c", fillColor: "#fff1f2", fillOpacity: 1, interactive: true })
+            .bindTooltip(`手繪線此處離 OSM graph 約 ${Math.round(hit.distanceM || 0)} m`, { direction: "top" })
+            .addTo(graphDebugLayer);
+          if (hit.nearest && missIndex <= 24) {
+            window.L.polyline([[hit.lat, hit.lng], [hit.nearest.lat, hit.nearest.lng]], { color: "#e11d48", weight: 1.5, opacity: 0.72, dashArray: "4 5", interactive: false }).addTo(graphDebugLayer);
+          }
+        }
+      }
+      const button = panel?.querySelector("[data-re-graph-toggle]");
+      if (button) button.textContent = "隱藏 OSM Graph";
+    }
+  }
+
   function candidatesHtml(bundle) {
     const activeId = bundle.activeCandidateId || bundle.best?.id || bundle.selected?.id;
     const bestId = bundle.best?.id || bundle.selected?.id;
@@ -1247,8 +1379,9 @@
       : "";
 
     const graphDiag = bundle.graphDiagnostics;
+    const graphStats = graphDiag?.graphStats || {};
     const graphNote = graphDiag
-      ? `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；不是用 waypoint 猜替代路線。A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span></div>`
+      ? `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。最長 contracted edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`
       : "";
 
     return `<section class="re-candidates">
@@ -1576,6 +1709,7 @@
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
       .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.re-graph-actions button{min-height:36px;padding:8px 11px;border:1px solid #c4b5fd;border-radius:10px;background:#fff;color:#5b21b6;font-size:12.5px;font-weight:900;cursor:pointer}.re-graph-actions button:hover{background:#f5f3ff}.re-graph-diagnosis{display:grid;gap:5px;margin-top:9px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#334155;font-size:12.5px;line-height:1.5}.re-graph-diagnosis b{font-size:13px}.re-graph-diagnosis span{display:block}.re-graph-diagnosis p{margin:2px 0 0;font-weight:800}.re-graph-diagnosis.is-good{background:#ecfdf5;border-color:#86efac;color:#166534}.re-graph-diagnosis.is-warning{background:#fffbeb;border-color:#fde68a;color:#92400e}.re-graph-diagnosis.is-bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
       .re-time-step{border-color:#99d9cf;background:linear-gradient(145deg,#f0fdfa,#ffffff)}
       .re-time-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin-bottom:9px;border-radius:11px;background:#fff;border:1px solid #cce8e3}.re-time-summary span{color:#64748b;font-size:12.5px;font-weight:800}.re-time-summary strong{color:#075a63;font-size:16px;font-weight:950}
       .re-time-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:9px}.re-time-quick button{min-height:38px;border:1px solid #b8d9d4;border-radius:10px;background:#fff;color:#0f766e;font-size:13px;font-weight:900;cursor:pointer}.re-time-quick button:hover{background:#ecfdf5;border-color:#5eead4}
@@ -1692,6 +1826,10 @@
         selectCandidate(candidate.dataset.reCandidateId);
         return;
       }
+      const graphToggle = event.target?.closest?.("[data-re-graph-toggle]");
+      if (graphToggle) { toggleGraphDiagnostics(); return; }
+      const graphDiagnose = event.target?.closest?.("[data-re-graph-diagnose]");
+      if (graphDiagnose) { diagnoseSavedManualRoute(); return; }
       const action = event.target?.closest?.("[data-re-result-draw]");
       if (!action) return;
       setUiMode("draw");
@@ -1740,7 +1878,7 @@
       button.classList.toggle("is-on", next);
       button.setAttribute("aria-pressed", String(next));
     }
-    if (!next) stopDrawMode();
+    if (!next) { stopDrawMode(); clearGraphDiagnostics(); }
   }
 
   function addButton() {
