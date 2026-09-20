@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev4 */
+/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev5 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -17,5 +17,14 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   manualEndpointToleranceM: 120,
   exploreCandidates: true,
   exploreMaxRoutes: 6,
-  maxScoredCandidates: 10
+  maxScoredCandidates: 10,
+  // dev5: shaded dead-end / out-and-back routes are rejected before shade scoring.
+  routeQualityEnabled: true,
+  routeQualitySampleM: 8,
+  routeQualityLoopReturnRadiusM: 10,
+  routeQualityMinLoopExcursionM: 45,
+  routeQualityRepeatedCorridorRadiusM: 9,
+  routeQualityRepeatedCorridorMinSeparationM: 32,
+  routeQualityMaxRepeatedCorridorM: 24,
+  routeQualityMaxBacktrackM: 65
 };
