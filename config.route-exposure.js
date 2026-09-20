@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev1 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev2 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev1: browser-side OSM pedestrian graph prototype.
+  // v9.0.0-dev2: local OSM graph + interactive diagnostics / manual-route graph matching.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -42,8 +42,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     maxShadeEdgeEvaluations: 700,
     timeBucketSec: 60,
     shadeTimeBucketSec: 120,
-    shadeSampleSpacingM: 28,
-    shadeMaxSamplesPerEdge: 4,
+    shadeSampleSpacingM: 30,
+    shadeMaxSamplesPerEdge: 8,
+    diagnosticMatchThresholdM: 16,
+    diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3
   }
 };
