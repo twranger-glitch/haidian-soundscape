@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v8.9.0-dev6 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev1 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -15,7 +15,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   fitCandidateRoute: true,
   manualRouteSnapToleranceM: 120,
   manualEndpointToleranceM: 120,
-  exploreCandidates: true,
+  exploreCandidates: false,
   exploreMaxRoutes: 6,
   maxScoredCandidates: 10,
   // dev6: reject only true loop-return / reverse repeated-corridor waste; normal street detours remain allowed.
@@ -26,5 +26,24 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorRadiusM: 5,
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
-  routeQualityOppositeHeadingDeg: 155
+  routeQualityOppositeHeadingDeg: 155,
+  // v9.0.0-dev1: browser-side OSM pedestrian graph prototype.
+  graphRouting: {
+    enabled: true,
+    overpassEndpoints: [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter"
+    ],
+    overpassTimeoutMs: 22000,
+    bboxMarginM: 420,
+    maxBboxSideM: 2800,
+    snapMaxM: 120,
+    maxExpandedStates: 5000,
+    maxShadeEdgeEvaluations: 700,
+    timeBucketSec: 60,
+    shadeTimeBucketSec: 120,
+    shadeSampleSpacingM: 28,
+    shadeMaxSamplesPerEdge: 4,
+    shadeConcurrency: 3
+  }
 };
