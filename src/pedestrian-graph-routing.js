@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev9 Ordered Manual Map Matching
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev10 Progress-state Ordered Map Matching
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev9";
+  const VERSION = "v9.0.0-dev10";
 
   const DEFAULTS = {
     enabled: true,
@@ -29,6 +29,9 @@
     pedestrianSnapSlackM: 12,
     manualReplayCorridorM: 16,
     manualReplayMaxCorridorM: 36,
+    manualReplayProgressBucketM: 10,
+    manualReplayBacktrackToleranceM: 12,
+    manualReplayGoalToleranceM: 28,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
     maxFineNodes: 12000,
@@ -59,6 +62,7 @@
   let lastRouteEdges = { fastest: new Set(), minSun: new Set() };
   const lastShadeDebug = new Map();
   const graphCache = new Map();
+  let lastOrderedMapMatchFailure = null;
 
   function asLatLng(value) {
     if (!value) return null;
@@ -235,7 +239,7 @@
     return "road";
   }
 
-  // v9.0.0-dev9: terminal snapping is walking-first, not motor-road-first.
+  // v9.0.0-dev10: terminal snapping is walking-first, not motor-road-first.
   // Distance remains a hard local constraint: pedestrian preference only breaks
   // ties among edges within a small slack of the geometrically nearest edge.
   function pedestrianSnapRank(tags = {}) {
@@ -1198,73 +1202,138 @@
 
 
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
-    const backwardToleranceM = Math.max(4, Number(options.manualReplayBacktrackToleranceM || 12));
+    // dev10: ordered map matching is a state-space problem, not just a node shortest path.
+    // The same graph node may be reached while representing different progress along the
+    // hand-drawn route.  Collapsing those states by node alone can discard the only legal
+    // continuation through a levee / footway connector.
+    const configuredBacktrackM = Math.max(4, Number(options.manualReplayBacktrackToleranceM || config.manualReplayBacktrackToleranceM || 12));
+    const backwardToleranceM = Math.max(configuredBacktrackM, thresholdM * 0.75);
     const lateralWeight = Math.max(0.5, Number(options.manualReplayLateralWeight || 4));
+    const progressBucketM = Math.max(4, Number(options.manualReplayProgressBucketM || config.manualReplayProgressBucketM || 10));
     const routeLen = routeDistanceM(route);
-    const dist = new Map([[String(startId), 0]]);
-    const time = new Map([[String(startId), 0]]);
+    const goalToleranceM = Math.max(18, Number(options.manualReplayGoalToleranceM || config.manualReplayGoalToleranceM || 28), thresholdM * 0.8);
+    const maxForwardGapBaseM = Math.max(35, Number(options.manualReplayMaxForwardGapM || 55));
+    const dist = new Map();
+    const time = new Map();
     const prev = new Map();
     const heap = new MinHeap((a, b) => a.score - b.score);
     const matchCache = new Map();
     const cooperativeYield = makeCooperativeYielder(options);
+    const rejectCounts = { tooFar: 0, edgeBackwards: 0, stateBehind: 0, forwardJump: 0, envelope: 0 };
     let expanded = 0;
-    heap.push({ node: String(startId), score: 0 });
+    let furthest = { progressM: 0, node: String(startId), score: 0 };
+
+    function bucketFor(progressM) {
+      return Math.max(0, Math.min(Math.ceil(routeLen / progressBucketM) + 2, Math.round(progressM / progressBucketM)));
+    }
+    function keyFor(node, progressM) {
+      return `${String(node)}|${bucketFor(progressM)}`;
+    }
+
+    const startNode = graph.nodes.get(String(startId));
+    const startProjection = startNode ? projectPointToPolylineProgressM(startNode, route) : null;
+    const startProgressM = Math.max(0, Math.min(routeLen, startProjection?.progressM ?? 0));
+    const startKey = keyFor(startId, startProgressM);
+    dist.set(startKey, 0);
+    time.set(startKey, 0);
+    heap.push({ key: startKey, node: String(startId), progressM: startProgressM, score: 0 });
+    let goalState = null;
 
     while (heap.size) {
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
       const cur = heap.pop();
-      if (!cur || cur.score !== dist.get(cur.node)) continue;
-      if (cur.node === String(endId)) break;
+      if (!cur || cur.score !== dist.get(cur.key)) continue;
+      if (cur.progressM > furthest.progressM + 0.01) furthest = { progressM: cur.progressM, node: cur.node, score: cur.score };
+      if (cur.node === String(endId) && cur.progressM >= routeLen - goalToleranceM) {
+        goalState = cur;
+        break;
+      }
       expanded += 1;
       if ((expanded % 100) === 0) await cooperativeYield();
 
       for (const ref of graph.adjacency.get(cur.node) || []) {
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
-        const key = `${edge.id}|${cur.node}`;
-        let match = matchCache.get(key);
-        if (!match) {
-          match = orderedEdgeMatch(edge, cur.node, route, 4);
-          matchCache.set(key, match || false);
+        const cacheKey = `${edge.id}|${cur.node}`;
+        let match = matchCache.get(cacheKey);
+        if (match == null) {
+          match = orderedEdgeMatch(edge, cur.node, route, 5);
+          matchCache.set(cacheKey, match || false);
         }
         if (!match || match === false) continue;
-        if (match.maxDistanceM > thresholdM) continue;
-        if (match.progressGainM < -backwardToleranceM) continue;
-        // Reject graph shortcuts that jump far ahead along a meandering hand-drawn route.
-        if (match.progressGainM > edge.distanceM + thresholdM * 2 + 18) continue;
-        // Do not let a path leave the manual route's A→B progress envelope.
-        if (match.maxProgressM < -backwardToleranceM || match.minProgressM > routeLen + backwardToleranceM) continue;
+        if (match.maxDistanceM > thresholdM) { rejectCounts.tooFar += 1; continue; }
+        if (match.progressGainM < -backwardToleranceM) { rejectCounts.edgeBackwards += 1; continue; }
+        if (match.maxProgressM < cur.progressM - backwardToleranceM) { rejectCounts.stateBehind += 1; continue; }
+
+        // The edge must begin reasonably close to the route progress represented by this
+        // state.  This prevents jumping to a nearby parallel road far ahead while still
+        // allowing short real-world connector detours around ramps / levee accesses.
+        const maxForwardGapM = Math.max(maxForwardGapBaseM, edge.distanceM + thresholdM * 2 + 18);
+        if (match.startProgressM > cur.progressM + maxForwardGapM) { rejectCounts.forwardJump += 1; continue; }
+        if (match.maxProgressM < -backwardToleranceM || match.minProgressM > routeLen + backwardToleranceM) { rejectCounts.envelope += 1; continue; }
 
         const next = String(ref.to);
         const edgeTime = edge.distanceM / speedMps;
+        const nextProgressM = Math.max(cur.progressM, Math.min(routeLen, match.endProgressM));
+        const effectiveGainM = Math.max(0, nextProgressM - cur.progressM);
         const lateralFactor = 1 + lateralWeight * Math.min(1.5, match.avgDistanceM / Math.max(4, thresholdM));
-        const stagnantPenalty = Math.max(0, Math.min(edge.distanceM, 20) - Math.max(0, match.progressGainM)) * 2;
-        const score = cur.score + edge.distanceM * lateralFactor + stagnantPenalty;
-        if (score + 1e-9 < (dist.get(next) ?? Infinity)) {
-          dist.set(next, score);
-          time.set(next, (time.get(cur.node) || 0) + edgeTime);
-          prev.set(next, { node: cur.node, edgeId: edge.id, match });
-          heap.push({ node: next, score });
+        const stagnantPenalty = Math.max(0, Math.min(edge.distanceM, 20) - effectiveGainM) * 2;
+        const continuityGapM = Math.max(0, Math.abs(match.startProgressM - cur.progressM) - thresholdM);
+        const continuityPenalty = continuityGapM * 1.5;
+        const score = cur.score + edge.distanceM * lateralFactor + stagnantPenalty + continuityPenalty;
+        const nextKey = keyFor(next, nextProgressM);
+        if (score + 1e-9 < (dist.get(nextKey) ?? Infinity)) {
+          dist.set(nextKey, score);
+          time.set(nextKey, (time.get(cur.key) || 0) + edgeTime);
+          prev.set(nextKey, { prevKey: cur.key, node: cur.node, edgeId: edge.id, match, progressM: nextProgressM });
+          heap.push({ key: nextKey, node: next, progressM: nextProgressM, score });
         }
       }
     }
 
-    if (!Number.isFinite(dist.get(String(endId)))) return null;
+    if (!goalState) {
+      const node = graph.nodes.get(furthest.node);
+      const nearbyHighways = [];
+      for (const ref of graph.adjacency.get(furthest.node) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        const h = edge ? primaryHighway(edge) : null;
+        if (h && !nearbyHighways.includes(h)) nearbyHighways.push(h);
+      }
+      lastOrderedMapMatchFailure = {
+        thresholdM,
+        expanded,
+        routeLengthM: routeLen,
+        maxProgressM: furthest.progressM,
+        maxProgressRatio: routeLen > 0 ? furthest.progressM / routeLen : 0,
+        nodeId: furthest.node,
+        lat: node?.lat ?? null,
+        lng: node?.lng ?? null,
+        nearbyHighways: nearbyHighways.slice(0, 8),
+        backwardToleranceM,
+        progressBucketM,
+        rejectCounts
+      };
+      return null;
+    }
+
     const steps = [];
-    let cur = String(endId);
+    let curKey = goalState.key;
     let guard = 0;
-    while (cur !== String(startId) && guard++ < 10000) {
-      const step = prev.get(cur);
+    while (curKey !== startKey && guard++ < 20000) {
+      const step = prev.get(curKey);
       if (!step) return null;
-      steps.push({ edgeId: step.edgeId, from: step.node, to: cur, match: step.match });
-      cur = step.node;
+      const currentNode = curKey.split('|')[0];
+      steps.push({ edgeId: step.edgeId, from: step.node, to: currentNode, match: step.match });
+      curKey = step.prevKey;
     }
     steps.reverse();
     const path = pathFromEdgeSteps(graph, steps);
-    path.walkSeconds = time.get(String(endId));
+    path.walkSeconds = time.get(goalState.key);
     path.steps = steps;
-    path.mapMatchScore = dist.get(String(endId));
+    path.mapMatchScore = dist.get(goalState.key);
+    path.mapMatchProgressM = goalState.progressM;
     path.coverage = pathCoverageAgainstRoute(path.points, route, Math.min(14, thresholdM), 10);
+    lastOrderedMapMatchFailure = null;
     return path;
   }
   async function corridorDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
@@ -1337,7 +1406,10 @@
       path = null;
     }
     if (!path) {
-      return { available: true, connected: false, reason: "no-ordered-map-match-in-manual-corridor", triedCorridorM: thresholds };
+      return {
+        available: true, connected: false, reason: "no-ordered-map-match-in-manual-corridor", triedCorridorM: thresholds,
+        failureDiagnostics: lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null
+      };
     }
     let walkS = 0;
     let sunS = 0;
@@ -1742,6 +1814,7 @@
       nearestGraphEdge,
       diagnosePolyline,
       replayPolyline,
+      getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
       highwayFamily,
       pedestrianSnapRank,
