@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev2 Graph Diagnostics
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev3 Graph Reveal + Drag-safe Endpoints
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev2";
+  const VERSION = "v9.0.0-dev3";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -69,6 +69,8 @@
   let busy = false;
   let savedDrawnRoute = [];
   let savedDrawnAnalysis = null;
+  let mapDragSuppressUntil = 0;
+  let lastGraphFailure = null;
 
   const icon = {
     route: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.2"></circle><circle cx="19" cy="6" r="2.2"></circle><path d="M7.1 17.4c4.7-1 2.1-8.1 6.5-8.7l3.2-.4"></path></svg>',
@@ -1380,9 +1382,13 @@
 
     const graphDiag = bundle.graphDiagnostics;
     const graphStats = graphDiag?.graphStats || {};
-    const graphNote = graphDiag
-      ? `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。最長 contracted edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`
-      : "";
+    const graphDebugAvailable = Boolean(bundle.graphDebugAvailable);
+    let graphNote = "";
+    if (graphDiag) {
+      graphNote = `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。最長 contracted edge 約 ${Math.round(graphStats.longestEdgeM || 0)} m。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+    } else if (bundle.graphError || graphDebugAvailable) {
+      graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>對照我的手繪路線</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
+    }
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
@@ -1570,6 +1576,7 @@
 
       let graphResult = null;
       let graphCandidates = [];
+      lastGraphFailure = null;
       if (config.graphRouting?.enabled !== false && window.HaidianPedestrianGraph?.findRoutes) {
         try {
           await ensureShadeReady();
@@ -1592,6 +1599,7 @@
         } catch (graphError) {
           if (graphError?.message === "ROUTE_ANALYSIS_CANCELLED") throw graphError;
           graphResult = { available: false, error: graphError?.message || String(graphError) };
+          lastGraphFailure = graphResult.error;
           console.warn("[Haidian v9 graph] local graph routing unavailable; falling back to provider candidates.", graphError);
           setStatus(`OSM Graph 暫時未完成（${graphResult.error}）；改用一般步行候選繼續分析。`, "warning");
         }
@@ -1624,6 +1632,14 @@
       bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn" && candidate.eligible !== false);
       bundle.graphDiagnostics = graphResult?.diagnostics || null;
       bundle.graphError = graphResult?.error || null;
+      bundle.graphDebugAvailable = Boolean(window.HaidianPedestrianGraph?.getDebugSnapshot?.()?.edges?.length);
+      if (savedDrawnRoute?.length >= 2 && bundle.graphDebugAvailable && window.HaidianPedestrianGraph?.diagnosePolyline) {
+        try {
+          lastManualGraphDiagnosis = window.HaidianPedestrianGraph.diagnosePolyline(savedDrawnRoute);
+        } catch (diagnosisError) {
+          console.warn("[Haidian v9 graph] automatic manual-route diagnosis failed", diagnosisError);
+        }
+      }
       lastCandidateBundle = bundle;
       lastSelectedCandidate = bundle.best;
       lastAnalysis = bundle.best?.analysis || null;
@@ -1709,6 +1725,7 @@
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
       .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-graph-note.is-error{background:#fff7ed;border-color:#fdba74;color:#9a3412}.re-graph-note.is-error .re-graph-actions button{border-color:#fdba74;color:#9a3412}
       .re-graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.re-graph-actions button{min-height:36px;padding:8px 11px;border:1px solid #c4b5fd;border-radius:10px;background:#fff;color:#5b21b6;font-size:12.5px;font-weight:900;cursor:pointer}.re-graph-actions button:hover{background:#f5f3ff}.re-graph-diagnosis{display:grid;gap:5px;margin-top:9px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#334155;font-size:12.5px;line-height:1.5}.re-graph-diagnosis b{font-size:13px}.re-graph-diagnosis span{display:block}.re-graph-diagnosis p{margin:2px 0 0;font-weight:800}.re-graph-diagnosis.is-good{background:#ecfdf5;border-color:#86efac;color:#166534}.re-graph-diagnosis.is-warning{background:#fffbeb;border-color:#fde68a;color:#92400e}.re-graph-diagnosis.is-bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
       .re-time-step{border-color:#99d9cf;background:linear-gradient(145deg,#f0fdfa,#ffffff)}
       .re-time-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin-bottom:9px;border-radius:11px;background:#fff;border:1px solid #cce8e3}.re-time-summary span{color:#64748b;font-size:12.5px;font-weight:800}.re-time-summary strong{color:#075a63;font-size:16px;font-weight:950}
@@ -1909,8 +1926,22 @@
     return true;
   }
 
+  function suppressMapPointAfterDrag(message = true) {
+    mapDragSuppressUntil = Math.max(mapDragSuppressUntil, Date.now() + 650);
+    if (message && (drawMode === "a" || drawMode === "b")) {
+      setStatus(drawMode === "b"
+        ? "已拖曳地圖，這次不會設定 B。移到想要的位置後，再單擊一次設定 B。"
+        : "已拖曳地圖，這次不會設定 A。移到想要的位置後，再單擊一次設定 A。", "drawing");
+    }
+  }
+
+  function mapPointClickSuppressed() {
+    return Date.now() < mapDragSuppressUntil;
+  }
+
   function onMapClick(event) {
     if (!event?.latlng) return;
+    if (mapPointClickSuppressed()) return;
     const point = { lat: Number(event.latlng.lat), lng: Number(event.latlng.lng) };
     if (drawMode === "route") {
       if (drawPoints.length >= Number(config.maxDrawPoints || 80)) {
@@ -1953,6 +1984,8 @@
       if (map && window.L && addButton()) {
         panel = createPanel();
         map.on("click", onMapClick);
+        map.on("dragstart", () => suppressMapPointAfterDrag(false));
+        map.on("dragend", () => suppressMapPointAfterDrag(true));
         window.clearInterval(timer);
       } else if (attempts > 80) {
         window.clearInterval(timer);
@@ -1976,6 +2009,7 @@
     get lastCandidateBundle() { return lastCandidateBundle; },
     get savedDrawnRoute() { return savedDrawnRoute.slice(); },
     get graphDiagnostics() { return window.HaidianPedestrianGraph?.lastDiagnostics || null; },
+    get lastGraphFailure() { return lastGraphFailure; },
     _internals: {
       buildSampleSegments,
       aggregateExposure,

@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev2 Diagnostics
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev3 Diagnostics
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev2";
+  const VERSION = "v9.0.0-dev3";
 
   const DEFAULTS = {
     enabled: true,
