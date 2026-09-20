@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev6 Flow & Quality
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev1 Local Graph
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v8.9.0-dev6";
+  const VERSION = "v9.0.0-dev1";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -30,7 +30,7 @@
     fitCandidateRoute: true,
     manualRouteSnapToleranceM: 120,
     manualEndpointToleranceM: 120,
-    exploreCandidates: true,
+    exploreCandidates: false,
     exploreMaxRoutes: 6,
     maxScoredCandidates: 10,
     // dev5 route-quality guard: shaded dead-ends / out-and-back loops never count as a benefit.
@@ -1192,6 +1192,8 @@
   }
 
   function candidateName(candidate, bundle) {
+    if (candidate?.kind === "graph-shade") return "OSM Graph 最不曬候選";
+    if (candidate?.kind === "graph-fastest") return "OSM Graph 最快";
     if (candidate?.kind === "manual") return "我的手繪路線";
     if (candidate?.id === bundle.fastest?.id) return "最快";
     if (candidate?.kind === "explore") {
@@ -1211,6 +1213,7 @@
       const badges = [];
       if (c.kind === 'manual') badges.push('<em class="manual">手繪</em>');
       if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
+      if (c.kind === 'graph-shade' || c.kind === 'graph-fastest') badges.push('<em class="graph">OSM Graph</em>');
       if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">最不曬</em>');
       if (c.eligible === false) badges.push('<em class="over">超過上限</em>');
       if (c.id === activeId) badges.push('<em class="viewing">目前顯示</em>');
@@ -1243,9 +1246,14 @@
       ? `<div class="re-quality-note">已自動淘汰 ${rejectedCount} 條真正返回同一位置／反向重走同一走廊的候選。一般街廓轉彎、平行街繞行不會只因短暫朝反方向就被淘汰。</div>`
       : "";
 
+    const graphDiag = bundle.graphDiagnostics;
+    const graphNote = graphDiag
+      ? `<div class="re-graph-note"><b>v9 OSM Graph 已啟用</b><span>本次直接搜尋 ${Math.round(graphDiag.contractedNodes || 0)} 個步行交會節點／${Math.round(graphDiag.contractedEdges || 0)} 條 graph edge；不是用 waypoint 猜替代路線。A、B 吸附誤差約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span></div>`
+      : "";
+
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
-      ${notice}${manualState}${qualityNote}${rows}
+      ${notice}${graphNote}${manualState}${qualityNote}${rows}
       <div class="re-method-note">評選以「直接日照時間」為核心，不以提高遮蔭百分比為目的。走進無尾巷再原路走回、或反向重走同一條實體走廊會先淘汰；一般街廓轉彎與合理側向繞行仍可參加比較。</div>
     </section>`;
   }
@@ -1419,37 +1427,80 @@
     const serial = analysisSerial;
     setBusy(true);
     try {
-      setStatus("正在取得步行候選，並探索 A→B 走廊兩側的替代路線…", "loading");
+      const departure = departureDateFromPanel();
+      const speedMps = speedMpsFromPanel();
+      const detourPct = detourCapFromPanel();
+
+      setStatus("正在取得一般步行候選…", "loading");
       const providerCandidates = await fetchRouteCandidates(aPoint, bPoint);
       if (serial !== analysisSerial) return;
-      let exploratoryCandidates = [];
-      try {
-        exploratoryCandidates = await fetchExploratoryCandidates(aPoint, bPoint);
-      } catch (_) { exploratoryCandidates = []; }
+
+      let graphResult = null;
+      let graphCandidates = [];
+      if (config.graphRouting?.enabled !== false && window.HaidianPedestrianGraph?.findRoutes) {
+        try {
+          await ensureShadeReady();
+          setStatus("v9：正在讀取 OSM 步行路網並直接搜尋『最不曬』graph 路徑…", "loading");
+          let lastGraphUi = 0;
+          graphResult = await window.HaidianPedestrianGraph.findRoutes(aPoint, bPoint, {
+            departure,
+            speedMps,
+            detourPct,
+            shouldCancel: () => serial !== analysisSerial,
+            onProgress(info) {
+              const now = Date.now();
+              if (now - lastGraphUi < 180 && info?.stage === "search") return;
+              lastGraphUi = now;
+              if (serial !== analysisSerial) return;
+              setStatus(info?.message || "正在搜尋 OSM pedestrian graph…", "loading");
+            }
+          });
+          graphCandidates = Array.isArray(graphResult?.candidates) ? graphResult.candidates : [];
+        } catch (graphError) {
+          if (graphError?.message === "ROUTE_ANALYSIS_CANCELLED") throw graphError;
+          graphResult = { available: false, error: graphError?.message || String(graphError) };
+          console.warn("[Haidian v9 graph] local graph routing unavailable; falling back to provider candidates.", graphError);
+          setStatus(`OSM Graph 暫時未完成（${graphResult.error}）；改用一般步行候選繼續分析。`, "warning");
+        }
+      }
       if (serial !== analysisSerial) return;
-      const speedMps = speedMpsFromPanel();
+
+      // Legacy waypoint exploration is fallback-only. v9 prefers direct graph search.
+      let exploratoryCandidates = [];
+      if (!graphCandidates.length && config.exploreCandidates !== false) {
+        try { exploratoryCandidates = await fetchExploratoryCandidates(aPoint, bPoint); }
+        catch (_) { exploratoryCandidates = []; }
+      }
+      if (serial !== analysisSerial) return;
+
       const manualMatch = buildManualCandidate(aPoint, bPoint, speedMps);
-      const candidates = dedupeCandidates(providerCandidates.concat(exploratoryCandidates));
+      const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, exploratoryCandidates));
       if (manualMatch?.matched && manualMatch.candidate) candidates.push(manualMatch.candidate);
       lastCandidates = candidates;
+
+      setStatus(`正在用實際到達時間重新精算 ${candidates.length} 條候選的 ShadeMap 曝曬…`, "loading");
       const bundle = await scoreCandidates(candidates, {
         serial,
-        departure: departureDateFromPanel(),
+        departure,
         sampleSpacingM: spacingFromPanel(),
         speedMps,
-        detourPct: detourCapFromPanel()
+        detourPct
       });
       if (serial !== analysisSerial) return;
       bundle.manualMatch = manualMatch;
       bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn" && candidate.eligible !== false);
+      bundle.graphDiagnostics = graphResult?.diagnostics || null;
+      bundle.graphError = graphResult?.error || null;
       lastCandidateBundle = bundle;
       lastSelectedCandidate = bundle.best;
       lastAnalysis = bundle.best?.analysis || null;
       renderCandidateBundle(bundle);
       if (bundle.comparisonValid) {
-        setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選；下方可逐條點選切換地圖。`, "ok");
+        const graphText = bundle.graphDiagnostics ? "；已加入 v9 OSM Graph 直接搜尋結果" : "";
+        setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}。下方可逐條點選切換地圖。`, "ok");
       } else {
-        setStatus("目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。", "warning");
+        const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
+        setStatus(`目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。${suffix}`, "warning");
       }
     } catch (error) {
       if (error?.message !== "ROUTE_ANALYSIS_CANCELLED") setStatus(error?.message || "A→B 路線分析失敗。", "error");
@@ -1524,7 +1575,7 @@
       .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:12px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
-      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .re-time-step{border-color:#99d9cf;background:linear-gradient(145deg,#f0fdfa,#ffffff)}
       .re-time-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin-bottom:9px;border-radius:11px;background:#fff;border:1px solid #cce8e3}.re-time-summary span{color:#64748b;font-size:12.5px;font-weight:800}.re-time-summary strong{color:#075a63;font-size:16px;font-weight:950}
       .re-time-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:9px}.re-time-quick button{min-height:38px;border:1px solid #b8d9d4;border-radius:10px;background:#fff;color:#0f766e;font-size:13px;font-weight:900;cursor:pointer}.re-time-quick button:hover{background:#ecfdf5;border-color:#5eead4}
@@ -1786,6 +1837,7 @@
     get lastSelectedCandidate() { return lastSelectedCandidate; },
     get lastCandidateBundle() { return lastCandidateBundle; },
     get savedDrawnRoute() { return savedDrawnRoute.slice(); },
+    get graphDiagnostics() { return window.HaidianPedestrianGraph?.lastDiagnostics || null; },
     _internals: {
       buildSampleSegments,
       aggregateExposure,
