@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev10 Progress-state Ordered Map Matching
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev11 First Topology Breakpoint Diagnostics
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev10";
+  const VERSION = "v9.0.0-dev11";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1307,12 +1307,33 @@
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else {
         const f = r.failureDiagnostics || null;
+        const bp = f?.breakpoint || null;
         const progress = f && Number.isFinite(f.maxProgressRatio) ? Math.round(f.maxProgressRatio * 100) : null;
-        const where = f && Number.isFinite(f.lat) && Number.isFinite(f.lng) ? `；最遠重建到約 ${progress}%（${f.lat.toFixed(5)}, ${f.lng.toFixed(5)}）` : (progress != null ? `；最遠重建到約 ${progress}%` : '');
-        const roads = f?.nearbyHighways?.length ? `；該處附近 edge：${escapeHtml(f.nearbyHighways.join(' / '))}` : '';
+        const where = f && Number.isFinite(f.lat) && Number.isFinite(f.lng) ? `；最佳嘗試重建到約 ${progress}%（${f.lat.toFixed(5)}, ${f.lng.toFixed(5)}）` : (progress != null ? `；最佳嘗試重建到約 ${progress}%` : '');
+        const bestCorridor = Number.isFinite(Number(f?.thresholdM)) ? `；最佳容許範圍 ${Math.round(Number(f.thresholdM))} m` : '';
+        const roads = f?.nearbyHighways?.length ? `；該處 graph edge：${escapeHtml(f.nearbyHighways.join(' / '))}` : '';
         const rejected = f?.rejectCounts ? `；拒絕統計：離線 ${f.rejectCounts.tooFar || 0}、反向 ${f.rejectCounts.edgeBackwards || 0}、落後進度 ${f.rejectCounts.stateBehind || 0}、跳太前 ${f.rejectCounts.forwardJump || 0}` : '';
-        replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內仍無法依手繪前進順序重建 A→B${where}${roads}${rejected}。</span>` +
-          `<p>這代表目前不是單純「離 graph 太遠」，而是 map-match 在某個拓樸／進度轉換點中斷；dev10 已保留同一節點的不同手繪進度 state，不再用 node 單一狀態互相覆蓋。</p>`;
+        let breakpointHtml = '';
+        if (bp) {
+          const causeLabel = bp.suspectedCause === 'near-miss-topology-gap' ? '高度疑似 OSM 未共構 connector' :
+            bp.suspectedCause === 'matcher-progress-rejection' ? '較像 matcher 進度規則拒絕' :
+            bp.suspectedCause === 'graph-dead-end' ? 'graph 在此形成步行死端' :
+            bp.suspectedCause === 'possible-topology-gap' ? '可能是近距離拓樸斷點' : '原因尚未定案';
+          const cur = bp.currentNode || {};
+          const curSource = cur.sourceNodeId ? ` / OSM node ${escapeHtml(cur.sourceNodeId)}` : (cur.virtual ? ' / fine-graph 虛擬節點' : '');
+          const near = bp.nearestDisconnected || null;
+          const nearNode = near?.node || {};
+          const nearWays = near?.wayIds?.length ? `；way ${escapeHtml(near.wayIds.join(', '))}` : '';
+          const nearTypes = near?.highways?.length ? `（${escapeHtml(near.highways.join(' / '))}）` : '';
+          const nearDetail = near ? `<span><strong>最近未連接候選：</strong>node ${escapeHtml(nearNode.id || '—')}${nearNode.sourceNodeId ? ` / OSM node ${escapeHtml(nearNode.sourceNodeId)}` : ''}，與目前節點相距 ${Number(near.gapM || 0).toFixed(1)} m、離手繪線 ${Number(near.routeDistanceM || 0).toFixed(1)} m、手繪進度差 ${Number(near.deltaProgressM || 0).toFixed(1)} m；direct edge 正向 ${near.forwardExists ? '有' : '無'}／反向 ${near.reverseExists ? '有' : '無'}${nearTypes}${nearWays}。</span>` : '';
+          const rejectedEdges = (bp.incidentEdges || []).filter((e) => !e.accepted).slice(0, 3).map((e) => `${e.highway || 'unknown'}[${(e.wayIds || []).join('/') || 'no-way'}]→${e.rejectReason || 'reject'}`).join('；');
+          const edgeDetail = rejectedEdges ? `<span><strong>目前節點被拒 edge：</strong>${escapeHtml(rejectedEdges)}</span>` : '';
+          const directionDetail = Number.isFinite(Number(bp.incidentBidirectionalCount)) ? `；目前節點鄰接 edge 雙向 ${Math.round(bp.incidentBidirectionalCount || 0)}、單向 ${Math.round(bp.incidentOneWayCount || 0)}` : '';
+          breakpointHtml = `<span><strong>dev11 疑似斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
+        }
+        replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內仍無法依手繪前進順序重建 A→B${where}${bestCorridor}${roads}${rejected}。</span>` +
+          breakpointHtml +
+          `<p>dev11 不會自動把「相距幾公尺」的道路硬接起來；先定位第一個疑似 topology breakpoint，再區分「OSM node 未共構」和「graph 已連通但 matcher 規則拒絕」，避免穿牆或跨水溝。</p>`;
       }
     }
     return `<div class="re-graph-diagnosis ${cls}"><b>手繪路線 ↔ OSM Graph 對照</b>` +
@@ -1353,12 +1374,12 @@
           const f = diagnosis.replay.failureDiagnostics;
           const pct = f && Number.isFinite(f.maxProgressRatio) ? Math.round(f.maxProgressRatio * 100) : null;
           diagnosis.interpretation = pct != null
-            ? `手繪線幾何上貼近 OSM graph，但依有向拓樸與前進順序只能重建到約 ${pct}%；應檢查該進度附近的 connector / edge 方向 / OSM node 是否真正共點。`
-            : "手繪線幾何上貼近 OSM graph，但目前仍無法依有向拓樸與前進順序重建完整 A→B；應優先檢查 connector / edge 方向 / OSM node 是否真正共點。";
+            ? `手繪線幾何上貼近 OSM graph，但依前進順序只能重建到約 ${pct}%；dev11 已進一步檢查該進度附近是否有「幾何相近但未共構」的 connector，或 matcher 進度規則拒絕。`
+            : "手繪線幾何上貼近 OSM graph，但目前仍無法依前進順序重建完整 A→B；dev11 會優先顯示疑似 topology breakpoint 與附近未連接 node。";
         }
         lastManualGraphDiagnosis = diagnosis;
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
-        setStatus(diagnosis.replay?.searchMissConfirmed ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的 ordered 手繪 edge path；搜尋器仍有漏解。" : (diagnosis.replay?.connected === false ? "Progress-state map-match 找到中斷位置；請看診斷卡的完成百分比與附近 edge。" : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。"), diagnosis.replay?.searchMissConfirmed ? "warning" : (diagnosis.replay?.connected === false ? "warning" : "ok"));
+        setStatus(diagnosis.replay?.searchMissConfirmed ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的 ordered 手繪 edge path；搜尋器仍有漏解。" : (diagnosis.replay?.connected === false ? "dev11 已定位最佳疑似拓樸斷點；請看診斷卡的 node / way / connector 與 matcher 拒絕原因。" : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。"), diagnosis.replay?.searchMissConfirmed ? "warning" : (diagnosis.replay?.connected === false ? "warning" : "ok"));
       } catch (error) {
         diagnosis.replay = { available: true, connected: false, reason: error?.message || String(error) };
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
@@ -1377,6 +1398,21 @@
             .addTo(graphDebugLayer);
           if (hit.nearest && missIndex <= 24) {
             window.L.polyline([[hit.lat, hit.lng], [hit.nearest.lat, hit.nearest.lng]], { color: "#e11d48", weight: 1.5, opacity: 0.72, dashArray: "4 5", interactive: false }).addTo(graphDebugLayer);
+          }
+        }
+        const bp = diagnosis.replay?.failureDiagnostics?.breakpoint || null;
+        if (bp?.currentNode && Number.isFinite(bp.currentNode.lat) && Number.isFinite(bp.currentNode.lng)) {
+          window.L.circleMarker([bp.currentNode.lat, bp.currentNode.lng], { radius: 8, weight: 3, color: "#dc2626", fillColor: "#fef2f2", fillOpacity: 0.95, interactive: true })
+            .bindTooltip(`dev11 疑似拓樸斷點 · ${bp.suspectedCause || 'unknown'} · node ${bp.currentNode.id || '—'}`, { direction: "top" })
+            .addTo(graphDebugLayer);
+        }
+        const near = bp?.nearestDisconnected || null;
+        if (near?.node && Number.isFinite(near.node.lat) && Number.isFinite(near.node.lng)) {
+          window.L.circleMarker([near.node.lat, near.node.lng], { radius: 7, weight: 3, color: "#f59e0b", fillColor: "#fffbeb", fillOpacity: 0.95, interactive: true })
+            .bindTooltip(`附近未連接候選 · gap ${Number(near.gapM || 0).toFixed(1)} m · node ${near.node.id || '—'}`, { direction: "top" })
+            .addTo(graphDebugLayer);
+          if (bp?.currentNode && Number.isFinite(bp.currentNode.lat) && Number.isFinite(bp.currentNode.lng)) {
+            window.L.polyline([[bp.currentNode.lat, bp.currentNode.lng], [near.node.lat, near.node.lng]], { color: "#f59e0b", weight: 3, opacity: 0.9, dashArray: "7 5", interactive: false }).addTo(graphDebugLayer);
           }
         }
       }

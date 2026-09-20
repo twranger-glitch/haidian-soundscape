@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev10 Progress-state Ordered Map Matching
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev11 First Topology Breakpoint Diagnostics
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev10";
+  const VERSION = "v9.0.0-dev11";
 
   const DEFAULTS = {
     enabled: true,
@@ -32,6 +32,8 @@
     manualReplayProgressBucketM: 10,
     manualReplayBacktrackToleranceM: 12,
     manualReplayGoalToleranceM: 28,
+    topologyBreakpointProbeM: 14,
+    topologyBreakpointMaxCandidates: 8,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
     maxFineNodes: 12000,
@@ -202,7 +204,7 @@
 
 
   function compactTagSummary(tags = {}) {
-    const keys = ["highway", "foot", "access", "name", "surface", "lit", "bridge", "tunnel", "layer", "incline", "steps"];
+    const keys = ["highway", "foot", "access", "oneway", "oneway:foot", "bicycle", "cycleway", "service", "name", "surface", "lit", "bridge", "tunnel", "layer", "incline", "steps"];
     const out = {};
     for (const key of keys) {
       const value = tags?.[key];
@@ -239,7 +241,7 @@
     return "road";
   }
 
-  // v9.0.0-dev10: terminal snapping is walking-first, not motor-road-first.
+  // v9.0.0-dev8+: terminal snapping is walking-first, not motor-road-first.
   // Distance remains a hard local constraint: pedestrian preference only breaks
   // ties among edges within a small slack of the geometrically nearest edge.
   function pedestrianSnapRank(tags = {}) {
@@ -1012,6 +1014,165 @@
     };
   }
 
+
+  function graphHasDirectedEdge(graph, fromId, toId) {
+    const from = String(fromId), to = String(toId);
+    return (graph?.adjacency?.get(from) || []).some((ref) => String(ref.to) === to);
+  }
+
+  function compactTagsForBreakpoint(edge) {
+    const src = edge?.tagsSummary || {};
+    const out = {};
+    for (const key of ["highway", "foot", "access", "oneway", "oneway:foot", "bicycle", "cycleway", "service", "bridge", "tunnel", "layer", "incline", "steps", "name"]) {
+      const value = src[key];
+      if (Array.isArray(value) && value.length) out[key] = value.slice(0, 6);
+      else if (value != null && String(value).trim() !== "") out[key] = value;
+    }
+    return out;
+  }
+
+  function nodeMetaForBreakpoint(graph, nodeId) {
+    const id = String(nodeId);
+    const node = graph?.nodes?.get(id);
+    if (!node) return { id };
+    return {
+      id,
+      lat: Number.isFinite(Number(node.lat)) ? Number(node.lat) : null,
+      lng: Number.isFinite(Number(node.lng)) ? Number(node.lng) : null,
+      virtual: node.virtual === true,
+      sourceNodeId: node.sourceNodeId != null ? String(node.sourceNodeId) : null,
+      sourceEdgeId: node.sourceEdgeId != null ? String(node.sourceEdgeId) : null
+    };
+  }
+
+  function classifyOrderedTransition(match, edge, curProgressM, routeLen, thresholdM, backwardToleranceM, maxForwardGapBaseM) {
+    if (!match) return { accepted: false, reason: "noMatch" };
+    if (match.maxDistanceM > thresholdM) return { accepted: false, reason: "tooFar" };
+    if (match.progressGainM < -backwardToleranceM) return { accepted: false, reason: "edgeBackwards" };
+    if (match.maxProgressM < curProgressM - backwardToleranceM) return { accepted: false, reason: "stateBehind" };
+    const maxForwardGapM = Math.max(maxForwardGapBaseM, Number(edge?.distanceM || 0) + thresholdM * 2 + 18);
+    if (match.startProgressM > curProgressM + maxForwardGapM) return { accepted: false, reason: "forwardJump", maxForwardGapM };
+    if (match.maxProgressM < -backwardToleranceM || match.minProgressM > routeLen + backwardToleranceM) return { accepted: false, reason: "envelope", maxForwardGapM };
+    return { accepted: true, reason: "accepted", maxForwardGapM };
+  }
+
+  function incidentEdgesForBreakpoint(graph, nodeId, route, curProgressM, thresholdM, backwardToleranceM, maxForwardGapBaseM) {
+    const routeLen = routeDistanceM(route);
+    const out = [];
+    for (const ref of graph?.adjacency?.get(String(nodeId)) || []) {
+      const edge = graph.edges.get(ref.edgeId);
+      if (!edge) continue;
+      const match = orderedEdgeMatch(edge, String(nodeId), route, 5);
+      const verdict = classifyOrderedTransition(match, edge, curProgressM, routeLen, thresholdM, backwardToleranceM, maxForwardGapBaseM);
+      const reverseExists = graphHasDirectedEdge(graph, ref.to, nodeId);
+      out.push({
+        edgeId: edge.id,
+        toNodeId: String(ref.to),
+        highway: primaryHighway(edge),
+        wayIds: (edge.wayIds || []).slice(0, 8),
+        tags: compactTagsForBreakpoint(edge),
+        forwardExists: true,
+        reverseExists,
+        accepted: verdict.accepted,
+        rejectReason: verdict.reason,
+        distanceM: Number(edge.distanceM || 0),
+        match: match ? {
+          maxDistanceM: match.maxDistanceM,
+          avgDistanceM: match.avgDistanceM,
+          startProgressM: match.startProgressM,
+          endProgressM: match.endProgressM,
+          progressGainM: match.progressGainM,
+          minProgressM: match.minProgressM,
+          maxProgressM: match.maxProgressM
+        } : null
+      });
+    }
+    return out.sort((a, b) => (b.accepted - a.accepted) || ((b.match?.maxProgressM ?? -Infinity) - (a.match?.maxProgressM ?? -Infinity)) || (a.distanceM - b.distanceM));
+  }
+
+  function nearbyDisconnectedCandidatesForBreakpoint(graph, currentNodeId, route, curProgressM, thresholdM, backwardToleranceM, options = {}) {
+    const current = graph?.nodes?.get(String(currentNodeId));
+    if (!current) return [];
+    const probeM = Math.max(4, Number(options.topologyBreakpointProbeM || config.topologyBreakpointProbeM || 14));
+    const maxCandidates = Math.max(1, Number(options.topologyBreakpointMaxCandidates || config.topologyBreakpointMaxCandidates || 8));
+    const forwardWindowM = Math.max(45, thresholdM * 4);
+    const out = [];
+    for (const [candidateId, node] of graph.nodes || []) {
+      const id = String(candidateId);
+      if (id === String(currentNodeId)) continue;
+      const gapM = haversineM(current, node);
+      if (!(gapM <= probeM + 1e-9)) continue;
+      if (graphHasDirectedEdge(graph, currentNodeId, id) || graphHasDirectedEdge(graph, id, currentNodeId)) continue;
+      const projection = projectPointToPolylineProgressM(node, route);
+      if (!projection) continue;
+      const deltaProgressM = projection.progressM - curProgressM;
+      if (deltaProgressM < -backwardToleranceM || deltaProgressM > forwardWindowM) continue;
+      if (projection.distanceM > Math.max(thresholdM * 1.35, probeM)) continue;
+      const incident = incidentEdgesForBreakpoint(graph, id, route, curProgressM, thresholdM, backwardToleranceM, Math.max(35, Number(options.manualReplayMaxForwardGapM || 55)));
+      const wayIds = [];
+      const highways = [];
+      for (const e of incident) {
+        for (const w of e.wayIds || []) if (!wayIds.includes(String(w))) wayIds.push(String(w));
+        if (e.highway && !highways.includes(e.highway)) highways.push(e.highway);
+      }
+      out.push({
+        node: nodeMetaForBreakpoint(graph, id),
+        gapM,
+        routeDistanceM: projection.distanceM,
+        routeProgressM: projection.progressM,
+        deltaProgressM,
+        forwardExists: graphHasDirectedEdge(graph, currentNodeId, id),
+        reverseExists: graphHasDirectedEdge(graph, id, currentNodeId),
+        highways: highways.slice(0, 8),
+        wayIds: wayIds.slice(0, 12),
+        incidentEdges: incident.slice(0, 6)
+      });
+    }
+    out.sort((a, b) => (a.gapM + a.routeDistanceM * 0.8 + Math.max(0, -a.deltaProgressM) * 2) - (b.gapM + b.routeDistanceM * 0.8 + Math.max(0, -b.deltaProgressM) * 2));
+    return out.slice(0, maxCandidates);
+  }
+
+  function buildTopologyBreakpointDiagnostics(graph, furthest, route, thresholdM, backwardToleranceM, maxForwardGapBaseM, rejectCounts, options = {}) {
+    const node = graph?.nodes?.get(String(furthest?.node));
+    if (!node) return null;
+    const routeLen = routeDistanceM(route);
+    const progressM = Math.max(0, Math.min(routeLen, Number(furthest?.progressM || 0)));
+    const routePoint = pointAlongPolyline(route, progressM);
+    const nextRoutePoint = pointAlongPolyline(route, Math.min(routeLen, progressM + Math.max(8, thresholdM * 0.75)));
+    const incidentEdges = incidentEdgesForBreakpoint(graph, furthest.node, route, progressM, thresholdM, backwardToleranceM, maxForwardGapBaseM);
+    const disconnected = nearbyDisconnectedCandidatesForBreakpoint(graph, furthest.node, route, progressM, thresholdM, backwardToleranceM, options);
+    const acceptedIncident = incidentEdges.filter((e) => e.accepted);
+    const rejectedIncident = incidentEdges.filter((e) => !e.accepted);
+    let suspectedCause = "unknown";
+    if (disconnected.length && disconnected[0].gapM <= Math.max(6, Math.min(Number(options.topologyBreakpointProbeM || config.topologyBreakpointProbeM || 14), thresholdM))) {
+      suspectedCause = "near-miss-topology-gap";
+    } else if (!acceptedIncident.length && rejectedIncident.length) {
+      suspectedCause = "matcher-progress-rejection";
+    } else if (!incidentEdges.length) {
+      suspectedCause = "graph-dead-end";
+    } else if (disconnected.length) {
+      suspectedCause = "possible-topology-gap";
+    }
+    return {
+      suspectedCause,
+      thresholdM,
+      progressM,
+      progressRatio: routeLen > 0 ? progressM / routeLen : 0,
+      routeLengthM: routeLen,
+      routePoint: routePoint ? { lat: routePoint.lat, lng: routePoint.lng } : null,
+      nextRoutePoint: nextRoutePoint ? { lat: nextRoutePoint.lat, lng: nextRoutePoint.lng } : null,
+      currentNode: nodeMetaForBreakpoint(graph, furthest.node),
+      incidentEdges: incidentEdges.slice(0, 12),
+      acceptedIncidentCount: acceptedIncident.length,
+      rejectedIncidentCount: rejectedIncident.length,
+      incidentBidirectionalCount: incidentEdges.filter((e) => e.forwardExists && e.reverseExists).length,
+      incidentOneWayCount: incidentEdges.filter((e) => e.forwardExists && !e.reverseExists).length,
+      nearestDisconnected: disconnected[0] || null,
+      nearbyDisconnected: disconnected,
+      rejectCounts: Object.assign({}, rejectCounts || {})
+    };
+  }
+
   function pathCoverageAgainstRoute(pathPoints, route, thresholdM = 12, spacingM = 10) {
     const samples = samplePolyline(route, spacingM);
     if (!samples.length || !pathPoints?.length) return { coverageRatio: 0, averageDistanceM: Infinity, maxDistanceM: Infinity };
@@ -1202,7 +1363,7 @@
 
 
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
-    // dev10: ordered map matching is a state-space problem, not just a node shortest path.
+    // dev10+: ordered map matching is a state-space problem, not just a node shortest path.
     // The same graph node may be reached while representing different progress along the
     // hand-drawn route.  Collapsing those states by node alone can discard the only legal
     // continuation through a levee / footway connector.
@@ -1261,16 +1422,11 @@
           matchCache.set(cacheKey, match || false);
         }
         if (!match || match === false) continue;
-        if (match.maxDistanceM > thresholdM) { rejectCounts.tooFar += 1; continue; }
-        if (match.progressGainM < -backwardToleranceM) { rejectCounts.edgeBackwards += 1; continue; }
-        if (match.maxProgressM < cur.progressM - backwardToleranceM) { rejectCounts.stateBehind += 1; continue; }
-
-        // The edge must begin reasonably close to the route progress represented by this
-        // state.  This prevents jumping to a nearby parallel road far ahead while still
-        // allowing short real-world connector detours around ramps / levee accesses.
-        const maxForwardGapM = Math.max(maxForwardGapBaseM, edge.distanceM + thresholdM * 2 + 18);
-        if (match.startProgressM > cur.progressM + maxForwardGapM) { rejectCounts.forwardJump += 1; continue; }
-        if (match.maxProgressM < -backwardToleranceM || match.minProgressM > routeLen + backwardToleranceM) { rejectCounts.envelope += 1; continue; }
+        const verdict = classifyOrderedTransition(match, edge, cur.progressM, routeLen, thresholdM, backwardToleranceM, maxForwardGapBaseM);
+        if (!verdict.accepted) {
+          if (Object.prototype.hasOwnProperty.call(rejectCounts, verdict.reason)) rejectCounts[verdict.reason] += 1;
+          continue;
+        }
 
         const next = String(ref.to);
         const edgeTime = edge.distanceM / speedMps;
@@ -1299,6 +1455,7 @@
         const h = edge ? primaryHighway(edge) : null;
         if (h && !nearbyHighways.includes(h)) nearbyHighways.push(h);
       }
+      const breakpoint = buildTopologyBreakpointDiagnostics(graph, furthest, route, thresholdM, backwardToleranceM, maxForwardGapBaseM, rejectCounts, options);
       lastOrderedMapMatchFailure = {
         thresholdM,
         expanded,
@@ -1311,7 +1468,8 @@
         nearbyHighways: nearbyHighways.slice(0, 8),
         backwardToleranceM,
         progressBucketM,
-        rejectCounts
+        rejectCounts,
+        breakpoint
       };
       return null;
     }
@@ -1400,15 +1558,30 @@
     const thresholds = Array.from(new Set([baseThreshold, Math.min(maxThreshold, baseThreshold + 8), Math.min(maxThreshold, baseThreshold + 16), maxThreshold])).sort((a,b)=>a-b);
     let path = null;
     let usedThresholdM = null;
+    let bestFailure = null;
+    const failureAttempts = [];
     for (const thresholdM of thresholds) {
       path = await orderedMapMatchDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
       if (path && (path.coverage?.coverageRatio || 0) >= 0.88) { usedThresholdM = thresholdM; break; }
+      if (lastOrderedMapMatchFailure) {
+        const snapshot = Object.assign({}, lastOrderedMapMatchFailure, {
+          rejectCounts: Object.assign({}, lastOrderedMapMatchFailure.rejectCounts || {}),
+          breakpoint: lastOrderedMapMatchFailure.breakpoint ? Object.assign({}, lastOrderedMapMatchFailure.breakpoint) : null
+        });
+        failureAttempts.push(snapshot);
+        if (!bestFailure || Number(snapshot.maxProgressRatio || 0) > Number(bestFailure.maxProgressRatio || 0) + 1e-9 ||
+            (Math.abs(Number(snapshot.maxProgressRatio || 0) - Number(bestFailure.maxProgressRatio || 0)) < 1e-9 && Number(snapshot.thresholdM || Infinity) < Number(bestFailure.thresholdM || Infinity))) {
+          bestFailure = snapshot;
+        }
+      }
       path = null;
     }
     if (!path) {
+      lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true, connected: false, reason: "no-ordered-map-match-in-manual-corridor", triedCorridorM: thresholds,
-        failureDiagnostics: lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null
+        failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
+        failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null }))
       };
     }
     let walkS = 0;
@@ -1647,7 +1820,7 @@
     });
     await cooperativeYield(true);
     if (graph.nodes.size > Number(config.maxFineNodes || 12000)) throw new Error(`細緻步行 graph 有 ${graph.nodes.size} 個節點，超過目前安全上限。`);
-    lastGraphDebug = { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint, builtAt: Date.now() };
+    lastGraphDebug = { graph, raw: workingRaw, contracted, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint, builtAt: Date.now() };
     return { graph, snapA, snapB, bbox: cached.bbox, endpoint: cached.endpoint };
   }
 
