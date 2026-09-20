@@ -1,11 +1,11 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev1
+ * Haidian Soundscape — Route Exposure Foundation v8.9.0-dev2 UX Flow
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
  * - time-dependent shade evaluation at each segment traversal time;
  * - nearby realtime heat-risk context for near-now departures;
- * - experimental A→B "最不曬" selection among routing-provider alternatives.
+ * - guided two-mode UX plus A→B candidate comparison with optional user-drawn route.
  *
  * Important: this is candidate-route scoring, not full-network shade-optimal routing.
  */
@@ -25,7 +25,8 @@
     maxDrawPoints: 80,
     maxRouteSamples: 420,
     autoEnableShade: true,
-    fitCandidateRoute: true
+    fitCandidateRoute: true,
+    manualEndpointToleranceM: 60
   };
 
   const config = Object.assign({}, DEFAULTS, window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {});
@@ -44,6 +45,11 @@
   let lastAnalysis = null;
   let lastCandidates = [];
   let lastSelectedCandidate = null;
+  let lastCandidateBundle = null;
+  let uiMode = "home";
+  let busy = false;
+  let savedDrawnRoute = [];
+  let savedDrawnAnalysis = null;
 
   const icon = {
     route: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.2"></circle><circle cx="19" cy="6" r="2.2"></circle><path d="M7.1 17.4c4.7-1 2.1-8.1 6.5-8.7l3.2-.4"></path></svg>',
@@ -183,16 +189,144 @@
     if (!el) return;
     el.textContent = message || "";
     el.dataset.tone = tone;
+    el.hidden = !message;
   }
 
-  function setBusy(busy) {
+  function activeWorkflowTitle() {
+    return uiMode === "draw" ? "分析我自己的路線" : uiMode === "ab" ? "幫我找「最不曬」" : "路線曝曬分析";
+  }
+
+  function captureDrawnRouteIfValid() {
+    if (drawPoints.length >= 2) savedDrawnRoute = drawPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
+  }
+
+  function renderSavedDrawnReference() {
+    if (!map || !window.L) return;
+    if (!drawLayer) drawLayer = createLayerGroup();
+    clearLayer(drawLayer);
+    if (savedDrawnRoute.length < 2) return;
+    window.L.polyline(savedDrawnRoute, {
+      color: "#e11d48",
+      weight: 5,
+      opacity: 0.78,
+      interactive: false
+    }).addTo(drawLayer);
+  }
+
+  function setDetourPct(value) {
+    const input = panel?.querySelector("[data-re-detour]");
+    if (!input) return;
+    input.value = String(clamp(value, 0, 60, config.detourCapPct));
+    syncUiState();
+  }
+
+  function syncUiState() {
     if (!panel) return;
-    panel.classList.toggle("is-busy", !!busy);
-    panel.querySelectorAll("button, input").forEach((el) => {
-      if (el.matches("[data-re-close]")) return;
-      if (el.matches("[data-re-cancel]")) return;
-      el.disabled = !!busy;
+    panel.dataset.mode = uiMode;
+    panel.querySelectorAll("[data-re-screen]").forEach((screen) => {
+      screen.hidden = screen.dataset.reScreen !== uiMode;
     });
+    const workflow = panel.querySelector("[data-re-workflow]");
+    if (workflow) workflow.hidden = uiMode === "home";
+    const home = panel.querySelector("[data-re-home]");
+    if (home) home.hidden = uiMode !== "home";
+
+    const modeTitle = panel.querySelector("[data-re-mode-title]");
+    if (modeTitle) modeTitle.textContent = activeWorkflowTitle();
+    const modeDesc = panel.querySelector("[data-re-mode-desc]");
+    if (modeDesc) modeDesc.textContent = uiMode === "draw"
+      ? "我已經知道想走哪一條路，看看沿途會曬多久。"
+      : "我只知道起點和終點，讓系統比較可取得的步行候選。";
+
+    const drawProgress = panel.querySelector("[data-re-draw-progress]");
+    if (drawProgress) {
+      if (!drawPoints.length) drawProgress.textContent = "尚未開始畫路線";
+      else if (drawPoints.length === 1) drawProgress.textContent = "已放 1 個節點，請至少再點 1 個";
+      else drawProgress.textContent = `已放 ${drawPoints.length} 個節點，可繼續加點或直接分析`;
+    }
+    const drawStart = panel.querySelector("[data-re-draw-start]");
+    const drawAnalyze = panel.querySelector("[data-re-analyze-draw]");
+    const redraw = panel.querySelector("[data-re-redraw]");
+    if (drawStart) {
+      drawStart.hidden = drawMode === "route" || drawPoints.length > 0;
+      drawStart.disabled = busy;
+    }
+    if (drawAnalyze) {
+      drawAnalyze.hidden = drawPoints.length < 2;
+      drawAnalyze.disabled = busy || drawPoints.length < 2;
+      drawAnalyze.textContent = drawMode === "route" ? "分析這條路線" : (savedDrawnAnalysis ? "重新分析這條路線" : "分析這條路線");
+    }
+    if (redraw) {
+      redraw.hidden = drawPoints.length === 0 && savedDrawnRoute.length === 0;
+      redraw.disabled = busy;
+    }
+
+    const endpointState = panel.querySelector("[data-re-endpoint-state]");
+    if (endpointState) {
+      if (!aPoint && !bPoint) endpointState.innerHTML = '<span>A</span> 尚未設定　<span>B</span> 尚未設定';
+      else if (aPoint && !bPoint) endpointState.innerHTML = '<span class="ok">A ✓</span> 已設定　<span>B</span> 請點地圖';
+      else endpointState.innerHTML = '<span class="ok">A ✓</span> 已設定　<span class="ok">B ✓</span> 已設定';
+    }
+    const abSet = panel.querySelector("[data-re-ab]");
+    if (abSet) {
+      abSet.disabled = busy;
+      abSet.textContent = aPoint && bPoint ? "重新設定 A → B" : (aPoint ? "正在設定 A → B…" : "在地圖設定 A → B");
+    }
+    const abAnalyze = panel.querySelector("[data-re-analyze-ab]");
+    if (abAnalyze) abAnalyze.disabled = busy || !aPoint || !bPoint;
+
+    const manualNote = panel.querySelector("[data-re-manual-note]");
+    if (manualNote) {
+      manualNote.hidden = savedDrawnRoute.length < 2;
+      if (savedDrawnRoute.length >= 2) manualNote.textContent = "已保留你的手繪路線；若起終點靠近 A、B，會自動加入候選比較。";
+    }
+
+    const detour = detourCapFromPanel();
+    panel.querySelectorAll("[data-re-detour-chip]").forEach((chip) => {
+      chip.classList.toggle("is-active", Number(chip.dataset.reDetourChip) === Number(detour));
+    });
+
+    const cancelWrap = panel.querySelector("[data-re-cancel-wrap]");
+    if (cancelWrap) cancelWrap.hidden = !busy;
+    const reset = panel.querySelector("[data-re-reset]");
+    if (reset) reset.disabled = busy;
+    const exports = panel.querySelector("[data-re-export]");
+    const hasRenderedResult = !!panel.querySelector("[data-re-results]")?.innerHTML.trim();
+    if (exports) exports.hidden = !lastAnalysis || !hasRenderedResult;
+  }
+
+  function setUiMode(mode) {
+    const next = ["home", "draw", "ab"].includes(mode) ? mode : "home";
+    if (uiMode === "draw" && next !== "draw") captureDrawnRouteIfValid();
+    stopDrawMode();
+    uiMode = next;
+    clearLayer(resultLayer);
+    const results = panel?.querySelector("[data-re-results]");
+    if (results) results.innerHTML = "";
+    lastCandidateBundle = null;
+    if (next === "home") {
+      setStatus("", "");
+      renderSavedDrawnReference();
+    } else if (next === "draw") {
+      drawPoints = savedDrawnRoute.map((p) => ({ lat: p.lat, lng: p.lng }));
+      drawEditableRoute();
+      setStatus(drawPoints.length >= 2 ? "這條手繪路線已保留，可重新分析或重新畫。" : "按「開始畫路線」，再依序點選地圖上的路線節點。", "");
+    } else {
+      renderSavedDrawnReference();
+      setStatus(aPoint && bPoint ? "A、B 已設定，可以開始比較候選路線。" : "先在地圖設定 A 起點與 B 終點。", "");
+    }
+    syncUiState();
+  }
+
+  function setBusy(value) {
+    busy = !!value;
+    if (!panel) return;
+    panel.classList.toggle("is-busy", busy);
+    panel.querySelectorAll("button, input").forEach((el) => {
+      if (el.matches("[data-re-close], [data-re-cancel]")) return;
+      el.disabled = busy;
+    });
+    syncUiState();
   }
 
   function routeMidpoint(points) {
@@ -317,7 +451,7 @@
     const summary = aggregateExposure(results, speedMps);
     const heat = options.includeHeat === false ? null : await maybeHeatContext(route, departure, serial);
     return {
-      version: "v8.9.0-dev1",
+      version: "v8.9.0-dev2",
       route,
       departure: departure.toISOString(),
       sampleSpacingM: spacingM,
@@ -345,13 +479,13 @@
     if (!drawLayer) drawLayer = createLayerGroup();
     clearLayer(drawLayer);
     if (drawPoints.length >= 2) {
-      window.L.polyline(drawPoints, { color: "#475569", weight: 5, opacity: 0.86, dashArray: "8 7" }).addTo(drawLayer);
+      window.L.polyline(drawPoints, { color: "#e11d48", weight: 5, opacity: 0.86, dashArray: "8 7" }).addTo(drawLayer);
     }
     drawPoints.forEach((p, i) => {
       window.L.circleMarker(p, {
         radius: i === 0 || i === drawPoints.length - 1 ? 6 : 4,
         weight: 2,
-        color: "#334155",
+        color: "#be123c",
         fillColor: "#ffffff",
         fillOpacity: 0.98,
         interactive: false
@@ -392,31 +526,52 @@
     return `${(seconds / 60).toFixed(seconds < 600 ? 1 : 0)} 分`;
   }
 
-  function resultHtml(analysis) {
+  function resultHtml(analysis, options = {}) {
     const s = analysis.summary;
-    const shade = s.shadeRatio == null ? "—" : `${Math.round(s.shadeRatio * 100)}%`;
-    const sun = s.sunRatio == null ? "—" : `${Math.round(s.sunRatio * 100)}%`;
+    const shadePct = s.shadeRatio == null ? null : Math.round(s.shadeRatio * 100);
+    const sunPct = s.sunRatio == null ? null : Math.round(s.sunRatio * 100);
+    const shade = shadePct == null ? "—" : `${shadePct}%`;
+    const sun = sunPct == null ? "—" : `${sunPct}%`;
     const heatPayload = analysis.heat?.available ? analysis.heat.payload : null;
     const hi = heatPayload?.assessment?.heatIndexC;
     const temp = heatPayload?.assessment?.temperatureC;
     const rh = heatPayload?.assessment?.relativeHumidity;
     const heatBlock = heatPayload
-      ? `<div class="re-heat"><b>即時熱風險背景</b><span>熱指數 ${Number.isFinite(Number(hi)) ? Number(hi).toFixed(1) + "°C" : "—"}・氣溫 ${Number.isFinite(Number(temp)) ? Number(temp).toFixed(1) + "°C" : "—"}・濕度 ${Number.isFinite(Number(rh)) ? Math.round(Number(rh)) + "%" : "—"}</span><small>僅作目前附近溫濕度基準；沒有把日照虛構成額外幾°C。</small></div>`
+      ? `<div class="re-heat"><b>即時熱風險背景</b><span>熱指數 ${Number.isFinite(Number(hi)) ? Number(hi).toFixed(1) + "°C" : "—"}・氣溫 ${Number.isFinite(Number(temp)) ? Number(temp).toFixed(1) + "°C" : "—"}・濕度 ${Number.isFinite(Number(rh)) ? Math.round(Number(rh)) + "%" : "—"}</span><small>這是附近溫濕度基準；不把日照直接虛構成額外幾 °C。</small></div>`
       : "";
     const partialPct = s.daylightDistanceM > 0 ? (s.partialDistanceM / s.daylightDistanceM) * 100 : 0;
+    let verdict = "這條路的日照與遮蔭已完成分析";
+    if (shadePct != null) {
+      if (shadePct >= 75) verdict = "這條路大部分有遮蔭";
+      else if (shadePct >= 50) verdict = "這條路有一半以上路段可遮蔭";
+      else verdict = "這條路直接日照較多";
+    }
+    const title = escapeHtml(options.title || verdict);
+    const eyebrow = options.eyebrow ? `<div class="re-result-eyebrow">${escapeHtml(options.eyebrow)}</div>` : "";
     return `
-      <div class="re-summary-grid">
-        <div><span>路線距離</span><b>${formatDistance(s.totalDistanceM)}</b></div>
-        <div><span>估計步行</span><b>${formatMinutes(s.walkSeconds)}</b></div>
-        <div><span>遮蔭比例</span><b>${shade}</b></div>
-        <div><span>直接日照</span><b>${sun}</b></div>
-        <div><span>日照時間</span><b>${formatMinutes(s.directSunSeconds)}</b></div>
-        <div><span>遮蔭時間</span><b>${formatMinutes(s.shadedSeconds)}</b></div>
-      </div>
-      <div class="re-detail">最長連續日照 ${formatDistance(s.longestSunM)}・最長連續遮蔭 ${formatDistance(s.longestShadeM)}</div>
-      ${s.nightSeconds > 0 ? `<div class="re-note">夜間 ${formatMinutes(s.nightSeconds)} 已獨立計算，不會灌進遮蔭百分比。</div>` : ""}
-      ${partialPct > 1 ? `<div class="re-warn">約 ${Math.round(partialPct)}% 日間路段屬部分可靠度（多半是建築快取未就緒或低太陽高度）。</div>` : ""}
-      ${heatBlock}
+      <section class="re-result-card">
+        ${eyebrow}
+        <h3>${title}</h3>
+        <div class="re-result-hero">
+          <div class="shade"><span>遮蔭</span><b>${shade}</b></div>
+          <div class="sun"><span>直接日照</span><b>${sun}</b></div>
+        </div>
+        <p class="re-result-sentence">約 ${formatMinutes(s.walkSeconds)} 路程，其中約 <strong>${formatMinutes(s.directSunSeconds)}</strong> 會直接曬到太陽。</p>
+        <details class="re-result-details">
+          <summary>查看詳細資料</summary>
+          <div class="re-summary-grid">
+            <div><span>路線距離</span><b>${formatDistance(s.totalDistanceM)}</b></div>
+            <div><span>估計步行</span><b>${formatMinutes(s.walkSeconds)}</b></div>
+            <div><span>遮蔭時間</span><b>${formatMinutes(s.shadedSeconds)}</b></div>
+            <div><span>日照時間</span><b>${formatMinutes(s.directSunSeconds)}</b></div>
+            <div><span>最長連續日照</span><b>${formatDistance(s.longestSunM)}</b></div>
+            <div><span>最長連續遮蔭</span><b>${formatDistance(s.longestShadeM)}</b></div>
+          </div>
+          ${s.nightSeconds > 0 ? `<div class="re-note">夜間 ${formatMinutes(s.nightSeconds)} 已獨立計算，不會灌進遮蔭百分比。</div>` : ""}
+          ${partialPct > 1 ? `<div class="re-warn">約 ${Math.round(partialPct)}% 日間路段屬部分可靠度（多半是建築快取未就緒或低太陽高度）。</div>` : ""}
+          ${heatBlock}
+        </details>
+      </section>
     `;
   }
 
@@ -472,25 +627,72 @@
     }
   }
 
+  function buildManualCandidateFromRoute(routePoints, a, b, speedMps) {
+    const route = Array.isArray(routePoints) ? routePoints.map(asLatLng).filter(Boolean) : [];
+    if (route.length < 2) return { available: false, reason: "none" };
+    const A = asLatLng(a);
+    const B = asLatLng(b);
+    if (!A || !B) return { available: true, matched: false, reason: "missing-endpoints" };
+    const first = route[0];
+    const last = route[route.length - 1];
+    const forward = { startGapM: haversineM(first, A), endGapM: haversineM(last, B), reversed: false };
+    const reverse = { startGapM: haversineM(last, A), endGapM: haversineM(first, B), reversed: true };
+    const best = (forward.startGapM + forward.endGapM) <= (reverse.startGapM + reverse.endGapM) ? forward : reverse;
+    const tolerance = clamp(config.manualEndpointToleranceM, 10, 200, 60);
+    if (best.startGapM > tolerance || best.endGapM > tolerance) {
+      return { available: true, matched: false, toleranceM: tolerance, ...best };
+    }
+    const points = best.reversed ? route.slice().reverse() : route.slice();
+    const distanceM = routeDistanceM(points);
+    const safeSpeed = Math.max(0.4, Number(speedMps) || config.walkingSpeedKmh / 3.6);
+    return {
+      available: true,
+      matched: true,
+      toleranceM: tolerance,
+      startGapM: best.startGapM,
+      endGapM: best.endGapM,
+      candidate: {
+        id: "manual-drawn",
+        kind: "manual",
+        label: "我的手繪路線",
+        providerIndex: null,
+        distanceM,
+        durationS: distanceM / safeSpeed,
+        points,
+        raw: null
+      }
+    };
+  }
+
+  function buildManualCandidate(a, b, speedMps) {
+    return buildManualCandidateFromRoute(savedDrawnRoute, a, b, speedMps);
+  }
+
   function candidateWithinDetour(candidate, fastest, detourPct) {
     const limit = 1 + Math.max(0, detourPct) / 100;
-    const baseDuration = fastest.durationS > 0 ? fastest.durationS : null;
-    const baseDistance = fastest.distanceM > 0 ? fastest.distanceM : null;
+    const baseDistance = fastest?.distanceM > 0 ? fastest.distanceM : null;
+    const baseDuration = fastest?.durationS > 0 ? fastest.durationS : null;
+    if (baseDistance && candidate.distanceM > 0) return candidate.distanceM <= baseDistance * limit + 1;
     if (baseDuration && candidate.durationS > 0) return candidate.durationS <= baseDuration * limit + 1;
-    if (baseDistance) return candidate.distanceM <= baseDistance * limit + 1;
     return true;
   }
 
   async function scoreCandidates(candidates, options = {}) {
     if (!Array.isArray(candidates) || !candidates.length) throw new Error("沒有候選路線。");
     const serial = options.serial ?? analysisSerial;
-    const fastest = candidates.reduce((best, c) => !best || (c.durationS || Infinity) < (best.durationS || Infinity) ? c : best, null);
+    const baselineCandidates = candidates.filter((c) => c?.kind !== "manual");
+    const fastest = (baselineCandidates.length ? baselineCandidates : candidates).reduce((best, c) => {
+      if (!best) return c;
+      const d = Number(c.distanceM) || Infinity;
+      const bestD = Number(best.distanceM) || Infinity;
+      return d < bestD ? c : best;
+    }, null);
     const detourPct = clamp(options.detourPct, 0, 60, detourCapFromPanel());
     const eligible = candidates.filter((c) => candidateWithinDetour(c, fastest, detourPct));
     const scored = [];
     for (let i = 0; i < eligible.length; i += 1) {
       if (serial !== analysisSerial) throw new Error("ROUTE_ANALYSIS_CANCELLED");
-      setStatus(`正在評分候選路線 ${i + 1}/${eligible.length}…`, "loading");
+      setStatus(`正在比較第 ${i + 1}/${eligible.length} 條路線…`, "loading");
       const analysis = await analyzeRoute(eligible[i].points, {
         departure: options.departure,
         sampleSpacingM: options.sampleSpacingM,
@@ -505,32 +707,84 @@
       const sunA = a.analysis.summary.directSunSeconds;
       const sunB = b.analysis.summary.directSunSeconds;
       if (Math.abs(sunA - sunB) > 0.5) return sunA - sunB;
-      const walkA = a.analysis.summary.walkSeconds;
-      const walkB = b.analysis.summary.walkSeconds;
-      return walkA - walkB;
+      return a.analysis.summary.walkSeconds - b.analysis.summary.walkSeconds;
     })[0] || null;
     if (selected && serial === analysisSerial) {
       const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || departureDateFromPanel());
       selected.analysis.heat = await maybeHeatContext(selected.points, departure, serial);
     }
-    return { fastest, eligible, scored, selected, detourPct };
+    return {
+      fastest,
+      eligible,
+      scored,
+      selected,
+      detourPct,
+      comparisonValid: scored.length >= 2
+    };
+  }
+
+  function candidateDetourPct(candidate, bundle) {
+    const base = Number(bundle.fastest?.distanceM) || 0;
+    const d = Number(candidate?.distanceM) || candidate?.analysis?.summary?.totalDistanceM || 0;
+    return base > 0 ? Math.max(0, (d / base - 1) * 100) : 0;
+  }
+
+  function candidateName(candidate, bundle) {
+    if (candidate?.kind === "manual") return "我的手繪路線";
+    if (candidate?.id === bundle.fastest?.id) return "最快";
+    const index = bundle.scored.findIndex((c) => c.id === candidate.id);
+    return `候選 ${index + 1}`;
   }
 
   function candidatesHtml(bundle) {
     const selectedId = bundle.selected?.id;
-    const rows = bundle.scored.map((c, i) => {
+    const rows = bundle.scored.map((c) => {
       const s = c.analysis.summary;
-      const detour = bundle.fastest?.durationS > 0 ? ((c.durationS / bundle.fastest.durationS) - 1) * 100 : 0;
-      return `<div class="re-candidate${c.id === selectedId ? " is-selected" : ""}"><b>${c.id === selectedId ? "最不曬" : `候選 ${i + 1}`}</b><span>${formatDistance(s.totalDistanceM)}・${formatMinutes(s.walkSeconds)}・日照 ${formatMinutes(s.directSunSeconds)}・遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}</span><small>${detour > 0.5 ? `相對最快約 +${Math.round(detour)}%` : "接近最快路線"}</small></div>`;
+      const detour = candidateDetourPct(c, bundle);
+      const selectedLabel = c.id === selectedId
+        ? (bundle.comparisonValid ? '<em class="best">最不曬</em>' : '<em>目前唯一候選</em>')
+        : "";
+      const source = c.kind === "manual" ? '<em class="manual">手繪</em>' : "";
+      return `<div class="re-candidate${c.id === selectedId ? " is-selected" : ""}">
+        <div class="re-candidate-title"><b>${candidateName(c, bundle)}</b><span>${source}${selectedLabel}</span></div>
+        <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
+        <small>${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"}</small>
+      </div>`;
     }).join("");
-    return `<div class="re-candidates"><div class="re-candidate-head">候選路線比較（繞路上限 ${Math.round(bundle.detourPct)}%）</div>${rows}<div class="re-note">「最不曬」只代表目前 routing provider 提供的候選路線中，直接日照時間最少者；尚非全道路網路的全域最佳解。</div></div>`;
+
+    let notice = "";
+    if (!bundle.comparisonValid) {
+      notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線</b><span>已完成這條路的曝曬分析，但還不能判定真正的「最不曬」。你可以先畫一條你認為更好的路線，再回來比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
+    } else {
+      const selectedName = candidateName(bundle.selected, bundle);
+      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.scored.length} 條候選</b><span>目前候選中直接日照最少的是「${escapeHtml(selectedName)}」。</span></div>`;
+    }
+
+    let manualState = "";
+    if (bundle.manualMatch?.matched && bundle.manualEligible) {
+      manualState = '<div class="re-note re-note--manual">✓ 已把你的手繪路線加入這次比較。</div>';
+    } else if (bundle.manualMatch?.matched && !bundle.manualEligible) {
+      manualState = '<div class="re-note">你的手繪路線起終點符合 A、B，但超過目前的繞路上限，因此這次沒有進入評分。</div>';
+    } else if (bundle.manualMatch?.available && !bundle.manualMatch?.matched) {
+      manualState = `<div class="re-note">你的手繪路線起終點沒有靠近目前 A、B（容許約 ${Math.round(bundle.manualMatch.toleranceM)} m），所以這次沒有納入比較。</div>`;
+    }
+
+    return `<section class="re-candidates">
+      <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
+      ${notice}${manualState}${rows}
+      <div class="re-method-note">這一版比較 routing provider 提供的候選，以及符合 A/B 的手繪路線；尚不是全道路網的全域最佳解。</div>
+    </section>`;
   }
 
   function renderCandidateBundle(bundle) {
     const el = panel?.querySelector("[data-re-results]");
     if (!el || !bundle.selected) return;
-    el.innerHTML = resultHtml(bundle.selected.analysis) + candidatesHtml(bundle);
+    const selectedName = candidateName(bundle.selected, bundle);
+    const title = bundle.comparisonValid ? `目前候選中最不曬：${selectedName}` : "目前唯一可分析的候選路線";
+    const eyebrow = bundle.comparisonValid ? `已比較 ${bundle.scored.length} 條候選` : "候選不足，先顯示曝曬分析";
+    el.innerHTML = resultHtml(bundle.selected.analysis, { title, eyebrow }) + candidatesHtml(bundle);
     renderAnalyzedRoute(bundle.selected.analysis, { fit: config.fitCandidateRoute !== false, weight: 7 });
+    syncUiState();
   }
 
   function setEndpointMarker(point, label, color) {
@@ -546,51 +800,72 @@
 
   function stopDrawMode() {
     drawMode = "idle";
-    map.getContainer().classList.remove("route-exposure-drawing");
-    if (doubleClickWasEnabled === true && map.doubleClickZoom && !map.doubleClickZoom.enabled()) map.doubleClickZoom.enable();
+    if (map) map.getContainer().classList.remove("route-exposure-drawing");
+    if (doubleClickWasEnabled === true && map?.doubleClickZoom && !map.doubleClickZoom.enabled()) map.doubleClickZoom.enable();
     doubleClickWasEnabled = null;
+    syncUiState();
   }
 
-  function startDrawMode() {
+  function startDrawMode(options = {}) {
     analysisSerial += 1;
-    clearAll(false);
+    stopDrawMode();
+    uiMode = "draw";
+    if (options.reset !== false) {
+      drawPoints = [];
+      savedDrawnRoute = [];
+      savedDrawnAnalysis = null;
+      clearLayer(drawLayer);
+      clearLayer(resultLayer);
+      lastAnalysis = null;
+    } else if (drawPoints.length < 2 && savedDrawnRoute.length >= 2) {
+      drawPoints = savedDrawnRoute.map((p) => ({ lat: p.lat, lng: p.lng }));
+    }
     drawMode = "route";
-    drawPoints = [];
-    map.getContainer().classList.add("route-exposure-drawing");
-    if (map.doubleClickZoom) {
+    if (map) map.getContainer().classList.add("route-exposure-drawing");
+    if (map?.doubleClickZoom) {
       doubleClickWasEnabled = map.doubleClickZoom.enabled();
       if (doubleClickWasEnabled) map.doubleClickZoom.disable();
     }
-    setStatus("手繪模式：依序點選路線節點；完成後按「分析手繪路線」。", "drawing");
+    drawEditableRoute();
+    setStatus("依序點選地圖上的路線節點；至少 2 點後就可以分析。", "drawing");
+    syncUiState();
   }
 
   function startABMode() {
     analysisSerial += 1;
-    clearAll(false);
-    drawMode = "a";
+    stopDrawMode();
+    uiMode = "ab";
     aPoint = null;
     bPoint = null;
     if (!endpointsLayer) endpointsLayer = createLayerGroup();
     clearLayer(endpointsLayer);
-    map.getContainer().classList.add("route-exposure-drawing");
+    clearLayer(resultLayer);
+    renderSavedDrawnReference();
+    drawMode = "a";
+    if (map) map.getContainer().classList.add("route-exposure-drawing");
     setStatus("請先在地圖點選 A 起點。", "drawing");
+    syncUiState();
   }
 
   function clearAll(clearStatus = true) {
     analysisSerial += 1;
     stopDrawMode();
     drawPoints = [];
+    savedDrawnRoute = [];
+    savedDrawnAnalysis = null;
     aPoint = null;
     bPoint = null;
     lastAnalysis = null;
     lastCandidates = [];
     lastSelectedCandidate = null;
+    lastCandidateBundle = null;
     clearLayer(drawLayer);
     clearLayer(resultLayer);
     clearLayer(endpointsLayer);
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
-    if (clearStatus) setStatus("已清除路線。", "");
+    if (clearStatus) setStatus("已重新開始。", "");
+    setUiMode("home");
   }
 
   async function analyzeDrawnRoute() {
@@ -598,24 +873,26 @@
       setStatus("請至少點兩個路線節點。", "error");
       return;
     }
+    captureDrawnRouteIfValid();
     stopDrawMode();
     analysisSerial += 1;
     const serial = analysisSerial;
     setBusy(true);
     try {
-      setStatus("正在分析路線陰影…", "loading");
-      const analysis = await analyzeRoute(drawPoints, {
+      setStatus("正在分析這條路的日照與遮蔭…", "loading");
+      const analysis = await analyzeRoute(savedDrawnRoute, {
         serial,
         departure: departureDateFromPanel(),
         sampleSpacingM: spacingFromPanel(),
         speedMps: speedMpsFromPanel(),
-        onProgress: (done, total) => setStatus(`正在分析路線陰影 ${done}/${total}…`, "loading")
+        onProgress: (done, total) => setStatus(`正在分析 ${done}/${total} 個路段…`, "loading")
       });
       if (serial !== analysisSerial) return;
+      savedDrawnAnalysis = analysis;
       lastAnalysis = analysis;
       renderAnalyzedRoute(analysis, { fit: false });
       updateResults(analysis);
-      setStatus("路線分析完成。綠色＝遮蔭、橘色＝直接日照、灰色＝夜間。", "ok");
+      setStatus("分析完成。綠色＝遮蔭、橘色＝直接日照、灰色＝夜間。這條手繪路線也會保留給 A→B 比較。", "ok");
     } catch (error) {
       if (error?.message !== "ROUTE_ANALYSIS_CANCELLED") setStatus(error?.message || "路線分析失敗。", "error");
     } finally {
@@ -634,21 +911,32 @@
     setBusy(true);
     try {
       setStatus("正在取得步行候選路線…", "loading");
-      const candidates = await fetchRouteCandidates(aPoint, bPoint);
+      const providerCandidates = await fetchRouteCandidates(aPoint, bPoint);
       if (serial !== analysisSerial) return;
+      const speedMps = speedMpsFromPanel();
+      const manualMatch = buildManualCandidate(aPoint, bPoint, speedMps);
+      const candidates = providerCandidates.slice();
+      if (manualMatch?.matched && manualMatch.candidate) candidates.push(manualMatch.candidate);
       lastCandidates = candidates;
       const bundle = await scoreCandidates(candidates, {
         serial,
         departure: departureDateFromPanel(),
         sampleSpacingM: spacingFromPanel(),
-        speedMps: speedMpsFromPanel(),
+        speedMps,
         detourPct: detourCapFromPanel()
       });
       if (serial !== analysisSerial) return;
+      bundle.manualMatch = manualMatch;
+      bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn");
+      lastCandidateBundle = bundle;
       lastSelectedCandidate = bundle.selected;
       lastAnalysis = bundle.selected?.analysis || null;
       renderCandidateBundle(bundle);
-      setStatus(`完成：在 ${bundle.scored.length} 條符合繞路限制的候選中選出「最不曬」。`, "ok");
+      if (bundle.comparisonValid) {
+        setStatus(`完成：已比較 ${bundle.scored.length} 條符合繞路限制的候選。`, "ok");
+      } else {
+        setStatus("目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。", "warning");
+      }
     } catch (error) {
       if (error?.message !== "ROUTE_ANALYSIS_CANCELLED") setStatus(error?.message || "A→B 路線分析失敗。", "error");
     } finally {
@@ -682,7 +970,7 @@
         model: item.model
       }))
     });
-    downloadBlob("haidian-route-exposure-v8.9.0-dev1.json", JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
+    downloadBlob("haidian-route-exposure-v8.9.0-dev2.json", JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }
 
   function exportCsv() {
@@ -701,7 +989,7 @@
         Number.isFinite(item.model.solar?.altitudeDeg) ? item.model.solar.altitudeDeg.toFixed(2) : ""
       ]);
     }
-    downloadBlob("haidian-route-exposure-v8.9.0-dev1.csv", rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
+    downloadBlob("haidian-route-exposure-v8.9.0-dev2.csv", rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
   }
 
   function addStyles() {
@@ -713,33 +1001,18 @@
       #rightToolsWrapper .route-exposure-tool:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(15,23,42,.2)}
       #rightToolsWrapper .route-exposure-tool.is-on{color:#fff;background:linear-gradient(145deg,#10b981,#047857);border-color:#047857}
       #rightToolsWrapper .route-exposure-tool svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-      /* Host index integration: keep the real route button clickable in the v4 state manager. */
-      body.haidian-v4 #rightToolsWrapper > .route-exposure-tool,
-      body.haidian-v4-mode-idle #rightToolsWrapper > .route-exposure-tool,
-      body.haidian-v4-mode-walk #rightToolsWrapper > .route-exposure-tool,
-      body.haidian-v4-mode-data #rightToolsWrapper > .route-exposure-tool{pointer-events:auto!important}
-      @media(min-width:601px){
-        #rightToolsWrapper > .route-exposure-tool{order:3!important;width:52px!important;min-width:52px!important;height:52px!important;min-height:52px!important;margin:0!important;flex:0 0 52px!important;align-self:flex-end!important;z-index:4504!important}
-        #rightToolsWrapper > .tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}
-        #rightToolsWrapper > .tools-menu-container{order:5!important}
-        #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.route-exposure-tool{order:3!important;position:relative!important;inset:auto!important;width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important;margin:0!important;padding:0!important;flex:0 0 32px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;color:#12333b!important;background:rgba(255,255,255,.98)!important;border:1px solid #b7d8d4!important;border-radius:10px!important;box-shadow:0 5px 14px rgba(13,47,53,.14)!important;pointer-events:auto!important;transform:none!important;z-index:4516!important}
-        #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}
-        #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose{order:5!important}
-        #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-menu-container{order:6!important}
-        #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.route-exposure-tool svg{width:16px!important;height:16px!important;max-width:16px!important;max-height:16px!important;pointer-events:none!important}
-      }
-      @media(max-width:600px){#rightToolsWrapper > .route-exposure-tool{width:50px!important;min-width:50px!important;height:50px!important;min-height:50px!important;margin-bottom:8px!important}}
+      body.haidian-v4 #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-idle #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-walk #rightToolsWrapper>.route-exposure-tool,body.haidian-v4-mode-data #rightToolsWrapper>.route-exposure-tool{pointer-events:auto!important}
+      @media(min-width:601px){#rightToolsWrapper>.route-exposure-tool{order:3!important;width:52px!important;min-width:52px!important;height:52px!important;min-height:52px!important;margin:0!important;flex:0 0 52px!important;align-self:flex-end!important;z-index:4504!important}#rightToolsWrapper>.tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}#rightToolsWrapper>.tools-menu-container{order:5!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>button.route-exposure-tool{order:3!important;position:relative!important;inset:auto!important;width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important;margin:0!important;padding:0!important;flex:0 0 32px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;color:#12333b!important;background:rgba(255,255,255,.98)!important;border:1px solid #b7d8d4!important;border-radius:10px!important;box-shadow:0 5px 14px rgba(13,47,53,.14)!important;pointer-events:auto!important;transform:none!important;z-index:4516!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>.tools-toggle-btn[onclick*="toggleRightToolsPanel"]{order:4!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>#rightToolsCompactClose{order:5!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>.tools-menu-container{order:6!important}#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)>button.route-exposure-tool svg{width:16px!important;height:16px!important;max-width:16px!important;max-height:16px!important;pointer-events:none!important}}
+      .re-panel{position:absolute;top:86px;right:74px;z-index:4600;width:min(390px,calc(100vw - 96px));max-height:calc(100dvh - 110px);overflow:auto;box-sizing:border-box;color:#153d47;background:rgba(255,255,255,.98);border:1px solid rgba(15,118,110,.18);border-radius:22px;box-shadow:0 24px 64px rgba(15,23,42,.24);font-family:"Helvetica Neue",Arial,"Microsoft JhengHei",sans-serif;opacity:0;visibility:hidden;transform:translateY(-8px) scale(.985);transition:.18s ease;pointer-events:none}
+      .re-panel.is-open{opacity:1;visibility:visible;transform:none;pointer-events:auto}.re-panel[hidden],[hidden]{display:none!important}.re-head{position:sticky;top:0;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:15px 17px 12px;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);border-bottom:1px solid #e7efee}.re-head small{display:block;color:#0f766e;font-size:9.5px;font-weight:900;letter-spacing:.08em}.re-head h2{margin:3px 0 0;font-size:17px}.re-close{width:34px;height:34px;display:grid;place-items:center;border:1px solid #d8e5e3;border-radius:11px;background:#fff;color:#31545b;cursor:pointer}.re-close svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2}.re-body{padding:15px 17px 18px}
+      .re-home-intro{margin:0 0 12px;color:#64748b;font-size:12px;line-height:1.55}.re-mode-grid{display:grid;gap:10px}.re-mode-card{width:100%;display:grid;grid-template-columns:42px 1fr auto;gap:11px;align-items:center;padding:14px;text-align:left;border:1px solid #dbe8e6;border-radius:16px;background:#fff;cursor:pointer;transition:.18s}.re-mode-card:hover{border-color:#6ee7b7;box-shadow:0 10px 24px rgba(15,118,110,.1);transform:translateY(-1px)}.re-mode-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#ecfdf5;font-size:20px}.re-mode-copy b{display:block;color:#134e4a;font-size:14px}.re-mode-copy span{display:block;margin-top:3px;color:#64748b;font-size:11px;line-height:1.35}.re-mode-arrow{color:#94a3b8;font-size:20px}
+      .re-workflow-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}.re-back{border:0;background:#f1f5f9;color:#475569;border-radius:9px;padding:7px 9px;font-weight:900;cursor:pointer}.re-workflow-top h3{margin:0;color:#123f46;font-size:15px}.re-workflow-top p{margin:3px 0 0;color:#64748b;font-size:10.5px;line-height:1.4}.re-step{margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.re-step-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}.re-step-no{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:#0f766e;color:#fff;font-size:11px;font-weight:950}.re-step-head b{font-size:12px;color:#334155}.re-field label{display:block;margin:0 0 5px;color:#64748b;font-size:10px;font-weight:850}.re-field input{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#163d44;font-weight:750}.re-progress{margin:7px 0 10px;padding:8px 9px;border-radius:9px;background:#f8fafc;color:#64748b;font-size:10.5px;font-weight:750}.re-primary,.re-secondary,.re-link-btn,.re-chip,.re-export button,.re-candidate-alert button{border-radius:11px;font-weight:900;cursor:pointer}.re-primary{width:100%;min-height:42px;border:1px solid #0f766e;background:#0f766e;color:#fff;padding:9px 11px}.re-secondary{width:100%;min-height:38px;margin-top:7px;border:1px solid #99c7c1;background:#fff;color:#0f766e}.re-primary:disabled,.re-secondary:disabled,.re-link-btn:disabled{opacity:.45;cursor:not-allowed}.re-endpoints{padding:9px 10px;margin-bottom:9px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:10.5px;font-weight:800}.re-endpoints span{display:inline-flex;padding:2px 6px;border-radius:999px;background:#e2e8f0;color:#475569}.re-endpoints span.ok{background:#dcfce7;color:#166534}.re-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.re-chip{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#475569}.re-chip.is-active{border-color:#0f766e;background:#ecfdf5;color:#047857}.re-detour-custom{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center;margin-top:8px;color:#64748b;font-size:10px;font-weight:750}.re-detour-custom input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d7e2e0;border-radius:9px}.re-manual-note{margin-top:8px;padding:8px 9px;border-radius:9px;background:#fff1f2;color:#9f1239;font-size:10px;font-weight:750;line-height:1.4}
+      .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:10.5px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:10.5px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
+      .re-status{margin:12px 0 0;padding:9px 10px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:750;line-height:1.45}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
+      .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:9.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:4px 0 11px;color:#123f46;font-size:15px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:10px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:10px 0 0;color:#475569;font-size:11px;line-height:1.5}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:10.5px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:9.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:12px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:9px 10px;border-radius:10px;font-size:10.5px;line-height:1.45;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
+      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px;color:#334155;font-size:11px}.re-candidate-head span{color:#64748b;font-size:9.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:4px;padding:10px;border-radius:11px;font-size:10.5px;line-height:1.45}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{display:grid;gap:4px;padding:10px;margin-top:7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-candidate.is-selected{border-color:#34d399;background:#f0fdf4}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:11px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:8.5px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:8px;color:#475569;font-size:10px}.re-candidate small{color:#64748b;font-size:9.5px}.re-method-note{margin-top:8px;color:#94a3b8;font-size:9px;line-height:1.45}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .route-exposure-drawing{cursor:crosshair!important}
-      .re-panel{position:fixed;z-index:10050;top:76px;right:78px;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 96px);overflow:auto;padding:0;color:#17323b;background:rgba(255,255,255,.97);border:1px solid rgba(15,118,110,.22);border-radius:20px;box-shadow:0 24px 60px rgba(15,23,42,.24);font-family:"Helvetica Neue",Arial,"Microsoft JhengHei",sans-serif;display:none}
-      .re-panel.is-open{display:block}.re-panel *{box-sizing:border-box}
-      .re-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 16px 12px;border-bottom:1px solid #dbe7e5;background:linear-gradient(145deg,#f0fdfa,#ecfeff)}
-      .re-head small{display:block;color:#0f766e;font-weight:900;letter-spacing:.05em}.re-head h2{margin:3px 0 0;font-size:18px}.re-close{width:34px;height:34px;border:0;border-radius:50%;background:transparent;display:grid;place-items:center;cursor:pointer}.re-close svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2}
-      .re-body{padding:14px 16px 16px}.re-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.re-field{display:grid;gap:4px}.re-field.wide{grid-column:1/-1}.re-field label{font-size:10.5px;font-weight:900;color:#48636b}.re-field input{width:100%;min-height:38px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;font:700 12px/1.2 inherit;color:#17323b}
-      .re-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.re-actions button,.re-export button{min-height:40px;padding:8px 10px;border:1px solid #99c7c1;border-radius:11px;background:#fff;color:#0f766e;font-weight:900;cursor:pointer}.re-actions button.primary{color:#fff;background:#0f766e;border-color:#0f766e}.re-actions button.danger{color:#9f1239;border-color:#fecdd3;background:#fff1f2}.re-panel.is-busy button:disabled,.re-panel.is-busy input:disabled{opacity:.6;cursor:not-allowed}
-      .re-status{margin:12px 0 0;padding:9px 10px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:750;line-height:1.45}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}
-      .re-results{margin-top:12px}.re-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:9.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-detail,.re-note,.re-warn,.re-heat{margin-top:9px;padding:9px 10px;border-radius:10px;font-size:10.5px;line-height:1.45;font-weight:700}.re-detail{background:#f8fafc;color:#475569}.re-note{background:#f1f5f9;color:#475569}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
-      .re-candidates{margin-top:10px}.re-candidate-head{font-size:11px;font-weight:900;color:#334155;margin-bottom:6px}.re-candidate{display:grid;gap:2px;padding:9px 10px;margin-top:6px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}.re-candidate.is-selected{border-color:#34d399;background:#ecfdf5}.re-candidate b{font-size:11px;color:#0f766e}.re-candidate span,.re-candidate small{font-size:10px;color:#475569}.re-export{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-      @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:72vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-summary-grid{grid-template-columns:repeat(2,1fr)}}
+      @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:78vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
     `;
     document.head.appendChild(style);
   }
@@ -750,40 +1023,92 @@
     node.className = "re-panel";
     node.setAttribute("aria-label", "路線曝曬分析");
     node.innerHTML = `
-      <header class="re-head"><div><small>v8.9.0-dev1・Route Exposure</small><h2>路線曝曬分析</h2></div><button type="button" class="re-close" data-re-close aria-label="關閉">${icon.close}</button></header>
+      <header class="re-head"><div><small>v8.9.0-dev2・Route Exposure</small><h2>路線曝曬分析</h2></div><button type="button" class="re-close" data-re-close aria-label="關閉">${icon.close}</button></header>
       <div class="re-body">
-        <div class="re-controls">
-          <div class="re-field wide"><label>出發日期與時間</label><input data-re-departure type="datetime-local" value="${nowLocalInputValue()}"></div>
-          <div class="re-field"><label>步行速度 km/h</label><input data-re-speed type="number" min="1.5" max="8" step="0.1" value="${config.walkingSpeedKmh}"></div>
-          <div class="re-field"><label>採樣間距 m</label><input data-re-spacing type="number" min="5" max="25" step="1" value="${config.sampleSpacingM}"></div>
-          <div class="re-field wide"><label>A→B 最不曬：最大繞路 %</label><input data-re-detour type="number" min="0" max="60" step="5" value="${config.detourCapPct}"></div>
-        </div>
-        <div class="re-actions">
-          <button type="button" data-re-draw>手繪路線</button>
-          <button type="button" class="primary" data-re-analyze-draw>分析手繪路線</button>
-          <button type="button" data-re-ab>設定 A → B</button>
-          <button type="button" class="primary" data-re-analyze-ab>找「最不曬」</button>
-          <button type="button" class="danger" data-re-clear>清除</button>
-          <button type="button" data-re-cancel>取消運算</button>
-        </div>
-        <div class="re-status" data-re-status>可先手繪固定路線，或設定 A、B 比較步行候選路線。</div>
-        <div class="re-results" data-re-results></div>
-        <div class="re-export"><button type="button" data-re-json>匯出 JSON</button><button type="button" data-re-csv>匯出 CSV</button></div>
+        <section data-re-home>
+          <p class="re-home-intro">先選你現在要做的事。兩種模式會分開顯示，不需要猜哪一顆按鈕先按。</p>
+          <div class="re-mode-grid">
+            <button type="button" class="re-mode-card" data-re-mode-draw><span class="re-mode-icon">✏️</span><span class="re-mode-copy"><b>分析我自己的路線</b><span>我已經知道想走哪一條路</span></span><span class="re-mode-arrow">›</span></button>
+            <button type="button" class="re-mode-card" data-re-mode-ab><span class="re-mode-icon">🌳</span><span class="re-mode-copy"><b>幫我找「最不曬」</b><span>我只知道起點和終點</span></span><span class="re-mode-arrow">›</span></button>
+          </div>
+        </section>
+
+        <section data-re-workflow hidden>
+          <div class="re-workflow-top"><button type="button" class="re-back" data-re-back>‹ 返回</button><div><h3 data-re-mode-title></h3><p data-re-mode-desc></p></div></div>
+
+          <div class="re-step">
+            <div class="re-step-head"><span class="re-step-no">1</span><b>出發時間</b></div>
+            <div class="re-field"><input data-re-departure aria-label="出發日期與時間" type="datetime-local" value="${nowLocalInputValue()}"></div>
+          </div>
+
+          <section data-re-screen="draw" hidden>
+            <div class="re-step">
+              <div class="re-step-head"><span class="re-step-no">2</span><b>畫出你想走的路線</b></div>
+              <div class="re-progress" data-re-draw-progress></div>
+              <button type="button" class="re-primary" data-re-draw-start>開始畫路線</button>
+              <button type="button" class="re-primary" data-re-analyze-draw hidden>分析這條路線</button>
+              <button type="button" class="re-secondary" data-re-redraw hidden>重新畫</button>
+            </div>
+          </section>
+
+          <section data-re-screen="ab" hidden>
+            <div class="re-step">
+              <div class="re-step-head"><span class="re-step-no">2</span><b>設定起點與終點</b></div>
+              <div class="re-endpoints" data-re-endpoint-state></div>
+              <button type="button" class="re-primary" data-re-ab>在地圖設定 A → B</button>
+              <div class="re-manual-note" data-re-manual-note hidden></div>
+            </div>
+            <div class="re-step">
+              <div class="re-step-head"><span class="re-step-no">3</span><b>最多願意多走多少？</b></div>
+              <div class="re-chips"><button type="button" class="re-chip" data-re-detour-chip="10">10%</button><button type="button" class="re-chip" data-re-detour-chip="20">20%</button><button type="button" class="re-chip" data-re-detour-chip="30">30%</button></div>
+              <div class="re-detour-custom"><span>自訂繞路上限</span><input data-re-detour type="number" min="0" max="60" step="5" value="${config.detourCapPct}" aria-label="最大繞路百分比"></div>
+            </div>
+            <div class="re-step">
+              <div class="re-step-head"><span class="re-step-no">4</span><b>開始比較</b></div>
+              <button type="button" class="re-primary" data-re-analyze-ab disabled>開始找「最不曬」</button>
+            </div>
+          </section>
+
+          <details class="re-advanced">
+            <summary>進階設定</summary>
+            <div class="re-advanced-grid"><div class="re-field"><label>步行速度 km/h</label><input data-re-speed type="number" min="1.5" max="8" step="0.1" value="${config.walkingSpeedKmh}"></div><div class="re-field"><label>採樣間距 m</label><input data-re-spacing type="number" min="5" max="25" step="1" value="${config.sampleSpacingM}"></div></div>
+          </details>
+
+          <div class="re-status" data-re-status hidden></div>
+          <div class="re-cancel-wrap" data-re-cancel-wrap hidden>正在運算中… <button type="button" data-re-cancel>取消分析</button></div>
+          <div class="re-results" data-re-results></div>
+          <details class="re-export" data-re-export hidden><summary>匯出研究資料</summary><div><button type="button" data-re-json>匯出 JSON</button><button type="button" data-re-csv>匯出 CSV</button></div></details>
+          <div class="re-bottom-actions"><button type="button" class="re-link-btn" data-re-reset>重新開始</button></div>
+        </section>
       </div>`;
     document.body.appendChild(node);
+
     node.querySelector("[data-re-close]").addEventListener("click", () => togglePanel(false));
-    node.querySelector("[data-re-draw]").addEventListener("click", startDrawMode);
+    node.querySelector("[data-re-mode-draw]").addEventListener("click", () => setUiMode("draw"));
+    node.querySelector("[data-re-mode-ab]").addEventListener("click", () => setUiMode("ab"));
+    node.querySelector("[data-re-back]").addEventListener("click", () => setUiMode("home"));
+    node.querySelector("[data-re-draw-start]").addEventListener("click", () => startDrawMode({ reset: true }));
+    node.querySelector("[data-re-redraw]").addEventListener("click", () => startDrawMode({ reset: true }));
     node.querySelector("[data-re-analyze-draw]").addEventListener("click", () => void analyzeDrawnRoute());
     node.querySelector("[data-re-ab]").addEventListener("click", startABMode);
     node.querySelector("[data-re-analyze-ab]").addEventListener("click", () => void analyzeAB());
-    node.querySelector("[data-re-clear]").addEventListener("click", () => clearAll(true));
+    node.querySelectorAll("[data-re-detour-chip]").forEach((chip) => chip.addEventListener("click", () => setDetourPct(Number(chip.dataset.reDetourChip))));
+    node.querySelector("[data-re-detour]").addEventListener("input", syncUiState);
+    node.querySelector("[data-re-reset]").addEventListener("click", () => clearAll(true));
     node.querySelector("[data-re-cancel]").addEventListener("click", () => { analysisSerial += 1; setBusy(false); setStatus("已取消目前運算。", ""); });
     node.querySelector("[data-re-json]").addEventListener("click", exportJson);
     node.querySelector("[data-re-csv]").addEventListener("click", exportCsv);
+    node.addEventListener("click", (event) => {
+      const action = event.target?.closest?.("[data-re-result-draw]");
+      if (!action) return;
+      setUiMode("draw");
+      startDrawMode({ reset: true });
+    });
     try {
       window.L.DomEvent.disableClickPropagation(node);
       window.L.DomEvent.disableScrollPropagation(node);
     } catch (_) {}
+    syncUiState();
     return node;
   }
 
@@ -809,7 +1134,11 @@
   function togglePanel(open) {
     if (!panel) panel = createPanel();
     const next = open == null ? !panel.classList.contains("is-open") : !!open;
-    if (next) quietCompetingMapTools();
+    if (next) {
+      quietCompetingMapTools();
+      if (!["home", "draw", "ab"].includes(uiMode)) uiMode = "home";
+      syncUiState();
+    }
     panel.classList.toggle("is-open", next);
     if (button) {
       button.classList.toggle("is-on", next);
@@ -855,8 +1184,10 @@
         return;
       }
       drawPoints.push(point);
+      savedDrawnAnalysis = null;
       drawEditableRoute();
-      setStatus(`已加入 ${drawPoints.length} 個節點；完成後按「分析手繪路線」。`, "drawing");
+      setStatus(drawPoints.length < 2 ? "已放 1 個節點，請再點至少 1 個。" : "可以繼續加節點；完成後直接按「分析這條路線」。", "drawing");
+      syncUiState();
       return;
     }
     if (drawMode === "a") {
@@ -866,6 +1197,7 @@
       setEndpointMarker(aPoint, "A", "#2563eb");
       drawMode = "b";
       setStatus("A 已設定；請點選 B 終點。", "drawing");
+      syncUiState();
       return;
     }
     if (drawMode === "b") {
@@ -873,7 +1205,8 @@
       setEndpointMarker(bPoint, "B", "#e11d48");
       drawMode = "idle";
       map.getContainer().classList.remove("route-exposure-drawing");
-      setStatus("A、B 已設定；按「找『最不曬』」取得並評分候選步行路線。", "drawing");
+      setStatus("A、B 都設定好了。確認繞路上限後，按「開始找『最不曬』」。", "ok");
+      syncUiState();
     }
   }
 
@@ -895,7 +1228,7 @@
   }
 
   window.HaidianRouteExposure = {
-    version: "v8.9.0-dev1",
+    version: "v8.9.0-dev2",
     get config() { return Object.assign({}, config); },
     analyzeRoute,
     fetchRouteCandidates,
@@ -906,11 +1239,16 @@
     get lastAnalysis() { return lastAnalysis; },
     get lastCandidates() { return lastCandidates.slice(); },
     get lastSelectedCandidate() { return lastSelectedCandidate; },
+    get lastCandidateBundle() { return lastCandidateBundle; },
+    get savedDrawnRoute() { return savedDrawnRoute.slice(); },
     _internals: {
       buildSampleSegments,
       aggregateExposure,
       routeDistanceM,
-      routeToGeoJsonCoords
+      routeToGeoJsonCoords,
+      candidateWithinDetour,
+      buildManualCandidate,
+      buildManualCandidateFromRoute
     }
   };
 
