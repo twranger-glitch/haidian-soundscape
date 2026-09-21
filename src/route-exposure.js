@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev11 First Topology Breakpoint Diagnostics
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev12 Truthful Map-match Outcomes
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev11";
+  const VERSION = "v9.0.0-dev12";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -543,6 +543,8 @@
     }
     summary.shadeRatio = summary.daylightDistanceM > 0 ? summary.shadedDistanceM / summary.daylightDistanceM : null;
     summary.sunRatio = summary.daylightDistanceM > 0 ? summary.directSunDistanceM / summary.daylightDistanceM : null;
+    summary.nightRatio = summary.totalDistanceM > 0 ? summary.nightDistanceM / summary.totalDistanceM : null;
+    summary.daylightRatio = summary.totalDistanceM > 0 ? summary.daylightDistanceM / summary.totalDistanceM : null;
     summary.walkSeconds = summary.totalDistanceM / speedMps;
     return summary;
   }
@@ -687,6 +689,10 @@
     const s = analysis.summary;
     const shadePct = s.shadeRatio == null ? null : Math.round(s.shadeRatio * 100);
     const sunPct = s.sunRatio == null ? null : Math.round(s.sunRatio * 100);
+    const nightPct = s.nightRatio == null
+      ? (s.totalDistanceM > 0 ? Math.round((s.nightDistanceM / s.totalDistanceM) * 100) : null)
+      : Math.round(s.nightRatio * 100);
+    const allNight = s.totalDistanceM > 0 && s.nightDistanceM > 0 && s.daylightDistanceM <= 0.01;
     const shade = shadePct == null ? "—" : `${shadePct}%`;
     const sun = sunPct == null ? "—" : `${sunPct}%`;
     const heatPayload = analysis.heat?.available ? analysis.heat.payload : null;
@@ -698,22 +704,33 @@
       : "";
     const partialPct = s.daylightDistanceM > 0 ? (s.partialDistanceM / s.daylightDistanceM) * 100 : 0;
     let verdict = "這條路的日照與遮蔭已完成分析";
-    if (shadePct != null) {
+    if (allNight) {
+      verdict = "這段路程全程為夜間，沒有直接日照";
+    } else if (shadePct != null) {
       if (shadePct >= 75) verdict = "這條路大部分有遮蔭";
       else if (shadePct >= 50) verdict = "這條路有一半以上路段可遮蔭";
       else verdict = "這條路直接日照較多";
     }
     const title = escapeHtml(options.title || verdict);
     const eyebrow = options.eyebrow ? `<div class="re-result-eyebrow">${escapeHtml(options.eyebrow)}</div>` : "";
+    const hero = allNight
+      ? `<div class="re-result-hero">
+          <div class="night"><span>夜間</span><b>${nightPct == null ? "100%" : `${nightPct}%`}</b></div>
+          <div class="sun"><span>直接日照</span><b>0%</b></div>
+        </div>`
+      : `<div class="re-result-hero">
+          <div class="shade"><span>遮蔭</span><b>${shade}</b></div>
+          <div class="sun"><span>直接日照</span><b>${sun}</b></div>
+        </div>`;
+    const sentence = allNight
+      ? `約 ${formatMinutes(s.walkSeconds)} 路程，出發到抵達都在夜間；直接日照為 <strong>0.0 分</strong>。夜間不是「遮蔭」，因此不硬算進遮蔭百分比。`
+      : `約 ${formatMinutes(s.walkSeconds)} 路程，其中約 <strong>${formatMinutes(s.directSunSeconds)}</strong> 會直接曬到太陽。`;
     return `
       <section class="re-result-card">
         ${eyebrow}
         <h3>${title}</h3>
-        <div class="re-result-hero">
-          <div class="shade"><span>遮蔭</span><b>${shade}</b></div>
-          <div class="sun"><span>直接日照</span><b>${sun}</b></div>
-        </div>
-        <p class="re-result-sentence">約 ${formatMinutes(s.walkSeconds)} 路程，其中約 <strong>${formatMinutes(s.directSunSeconds)}</strong> 會直接曬到太陽。</p>
+        ${hero}
+        <p class="re-result-sentence">${sentence}</p>
         <details class="re-result-details">
           <summary>查看詳細資料</summary>
           <div class="re-summary-grid">
@@ -721,10 +738,11 @@
             <div><span>估計步行</span><b>${formatMinutes(s.walkSeconds)}</b></div>
             <div><span>遮蔭時間</span><b>${formatMinutes(s.shadedSeconds)}</b></div>
             <div><span>日照時間</span><b>${formatMinutes(s.directSunSeconds)}</b></div>
+            <div><span>夜間時間</span><b>${formatMinutes(s.nightSeconds)}</b></div>
             <div><span>最長連續日照</span><b>${formatDistance(s.longestSunM)}</b></div>
             <div><span>最長連續遮蔭</span><b>${formatDistance(s.longestShadeM)}</b></div>
           </div>
-          ${s.nightSeconds > 0 ? `<div class="re-note">夜間 ${formatMinutes(s.nightSeconds)} 已獨立計算，不會灌進遮蔭百分比。</div>` : ""}
+          ${s.nightSeconds > 0 ? `<div class="re-note">夜間 ${formatMinutes(s.nightSeconds)} 已獨立計算，不會灌進遮蔭百分比。${allNight ? " 本次整條路線都屬夜間，所以原本的遮蔭／日照日間比例不適用。" : ""}</div>` : ""}
           ${partialPct > 1 ? `<div class="re-warn">約 ${Math.round(partialPct)}% 日間路段屬部分可靠度（多半是建築快取未就緒或低太陽高度）。</div>` : ""}
           ${heatBlock}
         </details>
@@ -1296,12 +1314,30 @@
     if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
     const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
     const overlap = Math.round((diagnosis.overlapWithSelectedRatio || 0) * 100);
-    const cls = diagnosis.replay?.searchMissConfirmed ? "is-bad" : coverage >= 80 ? "is-good" : coverage < 50 ? "is-bad" : "is-warning";
+    const replayOutcome = diagnosis.replay?.outcome || '';
+    const cls = diagnosis.replay?.searchMissConfirmed ? "is-bad" : replayOutcome === 'connected-low-coverage' ? "is-warning" : coverage >= 80 ? "is-good" : coverage < 50 ? "is-bad" : "is-warning";
     const types = (diagnosis.matchedEdges || []).slice(0, 5).map((e) => `${escapeHtml(e.highway)} (${e.count})`).join("、") || "—";
     let replay = '';
     if (diagnosis.replay) {
       const r = diagnosis.replay;
-      if (r.connected) {
+      if (r.graphReachedGoal === true && r.manualFidelityAccepted === false) {
+        const matchPct = Math.round((r.mapMatchCoverageRatio || 0) * 100);
+        const minPct = Math.round((r.minCoverage || 0.88) * 100);
+        const avg = Number.isFinite(Number(r.mapMatchAverageDistanceM)) ? `${Number(r.mapMatchAverageDistanceM).toFixed(1)} m` : '—';
+        const max = Number.isFinite(Number(r.mapMatchMaxDistanceM)) ? `${Number(r.mapMatchMaxDistanceM).toFixed(1)} m` : '—';
+        const score = Number.isFinite(Number(r.mapMatchScore)) ? Number(r.mapMatchScore).toFixed(1) : '—';
+        const d = r.firstDivergence || null;
+        const progress = d && Number.isFinite(Number(d.manualProgressRatio)) ? Math.round(Number(d.manualProgressRatio) * 100) : null;
+        const coords = d?.point && Number.isFinite(Number(d.point.lat)) && Number.isFinite(Number(d.point.lng)) ? `（${Number(d.point.lat).toFixed(5)}, ${Number(d.point.lng).toFixed(5)}）` : '';
+        const wayText = d?.wayIds?.length ? `；way ${escapeHtml(d.wayIds.join(', '))}` : '';
+        const edgeText = d ? `<span><strong>第一個明顯偏離：</strong>${progress != null ? `約手繪進度 ${progress}%` : '位置已定位'}${coords}；離手繪線 ${Number(d.distanceM || 0).toFixed(1)} m；edge ${escapeHtml(d.edgeId || '—')} / ${escapeHtml(d.highway || 'unknown')}${wayText}。</span>` : '';
+        const parallel = r.switchedToNearbyParallel
+          ? `<span><strong>平行廊道判斷：</strong>是；matcher 曾切到與手繪方向近似、但橫向偏離超過貼合門檻的附近廊道${r.firstParallelDivergence?.highway ? `（${escapeHtml(r.firstParallelDivergence.highway)}）` : ''}。</span>`
+          : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
+        replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
+          `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
+          edgeText + parallel + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+      } else if (r.connected) {
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
@@ -1329,11 +1365,11 @@
           const rejectedEdges = (bp.incidentEdges || []).filter((e) => !e.accepted).slice(0, 3).map((e) => `${e.highway || 'unknown'}[${(e.wayIds || []).join('/') || 'no-way'}]→${e.rejectReason || 'reject'}`).join('；');
           const edgeDetail = rejectedEdges ? `<span><strong>目前節點被拒 edge：</strong>${escapeHtml(rejectedEdges)}</span>` : '';
           const directionDetail = Number.isFinite(Number(bp.incidentBidirectionalCount)) ? `；目前節點鄰接 edge 雙向 ${Math.round(bp.incidentBidirectionalCount || 0)}、單向 ${Math.round(bp.incidentOneWayCount || 0)}` : '';
-          breakpointHtml = `<span><strong>dev11 疑似斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
+          breakpointHtml = `<span><strong>dev12 拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
-        replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內仍無法依手繪前進順序重建 A→B${where}${bestCorridor}${roads}${rejected}。</span>` +
+        replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
           breakpointHtml +
-          `<p>dev11 不會自動把「相距幾公尺」的道路硬接起來；先定位第一個疑似 topology breakpoint，再區分「OSM node 未共構」和「graph 已連通但 matcher 規則拒絕」，避免穿牆或跨水溝。</p>`;
+          `<p>dev12 只有在 graph 未到達 B 時才把結果列為拓樸／轉換失敗；不會把「已連通但貼合度不足」誤報成 topology failure，也不會自動把近距離道路硬接起來。</p>`;
       }
     }
     return `<div class="re-graph-diagnosis ${cls}"><b>手繪路線 ↔ OSM Graph 對照</b>` +
@@ -1370,16 +1406,29 @@
           shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
           canopyTimeoutMs: config.canopyTimeoutMs
         });
-        if (diagnosis.replay && diagnosis.replay.connected === false) {
+        if (diagnosis.replay?.graphReachedGoal === true && diagnosis.replay?.manualFidelityAccepted === false) {
+          const pct = Math.round((diagnosis.replay.mapMatchCoverageRatio || 0) * 100);
+          diagnosis.interpretation = `Graph 已可連到 B，但 ordered path 與手繪線只有約 ${pct}% 貼合；這是低貼合匹配，不是拓樸不連通。請優先看第一個偏離 edge / way / highway 與平行廊道判斷。`;
+        } else if (diagnosis.replay && diagnosis.replay.connected === false) {
           const f = diagnosis.replay.failureDiagnostics;
           const pct = f && Number.isFinite(f.maxProgressRatio) ? Math.round(f.maxProgressRatio * 100) : null;
           diagnosis.interpretation = pct != null
-            ? `手繪線幾何上貼近 OSM graph，但依前進順序只能重建到約 ${pct}%；dev11 已進一步檢查該進度附近是否有「幾何相近但未共構」的 connector，或 matcher 進度規則拒絕。`
-            : "手繪線幾何上貼近 OSM graph，但目前仍無法依前進順序重建完整 A→B；dev11 會優先顯示疑似 topology breakpoint 與附近未連接 node。";
+            ? `手繪線幾何上貼近 OSM graph，但依前進順序只能重建到約 ${pct}%；dev12 已確認這次 graph 沒有到達 B，才進一步檢查該進度附近的 topology / transition breakpoint。`
+            : "手繪線幾何上貼近 OSM graph，但目前 ordered matcher 的 graph path 沒有到達 B；dev12 會顯示拓樸／轉換 breakpoint 與附近未連接 node。";
         }
         lastManualGraphDiagnosis = diagnosis;
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
-        setStatus(diagnosis.replay?.searchMissConfirmed ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的 ordered 手繪 edge path；搜尋器仍有漏解。" : (diagnosis.replay?.connected === false ? "dev11 已定位最佳疑似拓樸斷點；請看診斷卡的 node / way / connector 與 matcher 拒絕原因。" : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。"), diagnosis.replay?.searchMissConfirmed ? "warning" : (diagnosis.replay?.connected === false ? "warning" : "ok"));
+        const lowFidelity = diagnosis.replay?.graphReachedGoal === true && diagnosis.replay?.manualFidelityAccepted === false;
+        setStatus(
+          diagnosis.replay?.searchMissConfirmed
+            ? "已確認：同一 OSM Graph 內存在符合上限、且比自動解更少曬的 ordered 手繪 edge path；搜尋器仍有漏解。"
+            : lowFidelity
+              ? `Graph 可連到 B，但目前貼合手繪線只有 ${Math.round((diagnosis.replay?.mapMatchCoverageRatio || 0) * 100)}%；這是低貼合匹配，不是拓樸不連通。請看第一個偏離 edge / way。`
+              : diagnosis.replay?.connected === false
+                ? "dev12 已定位 graph 無法到 B 的最佳拓樸／轉換斷點；請看 node / way / connector 與 matcher 拒絕原因。"
+                : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。",
+          diagnosis.replay?.searchMissConfirmed || lowFidelity || diagnosis.replay?.connected === false ? "warning" : "ok"
+        );
       } catch (error) {
         diagnosis.replay = { available: true, connected: false, reason: error?.message || String(error) };
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
@@ -1403,7 +1452,7 @@
         const bp = diagnosis.replay?.failureDiagnostics?.breakpoint || null;
         if (bp?.currentNode && Number.isFinite(bp.currentNode.lat) && Number.isFinite(bp.currentNode.lng)) {
           window.L.circleMarker([bp.currentNode.lat, bp.currentNode.lng], { radius: 8, weight: 3, color: "#dc2626", fillColor: "#fef2f2", fillOpacity: 0.95, interactive: true })
-            .bindTooltip(`dev11 疑似拓樸斷點 · ${bp.suspectedCause || 'unknown'} · node ${bp.currentNode.id || '—'}`, { direction: "top" })
+            .bindTooltip(`dev12 拓樸／轉換斷點 · ${bp.suspectedCause || 'unknown'} · node ${bp.currentNode.id || '—'}`, { direction: "top" })
             .addTo(graphDebugLayer);
         }
         const near = bp?.nearestDisconnected || null;
@@ -1436,7 +1485,7 @@
       if (c.id === activeId) badges.push('<em class="viewing">目前顯示</em>');
       return `<button type="button" class="re-candidate${c.id === activeId ? " is-selected" : ""}" data-re-candidate-id="${escapeHtml(c.id)}" aria-pressed="${c.id === activeId ? "true" : "false"}">
         <div class="re-candidate-title"><b>${escapeHtml(candidateName(c, bundle))}</b><span>${badges.join('')}</span></div>
-        <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
+        <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>${s.daylightDistanceM <= 0.01 && s.nightDistanceM > 0 ? "夜間 100%" : `遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}`}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
         <small>${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
       </button>`;
     }).join('');
@@ -1806,7 +1855,7 @@
       .re-workflow-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}.re-back{border:0;background:#f1f5f9;color:#475569;border-radius:9px;padding:7px 9px;font-weight:900;cursor:pointer}.re-workflow-top h3{margin:0;color:#123f46;font-size:17px}.re-workflow-top p{margin:4px 0 0;color:#64748b;font-size:13px;line-height:1.5}.re-step{margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.re-step-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}.re-step-no{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:#0f766e;color:#fff;font-size:11px;font-weight:950}.re-step-head b{font-size:14px;color:#334155}.re-field label{display:block;margin:0 0 6px;color:#64748b;font-size:12.5px;font-weight:850}.re-field input{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#163d44;font-weight:750;font-size:13px}.re-progress{margin:8px 0 11px;padding:9px 10px;border-radius:9px;background:#f8fafc;color:#475569;font-size:12.5px;font-weight:750}.re-primary,.re-secondary,.re-link-btn,.re-chip,.re-export button,.re-candidate-alert button{border-radius:11px;font-weight:900;cursor:pointer}.re-primary{width:100%;min-height:44px;border:1px solid #0f766e;background:#0f766e;color:#fff;padding:10px 12px;font-size:14px}.re-secondary{width:100%;min-height:40px;margin-top:7px;border:1px solid #99c7c1;background:#fff;color:#0f766e;font-size:13px}.re-primary:disabled,.re-secondary:disabled,.re-link-btn:disabled{opacity:.45;cursor:not-allowed}.re-endpoints{padding:10px 11px;margin-bottom:10px;border-radius:10px;background:#f8fafc;color:#475569;font-size:12.5px;font-weight:800}.re-endpoints span{display:inline-flex;padding:2px 6px;border-radius:999px;background:#e2e8f0;color:#475569}.re-endpoints span.ok{background:#dcfce7;color:#166534}.re-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.re-chip{min-height:38px;border:1px solid #cfdedc;background:#fff;color:#475569;font-size:13px}.re-chip.is-active{border-color:#0f766e;background:#ecfdf5;color:#047857}.re-detour-custom{display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center;margin-top:8px;color:#64748b;font-size:12px;font-weight:750}.re-detour-custom input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d7e2e0;border-radius:9px}.re-manual-note{margin-top:9px;padding:9px 10px;border-radius:9px;background:#fff1f2;color:#9f1239;font-size:12px;font-weight:750;line-height:1.5}
       .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:12px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
-      .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
+      .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .night{background:#f1f5f9;color:#475569}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
       .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .re-graph-note.is-error{background:#fff7ed;border-color:#fdba74;color:#9a3412}.re-graph-note.is-error .re-graph-actions button{border-color:#fdba74;color:#9a3412}
       .re-graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.re-graph-actions button{min-height:36px;padding:8px 11px;border:1px solid #c4b5fd;border-radius:10px;background:#fff;color:#5b21b6;font-size:12.5px;font-weight:900;cursor:pointer}.re-graph-actions button:hover{background:#f5f3ff}.re-graph-diagnosis{display:grid;gap:5px;margin-top:9px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#334155;font-size:12.5px;line-height:1.5}.re-graph-diagnosis b{font-size:13px}.re-graph-diagnosis span{display:block}.re-graph-diagnosis p{margin:2px 0 0;font-weight:800}.re-graph-diagnosis.is-good{background:#ecfdf5;border-color:#86efac;color:#166534}.re-graph-diagnosis.is-warning{background:#fffbeb;border-color:#fde68a;color:#92400e}.re-graph-diagnosis.is-bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}

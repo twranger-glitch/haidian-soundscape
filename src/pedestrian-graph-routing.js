@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev11 First Topology Breakpoint Diagnostics
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev12 Truthful Map-match Outcomes
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev11";
+  const VERSION = "v9.0.0-dev12";
 
   const DEFAULTS = {
     enabled: true,
@@ -32,6 +32,9 @@
     manualReplayProgressBucketM: 10,
     manualReplayBacktrackToleranceM: 12,
     manualReplayGoalToleranceM: 28,
+    manualReplayMinCoverage: 0.88,
+    manualReplayFidelityThresholdM: 14,
+    manualReplayDivergenceSampleM: 6,
     topologyBreakpointProbeM: 14,
     topologyBreakpointMaxCandidates: 8,
     maxRawNodes: 18000,
@@ -1185,6 +1188,116 @@
     }
     return { coverageRatio: matched / samples.length, averageDistanceM: sum / samples.length, maxDistanceM: maxD, samples: samples.length };
   }
+  function headingDifferenceDeg(a, b, c, d) {
+    const A = asLatLng(a), B = asLatLng(b), C = asLatLng(c), D = asLatLng(d);
+    if (!A || !B || !C || !D) return null;
+    const lat0 = ((A.lat + B.lat + C.lat + D.lat) / 4) * Math.PI / 180;
+    const mx = 111320 * Math.max(0.2, Math.cos(lat0));
+    const my = 110540;
+    const h1 = Math.atan2((B.lat - A.lat) * my, (B.lng - A.lng) * mx) * 180 / Math.PI;
+    const h2 = Math.atan2((D.lat - C.lat) * my, (D.lng - C.lng) * mx) * 180 / Math.PI;
+    let diff = Math.abs(h1 - h2) % 180;
+    if (diff > 90) diff = 180 - diff;
+    return diff;
+  }
+
+  function pathDivergenceDiagnostics(graph, steps, route, fidelityThresholdM, sampleSpacingM = 6) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    const routeLen = routeDistanceM(manualRoute);
+    if (!graph || !steps?.length || manualRoute.length < 2 || !(fidelityThresholdM > 0)) return null;
+
+    let walkedPathM = 0;
+    let firstThresholdExceeded = null;
+    let firstMeaningfulDivergence = null;
+    let firstParallelDivergence = null;
+    const divergentEdges = [];
+
+    for (const step of steps) {
+      const edge = graph.edges.get(step.edgeId);
+      if (!edge) continue;
+      const geometry = edgeGeometryFor(edge, step.from);
+      const geometryLen = routeDistanceM(geometry);
+      const count = Math.max(2, Math.ceil(Math.max(1, geometryLen) / Math.max(3, Number(sampleSpacingM) || 6)) + 1);
+      const samples = [];
+      let outside = 0;
+      let maxDistanceM = 0;
+      let firstOutside = null;
+
+      for (let i = 0; i < count; i += 1) {
+        const alongM = geometryLen * (i / (count - 1));
+        const point = pointAlongPolyline(geometry, alongM);
+        const projection = point ? projectPointToPolylineProgressM(point, manualRoute) : null;
+        if (!projection) continue;
+        const item = {
+          point,
+          pathProgressM: walkedPathM + alongM,
+          manualProgressM: projection.progressM,
+          manualProgressRatio: routeLen > 0 ? projection.progressM / routeLen : 0,
+          distanceM: projection.distanceM,
+          nearestManualPoint: projection.point,
+          manualSegmentIndex: projection.segmentIndex
+        };
+        samples.push(item);
+        maxDistanceM = Math.max(maxDistanceM, projection.distanceM);
+        if (projection.distanceM > fidelityThresholdM) {
+          outside += 1;
+          if (!firstOutside) firstOutside = item;
+          if (!firstThresholdExceeded) firstThresholdExceeded = item;
+        }
+      }
+
+      const outsideRatio = samples.length ? outside / samples.length : 0;
+      if (outsideRatio >= 0.5 && firstOutside) {
+        const idx = Math.max(0, Math.min(manualRoute.length - 2, Number(firstOutside.manualSegmentIndex || 0)));
+        const edgeHeadingDeltaDeg = geometry.length >= 2
+          ? headingDifferenceDeg(geometry[0], geometry[geometry.length - 1], manualRoute[idx], manualRoute[idx + 1])
+          : null;
+        const parallelToManual = Number.isFinite(edgeHeadingDeltaDeg) && edgeHeadingDeltaDeg <= 30 && firstOutside.distanceM <= Math.max(60, fidelityThresholdM * 4);
+        const detail = {
+          pathProgressM: firstOutside.pathProgressM,
+          manualProgressM: firstOutside.manualProgressM,
+          manualProgressRatio: firstOutside.manualProgressRatio,
+          distanceM: firstOutside.distanceM,
+          point: firstOutside.point,
+          nearestManualPoint: firstOutside.nearestManualPoint,
+          edgeId: edge.id,
+          fromNodeId: String(step.from),
+          toNodeId: String(step.to),
+          highway: primaryHighway(edge),
+          wayIds: (edge.wayIds || []).slice(0, 8),
+          tags: compactTagsForBreakpoint(edge),
+          outsideSampleRatio: outsideRatio,
+          maxDistanceM,
+          headingDeltaDeg: edgeHeadingDeltaDeg,
+          parallelToManual
+        };
+        divergentEdges.push(detail);
+        if (!firstMeaningfulDivergence) firstMeaningfulDivergence = detail;
+        if (!firstParallelDivergence && parallelToManual) firstParallelDivergence = detail;
+      }
+      walkedPathM += Number(edge.distanceM || geometryLen || 0);
+    }
+
+    const thresholdExceeded = firstThresholdExceeded ? {
+      pathProgressM: firstThresholdExceeded.pathProgressM,
+      manualProgressM: firstThresholdExceeded.manualProgressM,
+      manualProgressRatio: firstThresholdExceeded.manualProgressRatio,
+      distanceM: firstThresholdExceeded.distanceM,
+      point: firstThresholdExceeded.point,
+      nearestManualPoint: firstThresholdExceeded.nearestManualPoint
+    } : null;
+
+    return {
+      fidelityThresholdM,
+      routeLengthM: routeLen,
+      firstThresholdExceeded: thresholdExceeded,
+      firstDivergence: firstMeaningfulDivergence || (thresholdExceeded ? Object.assign({ edgeId: null, highway: null, wayIds: [], tags: {}, parallelToManual: false }, thresholdExceeded) : null),
+      firstParallelDivergence,
+      switchedToNearbyParallel: Boolean(firstParallelDivergence),
+      divergentEdges: divergentEdges.slice(0, 8)
+    };
+  }
+
   function samplePolyline(points, spacingM) {
     const pts = (points || []).map(asLatLng).filter(Boolean);
     if (pts.length < 2) return pts;
@@ -1363,6 +1476,7 @@
 
 
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
+    lastOrderedMapMatchFailure = null;
     // dev10+: ordered map matching is a state-space problem, not just a node shortest path.
     // The same graph node may be reached while representing different progress along the
     // hand-drawn route.  Collapsing those states by node alone can discard the only legal
@@ -1457,6 +1571,10 @@
       }
       const breakpoint = buildTopologyBreakpointDiagnostics(graph, furthest, route, thresholdM, backwardToleranceM, maxForwardGapBaseM, rejectCounts, options);
       lastOrderedMapMatchFailure = {
+        outcome: "no-goal-path",
+        reason: "ordered-graph-goal-not-reached",
+        graphReachedGoal: false,
+        manualFidelityAccepted: false,
         thresholdM,
         expanded,
         routeLengthM: routeLen,
@@ -1479,7 +1597,7 @@
     let guard = 0;
     while (curKey !== startKey && guard++ < 20000) {
       const step = prev.get(curKey);
-      if (!step) return null;
+      if (!step) throw new Error("ORDERED_MAP_MATCH_RECONSTRUCTION_FAILED");
       const currentNode = curKey.split('|')[0];
       steps.push({ edgeId: step.edgeId, from: step.node, to: currentNode, match: step.match });
       curKey = step.prevKey;
@@ -1490,7 +1608,31 @@
     path.steps = steps;
     path.mapMatchScore = dist.get(goalState.key);
     path.mapMatchProgressM = goalState.progressM;
-    path.coverage = pathCoverageAgainstRoute(path.points, route, Math.min(14, thresholdM), 10);
+    const minCoverage = clamp(options.manualReplayMinCoverage ?? config.manualReplayMinCoverage, 0.5, 1, 0.88);
+    const configuredFidelityThresholdM = clamp(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM, 4, 100, 14);
+    const fidelityThresholdM = Math.min(thresholdM, configuredFidelityThresholdM);
+    path.coverage = pathCoverageAgainstRoute(path.points, route, fidelityThresholdM, 10);
+    path.divergence = pathDivergenceDiagnostics(graph, steps, route, fidelityThresholdM, options.manualReplayDivergenceSampleM || config.manualReplayDivergenceSampleM || 6);
+    path.mapMatchAttempt = {
+      outcome: path.coverage.coverageRatio >= minCoverage ? "accepted-map-match" : "connected-low-coverage",
+      reason: path.coverage.coverageRatio >= minCoverage ? "manual-fidelity-accepted" : "connected-low-manual-coverage",
+      graphReachedGoal: true,
+      manualFidelityAccepted: path.coverage.coverageRatio >= minCoverage,
+      thresholdM,
+      expanded,
+      routeLengthM: routeLen,
+      mapMatchProgressM: goalState.progressM,
+      mapMatchScore: path.mapMatchScore,
+      coverageRatio: path.coverage.coverageRatio,
+      averageDistanceM: path.coverage.averageDistanceM,
+      maxDistanceM: path.coverage.maxDistanceM,
+      minCoverage,
+      fidelityThresholdM,
+      firstDivergence: path.divergence?.firstDivergence || null,
+      firstThresholdExceeded: path.divergence?.firstThresholdExceeded || null,
+      switchedToNearbyParallel: Boolean(path.divergence?.switchedToNearbyParallel),
+      firstParallelDivergence: path.divergence?.firstParallelDivergence || null
+    };
     lastOrderedMapMatchFailure = null;
     return path;
   }
@@ -1555,35 +1697,134 @@
     const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
     const baseThreshold = Math.max(6, Number(options.corridorM || config.manualReplayCorridorM || 16));
     const maxThreshold = Math.max(baseThreshold, Number(options.maxCorridorM || config.manualReplayMaxCorridorM || 36));
+    const minCoverage = clamp(options.manualReplayMinCoverage ?? config.manualReplayMinCoverage, 0.5, 1, 0.88);
     const thresholds = Array.from(new Set([baseThreshold, Math.min(maxThreshold, baseThreshold + 8), Math.min(maxThreshold, baseThreshold + 16), maxThreshold])).sort((a,b)=>a-b);
     let path = null;
     let usedThresholdM = null;
     let bestFailure = null;
+    let bestLowCoverage = null;
     const failureAttempts = [];
+    const attempts = [];
+
+    function cloneAttempt(attempt) {
+      if (!attempt) return null;
+      return Object.assign({}, attempt, {
+        rejectCounts: attempt.rejectCounts ? Object.assign({}, attempt.rejectCounts) : undefined,
+        breakpoint: attempt.breakpoint ? Object.assign({}, attempt.breakpoint) : undefined,
+        firstDivergence: attempt.firstDivergence ? Object.assign({}, attempt.firstDivergence, {
+          wayIds: (attempt.firstDivergence.wayIds || []).slice(),
+          tags: Object.assign({}, attempt.firstDivergence.tags || {})
+        }) : null,
+        firstThresholdExceeded: attempt.firstThresholdExceeded ? Object.assign({}, attempt.firstThresholdExceeded) : null,
+        firstParallelDivergence: attempt.firstParallelDivergence ? Object.assign({}, attempt.firstParallelDivergence, {
+          wayIds: (attempt.firstParallelDivergence.wayIds || []).slice(),
+          tags: Object.assign({}, attempt.firstParallelDivergence.tags || {})
+        }) : null
+      });
+    }
+
+    function lowCoverageIsBetter(candidate, current) {
+      if (!current) return true;
+      const c = candidate.path.coverage || {};
+      const b = current.path.coverage || {};
+      if (Number(c.coverageRatio || 0) > Number(b.coverageRatio || 0) + 1e-9) return true;
+      if (Math.abs(Number(c.coverageRatio || 0) - Number(b.coverageRatio || 0)) > 1e-9) return false;
+      const cAvg = Number.isFinite(Number(c.averageDistanceM)) ? Number(c.averageDistanceM) : Infinity;
+      const bAvg = Number.isFinite(Number(b.averageDistanceM)) ? Number(b.averageDistanceM) : Infinity;
+      if (cAvg < bAvg - 1e-9) return true;
+      if (Math.abs(cAvg - bAvg) > 1e-9) return false;
+      const cScore = Number.isFinite(Number(candidate.path.mapMatchScore)) ? Number(candidate.path.mapMatchScore) : Infinity;
+      const bScore = Number.isFinite(Number(current.path.mapMatchScore)) ? Number(current.path.mapMatchScore) : Infinity;
+      return cScore < bScore;
+    }
+
     for (const thresholdM of thresholds) {
       path = await orderedMapMatchDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
-      if (path && (path.coverage?.coverageRatio || 0) >= 0.88) { usedThresholdM = thresholdM; break; }
-      if (lastOrderedMapMatchFailure) {
-        const snapshot = Object.assign({}, lastOrderedMapMatchFailure, {
-          rejectCounts: Object.assign({}, lastOrderedMapMatchFailure.rejectCounts || {}),
-          breakpoint: lastOrderedMapMatchFailure.breakpoint ? Object.assign({}, lastOrderedMapMatchFailure.breakpoint) : null
+      if (path) {
+        const attempt = cloneAttempt(path.mapMatchAttempt || {
+          outcome: (path.coverage?.coverageRatio || 0) >= minCoverage ? "accepted-map-match" : "connected-low-coverage",
+          graphReachedGoal: true,
+          manualFidelityAccepted: (path.coverage?.coverageRatio || 0) >= minCoverage,
+          thresholdM,
+          coverageRatio: path.coverage?.coverageRatio ?? null,
+          averageDistanceM: path.coverage?.averageDistanceM ?? null,
+          maxDistanceM: path.coverage?.maxDistanceM ?? null,
+          mapMatchScore: path.mapMatchScore ?? null,
+          minCoverage
         });
+        attempts.push(attempt);
+        if (attempt.manualFidelityAccepted) {
+          usedThresholdM = thresholdM;
+          break;
+        }
+        const low = { path, attempt };
+        if (lowCoverageIsBetter(low, bestLowCoverage)) bestLowCoverage = low;
+        path = null;
+        continue;
+      }
+
+      if (lastOrderedMapMatchFailure) {
+        const snapshot = cloneAttempt(lastOrderedMapMatchFailure);
         failureAttempts.push(snapshot);
+        attempts.push(snapshot);
         if (!bestFailure || Number(snapshot.maxProgressRatio || 0) > Number(bestFailure.maxProgressRatio || 0) + 1e-9 ||
             (Math.abs(Number(snapshot.maxProgressRatio || 0) - Number(bestFailure.maxProgressRatio || 0)) < 1e-9 && Number(snapshot.thresholdM || Infinity) < Number(bestFailure.thresholdM || Infinity))) {
           bestFailure = snapshot;
         }
       }
-      path = null;
     }
+
+    if (!path && bestLowCoverage) {
+      const lowPath = bestLowCoverage.path;
+      const low = bestLowCoverage.attempt;
+      lastOrderedMapMatchFailure = null;
+      return {
+        available: true,
+        connected: true,
+        graphReachedGoal: true,
+        mapMatched: false,
+        manualFidelityAccepted: false,
+        outcome: "connected-low-coverage",
+        reason: "connected-low-manual-coverage",
+        triedCorridorM: thresholds,
+        corridorM: low.thresholdM,
+        distanceM: lowPath.distanceM,
+        mapMatchCoverageRatio: low.coverageRatio,
+        mapMatchAverageDistanceM: low.averageDistanceM,
+        mapMatchMaxDistanceM: low.maxDistanceM,
+        mapMatchScore: low.mapMatchScore,
+        mapMatchProgressM: low.mapMatchProgressM ?? null,
+        minCoverage: low.minCoverage ?? minCoverage,
+        fidelityThresholdM: low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold)),
+        firstDivergence: low.firstDivergence || null,
+        firstThresholdExceeded: low.firstThresholdExceeded || null,
+        switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
+        firstParallelDivergence: low.firstParallelDivergence || null,
+        edgeIds: lowPath.edgeIds,
+        points: lowPath.points,
+        attempts,
+        failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
+        interpretation: "Graph 已可連到 B，但 ordered path 與手繪線的貼合度低於驗收門檻；這是低貼合匹配，不是拓樸不連通。"
+      };
+    }
+
     if (!path) {
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
-        available: true, connected: false, reason: "no-ordered-map-match-in-manual-corridor", triedCorridorM: thresholds,
+        available: true,
+        connected: false,
+        graphReachedGoal: false,
+        mapMatched: false,
+        manualFidelityAccepted: false,
+        outcome: "no-goal-path",
+        reason: "no-ordered-map-match-in-manual-corridor",
+        triedCorridorM: thresholds,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
-        failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null }))
+        failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
+        attempts
       };
     }
+
     let walkS = 0;
     let sunS = 0;
     const edgeSun = [];
@@ -1618,12 +1859,38 @@
     else if (searchMissConfirmed) interpretation = "已確認搜尋漏解：同一 OSM graph、同一日照成本模型中，手繪 ordered map-match 路徑符合繞路上限且直接日照更少。";
     else if (Number.isFinite(autoSunS)) interpretation = "手繪 ordered map-match 路徑在 graph 中連通，但用搜尋器自己的 edge 日照模型計分後，未證明比目前自動解更少曬；此時才應檢查 graph edge shade 與最終高精度 ShadeMap 評分差異。";
     return {
-      available: true, connected: true, mapMatched: true, corridorM: usedThresholdM, distanceM: path.distanceM, walkSeconds: walkS,
-      mapMatchCoverageRatio: path.coverage?.coverageRatio ?? null, mapMatchAverageDistanceM: path.coverage?.averageDistanceM ?? null, mapMatchMaxDistanceM: path.coverage?.maxDistanceM ?? null,
-      directSunSeconds: sunS, directSunFraction: walkS > 0 ? sunS / walkS : null,
-      withinDetour, detourPct, detourLimitSeconds: detourLimitS, fastestSeconds: fastestS,
+      available: true,
+      connected: true,
+      graphReachedGoal: true,
+      mapMatched: true,
+      manualFidelityAccepted: true,
+      outcome: "accepted-map-match",
+      reason: "manual-fidelity-accepted",
+      corridorM: usedThresholdM,
+      triedCorridorM: thresholds,
+      distanceM: path.distanceM,
+      walkSeconds: walkS,
+      mapMatchCoverageRatio: path.coverage?.coverageRatio ?? null,
+      mapMatchAverageDistanceM: path.coverage?.averageDistanceM ?? null,
+      mapMatchMaxDistanceM: path.coverage?.maxDistanceM ?? null,
+      mapMatchScore: path.mapMatchScore ?? null,
+      minCoverage,
+      fidelityThresholdM: path.mapMatchAttempt?.fidelityThresholdM ?? null,
+      firstDivergence: path.mapMatchAttempt?.firstDivergence || null,
+      switchedToNearbyParallel: Boolean(path.mapMatchAttempt?.switchedToNearbyParallel),
+      directSunSeconds: sunS,
+      directSunFraction: walkS > 0 ? sunS / walkS : null,
+      withinDetour,
+      detourPct,
+      detourLimitSeconds: detourLimitS,
+      fastestSeconds: fastestS,
       autoEstimatedDirectSunSeconds: Number.isFinite(autoSunS) ? autoSunS : null,
-      searchMissConfirmed, edgeIds: path.edgeIds, points: path.points, edgeSun, interpretation
+      searchMissConfirmed,
+      edgeIds: path.edgeIds,
+      points: path.points,
+      edgeSun,
+      attempts,
+      interpretation
     };
   }
 
@@ -1987,6 +2254,8 @@
       nearestGraphEdge,
       diagnosePolyline,
       replayPolyline,
+      orderedMapMatchDijkstra,
+      pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
       highwayFamily,
