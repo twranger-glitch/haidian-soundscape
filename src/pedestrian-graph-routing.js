@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev18 Shade-Cost Reconciliation
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev19 Source-Gap Controlled Counterfactual
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev18";
+  const VERSION = "v9.0.0-dev19";
 
   const DEFAULTS = {
     enabled: true,
@@ -54,6 +54,12 @@
     shadeReconcileSampleSpacingM: 10,
     shadeReconcileMismatchSec: 45,
     shadeReconcileTopEdges: 8,
+    // dev19: diagnostic-only source-gap overlay. These joins are never written
+    // into the production graph; they only test whether the raw OSM junction
+    // gaps proven by dev17 are sufficient to explain the missing faithful route.
+    sourceGapCounterfactualEnabled: true,
+    sourceGapCounterfactualMaxGapM: 55,
+    sourceGapCounterfactualStrictM: 14,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -2671,6 +2677,276 @@
     };
   }
 
+  // v9.0.0-dev19: create an ephemeral fine-graph overlay containing only the
+  // source-gap connectors already justified by dev16 route-support transitions
+  // and dev17 raw-OSM evidence. The production graph is never mutated.
+  function cloneFineGraphWithDiagnosticConnectors(graph, connectorSpecs = []) {
+    const nodes = new Map(graph?.nodes || []);
+    const edges = new Map(graph?.edges || []);
+    const adjacency = new Map();
+    for (const [id, refs] of graph?.adjacency || []) adjacency.set(String(id), (refs || []).map((r) => Object.assign({}, r)));
+    function ensure(id) { const key = String(id); if (!adjacency.has(key)) adjacency.set(key, []); return key; }
+    const added = [];
+    let counter = 0;
+    for (const spec of connectorSpecs || []) {
+      const a = ensure(spec.a), b = ensure(spec.b);
+      const pa = asLatLng(nodes.get(a)), pb = asLatLng(nodes.get(b));
+      if (!pa || !pb || a === b) continue;
+      const geometry = (spec.geometry || [pa, pb]).map(asLatLng).filter(Boolean).map((q) => ({ lat: q.lat, lng: q.lng }));
+      const distanceM = routeDistanceM(geometry);
+      if (!(distanceM > 0.2)) continue;
+      const id = `dev19-c${++counter}`;
+      const edge = {
+        id, a, b, geometry, distanceM,
+        wayIds: [],
+        tagsSummary: { highway: ['path'], foot: ['yes'], diagnostic: ['dev19-source-gap-counterfactual'] },
+        diagnosticConnector: true,
+        diagnosticSource: 'dev17-source-topology-gap',
+        diagnosticProgressRatio: Number(spec.progressRatio || 0),
+        diagnosticGapM: Number(spec.gapM || distanceM),
+        diagnosticClassification: spec.classification || 'source-topology-gap'
+      };
+      edges.set(id, edge);
+      adjacency.get(a).push({ edgeId: id, to: b });
+      adjacency.get(b).push({ edgeId: id, to: a });
+      added.push({ id, a, b, distanceM, progressRatio: edge.diagnosticProgressRatio, gapM: edge.diagnosticGapM, classification: edge.diagnosticClassification, geometry: edge.geometry.map((q) => ({ lat: q.lat, lng: q.lng })) });
+    }
+    return {
+      graph: Object.assign({}, graph, { nodes, edges, adjacency, diagnosticOverlay: true, diagnosticConnectorIds: added.map((x) => x.id) }),
+      connectors: added
+    };
+  }
+
+  async function coarseShadeScoreForSteps(graph, steps, departure, speedMps, options = {}) {
+    const safeSpeed = clamp(speedMps, 0.5, 2.5, 1.25);
+    const dep = departure instanceof Date ? departure : new Date(departure || Date.now());
+    let walkS = 0, sunS = 0, shadeS = 0, nightS = 0;
+    const edgeSun = [];
+    const cooperativeYield = makeCooperativeYielder(options);
+    for (let i = 0; i < (steps || []).length; i += 1) {
+      const step = steps[i], edge = graph.edges.get(step.edgeId);
+      if (!edge) continue;
+      const edgeTime = edge.distanceM / safeSpeed;
+      const at = new Date(dep.getTime() + (walkS + edgeTime / 2) * 1000);
+      const shade = await defaultEdgeSunProvider(edge, step.from, at, {
+        shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
+        shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
+        shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
+        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+      });
+      const sunFrac = clamp(shade?.directSunFraction, 0, 1, 0);
+      const shadeFrac = clamp(shade?.shadedFraction, 0, 1, Math.max(0, 1 - sunFrac));
+      const nightFrac = clamp(shade?.nightFraction, 0, 1, 0);
+      const sun = edgeTime * sunFrac, sh = edgeTime * shadeFrac, ni = edgeTime * nightFrac;
+      sunS += sun; shadeS += sh; nightS += ni; walkS += edgeTime;
+      edgeSun.push({ edgeId: edge.id, highway: primaryHighway(edge), distanceM: edge.distanceM, directSunFraction: sunFrac, directSunSeconds: sun, diagnosticConnector: Boolean(edge.diagnosticConnector) });
+      if ((i % 3) === 2) await cooperativeYield();
+    }
+    return { walkSeconds: walkS, directSunSeconds: sunS, shadedSeconds: shadeS, nightSeconds: nightS, edgeSun };
+  }
+
+  async function controlledSourceGapConnectorAuditUnsafe(graph, startId, endId, route, componentTraceAudit, rawAudit, departure, speedMps, options = {}) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    if (options.sourceGapCounterfactualEnabled === false || config.sourceGapCounterfactualEnabled === false) return { available: false, reason: 'disabled' };
+    if (!graph?.edges?.size || manualRoute.length < 2 || !componentTraceAudit?.available || !rawAudit?.available) return { available: false, reason: 'missing-component-or-raw-audit' };
+    const strictM = Math.max(4, Number(options.sourceGapCounterfactualStrictM || config.sourceGapCounterfactualStrictM || 14));
+    const maxGapM = Math.max(8, Number(options.sourceGapCounterfactualMaxGapM || config.sourceGapCounterfactualMaxGapM || 55));
+    const minCoverage = clamp(options.manualReplayMinCoverage ?? config.manualReplayMinCoverage, 0.5, 1, 0.88);
+    const cfConnectors = componentTraceAudit?.connectorCounterfactual?.connectors || [];
+    const junctions = rawAudit?.junctions || [];
+    const eligible = [];
+    for (const c of cfConnectors) {
+      const j = junctions.find((x) => x.fromComponentId === c.fromComponentId && x.toComponentId === c.toComponentId) || null;
+      if (!j || j.evidenceLayer !== 'source-osm-topology' || j.gradeSeparationPossible) continue;
+      if (Number(c.gapM || Infinity) > maxGapM + 1e-9) continue;
+      const aNode = graph.nodes.get(String(c.a)), bNode = graph.nodes.get(String(c.b));
+      if (!aNode || !bNode) continue;
+      const probe = { geometry: [aNode, bNode], distanceM: haversineM(aNode, bNode) };
+      const routeOffsetM = edgeDistanceToPolylineM(probe, manualRoute, 8);
+      if (!(routeOffsetM <= strictM + 1.0)) continue;
+      eligible.push({
+        a: String(c.a), b: String(c.b), gapM: Number(c.gapM || probe.distanceM), progressRatio: Number(c.progressRatio || 0),
+        classification: j.classification || c.classification || 'source-topology-gap', routeOffsetM,
+        fromWays: (j.fromWays || []).map((w) => ({ wayId: w.wayId, highway: w.highway })),
+        toWays: (j.toWays || []).map((w) => ({ wayId: w.wayId, highway: w.highway }))
+      });
+    }
+    if (!eligible.length) {
+      return { available: true, tested: false, strictM, maxGapM, connectorCount: 0, connectors: [], outcome: 'no-controlled-connectors', interpretation: 'dev17 沒有留下同時滿足 source-gap、無立體交會疑慮、且貼著手繪忠實走廊的受控 connector；不進行 patched-graph 因果測試。' };
+    }
+
+    const over = cloneFineGraphWithDiagnosticConnectors(graph, eligible);
+    const patched = over.graph;
+    const strict = strictCorridorConnectivityAudit(patched, startId, endId, manualRoute, strictM, options, new Map());
+    const ordered = await orderedMapMatchDijkstra(patched, startId, endId, manualRoute, strictM, speedMps, options);
+    let orderedScore = null;
+    let orderedDenseShade = null;
+    if (ordered?.steps?.length) {
+      orderedScore = await coarseShadeScoreForSteps(patched, ordered.steps, departure, speedMps, options);
+      // Reconcile the restored faithful geometry immediately instead of forcing
+      // another release/test cycle when the coarse search model still dislikes it.
+      // This reuses dev18's exact-same-geometry dense ShadeMap audit and remains
+      // diagnostic-only. A dense failure must never invalidate the connector test.
+      try {
+        orderedDenseShade = await reconcilePathShadeCost(
+          patched, ordered.steps, orderedScore?.edgeSun || [], departure, speedMps, options
+        );
+      } catch (error) {
+        orderedDenseShade = { available: false, reason: 'dense-reconciliation-error', error: error?.message || String(error) };
+      }
+    }
+
+    const detourLimitS = Number.isFinite(Number(options.referenceDetourLimitSeconds))
+      ? Number(options.referenceDetourLimitSeconds)
+      : Number.isFinite(Number(lastDiagnostics?.detourLimitSeconds)) ? Number(lastDiagnostics.detourLimitSeconds) : Infinity;
+    const toEnd = await dijkstraTimesResponsive(patched, endId, speedMps, true, {
+      onProgress: null, shouldCancel: options.shouldCancel, cooperativeYieldMs: options.cooperativeYieldMs
+    });
+    const minSun = await searchMinSun(patched, startId, endId, {
+      speedMps, detourLimitS, fastestToEnd: toEnd, departure,
+      edgeSunProvider: options.edgeSunProvider,
+      timeBucketSec: options.timeBucketSec,
+      shadeTimeBucketSec: options.shadeTimeBucketSec,
+      shadeSampleSpacingM: options.shadeSampleSpacingM,
+      shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge,
+      shadeConcurrency: options.shadeConcurrency,
+      canopyTimeoutMs: options.canopyTimeoutMs,
+      maxExpandedStates: options.maxExpandedStates,
+      maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
+      cooperativeYieldMs: options.cooperativeYieldMs,
+      yieldEveryExpanded: options.yieldEveryExpanded,
+      onProgress: null, shouldCancel: options.shouldCancel
+    });
+    const searchPath = minSun?.path || null;
+    const searchCoverage = searchPath?.points?.length ? pathCoverageAgainstRoute(searchPath.points, manualRoute, strictM, 10) : null;
+    const connectorIdSet = new Set(over.connectors.map((x) => x.id));
+    const orderedUsedConnectors = (ordered?.edgeIds || []).filter((id) => connectorIdSet.has(String(id)));
+    const searchUsedConnectors = (searchPath?.edgeIds || []).filter((id) => connectorIdSet.has(String(id)));
+    const baselineSunS = Number(lastDiagnostics?.minSunEstimatedDirectSunSeconds);
+    const faithfulSunS = Number(orderedScore?.directSunSeconds);
+    const orderedCoverage = Number(ordered?.coverage?.coverageRatio || 0);
+    const orderedFaithful = Boolean(ordered && orderedCoverage >= minCoverage && strict?.connected);
+    const searchFaithful = Boolean(searchCoverage && Number(searchCoverage.coverageRatio || 0) >= minCoverage);
+    const faithfulBeatsBaseline = orderedFaithful && Number.isFinite(faithfulSunS) && Number.isFinite(baselineSunS) && faithfulSunS + 0.5 < baselineSunS;
+    const patchedSearchUsesFaithful = Boolean(searchPath && searchFaithful && searchUsedConnectors.length > 0);
+
+    let outcome = 'controlled-connectors-tested';
+    let interpretation = '受控 source-gap connector 已只在診斷副本 graph 中測試；production graph 完全未變更。';
+    if (!strict?.connected) {
+      outcome = 'controlled-connectors-insufficient';
+      interpretation = '即使只補 dev16/dev17 已證實的 source-gap，14 m 忠實 corridor 仍未連通；目前兩個 gap 不是完整原因，不能升級成正式 connector。';
+    } else if (!orderedFaithful) {
+      outcome = 'strict-restored-ordered-still-unfaithful';
+      interpretation = '受控 connector 已恢復 strict corridor，但 ordered matcher 仍無法忠實重建；source gap 與 matcher 兩層都還有問題。';
+    } else if (faithfulBeatsBaseline && patchedSearchUsesFaithful) {
+      outcome = 'source-gaps-causally-explain-search-miss';
+      interpretation = '只在診斷副本補上 dev17 已證實的 source-gap 後，忠實手繪 graph path 恢復且 edge 日照成本比 production 自動解更低，patched global min-sun search 也實際選到這條忠實路。這是 source topology gap 導致 production 搜尋漏掉河堤路線的強因果證據；仍不代表可以自動把這些 connector 寫進正式 graph。';
+    } else if (faithfulBeatsBaseline && !patchedSearchUsesFaithful) {
+      outcome = 'source-gaps-restored-faithful-route-but-search-still-misses';
+      interpretation = '受控 connector 已恢復一條在同一 coarse edge 日照模型下更少曬的忠實路徑，但 patched global search 仍沒選到它；除了 source gap 外，搜尋剪枝/狀態仍有第二個問題。';
+    } else if (orderedFaithful && !faithfulBeatsBaseline) {
+      const denseAvailable = Boolean(orderedDenseShade?.available);
+      const denseMismatch = Boolean(orderedDenseShade?.materialMismatch);
+      if (denseAvailable && denseMismatch) {
+        outcome = 'source-gaps-restore-geometry-and-expose-shade-cost-mismatch';
+        interpretation = '受控 connector 已恢復忠實河堤 geometry；同一條 patched faithful path 的 coarse edge 日照與 dense ShadeMap 重算又出現實質差異。source OSM gap 已被證實會阻斷忠實路徑，同時 shade-cost 採樣／時間模型還存在第二層誤差。';
+      } else {
+        outcome = 'source-gaps-restore-geometry-not-shade-advantage';
+        interpretation = denseAvailable
+          ? '受控 connector 已把忠實河堤 geometry 接回來，而且同一路徑 coarse/dense 日照大致一致；在搜尋器目前的日照模型下，它仍沒有比 production 自動解更少曬。此時不要再怪拓樸，應核對手繪原線與 patched faithful graph geometry 的最終 ShadeMap 差異。'
+          : '受控 connector 已把忠實河堤 geometry 接回來，但搜尋器自己的 coarse edge 日照模型仍沒有把它評成比 production 自動解更少曬；dense ShadeMap reconciliation 這次不可用，仍不能把差異歸因於 shade-cost。';
+      }
+    }
+
+    return {
+      available: true, tested: true, strictM, maxGapM,
+      connectorCount: over.connectors.length,
+      connectors: over.connectors.map((c, i) => Object.assign({}, c, eligible[i] || {})),
+      productionGraphMutated: false,
+      strictConnected: Boolean(strict?.connected),
+      strictWitnessCoverageRatio: strict?.witness?.coverageRatio ?? null,
+      orderedReachedGoal: Boolean(ordered),
+      orderedCoverageRatio: ordered?.coverage?.coverageRatio ?? null,
+      orderedAverageDistanceM: ordered?.coverage?.averageDistanceM ?? null,
+      orderedDistanceM: ordered?.distanceM ?? null,
+      orderedPoints: ordered?.points?.map?.((p) => ({ lat: Number(p.lat), lng: Number(p.lng) })) || [],
+      orderedDirectSunSeconds: orderedScore?.directSunSeconds ?? null,
+      orderedWalkSeconds: orderedScore?.walkSeconds ?? null,
+      orderedDenseShadeReconciliation: orderedDenseShade,
+      orderedDenseDirectSunSeconds: orderedDenseShade?.available ? orderedDenseShade.denseDirectSunSeconds : null,
+      orderedCoarseDenseDeltaSeconds: orderedDenseShade?.available ? orderedDenseShade.deltaSeconds : null,
+      orderedCoarseDenseMaterialMismatch: orderedDenseShade?.available ? Boolean(orderedDenseShade.materialMismatch) : null,
+      orderedUsedConnectorIds: orderedUsedConnectors,
+      referenceProductionMinSunSeconds: Number.isFinite(baselineSunS) ? baselineSunS : null,
+      detourLimitSeconds: Number.isFinite(detourLimitS) ? detourLimitS : null,
+      patchedSearchFound: Boolean(searchPath),
+      patchedSearchDirectSunSeconds: searchPath?.directSunSeconds ?? null,
+      patchedSearchDistanceM: searchPath?.distanceM ?? null,
+      patchedSearchPoints: searchPath?.points?.map?.((p) => ({ lat: Number(p.lat), lng: Number(p.lng) })) || [],
+      patchedSearchCoverageRatio: searchCoverage?.coverageRatio ?? null,
+      patchedSearchAverageDistanceM: searchCoverage?.averageDistanceM ?? null,
+      patchedSearchUsedConnectorIds: searchUsedConnectors,
+      searchExpandedStates: minSun?.expanded ?? null,
+      shadeEdgeEvaluations: minSun?.shadeEvals ?? null,
+      outcome, interpretation
+    };
+  }
+
+  async function controlledSourceGapConnectorAudit(graph, startId, endId, route, componentTraceAudit, rawAudit, departure, speedMps, options = {}) {
+    const savedShadeDebug = new Map(lastShadeDebug);
+    const savedMatchFailure = lastOrderedMapMatchFailure;
+    try {
+      return await controlledSourceGapConnectorAuditUnsafe(graph, startId, endId, route, componentTraceAudit, rawAudit, departure, speedMps, options);
+    } catch (error) {
+      return {
+        available: true,
+        tested: true,
+        productionGraphMutated: false,
+        outcome: 'diagnostic-error',
+        error: error?.message || String(error),
+        interpretation: `dev19 的 patched-graph 因果測試發生診斷錯誤（${error?.message || error}）；production graph 與主要路線結果未被修改。`
+      };
+    } finally {
+      lastShadeDebug.clear();
+      for (const [key, value] of savedShadeDebug) lastShadeDebug.set(key, value);
+      lastOrderedMapMatchFailure = savedMatchFailure;
+    }
+  }
+
+  function engineBenchmarkManifest(route, startPoint, endPoint, sourceGapAudit, counterfactualAudit) {
+    const shape = (route || []).map(asLatLng).filter(Boolean).map((p) => ({ lat: Number(p.lat), lon: Number(p.lng) }));
+    const A = asLatLng(startPoint), B = asLatLng(endPoint);
+    if (!A || !B || shape.length < 2) return null;
+    const sourceGaps = (sourceGapAudit?.junctions || []).map((j) => ({
+      progressRatio: Number(j.progressRatio || 0), classification: j.classification || null,
+      geometryGapM: j.geometryGapM ?? null, graphNodeGapM: j.graphNodeGapM ?? null,
+      gradeSeparationPossible: Boolean(j.gradeSeparationPossible),
+      fromWays: (j.fromWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null })),
+      toWays: (j.toWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null }))
+    }));
+    return {
+      schema: 'haidian-routing-engine-benchmark-v1', generatedBy: VERSION,
+      start: { lat: A.lat, lon: A.lng }, end: { lat: B.lat, lon: B.lng }, manualShape: shape,
+      sourceGaps,
+      localCounterfactual: counterfactualAudit ? {
+        outcome: counterfactualAudit.outcome || null,
+        connectorCount: counterfactualAudit.connectorCount || 0,
+        orderedCoverageRatio: counterfactualAudit.orderedCoverageRatio ?? null,
+        patchedSearchCoverageRatio: counterfactualAudit.patchedSearchCoverageRatio ?? null
+      } : null,
+      valhalla: {
+        referenceServer: 'https://valhalla.openstreetmap.de',
+        routeRequest: { locations: [{ lat: A.lat, lon: A.lng }, { lat: B.lat, lon: B.lng }], costing: 'pedestrian', shape_format: 'geojson' },
+        traceRouteRequest: { shape, costing: 'pedestrian', shape_match: 'map_snap', search_radius: 20, gps_accuracy: 4.07, shape_format: 'geojson' }
+      },
+      graphhopper: {
+        profile: 'foot',
+        note: 'Use the same OSM extract date and run GraphHopper map-matching on the supplied manualShape converted to GPX; compare whether the two source-gap junctions remain disconnected.',
+        gpxTrackPoints: shape
+      }
+    };
+  }
+
   function endpointSnapCounterfactualAudit(graph, currentSnapA, currentSnapB, route, thresholdM, options = {}, sharedEdgeDistanceCache = null, context = {}) {
     const manualRoute = (route || []).map(asLatLng).filter(Boolean);
     if (manualRoute.length < 2 || !graph?.edges?.size) return { available: false, reason: 'route-or-graph-missing' };
@@ -3291,6 +3567,11 @@
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
       const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
+      const sourceGapCounterfactualAudit = await controlledSourceGapConnectorAudit(
+        graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
+        Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+      );
+      const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -3316,6 +3597,8 @@
         endpointSnapCounterfactualAudit,
         corridorComponentTraceAudit,
         rawOsmJunctionAudit,
+        sourceGapCounterfactualAudit,
+        engineBenchmark,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -3332,6 +3615,11 @@
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
       const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
+      const sourceGapCounterfactualAudit = await controlledSourceGapConnectorAudit(
+        graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
+        Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+      );
+      const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -3349,6 +3637,8 @@
         endpointSnapCounterfactualAudit,
         corridorComponentTraceAudit,
         rawOsmJunctionAudit,
+        sourceGapCounterfactualAudit,
+        engineBenchmark,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -3389,6 +3679,13 @@
     const endpointSnapCounterfactualAuditAccepted = corridorDiagnostics.endpointSnapCounterfactualAudit;
     const corridorComponentTraceAuditAccepted = corridorDiagnostics.corridorComponentTraceAudit;
     const rawOsmJunctionAuditAccepted = corridorDiagnostics.rawOsmJunctionAudit;
+    const sourceGapCounterfactualAuditAccepted = !strictCorridorAuditAccepted?.connected
+      ? await controlledSourceGapConnectorAudit(
+          graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAuditAccepted, rawOsmJunctionAuditAccepted, departure, speedMps,
+          Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+        )
+      : { available: false, reason: 'strict-corridor-already-connected' };
+    const engineBenchmarkAccepted = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAuditAccepted, sourceGapCounterfactualAuditAccepted);
     const shadeCostAudit = await reconcilePathShadeCost(graph, path.steps, edgeSun, departure, speedMps, options);
     const strictFidelityAccepted = Boolean(strictCorridorAuditAccepted?.connected) && (path.coverage?.coverageRatio || 0) >= minCoverage;
 
@@ -3429,6 +3726,8 @@
       endpointSnapCounterfactualAudit: endpointSnapCounterfactualAuditAccepted,
       corridorComponentTraceAudit: corridorComponentTraceAuditAccepted,
       rawOsmJunctionAudit: rawOsmJunctionAuditAccepted,
+      sourceGapCounterfactualAudit: sourceGapCounterfactualAuditAccepted,
+      engineBenchmark: engineBenchmarkAccepted,
       shadeCostAudit,
       firstDivergence: path.mapMatchAttempt?.firstDivergence || null,
       switchedToNearbyParallel: Boolean(path.mapMatchAttempt?.switchedToNearbyParallel),
@@ -3814,6 +4113,9 @@
       endpointSnapCounterfactualAudit,
       faithfulCorridorComponentTraceAudit,
       rawOsmJunctionAudit,
+      cloneFineGraphWithDiagnosticConnectors,
+      controlledSourceGapConnectorAudit,
+      engineBenchmarkManifest,
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
       pathDivergenceDiagnostics,

@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev18 Shade-Cost Reconciliation
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev19 Source-Gap Controlled Counterfactual
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev18";
+  const VERSION = "v9.0.0-dev19";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1360,6 +1360,29 @@
 
 
 
+    const sourceGapCf = lastManualGraphDiagnosis?.replay?.sourceGapCounterfactualAudit || null;
+    if (sourceGapCf?.tested) {
+      for (const c of (sourceGapCf.connectors || []).slice(0, 8)) {
+        const pts = c.geometry || [];
+        if (pts.length < 2) continue;
+        const label = `dev19 diagnostic source-gap connector<br>${Number(c.gapM || c.distanceM || 0).toFixed(1)} m・進度 ${Math.round(Number(c.progressRatio || 0) * 100)}%<br>production graph 未修改`;
+        window.L.polyline(pts, { color: "#be123c", weight: 5.5, opacity: 0.92, dashArray: "2 6", interactive: true })
+          .bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+      }
+      const orderedPts = sourceGapCf.orderedPoints || [];
+      if (orderedPts.length >= 2) {
+        window.L.polyline(orderedPts, { color: "#16a34a", weight: 6, opacity: 0.78, dashArray: "8 5", interactive: true })
+          .bindTooltip(`dev19 patched ordered faithful path・貼合 ${Math.round(Number(sourceGapCf.orderedCoverageRatio || 0) * 100)}%`, { direction: "top" })
+          .addTo(graphDebugLayer);
+      }
+      const searchPts = sourceGapCf.patchedSearchPoints || [];
+      if (searchPts.length >= 2) {
+        window.L.polyline(searchPts, { color: "#0f766e", weight: 6.5, opacity: 0.78, dashArray: "12 6", interactive: true })
+          .bindTooltip(`dev19 patched global min-sun・貼合 ${Math.round(Number(sourceGapCf.patchedSearchCoverageRatio || 0) * 100)}%`, { direction: "top" })
+          .addTo(graphDebugLayer);
+      }
+    }
+
     const rawJunctionAudit = lastManualGraphDiagnosis?.replay?.rawOsmJunctionAudit || null;
     if (rawJunctionAudit?.available) {
       for (const j of (rawJunctionAudit.junctions || []).slice(0, 12)) {
@@ -1613,6 +1636,28 @@
     return summary + rows + `<p><strong>dev17 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
+  function sourceGapCounterfactualAuditHtml(replay) {
+    const d = replay?.sourceGapCounterfactualAudit || null;
+    if (!d?.available) return '';
+    if (!d.tested) return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${escapeHtml(d.interpretation || '目前沒有可安全測試的受控 source-gap connector。')}</span>`;
+    const pct = (v) => Number.isFinite(Number(v)) ? `${Math.round(Number(v) * 100)}%` : '—';
+    const mins = (v) => Number.isFinite(Number(v)) ? formatMinutes(Number(v)) : '—';
+    const dist = (v) => Number.isFinite(Number(v)) ? formatDistance(Number(v)) : '—';
+    const connectors = (d.connectors || []).slice(0, 8).map((c, i) => {
+      const fromWays = (c.fromWays || []).map((w) => `${escapeHtml(w.highway || 'unknown')} way ${escapeHtml(w.wayId || '—')}`).join(' + ') || '—';
+      const toWays = (c.toWays || []).map((w) => `${escapeHtml(w.highway || 'unknown')} way ${escapeHtml(w.wayId || '—')}`).join(' + ') || '—';
+      return `#${i + 1} ${Number(c.gapM || c.distanceM || 0).toFixed(1)} m（進度 ${Math.round(Number(c.progressRatio || 0) * 100)}%）：${fromWays} ↔ ${toWays}`;
+    }).join('；');
+    const strict = `<span><strong>受控 patched graph：</strong>只在診斷副本加入 ${Math.round(Number(d.connectorCount || 0))} 條 source-gap connector；14 m strict corridor ${d.strictConnected ? '<b>已恢復連通</b>' : '<b>仍不連通</b>'}。production graph mutated = <b>${d.productionGraphMutated ? '是' : '否'}</b>。</span>`;
+    const densePart = d.orderedDenseShadeReconciliation?.available
+      ? `；同一路徑 dense ShadeMap 日照 ${mins(d.orderedDenseDirectSunSeconds)}，coarse↔dense 差 ${Number.isFinite(Number(d.orderedCoarseDenseDeltaSeconds)) ? (Number(d.orderedCoarseDenseDeltaSeconds) / 60).toFixed(1) + ' 分' : '—'}${d.orderedCoarseDenseMaterialMismatch ? '（<b>實質不一致</b>）' : '（大致一致）'}`
+      : '';
+    const ordered = `<span><strong>patched ordered faithful path：</strong>${d.orderedReachedGoal ? `到 B；貼合 ${pct(d.orderedCoverageRatio)}、平均偏移 ${Number.isFinite(Number(d.orderedAverageDistanceM)) ? Number(d.orderedAverageDistanceM).toFixed(1) + ' m' : '—'}、距離 ${dist(d.orderedDistanceM)}、coarse graph 日照 ${mins(d.orderedDirectSunSeconds)}${densePart}` : '仍沒有重建到 B'}。</span>`;
+    const search = `<span><strong>patched global min-sun search：</strong>${d.patchedSearchFound ? `日照 ${mins(d.patchedSearchDirectSunSeconds)}、距離 ${dist(d.patchedSearchDistanceM)}、對手繪貼合 ${pct(d.patchedSearchCoverageRatio)}；使用診斷 connector ${Math.round((d.patchedSearchUsedConnectorIds || []).length)} 條` : '沒有產生路徑'}。production 自動解 coarse 日照 ${mins(d.referenceProductionMinSunSeconds)}。</span>`;
+    const benchmark = replay?.engineBenchmark ? `<span><strong>Mature-engine benchmark：</strong>已準備 Valhalla pedestrian route / trace_route 與 GraphHopper foot GPX 對照 payload。<button type="button" data-re-engine-benchmark>匯出 benchmark JSON</button></span>` : '';
+    return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${connectors}</span>${strict}${ordered}${search}<p><strong>dev19 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>${benchmark}`;
+  }
+
   function enrichShadeReconciliation(diagnosis) {
     const r = diagnosis?.replay;
     const a = r?.shadeCostAudit;
@@ -1723,12 +1768,12 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         const strictWarning = r.strictFidelityAccepted === false ? `<span><strong>注意：</strong>coverage 門檻雖通過，但 strict faithful corridor 並未通過；這個 ordered path 仍可能是貼著手繪線的平行廊道，不能直接當成「同一條手繪路」。</span>` : '';
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
-          strictWarning + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + shadeCostReconciliationHtml(r) +
+          strictWarning + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + shadeCostReconciliationHtml(r) +
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else {
         const f = r.failureDiagnostics || null;
@@ -1757,7 +1802,7 @@
           breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + breakpointHtml +
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + breakpointHtml +
           `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }
@@ -2213,6 +2258,13 @@
     downloadBlob(`haidian-route-exposure-${VERSION}.json`, JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }
 
+  function exportEngineBenchmark() {
+    const payload = lastManualGraphDiagnosis?.replay?.engineBenchmark || null;
+    if (!payload) return setStatus("目前沒有可匯出的 mature-engine benchmark；請先按『驗證手繪 Graph 路徑』。", "warning");
+    downloadBlob(`haidian-engine-benchmark-${VERSION}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+    setStatus("已匯出 Valhalla / GraphHopper 對照 benchmark JSON；這份資料不會修改 OSM 或 production graph。", "ok");
+  }
+
   function exportCsv() {
     if (!lastAnalysis) return setStatus("目前沒有可匯出的分析結果。", "error");
     const rows = [["timestamp", "lat", "lng", "segment_m", "state", "shaded", "source", "reliability", "solar_altitude_deg"]];
@@ -2373,6 +2425,8 @@
       if (graphToggle) { toggleGraphDiagnostics(); return; }
       const graphDiagnose = event.target?.closest?.("[data-re-graph-diagnose]");
       if (graphDiagnose) { void diagnoseSavedManualRoute(); return; }
+      const benchmarkExport = event.target?.closest?.("[data-re-engine-benchmark]");
+      if (benchmarkExport) { exportEngineBenchmark(); return; }
       const action = event.target?.closest?.("[data-re-result-draw]");
       if (!action) return;
       setUiMode("draw");
