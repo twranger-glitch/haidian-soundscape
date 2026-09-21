@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev14 Threshold Delta Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev15 Endpoint Snap Counterfactual Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev14";
+  const VERSION = "v9.0.0-dev15";
 
   const DEFAULTS = {
     enabled: true,
@@ -37,6 +37,8 @@
     manualReplayDivergenceSampleM: 6,
     topologyBreakpointProbeM: 14,
     topologyBreakpointMaxCandidates: 8,
+    endpointCounterfactualRadiusM: 24,
+    endpointCounterfactualMaxCandidates: 8,
     maxRawNodes: 18000,
     maxContractedNodes: 5000,
     maxFineNodes: 12000,
@@ -1933,6 +1935,293 @@
     });
   }
 
+
+  function endpointSnapCounterfactualAudit(graph, currentSnapA, currentSnapB, route, thresholdM, options = {}, sharedEdgeDistanceCache = null, context = {}) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    if (manualRoute.length < 2 || !graph?.edges?.size) return { available: false, reason: 'route-or-graph-missing' };
+    const threshold = Math.max(4, Number(thresholdM || config.manualReplayFidelityThresholdM || 14));
+    const radiusM = Math.max(threshold, Number(options.endpointCounterfactualRadiusM || config.endpointCounterfactualRadiusM || 24));
+    const maxCandidates = Math.max(2, Math.min(16, Number(options.endpointCounterfactualMaxCandidates || config.endpointCounterfactualMaxCandidates || 8)));
+    const edgeDistanceCache = sharedEdgeDistanceCache || new Map();
+    const A = manualRoute[0], B = manualRoute[manualRoute.length - 1];
+
+    function edgeCorridorDistance(edge) {
+      if (!edge) return Infinity;
+      let value = edgeDistanceCache.get(edge.id);
+      if (value == null) {
+        value = edgeDistanceToPolylineM(edge, manualRoute, 5);
+        edgeDistanceCache.set(edge.id, value);
+      }
+      return value;
+    }
+
+    function rankForEdge(edge) {
+      const summary = edge?.tagsSummary || {};
+      const first = (key) => Array.isArray(summary[key]) && summary[key].length ? summary[key][0] : undefined;
+      return pedestrianSnapRank({
+        highway: primaryHighway(edge), foot: first('foot'), access: first('access'), bicycle: first('bicycle')
+      });
+    }
+
+    function currentAnchor(snap, label) {
+      if (!snap?.id || !graph.nodes.has(String(snap.id))) return null;
+      const node = graph.nodes.get(String(snap.id));
+      return {
+        id: `${label}:current`, label, type: 'current-snap', current: true,
+        nodeId: String(snap.id), seedNodeIds: [String(snap.id)],
+        point: { lat: Number(node.lat), lng: Number(node.lng) },
+        distanceM: Number(snap.distanceM || 0), highway: snap.sourceHighway || 'unknown',
+        wayIds: snap.sourceWayId != null ? [String(snap.sourceWayId)] : [],
+        pedestrianRank: Number.isFinite(Number(snap.pedestrianRank)) ? Number(snap.pedestrianRank) : null,
+        pedestrianLabel: snap.pedestrianLabel || null,
+        corridorDistanceM: 0, withinCorridor: true
+      };
+    }
+
+    function nearbyEdgeAnchors(point, label, currentSnap) {
+      const out = [];
+      for (const edge of graph.edges.values()) {
+        const hit = nearestPointOnGeometry(point, edge.geometry || []);
+        if (!hit || hit.distanceM > radiusM + 1e-9) continue;
+        const wayIds = (edge.wayIds || []).map(String);
+        const highway = primaryHighway(edge);
+        const corridorDistanceM = edgeCorridorDistance(edge);
+        const sameSource = currentSnap?.sourceWayId != null && wayIds.includes(String(currentSnap.sourceWayId));
+        const snapNode = currentSnap?.node || (currentSnap?.id ? graph.nodes.get(String(currentSnap.id)) : null);
+        const projectionNearCurrent = snapNode ? haversineM(hit.point, snapNode) <= 3.0 : false;
+        if (sameSource && projectionNearCurrent) continue;
+        out.push({
+          id: `${label}:edge:${edge.id}`, label, type: 'edge-counterfactual', current: false,
+          edgeId: String(edge.id), seedNodeIds: [String(edge.a), String(edge.b)],
+          point: { lat: Number(hit.point.lat), lng: Number(hit.point.lng) },
+          projectionSegmentIndex: Number(hit.segmentIndex || 0),
+          projectionT: Number(hit.t || 0),
+          distanceM: Number(hit.distanceM || 0), highway, wayIds,
+          pedestrianRank: rankForEdge(edge), pedestrianLabel: pedestrianSnapLabel({ highway }),
+          corridorDistanceM, withinCorridor: corridorDistanceM <= threshold + 1e-9,
+          sameSourceAsCurrent: sameSource,
+          sourceEdgeId: edge.sourceEdgeId || null
+        });
+      }
+      // This is a route-aware diagnostic, not the production walking-first snap.
+      // Prioritize edges that actually stay inside the faithful manual corridor;
+      // otherwise a dense cluster of rank-0 footways can crowd the nearby levee
+      // cycleway out of the bounded candidate set before it is ever tested.
+      out.sort((x, y) =>
+        (Number(y.withinCorridor) - Number(x.withinCorridor)) ||
+        (x.corridorDistanceM - y.corridorDistanceM) ||
+        (x.distanceM - y.distanceM) ||
+        ((Number.isFinite(Number(x.pedestrianRank)) ? Number(x.pedestrianRank) : 99) - (Number.isFinite(Number(y.pedestrianRank)) ? Number(y.pedestrianRank) : 99))
+      );
+      const dedup = [];
+      const seen = new Set();
+      for (const item of out) {
+        const sig = `${item.highway}|${item.wayIds.slice().sort().join(',')}`;
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        dedup.push(item);
+        if (dedup.length >= maxCandidates) break;
+      }
+      return dedup;
+    }
+
+    const currentA = currentAnchor(currentSnapA, 'A');
+    const currentB = currentAnchor(currentSnapB, 'B');
+    const alternativesA = nearbyEdgeAnchors(A, 'A', currentSnapA);
+    const alternativesB = nearbyEdgeAnchors(B, 'B', currentSnapB);
+    const anchorsA = [currentA, ...alternativesA].filter(Boolean);
+    const anchorsB = [currentB, ...alternativesB].filter(Boolean);
+
+    function searchFromAnchor(anchor, thresholdM, forbiddenWayIds = null) {
+      if (!anchor) return { seen: new Set(), prev: new Map(), roots: new Set() };
+      if (anchor.type === 'edge-counterfactual') {
+        const edge = graph.edges.get(anchor.edgeId);
+        if (!edge || edgeCorridorDistance(edge) > thresholdM + 1e-9) return { seen: new Set(), prev: new Map(), roots: new Set() };
+        if (forbiddenWayIds?.size && (edge.wayIds || []).some((w) => forbiddenWayIds.has(String(w)))) return { seen: new Set(), prev: new Map(), roots: new Set() };
+      }
+      const roots = new Set((anchor.seedNodeIds || []).map(String));
+      const seen = new Set(roots);
+      const prev = new Map();
+      const queue = Array.from(roots);
+      for (let qi = 0; qi < queue.length; qi += 1) {
+        const nodeId = queue[qi];
+        for (const ref of graph.adjacency.get(nodeId) || []) {
+          const edge = graph.edges.get(ref.edgeId);
+          if (!edge || edgeCorridorDistance(edge) > thresholdM + 1e-9) continue;
+          if (forbiddenWayIds?.size && (edge.wayIds || []).some((w) => forbiddenWayIds.has(String(w)))) continue;
+          const next = String(ref.to);
+          if (seen.has(next)) continue;
+          seen.add(next);
+          prev.set(next, { from: nodeId, edgeId: edge.id });
+          queue.push(next);
+        }
+      }
+      return { seen, prev, roots };
+    }
+
+    function targetNodeFor(anchor, search, thresholdM = threshold, forbiddenWayIds = null) {
+      if (!anchor) return null;
+      if (anchor.type === 'edge-counterfactual') {
+        const edge = graph.edges.get(anchor.edgeId);
+        if (!edge || edgeCorridorDistance(edge) > thresholdM + 1e-9) return null;
+        if (forbiddenWayIds?.size && (edge.wayIds || []).some((w) => forbiddenWayIds.has(String(w)))) return null;
+      }
+      for (const id of anchor.seedNodeIds || []) if (search.seen.has(String(id))) return String(id);
+      return null;
+    }
+
+    function anchorPartialGeometry(anchor, rootId) {
+      if (!anchor || anchor.type !== 'edge-counterfactual' || !anchor.edgeId) return [];
+      const edge = graph.edges.get(String(anchor.edgeId));
+      const geom = edge?.geometry || [];
+      if (geom.length < 2) return [];
+      const i = Math.max(0, Math.min(geom.length - 2, Number(anchor.projectionSegmentIndex || 0)));
+      const projection = anchor.point || interpolatePoint(geom[i], geom[i + 1], Number(anchor.projectionT || 0));
+      if (String(rootId) === String(edge.a)) {
+        return [projection, ...geom.slice(0, i + 1).reverse()].map(asLatLng).filter(Boolean);
+      }
+      if (String(rootId) === String(edge.b)) {
+        return [projection, ...geom.slice(i + 1)].map(asLatLng).filter(Boolean);
+      }
+      return [];
+    }
+
+    function reconstruct(search, targetId, aAnchor, bAnchor) {
+      if (!targetId) return null;
+      const steps = [];
+      let cur = String(targetId), guard = 0;
+      while (!search.roots.has(cur) && guard++ < 20000) {
+        const prev = search.prev.get(cur);
+        if (!prev) return null;
+        steps.push({ edgeId: prev.edgeId, from: prev.from, to: cur });
+        cur = String(prev.from);
+      }
+      const startRootId = String(cur);
+      const targetRootId = String(targetId);
+      steps.reverse();
+      const path = pathFromEdgeSteps(graph, steps);
+      const points = [];
+      function push(p) {
+        if (!p || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return;
+        const q = { lat: Number(p.lat), lng: Number(p.lng) };
+        const last = points[points.length - 1];
+        if (!last || haversineM(last, q) > 0.2) points.push(q);
+      }
+      const startPartial = anchorPartialGeometry(aAnchor, startRootId);
+      if (startPartial.length) for (const p of startPartial) push(p);
+      else push(aAnchor?.point);
+      for (const p of path.points || []) push(p);
+      const endPartial = anchorPartialGeometry(bAnchor, targetRootId);
+      if (endPartial.length) for (const p of endPartial.slice().reverse()) push(p);
+      else push(bAnchor?.point);
+      const coverage = pathCoverageAgainstRoute(points, manualRoute, threshold, 10);
+      return {
+        edgeIds: (path.edgeIds || []).slice(), points,
+        distanceM: Number(path.distanceM || 0) + routeDistanceM(startPartial) + routeDistanceM(endPartial),
+        coverageRatio: coverage.coverageRatio,
+        averageDistanceM: coverage.averageDistanceM,
+        maxDistanceM: coverage.maxDistanceM,
+        startRootId,
+        targetRootId
+      };
+    }
+
+    function compactAnchor(a) {
+      if (!a) return null;
+      return {
+        id: a.id, type: a.type, current: Boolean(a.current), edgeId: a.edgeId || null,
+        nodeId: a.nodeId || null, point: a.point || null, distanceM: a.distanceM,
+        highway: a.highway || 'unknown', wayIds: (a.wayIds || []).slice(),
+        pedestrianRank: a.pedestrianRank, pedestrianLabel: a.pedestrianLabel || null,
+        corridorDistanceM: a.corridorDistanceM, withinCorridor: a.withinCorridor !== false,
+        sameSourceAsCurrent: Boolean(a.sameSourceAsCurrent)
+      };
+    }
+
+    const pairTests = [];
+    let currentPair = null;
+    let bestAlternative = null;
+    for (const aAnchor of anchorsA) {
+      const search = searchFromAnchor(aAnchor, threshold, null);
+      for (const bAnchor of anchorsB) {
+        const target = targetNodeFor(bAnchor, search);
+        const connected = Boolean(target);
+        const item = {
+          a: compactAnchor(aAnchor), b: compactAnchor(bAnchor), connected,
+          changedEndpointCount: Number(!aAnchor.current) + Number(!bAnchor.current),
+          totalSnapDistanceM: Number(aAnchor.distanceM || 0) + Number(bAnchor.distanceM || 0),
+          witness: connected ? reconstruct(search, target, aAnchor, bAnchor) : null
+        };
+        pairTests.push(item);
+        if (aAnchor.current && bAnchor.current) currentPair = item;
+        if (connected && !(aAnchor.current && bAnchor.current)) {
+          if (!bestAlternative ||
+              item.changedEndpointCount < bestAlternative.changedEndpointCount ||
+              (item.changedEndpointCount === bestAlternative.changedEndpointCount && Number(item.witness?.averageDistanceM ?? Infinity) < Number(bestAlternative.witness?.averageDistanceM ?? Infinity) - 1e-9) ||
+              (item.changedEndpointCount === bestAlternative.changedEndpointCount && Math.abs(Number(item.witness?.averageDistanceM ?? Infinity) - Number(bestAlternative.witness?.averageDistanceM ?? Infinity)) < 1e-9 && item.totalSnapDistanceM < bestAlternative.totalSnapDistanceM - 1e-9)) {
+            bestAlternative = item;
+          }
+        }
+      }
+    }
+
+    pairTests.sort((x, y) =>
+      (Number(y.connected) - Number(x.connected)) ||
+      (Number(x.changedEndpointCount || 0) - Number(y.changedEndpointCount || 0)) ||
+      (Number(x.witness?.averageDistanceM ?? Infinity) - Number(y.witness?.averageDistanceM ?? Infinity)) ||
+      (x.totalSnapDistanceM - y.totalSnapDistanceM)
+    );
+    const selectedSnapLikelyCause = Boolean(currentPair && !currentPair.connected && bestAlternative?.connected);
+
+    const dynamicParallelWays = new Set();
+    for (const t of context?.thresholdDeltaAudit?.wayExclusionTests || []) {
+      if (t?.essentialForUpperCorridor && t?.wayId != null) dynamicParallelWays.add(String(t.wayId));
+    }
+    let upperWithoutTransitionWays = null;
+    if (bestAlternative?.connected && dynamicParallelWays.size) {
+      const upperThreshold = Math.max(threshold, Number(context.upperThresholdM || config.manualReplayCorridorM || 16));
+      const aFull = anchorsA.find((a) => a.id === bestAlternative.a.id) || null;
+      const bFull = anchorsB.find((b) => b.id === bestAlternative.b.id) || null;
+      const search = searchFromAnchor(aFull, upperThreshold, dynamicParallelWays);
+      const target = targetNodeFor(bFull, search, upperThreshold, dynamicParallelWays);
+      upperWithoutTransitionWays = {
+        thresholdM: upperThreshold,
+        forbiddenWayIds: Array.from(dynamicParallelWays),
+        connected: Boolean(target),
+        witness: target ? reconstruct(search, String(target), aFull, bFull) : null
+      };
+    }
+
+    let outcome = 'no-counterfactual-rescue';
+    let interpretation = `在 ${Math.round(threshold)} m 忠實走廊內，替換 A/B endpoint anchor 後仍沒有找到比目前 snap 更能恢復 A→B 的合法 path；目前證據不支持把 endpoint snapping 當成主要根因。`;
+    if (currentPair?.connected) {
+      outcome = 'current-snap-already-faithful';
+      interpretation = `目前 A/B snap 在 ${Math.round(threshold)} m 忠實走廊內本來就可連通；endpoint snapping 不是這個 corridor disconnect 的根因。`;
+    } else if (selectedSnapLikelyCause) {
+      outcome = 'counterfactual-snap-restores-faithful-path';
+      const changedA = !bestAlternative.a.current;
+      const changedB = !bestAlternative.b.current;
+      const changed = [changedA ? `A→${bestAlternative.a.highway}` : null, changedB ? `B→${bestAlternative.b.highway}` : null].filter(Boolean).join('、');
+      interpretation = `只替換 endpoint anchor（${changed || 'A/B'}），不補 edge、不改日照權重、不改 matcher scoring，就能在 ${Math.round(threshold)} m 忠實走廊內恢復 A→B；這是 endpoint snap 造成路徑被迫逃向平行廊道的直接反事實證據。`;
+      if (upperWithoutTransitionWays?.connected) interpretation += ` 即使再排除 dev14 驗出的 transition-critical source way，替代 anchor 在 ${Math.round(upperWithoutTransitionWays.thresholdM)} m 仍可連通，進一步支持「起終點吸附錯廊道」而非「必須借道該 tertiary」的解釋。`;
+    }
+
+    return {
+      available: true,
+      thresholdM: threshold,
+      radiusM,
+      currentPair,
+      candidatesA: anchorsA.map(compactAnchor),
+      candidatesB: anchorsB.map(compactAnchor),
+      pairTests: pairTests.slice(0, 20),
+      bestAlternative,
+      selectedSnapLikelyCause,
+      upperWithoutTransitionWays,
+      outcome,
+      interpretation
+    };
+  }
+
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
     lastOrderedMapMatchFailure = null;
     // dev10+: ordered map matching is a state-space problem, not just a node shortest path.
@@ -2180,7 +2469,11 @@
             { lowerAudit, upperAudit }
           )
         : null;
-      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit };
+      const endpointSnapAudit = endpointSnapCounterfactualAudit(
+        graph, state.snapA, state.snapB, route, fidelity, options, cache,
+        { thresholdDeltaAudit, upperThresholdM: baseThreshold }
+      );
+      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit: endpointSnapAudit };
     }
 
     function cloneAttempt(attempt) {
@@ -2256,7 +2549,7 @@
       const low = bestLowCoverage.attempt;
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -2279,6 +2572,7 @@
         strictCorridorAudit,
         strictCorridorAudits,
         thresholdDeltaAudit,
+        endpointSnapCounterfactualAudit,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -2294,7 +2588,7 @@
     if (!path) {
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -2309,6 +2603,7 @@
         strictCorridorAudit,
         strictCorridorAudits,
         thresholdDeltaAudit,
+        endpointSnapCounterfactualAudit,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -2747,6 +3042,7 @@
       orderedMapMatchDijkstra,
       strictCorridorConnectivityAudit,
       corridorThresholdDeltaAudit,
+      endpointSnapCounterfactualAudit,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
