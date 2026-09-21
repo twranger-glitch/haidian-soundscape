@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev11 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev12 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev11: adds first topology-breakpoint diagnostics on top of pedestrian-first ordered map matching.
+  // v9.0.0-dev12: distinguishes true no-goal topology/transition failure from connected-but-low-fidelity map matching.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -45,6 +45,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     manualReplayBacktrackToleranceM: 12,
     manualReplayProgressBucketM: 10,
     manualReplayGoalToleranceM: 28,
+    manualReplayMinCoverage: 0.88,
+    manualReplayFidelityThresholdM: 14,
+    manualReplayDivergenceSampleM: 6,
     topologyBreakpointProbeM: 14,
     topologyBreakpointMaxCandidates: 8,
     manualReplayLateralWeight: 4,
