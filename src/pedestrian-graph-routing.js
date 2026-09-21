@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev16 Corridor Component Trace
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev17 Raw OSM Junction Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev16";
+  const VERSION = "v9.0.0-dev17";
 
   const DEFAULTS = {
     enabled: true,
@@ -317,7 +317,7 @@
     const wayMeta = new Map();
     let rawSegments = 0;
     for (const way of parsed.ways) {
-      wayMeta.set(String(way.id), { id: String(way.id), tags: Object.assign({}, way.tags || {}) });
+      wayMeta.set(String(way.id), { id: String(way.id), tags: Object.assign({}, way.tags || {}), nodeIds: (way.nodes || []).map(String) });
       for (let i = 1; i < way.nodes.length; i += 1) {
         const aId = way.nodes[i - 1];
         const bId = way.nodes[i];
@@ -2344,6 +2344,193 @@
     };
   }
 
+
+  // v9.0.0-dev17: trace each dev16 component boundary back to the raw Overpass
+  // way/node topology that produced it.  This audit is intentionally read-only:
+  // it distinguishes a source OSM noding gap from a custom graph-builder loss,
+  // but never inserts a production connector or rewrites OSM data.
+  function rawOsmJunctionAudit(graph, raw, route, componentTraceAudit, options = {}) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    const transitions = componentTraceAudit?.transitions || [];
+    if (!graph?.edges?.size || !raw?.nodes?.size || !raw?.wayMeta?.size || manualRoute.length < 2 || !transitions.length) {
+      return { available: false, reason: 'missing-raw-topology-or-component-transitions' };
+    }
+    const nearRadiusM = Math.max(20, Number(options.rawJunctionNearRadiusM || 45));
+    const endpointGapMaxM = Math.max(6, Number(options.rawJunctionEndpointGapMaxM || 20));
+    const touchMaxM = Math.max(0.5, Number(options.rawJunctionTouchMaxM || 2.5));
+
+    function wayMeta(id) { return raw.wayMeta.get(String(id)) || null; }
+    function wayNodeIds(id) { return (wayMeta(id)?.nodeIds || []).map(String); }
+    function wayTags(id) { return wayMeta(id)?.tags || {}; }
+    function isEndpoint(wayId, nodeId) {
+      const ids = wayNodeIds(wayId);
+      return Boolean(ids.length && (ids[0] === String(nodeId) || ids[ids.length - 1] === String(nodeId)));
+    }
+    function compactWay(wayId) {
+      const meta = wayMeta(wayId);
+      if (!meta) return { wayId: String(wayId), missing: true, nodeCount: 0, tags: {} };
+      const ids = (meta.nodeIds || []).map(String);
+      return {
+        wayId: String(wayId), nodeCount: ids.length,
+        firstNodeId: ids[0] || null, lastNodeId: ids[ids.length - 1] || null,
+        highway: normalizedTag(meta.tags?.highway || '') || 'unknown',
+        tags: compactTagSummary(meta.tags || {})
+      };
+    }
+    function zSignature(wayIds) {
+      const sigs = [];
+      for (const wayId of wayIds || []) {
+        const tags = wayTags(wayId);
+        const layer = String(tags?.layer ?? '0').trim() || '0';
+        const bridge = normalizedTag(tags?.bridge || 'no');
+        const tunnel = normalizedTag(tags?.tunnel || 'no');
+        sigs.push({ wayId: String(wayId), layer, bridge, tunnel });
+      }
+      return sigs;
+    }
+    function gradeSeparationPossible(aWays, bWays) {
+      const A = zSignature(aWays), B = zSignature(bWays);
+      for (const a of A) for (const b of B) {
+        if (a.layer !== b.layer) return true;
+        const abr = !['', 'no', '0', 'false'].includes(a.bridge), bbr = !['', 'no', '0', 'false'].includes(b.bridge);
+        const atu = !['', 'no', '0', 'false'].includes(a.tunnel), btu = !['', 'no', '0', 'false'].includes(b.tunnel);
+        if (abr !== bbr || atu !== btu) return true;
+      }
+      return false;
+    }
+    function targetPoint(t, side) {
+      const gp = t?.geometryPair || null;
+      if (side === 'a' && gp?.aPoint) return asLatLng(gp.aPoint);
+      if (side === 'b' && gp?.bPoint) return asLatLng(gp.bPoint);
+      const np = t?.nearestNodePair || null;
+      return asLatLng(side === 'a' ? np?.a?.node : np?.b?.node);
+    }
+    function edgeForTransition(t, side) {
+      const gp = t?.geometryPair || null;
+      const id = side === 'a' ? gp?.aEdgeId : gp?.bEdgeId;
+      return id ? graph.edges.get(String(id)) || null : null;
+    }
+    function nearbyRawNodes(wayIds, point) {
+      const P = asLatLng(point);
+      if (!P) return [];
+      const out = [], seen = new Set();
+      for (const wayId0 of wayIds || []) {
+        const wayId = String(wayId0);
+        for (const nodeId of wayNodeIds(wayId)) {
+          const key = `${wayId}:${nodeId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const node = raw.nodes.get(String(nodeId));
+          if (!node) continue;
+          const distanceM = haversineM(P, node);
+          if (distanceM <= nearRadiusM + 1e-9) out.push({ wayId, nodeId: String(nodeId), node: { id: String(nodeId), lat: Number(node.lat), lng: Number(node.lng) }, distanceM, endpoint: isEndpoint(wayId, nodeId) });
+        }
+      }
+      return out.sort((a,b)=>a.distanceM-b.distanceM);
+    }
+    function sharedNearRawNodes(aWays, bWays, aPoint, bPoint) {
+      const aset = new Set();
+      for (const w of aWays || []) for (const id of wayNodeIds(w)) aset.add(String(id));
+      const out = [];
+      for (const w of bWays || []) for (const id of wayNodeIds(w)) {
+        const nid = String(id);
+        if (!aset.has(nid) || out.some(x => x.nodeId === nid)) continue;
+        const node = raw.nodes.get(nid); if (!node) continue;
+        const da = aPoint ? haversineM(aPoint, node) : Infinity;
+        const db = bPoint ? haversineM(bPoint, node) : Infinity;
+        if (Math.min(da, db) <= nearRadiusM + 1e-9) out.push({ nodeId: nid, node: { id:nid, lat:Number(node.lat), lng:Number(node.lng) }, distanceToA_M: da, distanceToB_M: db });
+      }
+      return out.sort((x,y)=>Math.min(x.distanceToA_M,x.distanceToB_M)-Math.min(y.distanceToA_M,y.distanceToB_M));
+    }
+    function nearestRawNodePair(aNodes, bNodes) {
+      let best = null;
+      for (const a of aNodes.slice(0,120)) for (const b of bNodes.slice(0,120)) {
+        const gapM = haversineM(a.node, b.node);
+        if (!best || gapM < best.gapM) best = { gapM, a, b };
+      }
+      return best;
+    }
+
+    const junctions = [];
+    let builderLossCount = 0, sourceGapCount = 0, touchWithoutNodeCount = 0, gradeSeparatedCount = 0;
+    for (const t of transitions.slice(0, 20)) {
+      const aEdge = edgeForTransition(t, 'a'), bEdge = edgeForTransition(t, 'b');
+      const aWays = (aEdge?.wayIds || []).map(String);
+      const bWays = (bEdge?.wayIds || []).map(String);
+      const aPoint = targetPoint(t, 'a'), bPoint = targetPoint(t, 'b');
+      const aNodes = nearbyRawNodes(aWays, aPoint), bNodes = nearbyRawNodes(bWays, bPoint);
+      const shared = sharedNearRawNodes(aWays, bWays, aPoint, bPoint);
+      const nearestPair = nearestRawNodePair(aNodes, bNodes);
+      const geomGapM = Number(t?.geometryPair?.distanceM);
+      const gradeSep = gradeSeparationPossible(aWays, bWays);
+      let classification = 'source-topology-gap';
+      let evidenceLayer = 'source-osm-topology';
+      if (shared.length) {
+        classification = 'raw-shared-node-but-fine-components-disconnected';
+        evidenceLayer = 'custom-graph-builder';
+        builderLossCount += 1;
+      } else if (Number.isFinite(geomGapM) && geomGapM <= touchMaxM + 1e-9 && gradeSep) {
+        classification = 'geometric-touch-with-grade-separation-tags';
+        evidenceLayer = 'source-osm-topology';
+        gradeSeparatedCount += 1;
+      } else if (Number.isFinite(geomGapM) && geomGapM <= touchMaxM + 1e-9) {
+        classification = 'non-noded-geometric-touch';
+        evidenceLayer = 'source-osm-topology';
+        touchWithoutNodeCount += 1; sourceGapCount += 1;
+      } else if (nearestPair && nearestPair.gapM <= endpointGapMaxM + 1e-9 && nearestPair.a.endpoint && nearestPair.b.endpoint) {
+        classification = 'source-way-endpoint-gap';
+        evidenceLayer = 'source-osm-topology';
+        sourceGapCount += 1;
+      } else {
+        sourceGapCount += 1;
+      }
+      junctions.push({
+        fromComponentId: t.fromComponentId, toComponentId: t.toComponentId,
+        progressM: Number(t.progressM || 0), progressRatio: Number(t.progressRatio || 0),
+        dev16Classification: t.classification || null,
+        geometryGapM: Number.isFinite(geomGapM) ? geomGapM : null,
+        graphNodeGapM: Number.isFinite(Number(t?.nearestNodePair?.gapM)) ? Number(t.nearestNodePair.gapM) : null,
+        fromFineEdgeId: aEdge?.id || null, toFineEdgeId: bEdge?.id || null,
+        fromSourceEdgeId: aEdge?.sourceEdgeId || null, toSourceEdgeId: bEdge?.sourceEdgeId || null,
+        fromWays: aWays.map(compactWay), toWays: bWays.map(compactWay),
+        sharedRawNodesNearBoundary: shared.slice(0, 12),
+        nearestRawNodePair: nearestPair,
+        gradeSeparationPossible: gradeSep,
+        fromZSignatures: zSignature(aWays), toZSignatures: zSignature(bWays),
+        classification, evidenceLayer
+      });
+    }
+
+    let outcome = 'source-topology-boundaries';
+    let interpretation = '';
+    if (builderLossCount > 0) {
+      outcome = 'custom-builder-loses-raw-junction';
+      interpretation = `至少 ${builderLossCount} 個忠實廊道斷點在原始 Overpass way 中其實共享同一 OSM node，但 fine graph 仍被分成不同 component；這是直接的 custom graph builder/contraction 證據，下一步應修 builder，而不是修改 OSM 或 matcher score。`;
+    } else if (touchWithoutNodeCount > 0 || sourceGapCount > 0) {
+      outcome = 'raw-source-topology-lacks-required-junctions';
+      interpretation = `目前檢查到的忠實廊道斷點，在原始 Overpass way/node 拓樸中沒有找到可直接共享的 OSM node；其中 ${touchWithoutNodeCount} 個屬於幾何幾乎相碰但未 noding 的情況。這表示 custom builder 大致忠實保留了來源拓樸，主要瓶頸已下沉到 OSM/source junction，而不是 map-match scoring。仍須先排除橋梁/隧道/不同 layer 等合法不相交情況，再決定資料修正或受控 local connector。`;
+    } else if (gradeSeparatedCount > 0) {
+      outcome = 'possible-grade-separated-crossings';
+      interpretation = `斷點幾何接近，但來源 way 含 layer/bridge/tunnel 差異；不可因為平面上相交就補 shared node，應視為可能的立體交會並做人工/成熟引擎資料核對。`;
+    } else {
+      interpretation = `dev17 尚未取得足夠 raw way/node 證據判定斷點屬於來源 OSM 拓樸或 custom builder；維持診斷狀態，不建立 production connector。`;
+    }
+    return {
+      available: true,
+      nearRadiusM,
+      endpointGapMaxM,
+      touchMaxM,
+      junctionCount: junctions.length,
+      builderLossCount,
+      sourceGapCount,
+      nonNodedTouchCount: touchWithoutNodeCount,
+      gradeSeparatedCount,
+      junctions,
+      outcome,
+      interpretation
+    };
+  }
+
   function endpointSnapCounterfactualAudit(graph, currentSnapA, currentSnapB, route, thresholdM, options = {}, sharedEdgeDistanceCache = null, context = {}) {
     const manualRoute = (route || []).map(asLatLng).filter(Boolean);
     if (manualRoute.length < 2 || !graph?.edges?.size) return { available: false, reason: 'route-or-graph-missing' };
@@ -2884,7 +3071,10 @@
       const corridorComponentTraceAudit = faithfulCorridorComponentTraceAudit(
         graph, state.snapA.id, state.snapB.id, route, fidelity, options, cache
       );
-      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit: endpointSnapAudit, corridorComponentTraceAudit };
+      const rawOsmJunctionAuditResult = rawOsmJunctionAudit(
+        graph, state.raw, route, corridorComponentTraceAudit, options
+      );
+      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit: endpointSnapAudit, corridorComponentTraceAudit, rawOsmJunctionAudit: rawOsmJunctionAuditResult };
     }
 
     function cloneAttempt(attempt) {
@@ -2960,7 +3150,7 @@
       const low = bestLowCoverage.attempt;
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -2985,6 +3175,7 @@
         thresholdDeltaAudit,
         endpointSnapCounterfactualAudit,
         corridorComponentTraceAudit,
+        rawOsmJunctionAudit,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -3000,7 +3191,7 @@
     if (!path) {
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -3017,6 +3208,7 @@
         thresholdDeltaAudit,
         endpointSnapCounterfactualAudit,
         corridorComponentTraceAudit,
+        rawOsmJunctionAudit,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -3457,6 +3649,7 @@
       corridorThresholdDeltaAudit,
       endpointSnapCounterfactualAudit,
       faithfulCorridorComponentTraceAudit,
+      rawOsmJunctionAudit,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,

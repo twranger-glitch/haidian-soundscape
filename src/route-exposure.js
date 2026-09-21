@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev16 Corridor Component Trace
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev17 Raw OSM Junction Audit
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev16";
+  const VERSION = "v9.0.0-dev17";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1359,6 +1359,25 @@
     }
 
 
+
+    const rawJunctionAudit = lastManualGraphDiagnosis?.replay?.rawOsmJunctionAudit || null;
+    if (rawJunctionAudit?.available) {
+      for (const j of (rawJunctionAudit.junctions || []).slice(0, 12)) {
+        const pair = j?.nearestRawNodePair || null;
+        const a = pair?.a?.node || null, b = pair?.b?.node || null;
+        if (!a || !b || !Number.isFinite(Number(a.lat)) || !Number.isFinite(Number(a.lng)) || !Number.isFinite(Number(b.lat)) || !Number.isFinite(Number(b.lng))) continue;
+        const pts = [{ lat:Number(a.lat), lng:Number(a.lng) }, { lat:Number(b.lat), lng:Number(b.lng) }];
+        const aw = (j.fromWays || []).map((w)=>`${w.highway || 'unknown'} ${w.wayId}`).join('/') || '—';
+        const bw = (j.toWays || []).map((w)=>`${w.highway || 'unknown'} ${w.wayId}`).join('/') || '—';
+        const shared = (j.sharedRawNodesNearBoundary || []).map((x)=>x.nodeId).join('/') || '無';
+        const label = `dev17 raw OSM junction audit<br>進度 ${Math.round(Number(j.progressRatio || 0) * 100)}%・${escapeHtml(j.classification || 'unknown')}<br>${escapeHtml(aw)} ↔ ${escapeHtml(bw)}<br>raw node gap ${Number(pair.gapM || 0).toFixed(1)} m・shared raw node ${escapeHtml(shared)}`;
+        window.L.polyline(pts, { color: "#ea580c", weight: 4.5, opacity: 0.92, dashArray: "3 5", interactive: true })
+          .bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+        window.L.circleMarker(pts[0], { radius: 5, weight: 2, color: "#c2410c", fillColor: "#ffedd5", fillOpacity: 1, interactive: true }).bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+        window.L.circleMarker(pts[1], { radius: 5, weight: 2, color: "#c2410c", fillColor: "#ffedd5", fillOpacity: 1, interactive: true }).bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+      }
+    }
+
     graphDebugVisible = true;
     return true;
   }
@@ -1568,6 +1587,32 @@
     return head + sequence + transitions + cfText + `<p><strong>dev16 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
+
+  function rawOsmJunctionAuditHtml(replay) {
+    const d = replay?.rawOsmJunctionAudit || null;
+    if (!d?.available) return '';
+    const fmtWays = (items) => (items || []).slice(0, 4).map((w) => `${escapeHtml(w.highway || 'unknown')} / way ${escapeHtml(w.wayId || '—')}`).join(' + ') || '—';
+    const classLabel = (c) => ({
+      'raw-shared-node-but-fine-components-disconnected': '原始 OSM 已共享 node，但 custom fine graph 仍斷開',
+      'non-noded-geometric-touch': '幾何幾乎相碰，但原始 OSM 沒有 shared node',
+      'geometric-touch-with-grade-separation-tags': '幾何接近，但 layer / bridge / tunnel 顯示可能是立體交會',
+      'source-way-endpoint-gap': '兩條 source way 的端點彼此接近，但原始 OSM 沒有 shared node',
+      'source-topology-gap': 'source topology gap'
+    }[c] || c || 'unknown');
+    const rows = (d.junctions || []).slice(0, 10).map((j, i) => {
+      const progress = Math.round(Number(j.progressRatio || 0) * 100);
+      const shared = (j.sharedRawNodesNearBoundary || []).map((x)=>x.nodeId).join('/') || '無';
+      const pair = j.nearestRawNodePair || null;
+      const rawGap = Number.isFinite(Number(pair?.gapM)) ? `${Number(pair.gapM).toFixed(1)} m` : '—';
+      const ep = pair ? `（${pair.a?.endpoint ? 'A側 way端點' : 'A側中間node'} ↔ ${pair.b?.endpoint ? 'B側 way端點' : 'B側中間node'}）` : '';
+      const geom = Number.isFinite(Number(j.geometryGapM)) ? `${Number(j.geometryGapM).toFixed(1)} m` : '—';
+      const layer = j.evidenceLayer === 'custom-graph-builder' ? '<b>builder 層</b>' : '<b>source OSM 拓樸層</b>';
+      return `<span><strong>斷點 ${i+1}（手繪進度 ${progress}%）：</strong>${fmtWays(j.fromWays)} ↔ ${fmtWays(j.toWays)}；fine geometry gap ${geom}；最近 raw node gap ${rawGap}${ep}；附近 shared raw node：${escapeHtml(shared)}；判定：${escapeHtml(classLabel(j.classification))}，證據落在 ${layer}。</span>`;
+    }).join('');
+    const summary = `<span><strong>dev17 Raw OSM Junction / Graph Builder Audit：</strong>直接使用這次 Overpass 回傳的原始 way node 序列檢查 dev16 的 component 邊界；共 ${Math.round(Number(d.junctionCount || 0))} 個斷點，builder-loss ${Math.round(Number(d.builderLossCount || 0))}、source-gap ${Math.round(Number(d.sourceGapCount || 0))}、non-noded touch ${Math.round(Number(d.nonNodedTouchCount || 0))}。</span>`;
+    return summary + rows + `<p><strong>dev17 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
+  }
+
   function graphDiagnosisHtml(diagnosis) {
     if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
     const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
@@ -1594,7 +1639,7 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
@@ -1626,7 +1671,7 @@
           breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + breakpointHtml +
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + breakpointHtml +
           `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }
