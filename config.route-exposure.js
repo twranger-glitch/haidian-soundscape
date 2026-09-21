@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev20 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev20.1 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev20: preserves dev13–dev19 diagnostics, keeps all source-gap
+  // v9.0.0-dev20.1: cross-check-first; preserves dev13–dev20 diagnostics, keeps all source-gap
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
   graphRouting: {
@@ -78,6 +78,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     sourceGapCounterfactualEnabled: true,
     sourceGapCounterfactualMaxGapM: 55,
     sourceGapCounterfactualStrictM: 14,
+    // dev20.1: do not block the first validation pass on the expensive patched
+    // ShadeMap + global min-sun causal rerun. It remains available by button.
+    deferSourceGapCounterfactual: true,
     // dev20: never auto-promote a hand-drawn source gap into production.
     // These thresholds only classify what needs manual review.
     safeConnectorNearTouchM: 2.5,
