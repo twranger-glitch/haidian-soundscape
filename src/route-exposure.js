@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev12 Truthful Map-match Outcomes
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev13 Strict Corridor Audit
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev12";
+  const VERSION = "v9.0.0-dev13";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1292,6 +1292,18 @@
       window.L.circleMarker(snapshot.snapB, { radius: 7, weight: 3, color: "#dc2626", fillColor: "#fee2e2", fillOpacity: 1 })
         .bindTooltip(`B edge 吸附・誤差 ${Math.round(snapshot.snapB.distanceM || 0)} m${snapshot.snapB.highway ? `<br>${escapeHtml(snapshot.snapB.highway)}` : ""}`, { permanent: false }).addTo(graphDebugLayer);
     }
+    const strictGap = lastManualGraphDiagnosis?.replay?.strictCorridorAudit?.nearestComponentGap || null;
+    const gapA = strictGap?.a?.node || null;
+    const gapB = strictGap?.b?.node || null;
+    if (gapA && gapB && Number.isFinite(Number(gapA.lat)) && Number.isFinite(Number(gapA.lng)) && Number.isFinite(Number(gapB.lat)) && Number.isFinite(Number(gapB.lng))) {
+      const aPoint = { lat: Number(gapA.lat), lng: Number(gapA.lng) };
+      const bPoint = { lat: Number(gapB.lat), lng: Number(gapB.lng) };
+      window.L.circleMarker(aPoint, { radius: 7, weight: 3, color: "#b91c1c", fillColor: "#fecaca", fillOpacity: 1 })
+        .bindTooltip(`dev13 strict corridor・A-side component 邊界<br>node ${escapeHtml(gapA.id || '—')}`, { direction: "top" }).addTo(graphDebugLayer);
+      window.L.circleMarker(bPoint, { radius: 7, weight: 3, color: "#c2410c", fillColor: "#fed7aa", fillOpacity: 1 })
+        .bindTooltip(`dev13 strict corridor・B-side component 邊界<br>node ${escapeHtml(gapB.id || '—')}`, { direction: "top" }).addTo(graphDebugLayer);
+      window.L.polyline([aPoint, bPoint], { color: "#dc2626", weight: 3, opacity: 0.9, dashArray: "6 6", interactive: false }).addTo(graphDebugLayer);
+    }
     graphDebugVisible = true;
     return true;
   }
@@ -1308,6 +1320,63 @@
       if (button) button.textContent = "隱藏 OSM Graph";
       setStatus("OSM Graph 診斷圖層已開啟：紫色為 footway/path 類步行廊道，黃色圓點是道路/步道類型的轉換節點。點任一 edge 可看 OSM tag 與 graph shade 估計。", "");
     }
+  }
+
+
+  function graphAttemptLadderHtml(replay) {
+    const attempts = Array.isArray(replay?.attempts) ? replay.attempts : [];
+    if (!attempts.length) return '';
+    const parts = attempts.map((a) => {
+      const threshold = Number.isFinite(Number(a?.thresholdM)) ? `${Math.round(Number(a.thresholdM))} m` : '—';
+      if (a?.graphReachedGoal === true) {
+        const coverage = Number.isFinite(Number(a.coverageRatio)) ? `${Math.round(Number(a.coverageRatio) * 100)}%` : '—';
+        return `${threshold}：到 B／貼合 ${coverage}${a.manualFidelityAccepted ? ' ✓' : ''}`;
+      }
+      const progress = Number.isFinite(Number(a?.maxProgressRatio)) ? `／最遠 ${Math.round(Number(a.maxProgressRatio) * 100)}%` : '';
+      return `${threshold}：未到 B${progress}`;
+    });
+    return `<span><strong>容許範圍嘗試：</strong>${escapeHtml(parts.join(' → '))}</span>`;
+  }
+
+  function strictCorridorAuditHtml(replay) {
+    const audits = Array.isArray(replay?.strictCorridorAudits) && replay.strictCorridorAudits.length
+      ? replay.strictCorridorAudits
+      : (replay?.strictCorridorAudit ? [replay.strictCorridorAudit] : []);
+    if (!audits.length) return '';
+    const pieces = [];
+    for (const audit of audits) {
+      const threshold = Math.round(Number(audit?.thresholdM || 0));
+      if (audit?.connected) {
+        const witness = audit.witness || null;
+        const coverage = witness && Number.isFinite(Number(witness.coverageRatio)) ? `；corridor witness 對手繪覆蓋 ${Math.round(Number(witness.coverageRatio) * 100)}%` : '';
+        const avg = witness && Number.isFinite(Number(witness.averageDistanceM)) ? `、平均偏移 ${Number(witness.averageDistanceM).toFixed(1)} m` : '';
+        pieces.push(`<span><strong>${threshold} m 忠實走廊：</strong>A→B 在不離開這個幾何走廊的條件下仍可連通${coverage}${avg}。若 ordered matcher 同一門檻仍到不了 B，優先檢查 progress gate，而不是 OSM 連通性。</span>`);
+        continue;
+      }
+      const a = audit?.furthestFromA || null;
+      const b = audit?.earliestToB || null;
+      const aPct = a && Number.isFinite(Number(a.progressRatio)) ? Math.round(Number(a.progressRatio) * 100) : null;
+      const bPct = b && Number.isFinite(Number(b.progressRatio)) ? Math.round(Number(b.progressRatio) * 100) : null;
+      const progressGap = Number.isFinite(Number(audit?.progressGapM)) ? `${Number(audit.progressGapM).toFixed(1)} m` : '—';
+      const gap = audit?.nearestComponentGap || null;
+      const physicalGap = gap && Number.isFinite(Number(gap.gapM)) ? `${Number(gap.gapM).toFixed(1)} m` : null;
+      const aNode = gap?.a?.node || a?.node || null;
+      const bNode = gap?.b?.node || b?.node || null;
+      const aEdge = (gap?.aIncidentEdges || audit?.boundaryIncidentEdges || [])[0] || null;
+      const bEdge = (gap?.bIncidentEdges || [])[0] || null;
+      const aWay = aEdge?.wayIds?.length ? ` way ${escapeHtml(aEdge.wayIds.join('/'))}` : '';
+      const bWay = bEdge?.wayIds?.length ? ` way ${escapeHtml(bEdge.wayIds.join('/'))}` : '';
+      const componentDetail = physicalGap
+        ? `；最近兩個 A/B corridor component 節點相距 ${physicalGap}（A node ${escapeHtml(aNode?.id || '—')}${aEdge?.highway ? ` ${escapeHtml(aEdge.highway)}` : ''}${aWay} ↔ B-side node ${escapeHtml(bNode?.id || '—')}${bEdge?.highway ? ` ${escapeHtml(bEdge.highway)}` : ''}${bWay}），direct edge 正向 ${gap.directForward ? '有' : '無'}／反向 ${gap.directReverse ? '有' : '無'}`
+        : '';
+      const cause = audit?.suspectedCause === 'strict-component-near-gap'
+        ? '兩側忠實 corridor component 幾何很近，但目前 graph 沒有直接連接；下一步應查 shared node／connector／fine graph 轉換。'
+        : audit?.suspectedCause === 'strict-corridor-needs-lateral-exit'
+          ? '從 A 側 component 繼續前進需要先離開忠實走廊；放寬 corridor 才能繞到 B。'
+          : '忠實走廊內目前沒有 A→B 連通 path；這不等於整張 OSM Graph 不連通。';
+      pieces.push(`<span><strong>${threshold} m 忠實走廊：</strong>A→B 不連通；A 側可達到約 ${aPct != null ? `${aPct}%` : '—'}，B 側可反向接回到約 ${bPct != null ? `${bPct}%` : '—'}，手繪進度缺口約 ${progressGap}${componentDetail}。${escapeHtml(cause)}</span>`);
+    }
+    return `<span><strong>dev13 Strict Corridor Audit：</strong>把「整張 Graph 可到 B」與「手繪忠實 corridor 自己是否連通」分開檢查。</span>${pieces.join('')}`;
   }
 
   function graphDiagnosisHtml(diagnosis) {
@@ -1336,7 +1405,7 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
@@ -1365,11 +1434,11 @@
           const rejectedEdges = (bp.incidentEdges || []).filter((e) => !e.accepted).slice(0, 3).map((e) => `${e.highway || 'unknown'}[${(e.wayIds || []).join('/') || 'no-way'}]→${e.rejectReason || 'reject'}`).join('；');
           const edgeDetail = rejectedEdges ? `<span><strong>目前節點被拒 edge：</strong>${escapeHtml(rejectedEdges)}</span>` : '';
           const directionDetail = Number.isFinite(Number(bp.incidentBidirectionalCount)) ? `；目前節點鄰接 edge 雙向 ${Math.round(bp.incidentBidirectionalCount || 0)}、單向 ${Math.round(bp.incidentOneWayCount || 0)}` : '';
-          breakpointHtml = `<span><strong>dev12 拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
+          breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          breakpointHtml +
-          `<p>dev12 只有在 graph 未到達 B 時才把結果列為拓樸／轉換失敗；不會把「已連通但貼合度不足」誤報成 topology failure，也不會自動把近距離道路硬接起來。</p>`;
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + breakpointHtml +
+          `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }
     return `<div class="re-graph-diagnosis ${cls}"><b>手繪路線 ↔ OSM Graph 對照</b>` +
@@ -1413,8 +1482,8 @@
           const f = diagnosis.replay.failureDiagnostics;
           const pct = f && Number.isFinite(f.maxProgressRatio) ? Math.round(f.maxProgressRatio * 100) : null;
           diagnosis.interpretation = pct != null
-            ? `手繪線幾何上貼近 OSM graph，但依前進順序只能重建到約 ${pct}%；dev12 已確認這次 graph 沒有到達 B，才進一步檢查該進度附近的 topology / transition breakpoint。`
-            : "手繪線幾何上貼近 OSM graph，但目前 ordered matcher 的 graph path 沒有到達 B；dev12 會顯示拓樸／轉換 breakpoint 與附近未連接 node。";
+            ? `手繪線幾何上貼近 OSM graph，但依前進順序只能重建到約 ${pct}%；ordered matcher 已確認這次 graph 沒有到達 B，才進一步檢查該進度附近的 topology / transition breakpoint。`
+            : "手繪線幾何上貼近 OSM graph，但目前 ordered matcher 的 graph path 沒有到達 B；系統會顯示拓樸／轉換 breakpoint 與附近未連接 node。";
         }
         lastManualGraphDiagnosis = diagnosis;
         if (box) box.innerHTML = graphDiagnosisHtml(diagnosis);
@@ -1425,7 +1494,7 @@
             : lowFidelity
               ? `Graph 可連到 B，但目前貼合手繪線只有 ${Math.round((diagnosis.replay?.mapMatchCoverageRatio || 0) * 100)}%；這是低貼合匹配，不是拓樸不連通。請看第一個偏離 edge / way。`
               : diagnosis.replay?.connected === false
-                ? "dev12 已定位 graph 無法到 B 的最佳拓樸／轉換斷點；請看 node / way / connector 與 matcher 拒絕原因。"
+                ? "已定位 graph 無法到 B 的最佳拓樸／轉換斷點；請看 node / way / connector 與 matcher 拒絕原因。"
                 : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。",
           diagnosis.replay?.searchMissConfirmed || lowFidelity || diagnosis.replay?.connected === false ? "warning" : "ok"
         );
@@ -1452,7 +1521,7 @@
         const bp = diagnosis.replay?.failureDiagnostics?.breakpoint || null;
         if (bp?.currentNode && Number.isFinite(bp.currentNode.lat) && Number.isFinite(bp.currentNode.lng)) {
           window.L.circleMarker([bp.currentNode.lat, bp.currentNode.lng], { radius: 8, weight: 3, color: "#dc2626", fillColor: "#fef2f2", fillOpacity: 0.95, interactive: true })
-            .bindTooltip(`dev12 拓樸／轉換斷點 · ${bp.suspectedCause || 'unknown'} · node ${bp.currentNode.id || '—'}`, { direction: "top" })
+            .bindTooltip(`拓樸／轉換斷點 · ${bp.suspectedCause || 'unknown'} · node ${bp.currentNode.id || '—'}`, { direction: "top" })
             .addTo(graphDebugLayer);
         }
         const near = bp?.nearestDisconnected || null;

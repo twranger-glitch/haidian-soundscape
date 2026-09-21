@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev12 Truthful Map-match Outcomes
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev13 Strict Corridor Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev12";
+  const VERSION = "v9.0.0-dev13";
 
   const DEFAULTS = {
     enabled: true,
@@ -1475,6 +1475,210 @@
   }
 
 
+
+  function corridorIncidentAudit(graph, nodeId, route, thresholdM, edgeDistanceCache = new Map()) {
+    const out = [];
+    for (const ref of graph?.adjacency?.get(String(nodeId)) || []) {
+      const edge = graph.edges.get(ref.edgeId);
+      if (!edge) continue;
+      let corridorDistanceM = edgeDistanceCache.get(edge.id);
+      if (corridorDistanceM == null) {
+        corridorDistanceM = edgeDistanceToPolylineM(edge, route, 5);
+        edgeDistanceCache.set(edge.id, corridorDistanceM);
+      }
+      out.push({
+        edgeId: edge.id,
+        toNodeId: String(ref.to),
+        highway: primaryHighway(edge),
+        wayIds: (edge.wayIds || []).slice(0, 8),
+        tags: compactTagsForBreakpoint(edge),
+        distanceM: Number(edge.distanceM || 0),
+        corridorDistanceM,
+        withinCorridor: corridorDistanceM <= thresholdM + 1e-9
+      });
+    }
+    return out.sort((a, b) => (b.withinCorridor - a.withinCorridor) || (a.corridorDistanceM - b.corridorDistanceM) || (a.distanceM - b.distanceM));
+  }
+
+  function strictCorridorConnectivityAudit(graph, startId, endId, route, thresholdM, options = {}, sharedEdgeDistanceCache = null) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    const routeLen = routeDistanceM(manualRoute);
+    const threshold = Math.max(4, Number(thresholdM || 0));
+    const edgeDistanceCache = sharedEdgeDistanceCache || new Map();
+    const start = String(startId), end = String(endId);
+    const reverseAdjacency = new Map();
+
+    function edgeCorridorDistance(edge) {
+      if (!edge) return Infinity;
+      let value = edgeDistanceCache.get(edge.id);
+      if (value == null) {
+        value = edgeDistanceToPolylineM(edge, manualRoute, 5);
+        edgeDistanceCache.set(edge.id, value);
+      }
+      return value;
+    }
+
+    for (const [from, refs] of graph?.adjacency || []) {
+      for (const ref of refs || []) {
+        const key = String(ref.to);
+        if (!reverseAdjacency.has(key)) reverseAdjacency.set(key, []);
+        reverseAdjacency.get(key).push({ from: String(from), edgeId: ref.edgeId });
+      }
+    }
+
+    const reachableFromA = new Set([start]);
+    const prevFromA = new Map();
+    const queueA = [start];
+    for (let qi = 0; qi < queueA.length; qi += 1) {
+      const nodeId = queueA[qi];
+      for (const ref of graph?.adjacency?.get(nodeId) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge || edgeCorridorDistance(edge) > threshold + 1e-9) continue;
+        const next = String(ref.to);
+        if (reachableFromA.has(next)) continue;
+        reachableFromA.add(next);
+        prevFromA.set(next, { from: nodeId, edgeId: edge.id });
+        queueA.push(next);
+      }
+    }
+
+    const canReachB = new Set([end]);
+    const queueB = [end];
+    for (let qi = 0; qi < queueB.length; qi += 1) {
+      const nodeId = queueB[qi];
+      for (const ref of reverseAdjacency.get(nodeId) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge || edgeCorridorDistance(edge) > threshold + 1e-9) continue;
+        const prevNode = String(ref.from);
+        if (canReachB.has(prevNode)) continue;
+        canReachB.add(prevNode);
+        queueB.push(prevNode);
+      }
+    }
+
+    function projectedNode(nodeId) {
+      const node = graph?.nodes?.get(String(nodeId));
+      if (!node) return null;
+      const projection = projectPointToPolylineProgressM(node, manualRoute);
+      if (!projection) return null;
+      return {
+        node: nodeMetaForBreakpoint(graph, nodeId),
+        progressM: projection.progressM,
+        progressRatio: routeLen > 0 ? projection.progressM / routeLen : 0,
+        routeDistanceM: projection.distanceM,
+        routePoint: projection.point ? { lat: projection.point.lat, lng: projection.point.lng } : null
+      };
+    }
+
+    const aProjected = [];
+    for (const nodeId of reachableFromA) {
+      const item = projectedNode(nodeId);
+      if (item) aProjected.push(item);
+    }
+    const bProjected = [];
+    for (const nodeId of canReachB) {
+      const item = projectedNode(nodeId);
+      if (item) bProjected.push(item);
+    }
+    aProjected.sort((a, b) => b.progressM - a.progressM || a.routeDistanceM - b.routeDistanceM);
+    bProjected.sort((a, b) => a.progressM - b.progressM || a.routeDistanceM - b.routeDistanceM);
+    const furthestFromA = aProjected[0] || null;
+    const earliestToB = bProjected[0] || null;
+
+    let witness = null;
+    const connected = reachableFromA.has(end);
+    if (connected) {
+      const steps = [];
+      let cur = end;
+      let guard = 0;
+      while (cur !== start && guard++ < 20000) {
+        const prev = prevFromA.get(cur);
+        if (!prev) break;
+        steps.push({ edgeId: prev.edgeId, from: prev.from, to: cur });
+        cur = prev.from;
+      }
+      if (cur === start) {
+        steps.reverse();
+        const path = pathFromEdgeSteps(graph, steps);
+        const coverage = pathCoverageAgainstRoute(path.points, manualRoute, threshold, 10);
+        witness = {
+          distanceM: path.distanceM,
+          edgeIds: (path.edgeIds || []).slice(),
+          coverageRatio: coverage.coverageRatio,
+          averageDistanceM: coverage.averageDistanceM,
+          maxDistanceM: coverage.maxDistanceM
+        };
+      }
+    }
+
+    const pairLimit = Math.max(30, Number(options.strictCorridorPairCandidateLimit || 120));
+    const lateralLimit = Math.max(threshold * 1.8, Number(options.strictCorridorPairLateralM || 28));
+    const aCandidates = aProjected.filter((x) => x.routeDistanceM <= lateralLimit).slice(0, pairLimit);
+    const bCandidates = bProjected.filter((x) => x.routeDistanceM <= lateralLimit).slice(0, pairLimit);
+    let nearestComponentGap = null;
+    if (!connected) {
+      for (const a of aCandidates) {
+        const an = graph.nodes.get(String(a.node.id));
+        if (!an) continue;
+        for (const b of bCandidates) {
+          if (b.progressM + threshold * 2 < a.progressM) continue;
+          const bn = graph.nodes.get(String(b.node.id));
+          if (!bn) continue;
+          const gapM = haversineM(an, bn);
+          const progressGapM = b.progressM - a.progressM;
+          const directForward = graphHasDirectedEdge(graph, a.node.id, b.node.id);
+          const directReverse = graphHasDirectedEdge(graph, b.node.id, a.node.id);
+          const score = gapM + Math.max(0, progressGapM) * 0.015 + (a.routeDistanceM + b.routeDistanceM) * 0.08;
+          if (!nearestComponentGap || score < nearestComponentGap._score) {
+            nearestComponentGap = {
+              _score: score,
+              gapM,
+              progressGapM,
+              a,
+              b,
+              directForward,
+              directReverse
+            };
+          }
+        }
+      }
+      if (nearestComponentGap) {
+        delete nearestComponentGap._score;
+        nearestComponentGap.aIncidentEdges = corridorIncidentAudit(graph, nearestComponentGap.a.node.id, manualRoute, threshold, edgeDistanceCache).slice(0, 6);
+        nearestComponentGap.bIncidentEdges = corridorIncidentAudit(graph, nearestComponentGap.b.node.id, manualRoute, threshold, edgeDistanceCache).slice(0, 6);
+      }
+    }
+
+    const boundaryNodeId = furthestFromA?.node?.id || start;
+    const boundaryIncident = corridorIncidentAudit(graph, boundaryNodeId, manualRoute, threshold, edgeDistanceCache);
+    const acceptedBoundary = boundaryIncident.filter((e) => e.withinCorridor);
+    const rejectedBoundary = boundaryIncident.filter((e) => !e.withinCorridor);
+    const probeM = Math.max(4, Number(options.topologyBreakpointProbeM || config.topologyBreakpointProbeM || 14));
+    let suspectedCause = connected ? "strict-corridor-connected" : "strict-corridor-disconnected";
+    if (!connected && nearestComponentGap && nearestComponentGap.gapM <= probeM + 1e-9 && !nearestComponentGap.directForward) {
+      suspectedCause = "strict-component-near-gap";
+    } else if (!connected && rejectedBoundary.length && rejectedBoundary[0].corridorDistanceM <= Math.max(threshold * 2.2, 32)) {
+      suspectedCause = "strict-corridor-needs-lateral-exit";
+    }
+
+    return {
+      thresholdM: threshold,
+      connected,
+      suspectedCause,
+      routeLengthM: routeLen,
+      reachableFromACount: reachableFromA.size,
+      canReachBCount: canReachB.size,
+      furthestFromA,
+      earliestToB,
+      progressGapM: furthestFromA && earliestToB ? earliestToB.progressM - furthestFromA.progressM : null,
+      nearestComponentGap,
+      boundaryIncidentEdges: boundaryIncident.slice(0, 12),
+      acceptedBoundaryEdgeCount: acceptedBoundary.length,
+      rejectedBoundaryEdgeCount: rejectedBoundary.length,
+      witness
+    };
+  }
+
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
     lastOrderedMapMatchFailure = null;
     // dev10+: ordered map matching is a state-space problem, not just a node shortest path.
@@ -1706,6 +1910,17 @@
     const failureAttempts = [];
     const attempts = [];
 
+    function buildStrictCorridorAudits(fidelityThresholdM) {
+      const cache = new Map();
+      const auditThresholds = Array.from(new Set([
+        Math.max(4, Number(fidelityThresholdM || config.manualReplayFidelityThresholdM || 14)),
+        baseThreshold
+      ])).sort((a, b) => a - b);
+      return auditThresholds.map((thresholdM) => strictCorridorConnectivityAudit(
+        graph, state.snapA.id, state.snapB.id, route, thresholdM, options, cache
+      ));
+    }
+
     function cloneAttempt(attempt) {
       if (!attempt) return null;
       return Object.assign({}, attempt, {
@@ -1777,6 +1992,9 @@
     if (!path && bestLowCoverage) {
       const lowPath = bestLowCoverage.path;
       const low = bestLowCoverage.attempt;
+      const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
+      const strictCorridorAudits = buildStrictCorridorAudits(fidelityThresholdM);
+      const strictCorridorAudit = strictCorridorAudits[0] || null;
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -1795,7 +2013,9 @@
         mapMatchScore: low.mapMatchScore,
         mapMatchProgressM: low.mapMatchProgressM ?? null,
         minCoverage: low.minCoverage ?? minCoverage,
-        fidelityThresholdM: low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold)),
+        fidelityThresholdM,
+        strictCorridorAudit,
+        strictCorridorAudits,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -1809,6 +2029,9 @@
     }
 
     if (!path) {
+      const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
+      const strictCorridorAudits = buildStrictCorridorAudits(fidelityThresholdM);
+      const strictCorridorAudit = strictCorridorAudits[0] || null;
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -1819,6 +2042,9 @@
         outcome: "no-goal-path",
         reason: "no-ordered-map-match-in-manual-corridor",
         triedCorridorM: thresholds,
+        fidelityThresholdM,
+        strictCorridorAudit,
+        strictCorridorAudits,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -2255,6 +2481,7 @@
       diagnosePolyline,
       replayPolyline,
       orderedMapMatchDijkstra,
+      strictCorridorConnectivityAudit,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
