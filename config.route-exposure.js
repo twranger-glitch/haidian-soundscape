@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev18 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev19 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,9 +27,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev18: preserves dev13–dev17 diagnostics and reconciles the exact same
-  // ordered graph path under the coarse search edge sampler versus a dense 10 m
-  // ShadeMap replay before blaming shade-cost or search pruning.
+  // v9.0.0-dev19: preserves dev13–dev18 diagnostics, then tests only the source-gap
+  // connectors already justified by raw OSM evidence in an ephemeral graph copy.
+  // No connector is written into production routing.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -75,6 +75,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     shadeReconcileSampleSpacingM: 10,
     shadeReconcileMismatchSec: 45,
     shadeReconcileTopEdges: 8,
+    sourceGapCounterfactualEnabled: true,
+    sourceGapCounterfactualMaxGapM: 55,
+    sourceGapCounterfactualStrictM: 14,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,
