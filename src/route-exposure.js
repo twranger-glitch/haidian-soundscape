@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev19 Source-Gap Controlled Counterfactual
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev20 Safe Connector + Mature Engine Cross-check
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev19";
+  const VERSION = "v9.0.0-dev20";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1654,8 +1654,46 @@
       : '';
     const ordered = `<span><strong>patched ordered faithful path：</strong>${d.orderedReachedGoal ? `到 B；貼合 ${pct(d.orderedCoverageRatio)}、平均偏移 ${Number.isFinite(Number(d.orderedAverageDistanceM)) ? Number(d.orderedAverageDistanceM).toFixed(1) + ' m' : '—'}、距離 ${dist(d.orderedDistanceM)}、coarse graph 日照 ${mins(d.orderedDirectSunSeconds)}${densePart}` : '仍沒有重建到 B'}。</span>`;
     const search = `<span><strong>patched global min-sun search：</strong>${d.patchedSearchFound ? `日照 ${mins(d.patchedSearchDirectSunSeconds)}、距離 ${dist(d.patchedSearchDistanceM)}、對手繪貼合 ${pct(d.patchedSearchCoverageRatio)}；使用診斷 connector ${Math.round((d.patchedSearchUsedConnectorIds || []).length)} 條` : '沒有產生路徑'}。production 自動解 coarse 日照 ${mins(d.referenceProductionMinSunSeconds)}。</span>`;
-    const benchmark = replay?.engineBenchmark ? `<span><strong>Mature-engine benchmark：</strong>已準備 Valhalla pedestrian route / trace_route 與 GraphHopper foot GPX 對照 payload。<button type="button" data-re-engine-benchmark>匯出 benchmark JSON</button></span>` : '';
+    const benchmark = replay?.engineBenchmark ? `<span><strong>Mature-engine benchmark：</strong>已準備 Valhalla pedestrian route / trace_route 與 GraphHopper foot GPX 對照 payload。執行時會把這次 A/B 與手繪 shape 傳給所設定的外部 routing service。<button type="button" data-re-engine-live>執行外部成熟引擎對照</button> <button type="button" data-re-engine-benchmark>匯出 benchmark JSON</button></span>` : '';
     return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${connectors}</span>${strict}${ordered}${search}<p><strong>dev19 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>${benchmark}`;
+  }
+
+
+  function connectorSafetyPolicyHtml(replay) {
+    const d = replay?.connectorSafetyPolicy || null;
+    if (!d?.available) return '';
+    const label = (tier) => ({
+      'fix-builder-not-connector': '修 builder，不補 connector',
+      'reject-grade-separation-risk': '拒絕自動連接：疑似立體交會',
+      'manual-review-large-gap': '大型缺口：僅限人工驗證',
+      'near-touch-review-candidate': '近接未 noding：人工資料修正候選',
+      'manual-review-source-gap': '來源缺口：人工驗證'
+    }[tier] || tier || '人工驗證');
+    const rows = (d.items || []).slice(0, 10).map((item, i) =>
+      `<span><strong>安全規則 #${i + 1}：</strong>進度 ${Math.round(Number(item.progressRatio || 0) * 100)}%・gap ${Number.isFinite(Number(item.gapM)) ? Number(item.gapM).toFixed(1) + ' m' : '—'}・${escapeHtml(label(item.tier))}；production auto connector = <b>否</b>。${escapeHtml(item.reason || '')}</span>`
+    ).join('');
+    return `<span><strong>dev20 Safe Connector Policy：</strong>手繪路線只提供診斷證據，不可直接把 source-gap 升級成正式道路。成熟 ordinary router ${d.ordinaryEngineCorroboration ? '<b>已有忠實走廊交叉證據</b>' : '目前沒有忠實走廊交叉證據'}。</span>${rows}<p><strong>dev20 connector 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
+  }
+
+  function matureEngineCrossCheckHtml(replay) {
+    const d = replay?.matureEngineCrossCheck || null;
+    if (!d) return '';
+    if (!d.available) return `<span><strong>dev20 Mature Engine Cross-check：</strong>${escapeHtml(d.reason || '不可用')}</span>`;
+    const pct = (v) => Number.isFinite(Number(v)) ? `${Math.round(Number(v) * 100)}%` : '—';
+    const meters = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)} m` : '—';
+    const row = (name, x) => {
+      if (!x) return `${name}：未執行`;
+      if (x.ok === false) return `${name}：失敗（${escapeHtml(x.error || 'unknown')}）`;
+      if (!x.available) return `${name}：沒有 geometry`;
+      return `${name}：${x.faithful ? '<b>忠實河堤</b>' : '非忠實河堤'}・貼合 ${pct(x.coverageRatio)}・平均偏移 ${meters(x.averageDistanceM)}・距離 ${formatDistance(x.distanceM || 0)}`;
+    };
+    const val = d.valhalla?.available
+      ? `<span><strong>Valhalla：</strong>${row('ordinary pedestrian route', d.valhalla.route)}；${row('trace_route map_snap', d.valhalla.traceRoute)}。</span>`
+      : `<span><strong>Valhalla：</strong>${escapeHtml(d.valhalla?.reason || '未執行')}。</span>`;
+    const gh = d.graphhopper?.available
+      ? `<span><strong>GraphHopper：</strong>${row('foot route', d.graphhopper.route)}；${row('GPX map-match', d.graphhopper.match)}。</span>`
+      : `<span><strong>GraphHopper：</strong>${d.graphhopper?.reason === 'api-key-not-configured' ? '未設定 API key，因此本次只跑 Valhalla；可在 graphRouting.graphHopperApiKey 設定後再比對。' : escapeHtml(d.graphhopper?.reason || '未執行')}。</span>`;
+    return `<span><strong>dev20 Mature Engine Cross-check：</strong>${escapeHtml(d.outcome || '')}</span>${val}${gh}<p><strong>dev20 engine 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
   function enrichShadeReconciliation(diagnosis) {
@@ -1768,12 +1806,12 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + connectorSafetyPolicyHtml(r) + matureEngineCrossCheckHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         const strictWarning = r.strictFidelityAccepted === false ? `<span><strong>注意：</strong>coverage 門檻雖通過，但 strict faithful corridor 並未通過；這個 ordered path 仍可能是貼著手繪線的平行廊道，不能直接當成「同一條手繪路」。</span>` : '';
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
-          strictWarning + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + shadeCostReconciliationHtml(r) +
+          strictWarning + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + connectorSafetyPolicyHtml(r) + matureEngineCrossCheckHtml(r) + shadeCostReconciliationHtml(r) +
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else {
         const f = r.failureDiagnostics || null;
@@ -1802,7 +1840,7 @@
           breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + breakpointHtml +
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + sourceGapCounterfactualAuditHtml(r) + connectorSafetyPolicyHtml(r) + matureEngineCrossCheckHtml(r) + breakpointHtml +
           `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }
@@ -2261,8 +2299,59 @@
   function exportEngineBenchmark() {
     const payload = lastManualGraphDiagnosis?.replay?.engineBenchmark || null;
     if (!payload) return setStatus("目前沒有可匯出的 mature-engine benchmark；請先按『驗證手繪 Graph 路徑』。", "warning");
-    downloadBlob(`haidian-engine-benchmark-${VERSION}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+    const withResult = lastManualGraphDiagnosis?.replay?.matureEngineCrossCheck
+      ? Object.assign({}, payload, { liveCrossCheck: lastManualGraphDiagnosis.replay.matureEngineCrossCheck })
+      : payload;
+    downloadBlob(`haidian-engine-benchmark-${VERSION}.json`, JSON.stringify(withResult, null, 2), "application/json;charset=utf-8");
     setStatus("已匯出 Valhalla / GraphHopper 對照 benchmark JSON；這份資料不會修改 OSM 或 production graph。", "ok");
+  }
+
+  async function runMatureEngineCrossCheck() {
+    const replay = lastManualGraphDiagnosis?.replay || null;
+    const manifest = replay?.engineBenchmark || null;
+    const api = window.HaidianPedestrianGraph;
+    if (!manifest || !api?.runMatureEngineBenchmark) {
+      setStatus("目前沒有可執行的 mature-engine benchmark；請先按『驗證手繪 Graph 路徑』。", "warning");
+      return;
+    }
+    const button = panel?.querySelector("[data-re-engine-live]");
+    if (button) { button.disabled = true; button.textContent = "成熟引擎比對中…"; }
+    setStatus("正在用同一 A/B 與手繪 shape 對照 Valhalla pedestrian routing / map matching；GraphHopper 需 API key 才會一起執行。", "loading");
+    try {
+      const live = await api.runMatureEngineBenchmark(manifest, {
+        matureEngineCrossCheckEnabled: config.graphRouting?.matureEngineCrossCheckEnabled !== false,
+        timeoutMs: config.graphRouting?.matureEngineTimeoutMs || 15000,
+        maxShapePoints: config.graphRouting?.matureEngineShapeMaxPoints || 180,
+        fidelityThresholdM: config.graphRouting?.manualReplayFidelityThresholdM || 14,
+        valhallaEndpoint: config.graphRouting?.valhallaBenchmarkEndpoint,
+        valhallaClientId: config.graphRouting?.valhallaClientId,
+        valhallaMinIntervalMs: config.graphRouting?.valhallaMinIntervalMs,
+        graphHopperEndpoint: config.graphRouting?.graphHopperBenchmarkEndpoint,
+        graphHopperApiKey: config.graphRouting?.graphHopperApiKey
+      });
+      replay.matureEngineCrossCheck = live;
+      if (api?._internals?.sourceGapConnectorSafetyPolicy) {
+        replay.connectorSafetyPolicy = api._internals.sourceGapConnectorSafetyPolicy(
+          replay.rawOsmJunctionAudit,
+          replay.sourceGapCounterfactualAudit,
+          live,
+          {
+            safeConnectorNearTouchM: config.graphRouting?.safeConnectorNearTouchM,
+            safeConnectorReviewGapM: config.graphRouting?.safeConnectorReviewGapM
+          }
+        );
+      }
+      const box = panel?.querySelector("[data-re-graph-diagnosis]");
+      if (box) box.innerHTML = graphDiagnosisHtml(lastManualGraphDiagnosis);
+      const outcome = live?.outcome || "engine-crosscheck-inconclusive";
+      const tone = outcome === "ordinary-engine-finds-faithful-corridor" || outcome === "map-matching-only-follows-faithful-corridor" ? "ok" : "warning";
+      setStatus(`成熟引擎對照完成：${outcome}。這只作交叉驗證，不會修改 production graph 或 OSM。`, tone);
+    } catch (error) {
+      setStatus(`成熟引擎對照失敗：${error?.message || error}。仍可匯出 benchmark JSON 後以外部/self-hosted 引擎重跑。`, "warning");
+    } finally {
+      const fresh = panel?.querySelector("[data-re-engine-live]");
+      if (fresh) { fresh.disabled = false; fresh.textContent = "重新執行成熟引擎對照"; }
+    }
   }
 
   function exportCsv() {
@@ -2425,6 +2514,8 @@
       if (graphToggle) { toggleGraphDiagnostics(); return; }
       const graphDiagnose = event.target?.closest?.("[data-re-graph-diagnose]");
       if (graphDiagnose) { void diagnoseSavedManualRoute(); return; }
+      const engineLive = event.target?.closest?.("[data-re-engine-live]");
+      if (engineLive) { void runMatureEngineCrossCheck(); return; }
       const benchmarkExport = event.target?.closest?.("[data-re-engine-benchmark]");
       if (benchmarkExport) { exportEngineBenchmark(); return; }
       const action = event.target?.closest?.("[data-re-result-draw]");

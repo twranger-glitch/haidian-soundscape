@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev19 Source-Gap Controlled Counterfactual
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev20 Safe Connector + Mature Engine Cross-check
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev19";
+  const VERSION = "v9.0.0-dev20";
 
   const DEFAULTS = {
     enabled: true,
@@ -60,6 +60,18 @@
     sourceGapCounterfactualEnabled: true,
     sourceGapCounterfactualMaxGapM: 55,
     sourceGapCounterfactualStrictM: 14,
+    // dev20: production connectors remain disabled.  The policy below only
+    // classifies source gaps and permits live mature-engine corroboration.
+    safeConnectorNearTouchM: 2.5,
+    safeConnectorReviewGapM: 12,
+    matureEngineCrossCheckEnabled: true,
+    matureEngineTimeoutMs: 15000,
+    matureEngineShapeMaxPoints: 180,
+    valhallaBenchmarkEndpoint: "https://valhalla1.openstreetmap.de",
+    valhallaClientId: "haidian-route-exposure-research",
+    valhallaMinIntervalMs: 1100, // public FOSSGIS demo fair-use: <= 1 request/sec
+    graphHopperBenchmarkEndpoint: "https://graphhopper.com/api/1",
+    graphHopperApiKey: "",
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -2677,7 +2689,7 @@
     };
   }
 
-  // v9.0.0-dev19: create an ephemeral fine-graph overlay containing only the
+  // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
   // source-gap connectors already justified by dev16 route-support transitions
   // and dev17 raw-OSM evidence. The production graph is never mutated.
   function cloneFineGraphWithDiagnosticConnectors(graph, connectorSpecs = []) {
@@ -2913,21 +2925,287 @@
     }
   }
 
+
+  // v9.0.0-dev20: source-gap connectors are never promoted automatically from
+  // a user-drawn route. This policy classifies what evidence would be required
+  // before any production data repair can be considered.
+  function sourceGapConnectorSafetyPolicy(rawAudit, counterfactualAudit, matureEngineCrossCheck = null, options = {}) {
+    const nearTouchM = Math.max(0.5, Number(options.safeConnectorNearTouchM || config.safeConnectorNearTouchM || 2.5));
+    const reviewGapM = Math.max(nearTouchM, Number(options.safeConnectorReviewGapM || config.safeConnectorReviewGapM || 12));
+    const connectors = counterfactualAudit?.connectors || [];
+    const junctions = rawAudit?.junctions || [];
+    const valRouteFaithful = Boolean(matureEngineCrossCheck?.valhalla?.route?.faithful);
+    const ghRouteFaithful = Boolean(matureEngineCrossCheck?.graphhopper?.route?.faithful);
+    const ordinaryEngineCorroboration = valRouteFaithful || ghRouteFaithful;
+    const items = junctions.map((j, index) => {
+      const gapM = Number.isFinite(Number(j.geometryGapM)) ? Number(j.geometryGapM)
+        : Number.isFinite(Number(j.graphNodeGapM)) ? Number(j.graphNodeGapM) : Infinity;
+      const connector = connectors.find((c) => Math.abs(Number(c.progressRatio || 0) - Number(j.progressRatio || 0)) < 0.03) || connectors[index] || null;
+      let tier = 'manual-review-source-gap';
+      let reason = '來源 OSM 沒有 shared node；使用者手繪線本身不能作為正式道路連接證據。';
+      if (j.evidenceLayer === 'custom-graph-builder') {
+        tier = 'fix-builder-not-connector';
+        reason = '原始 OSM 已有 shared node；應修 graph builder，而不是建立 local connector。';
+      } else if (j.gradeSeparationPossible) {
+        tier = 'reject-grade-separation-risk';
+        reason = '存在 bridge/tunnel/layer 差異，平面接近不能視為可步行連接。';
+      } else if (gapM > reviewGapM) {
+        tier = 'manual-review-large-gap';
+        reason = `幾何缺口約 ${Number.isFinite(gapM) ? gapM.toFixed(1) : '—'} m，超過 ${reviewGapM.toFixed(1)} m；不可做 proximity auto-bridge。`;
+      } else if (gapM <= nearTouchM && j.classification === 'non-noded-geometric-touch') {
+        tier = 'near-touch-review-candidate';
+        reason = `幾何幾乎相碰（≤${nearTouchM.toFixed(1)} m）但來源 OSM 未 noding；可列入人工資料修正候選，仍不可自動上線。`;
+      } else {
+        tier = 'manual-review-source-gap';
+        reason = `來源拓樸缺口在人工審核範圍內，但仍需要現地/影像/OSM 編修或等價外部證據。`;
+      }
+      return {
+        index, progressRatio: Number(j.progressRatio || 0), gapM: Number.isFinite(gapM) ? gapM : null,
+        classification: j.classification || null, evidenceLayer: j.evidenceLayer || null,
+        gradeSeparationPossible: Boolean(j.gradeSeparationPossible), tier,
+        productionAutoAllowed: false,
+        diagnosticConnectorId: connector?.id || null,
+        ordinaryEngineCorroboration,
+        reason
+      };
+    });
+    return {
+      available: Boolean(items.length), nearTouchM, reviewGapM,
+      productionAutoConnectorEnabled: false,
+      ordinaryEngineCorroboration,
+      items,
+      interpretation: items.length
+        ? `dev20 安全規則：source-gap 只可作診斷或人工資料修正候選；目前 ${items.length} 個斷點全部禁止由手繪線自動升級成 production connector。成熟引擎 ordinary route 可作交叉證據，但不能單獨證明真實世界可通行。`
+        : '目前沒有 source-gap 可套用 dev20 connector safety policy。'
+    };
+  }
+
+  function downsampleBenchmarkShape(shape, maxPoints = 180) {
+    const pts = (shape || []).map((p) => ({ lat: Number(p.lat), lng: Number(p.lng ?? p.lon) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const cap = Math.max(2, Math.floor(Number(maxPoints || 180)));
+    if (pts.length <= cap) return pts;
+    const total = routeDistanceM(pts);
+    if (!(total > 0)) return pts.filter((_, i) => i === 0 || i === pts.length - 1);
+    const spacing = total / Math.max(1, cap - 1);
+    const sampled = samplePolyline(pts, spacing);
+    if (!sampled.length) return [pts[0], pts[pts.length - 1]];
+    const out = sampled.slice(0, cap - 1);
+    const last = pts[pts.length - 1];
+    if (haversineM(out[out.length - 1], last) > 0.2) out.push(last);
+    return out.slice(0, cap);
+  }
+
+  function decodePolylineShape(encoded, precision = 6) {
+    if (typeof encoded !== 'string' || !encoded.length) return [];
+    let index = 0, lat = 0, lng = 0;
+    const factor = Math.pow(10, precision);
+    const points = [];
+    while (index < encoded.length) {
+      let result = 0, shift = 0, b;
+      do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && index <= encoded.length);
+      lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+      result = 0; shift = 0;
+      do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && index <= encoded.length);
+      lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+      points.push({ lat: lat / factor, lng: lng / factor });
+    }
+    return points;
+  }
+
+  function geoJsonLineToPoints(value) {
+    if (!value) return [];
+    const geom = value.type === 'Feature' ? value.geometry : value;
+    if (geom?.type === 'LineString' && Array.isArray(geom.coordinates)) {
+      return geom.coordinates.map((c) => ({ lat: Number(c?.[1]), lng: Number(c?.[0]) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    }
+    if (geom?.type === 'MultiLineString' && Array.isArray(geom.coordinates)) {
+      return geom.coordinates.flat().map((c) => ({ lat: Number(c?.[1]), lng: Number(c?.[0]) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    }
+    return [];
+  }
+
+  function appendDistinctPoints(target, points) {
+    for (const p of points || []) {
+      if (!p || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) continue;
+      const q = { lat: Number(p.lat), lng: Number(p.lng) };
+      const prev = target[target.length - 1];
+      if (!prev || haversineM(prev, q) > 0.05) target.push(q);
+    }
+    return target;
+  }
+
+  function extractValhallaPoints(payload) {
+    const direct = geoJsonLineToPoints(payload?.trip?.shape || payload?.shape || payload?.route?.shape);
+    if (direct.length) return direct;
+    const legs = payload?.trip?.legs || payload?.route?.legs || payload?.legs || [];
+    const out = [];
+    for (const leg of legs) {
+      const geo = geoJsonLineToPoints(leg?.shape);
+      if (geo.length) { appendDistinctPoints(out, geo); continue; }
+      if (typeof leg?.shape === 'string') appendDistinctPoints(out, decodePolylineShape(leg.shape, 6));
+    }
+    if (out.length) return out;
+    if (typeof payload?.trip?.shape === 'string') return decodePolylineShape(payload.trip.shape, 6);
+    if (typeof payload?.shape === 'string') return decodePolylineShape(payload.shape, 6);
+    return [];
+  }
+
+  function extractGraphHopperPoints(payload) {
+    const path = payload?.paths?.[0] || payload?.path || null;
+    const geo = geoJsonLineToPoints(path?.points || path?.snapped_waypoints);
+    if (geo.length) return geo;
+    if (typeof path?.points === 'string') return decodePolylineShape(path.points, 5);
+    return [];
+  }
+
+  function benchmarkPathAnalysis(points, manualShape, thresholdM = 14) {
+    const manual = (manualShape || []).map((p) => ({ lat: Number(p.lat), lng: Number(p.lng ?? p.lon) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const path = (points || []).map(asLatLng).filter(Boolean);
+    if (manual.length < 2 || path.length < 2) return { available: false, pointCount: path.length };
+    const coverage = pathCoverageAgainstRoute(path, manual, thresholdM, 10);
+    const avgDistanceM = Number(coverage.averageDistanceM);
+    const faithful = Number(coverage.coverageRatio || 0) >= 0.88 && Number.isFinite(avgDistanceM) && avgDistanceM <= thresholdM;
+    return {
+      available: true, pointCount: path.length, distanceM: routeDistanceM(path), faithful,
+      coverageRatio: coverage.coverageRatio, averageDistanceM: coverage.averageDistanceM, maxDistanceM: coverage.maxDistanceM,
+      points: path.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }))
+    };
+  }
+
+  async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 15000, fetchImpl = null) {
+    const f = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+    if (!f) throw new Error('fetch unavailable');
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || 15000))) : null;
+    try {
+      const response = await f(url, Object.assign({}, init, controller ? { signal: controller.signal } : {}));
+      const text = await response.text();
+      let payload = null;
+      try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = null; }
+      if (!response.ok) throw new Error(`${response.status}${payload?.error ? ` ${payload.error}` : ''}`);
+      if (!payload) throw new Error('empty or non-JSON response');
+      return payload;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function gpxForBenchmarkShape(shape) {
+    const pts = (shape || []).map((p) => ({ lat: Number(p.lat), lon: Number(p.lon ?? p.lng) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    const esc = (v) => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="${esc(VERSION)}" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>haidian-benchmark</name><trkseg>${pts.map((p) => `<trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}"></trkpt>`).join('')}</trkseg></trk></gpx>`;
+  }
+
+  async function runMatureEngineBenchmark(manifest, options = {}) {
+    if (!manifest?.manualShape?.length || !manifest?.start || !manifest?.end) return { available: false, reason: 'benchmark-manifest-missing' };
+    if (options.matureEngineCrossCheckEnabled === false || config.matureEngineCrossCheckEnabled === false) return { available: false, reason: 'disabled' };
+    const timeoutMs = Number(options.timeoutMs || config.matureEngineTimeoutMs || 15000);
+    const valhallaMinIntervalMs = Math.max(0, Number(options.valhallaMinIntervalMs ?? config.valhallaMinIntervalMs ?? 1100));
+    const maxPoints = Number(options.maxShapePoints || config.matureEngineShapeMaxPoints || 180);
+    const manualShape = downsampleBenchmarkShape(manifest.manualShape, maxPoints).map((p) => ({ lat: p.lat, lon: p.lng }));
+    const thresholdM = Number(options.fidelityThresholdM || config.manualReplayFidelityThresholdM || 14);
+    const fetchImpl = options.fetchImpl || null;
+    const result = { available: true, generatedBy: VERSION, valhalla: { available: false }, graphhopper: { available: false } };
+
+    const valBase = String(options.valhallaEndpoint || config.valhallaBenchmarkEndpoint || '').replace(/\/$/, '');
+    if (valBase) {
+      const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+      const clientId = String(options.valhallaClientId || config.valhallaClientId || '').trim();
+      if (clientId) headers['X-Client-Id'] = clientId;
+      const routeReq = Object.assign({}, manifest.valhalla?.routeRequest || {}, { shape_format: 'geojson', directions_type: 'none' });
+      const traceReq = Object.assign({}, manifest.valhalla?.traceRouteRequest || {}, {
+        shape: manualShape, costing: 'pedestrian', shape_match: 'map_snap', shape_format: 'geojson', directions_type: 'none'
+      });
+      result.valhalla = { available: true, endpoint: valBase };
+      try {
+        const payload = await fetchJsonWithTimeout(`${valBase}/route`, { method:'POST', mode:'cors', credentials:'omit', headers, body: JSON.stringify(routeReq) }, timeoutMs, fetchImpl);
+        const points = extractValhallaPoints(payload);
+        result.valhalla.route = Object.assign({ ok: true }, benchmarkPathAnalysis(points, manualShape, thresholdM));
+      } catch (error) {
+        result.valhalla.route = { ok: false, error: error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)) };
+      }
+      if (valhallaMinIntervalMs > 0) await new Promise((resolve) => setTimeout(resolve, valhallaMinIntervalMs));
+      try {
+        const payload = await fetchJsonWithTimeout(`${valBase}/trace_route`, { method:'POST', mode:'cors', credentials:'omit', headers, body: JSON.stringify(traceReq) }, timeoutMs, fetchImpl);
+        const points = extractValhallaPoints(payload);
+        result.valhalla.traceRoute = Object.assign({ ok: true }, benchmarkPathAnalysis(points, manualShape, thresholdM));
+      } catch (error) {
+        result.valhalla.traceRoute = { ok: false, error: error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)) };
+      }
+    }
+
+    const ghKey = String(options.graphHopperApiKey ?? config.graphHopperApiKey ?? '').trim();
+    const ghBase = String(options.graphHopperEndpoint || config.graphHopperBenchmarkEndpoint || '').replace(/\/$/, '');
+    if (ghBase && ghKey) {
+      result.graphhopper = { available: true, endpoint: ghBase };
+      try {
+        const routePayload = { points: [[Number(manifest.start.lon), Number(manifest.start.lat)], [Number(manifest.end.lon), Number(manifest.end.lat)]], profile:'foot', points_encoded:false, instructions:false };
+        const payload = await fetchJsonWithTimeout(`${ghBase}/route?key=${encodeURIComponent(ghKey)}`, { method:'POST', mode:'cors', credentials:'omit', headers:{'Content-Type':'application/json',Accept:'application/json'}, body:JSON.stringify(routePayload) }, timeoutMs, fetchImpl);
+        result.graphhopper.route = Object.assign({ ok: true }, benchmarkPathAnalysis(extractGraphHopperPoints(payload), manualShape, thresholdM));
+      } catch (error) {
+        result.graphhopper.route = { ok: false, error: error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)) };
+      }
+      try {
+        const gpx = gpxForBenchmarkShape(manualShape);
+        const payload = await fetchJsonWithTimeout(`${ghBase}/match?profile=foot&points_encoded=false&type=json&key=${encodeURIComponent(ghKey)}`, { method:'POST', mode:'cors', credentials:'omit', headers:{'Content-Type':'application/gpx+xml',Accept:'application/json'}, body:gpx }, timeoutMs, fetchImpl);
+        result.graphhopper.match = Object.assign({ ok: true }, benchmarkPathAnalysis(extractGraphHopperPoints(payload), manualShape, thresholdM));
+      } catch (error) {
+        result.graphhopper.match = { ok: false, error: error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)) };
+      }
+    } else {
+      result.graphhopper = { available: false, reason: ghKey ? 'endpoint-missing' : 'api-key-not-configured' };
+    }
+
+    const ordinaryFaithful = Boolean(result.valhalla?.route?.faithful || result.graphhopper?.route?.faithful);
+    const matchFaithful = Boolean(result.valhalla?.traceRoute?.faithful || result.graphhopper?.match?.faithful);
+    let outcome = 'engine-crosscheck-inconclusive';
+    let interpretation = '成熟引擎回應不足，暫時不能據此改 production connector policy。';
+    if (ordinaryFaithful) {
+      outcome = 'ordinary-engine-finds-faithful-corridor';
+      interpretation = '至少一個成熟 pedestrian ordinary router 從同一 A/B 找到忠實河堤走廊。這可能代表 OSM 資料版本或引擎拓樸處理與目前 Overpass snapshot 不同；應比對資料版本與實際 edge，而不是直接啟用 proximity bridge。';
+    } else if (matchFaithful) {
+      outcome = 'map-matching-only-follows-faithful-corridor';
+      interpretation = '成熟 map matcher 可以沿手繪河堤，但 ordinary pedestrian route 沒有同樣證據。這支持「軌跡可被解釋」但不等於 production routing 有合法 connector。';
+    } else if ((result.valhalla?.route?.ok || result.graphhopper?.route?.ok) && !ordinaryFaithful) {
+      outcome = 'ordinary-engine-also-avoids-faithful-corridor';
+      interpretation = '至少一個成熟 ordinary pedestrian router 也沒有重建出忠實河堤走廊；這與 dev17/dev19 的 source-topology-gap 結論一致。';
+    }
+    result.outcome = outcome;
+    result.interpretation = interpretation;
+    result.connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(
+      { junctions: (manifest.sourceGaps || []).map((g) => ({
+        progressRatio:g.progressRatio, classification:g.classification, geometryGapM:g.geometryGapM,
+        graphNodeGapM:g.graphNodeGapM, gradeSeparationPossible:g.gradeSeparationPossible, evidenceLayer:g.evidenceLayer || 'source-osm-topology'
+      })) }, null, result, options
+    );
+    return result;
+  }
+
   function engineBenchmarkManifest(route, startPoint, endPoint, sourceGapAudit, counterfactualAudit) {
     const shape = (route || []).map(asLatLng).filter(Boolean).map((p) => ({ lat: Number(p.lat), lon: Number(p.lng) }));
     const A = asLatLng(startPoint), B = asLatLng(endPoint);
     if (!A || !B || shape.length < 2) return null;
-    const sourceGaps = (sourceGapAudit?.junctions || []).map((j) => ({
-      progressRatio: Number(j.progressRatio || 0), classification: j.classification || null,
-      geometryGapM: j.geometryGapM ?? null, graphNodeGapM: j.graphNodeGapM ?? null,
-      gradeSeparationPossible: Boolean(j.gradeSeparationPossible),
-      fromWays: (j.fromWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null })),
-      toWays: (j.toWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null }))
-    }));
+    const cfConnectors = counterfactualAudit?.connectors || [];
+    const sourceGaps = (sourceGapAudit?.junctions || []).map((j, index) => {
+      const c = cfConnectors.find((x) => Math.abs(Number(x.progressRatio || 0) - Number(j.progressRatio || 0)) < 0.03) || cfConnectors[index] || null;
+      return {
+        progressRatio: Number(j.progressRatio || 0), classification: j.classification || null, evidenceLayer: j.evidenceLayer || null,
+        geometryGapM: j.geometryGapM ?? null, graphNodeGapM: j.graphNodeGapM ?? null,
+        gradeSeparationPossible: Boolean(j.gradeSeparationPossible),
+        fromWays: (j.fromWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null })),
+        toWays: (j.toWays || []).map((w) => ({ wayId: String(w.wayId), highway: w.highway || null })),
+        diagnosticConnector: c ? {
+          id: c.id || null, distanceM: c.distanceM ?? c.gapM ?? null,
+          geometry: (c.geometry || []).map((p) => ({ lat: Number(p.lat), lon: Number(p.lng ?? p.lon) }))
+        } : null
+      };
+    });
+    const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(sourceGapAudit, counterfactualAudit);
     return {
-      schema: 'haidian-routing-engine-benchmark-v1', generatedBy: VERSION,
+      schema: 'haidian-routing-engine-benchmark-v2', generatedBy: VERSION,
       start: { lat: A.lat, lon: A.lng }, end: { lat: B.lat, lon: B.lng }, manualShape: shape,
       sourceGaps,
+      connectorSafetyPolicy,
       localCounterfactual: counterfactualAudit ? {
         outcome: counterfactualAudit.outcome || null,
         connectorCount: counterfactualAudit.connectorCount || 0,
@@ -2935,7 +3213,7 @@
         patchedSearchCoverageRatio: counterfactualAudit.patchedSearchCoverageRatio ?? null
       } : null,
       valhalla: {
-        referenceServer: 'https://valhalla.openstreetmap.de',
+        referenceServer: 'https://valhalla1.openstreetmap.de',
         routeRequest: { locations: [{ lat: A.lat, lon: A.lng }, { lat: B.lat, lon: B.lng }], costing: 'pedestrian', shape_format: 'geojson' },
         traceRouteRequest: { shape, costing: 'pedestrian', shape_match: 'map_snap', search_radius: 20, gps_accuracy: 4.07, shape_format: 'geojson' }
       },
@@ -3571,6 +3849,7 @@
         graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
         Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
       );
+      const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(rawOsmJunctionAudit, sourceGapCounterfactualAudit, null, options);
       const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = null;
       return {
@@ -3598,6 +3877,7 @@
         corridorComponentTraceAudit,
         rawOsmJunctionAudit,
         sourceGapCounterfactualAudit,
+        connectorSafetyPolicy,
         engineBenchmark,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
@@ -3619,6 +3899,7 @@
         graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
         Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
       );
+      const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(rawOsmJunctionAudit, sourceGapCounterfactualAudit, null, options);
       const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
@@ -3638,6 +3919,7 @@
         corridorComponentTraceAudit,
         rawOsmJunctionAudit,
         sourceGapCounterfactualAudit,
+        connectorSafetyPolicy,
         engineBenchmark,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
@@ -3685,6 +3967,7 @@
           Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
         )
       : { available: false, reason: 'strict-corridor-already-connected' };
+    const connectorSafetyPolicyAccepted = sourceGapConnectorSafetyPolicy(rawOsmJunctionAuditAccepted, sourceGapCounterfactualAuditAccepted, null, options);
     const engineBenchmarkAccepted = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAuditAccepted, sourceGapCounterfactualAuditAccepted);
     const shadeCostAudit = await reconcilePathShadeCost(graph, path.steps, edgeSun, departure, speedMps, options);
     const strictFidelityAccepted = Boolean(strictCorridorAuditAccepted?.connected) && (path.coverage?.coverageRatio || 0) >= minCoverage;
@@ -3727,6 +4010,7 @@
       corridorComponentTraceAudit: corridorComponentTraceAuditAccepted,
       rawOsmJunctionAudit: rawOsmJunctionAuditAccepted,
       sourceGapCounterfactualAudit: sourceGapCounterfactualAuditAccepted,
+      connectorSafetyPolicy: connectorSafetyPolicyAccepted,
       engineBenchmark: engineBenchmarkAccepted,
       shadeCostAudit,
       firstDivergence: path.mapMatchAttempt?.firstDivergence || null,
@@ -4081,6 +4365,7 @@
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
     replayPolyline,
+    runMatureEngineBenchmark,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -4115,7 +4400,12 @@
       rawOsmJunctionAudit,
       cloneFineGraphWithDiagnosticConnectors,
       controlledSourceGapConnectorAudit,
+      sourceGapConnectorSafetyPolicy,
       engineBenchmarkManifest,
+      runMatureEngineBenchmark,
+      extractValhallaPoints,
+      extractGraphHopperPoints,
+      benchmarkPathAnalysis,
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
       pathDivergenceDiagnostics,
