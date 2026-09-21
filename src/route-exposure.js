@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev17 Raw OSM Junction Audit
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev18 Shade-Cost Reconciliation
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev17";
+  const VERSION = "v9.0.0-dev18";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1613,12 +1613,96 @@
     return summary + rows + `<p><strong>dev17 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
+  function enrichShadeReconciliation(diagnosis) {
+    const r = diagnosis?.replay;
+    const a = r?.shadeCostAudit;
+    if (!r?.connected || !a?.available) return null;
+    const scored = lastCandidateBundle?.scored || [];
+    const manualCandidate = scored.find((c) => c?.id === "manual-drawn") || null;
+    const autoGraphCandidate = scored.find((c) => c?.id === "graph-min-sun" || c?.kind === "graph-shade") || null;
+    const manualFinalSunSeconds = Number(manualCandidate?.analysis?.summary?.directSunSeconds);
+    const autoFinalSunSeconds = Number(autoGraphCandidate?.analysis?.summary?.directSunSeconds);
+    const matchedDenseSunSeconds = Number(a.denseDirectSunSeconds);
+    const matchedCoarseSunSeconds = Number(r.directSunSeconds);
+    const autoCoarseSunSeconds = Number(r.autoEstimatedDirectSunSeconds);
+    const walkSeconds = Number(r.walkSeconds || a.walkSeconds || 0);
+    const toleranceSec = Math.max(45, walkSeconds * 0.05);
+    const sameGeometryDeltaSec = Number.isFinite(matchedCoarseSunSeconds) && Number.isFinite(matchedDenseSunSeconds)
+      ? matchedCoarseSunSeconds - matchedDenseSunSeconds : null;
+    const manualVsMatchedDenseDeltaSec = Number.isFinite(manualFinalSunSeconds) && Number.isFinite(matchedDenseSunSeconds)
+      ? matchedDenseSunSeconds - manualFinalSunSeconds : null;
+    const autoSameGeometryDeltaSec = Number.isFinite(autoCoarseSunSeconds) && Number.isFinite(autoFinalSunSeconds)
+      ? autoCoarseSunSeconds - autoFinalSunSeconds : null;
+    const nearestGraphAvg = Number(diagnosis?.averageDistanceM);
+    const mapMatchAvg = Number(r.mapMatchAverageDistanceM);
+    const geometryExcessOffsetM = Number.isFinite(nearestGraphAvg) && Number.isFinite(mapMatchAvg) ? mapMatchAvg - nearestGraphAvg : null;
+    const sameGeometryMismatch = sameGeometryDeltaSec != null && Math.abs(sameGeometryDeltaSec) > toleranceSec;
+    const manualGeometryExposureMismatch = manualVsMatchedDenseDeltaSec != null && Math.abs(manualVsMatchedDenseDeltaSec) > toleranceSec;
+    const strictCorridorFailure = r.strictFidelityAccepted === false || r.strictCorridorAudit?.connected === false;
+    let outcome = "same-geometry-reconciled";
+    let interpretation = "同一 ordered graph path 的 coarse edge sampler 與 dense ShadeMap 重算大致一致。";
+    if (sameGeometryMismatch && manualGeometryExposureMismatch) {
+      outcome = "mixed-geometry-and-shade-cost-mismatch";
+      interpretation = "同一 graph path 的 coarse/dense 日照已有實質差異，而且 dense graph path 仍與手繪最終曝曬明顯不同；geometry 與 shade-cost 兩層都需追。";
+    } else if (sameGeometryMismatch) {
+      outcome = "shade-cost-mismatch";
+      interpretation = "同一 graph geometry 在 coarse edge sampler 與 dense ShadeMap 重算之間已有實質差異；shade-cost 採樣／時間模型是主要嫌疑。";
+    } else if (manualGeometryExposureMismatch || strictCorridorFailure) {
+      outcome = strictCorridorFailure ? "coverage-pass-strict-corridor-fail" : "map-match-geometry-mismatch";
+      interpretation = strictCorridorFailure
+        ? "ordered matcher 雖達點覆蓋門檻，但 strict faithful corridor 仍不連通；coarse 與 dense 對同一 graph path 又大致一致，因此目前差異主要來自 map-match 幾何借道，而不是 shade-cost。"
+        : "coarse 與 dense 對同一 graph path 大致一致，但該 graph path 與手繪路線的最終曝曬明顯不同；主要問題是 map-match geometry，不是 edge shade-cost。";
+    }
+    r.shadeReconciliation = {
+      available: true,
+      outcome,
+      toleranceSec,
+      manualFinalSunSeconds: Number.isFinite(manualFinalSunSeconds) ? manualFinalSunSeconds : null,
+      matchedDenseSunSeconds: Number.isFinite(matchedDenseSunSeconds) ? matchedDenseSunSeconds : null,
+      matchedCoarseSunSeconds: Number.isFinite(matchedCoarseSunSeconds) ? matchedCoarseSunSeconds : null,
+      autoFinalSunSeconds: Number.isFinite(autoFinalSunSeconds) ? autoFinalSunSeconds : null,
+      autoCoarseSunSeconds: Number.isFinite(autoCoarseSunSeconds) ? autoCoarseSunSeconds : null,
+      sameGeometryDeltaSec,
+      manualVsMatchedDenseDeltaSec,
+      autoSameGeometryDeltaSec,
+      nearestGraphAverageDistanceM: Number.isFinite(nearestGraphAvg) ? nearestGraphAvg : null,
+      mapMatchAverageDistanceM: Number.isFinite(mapMatchAvg) ? mapMatchAvg : null,
+      geometryExcessOffsetM,
+      strictCorridorFailure,
+      sameGeometryMismatch,
+      manualGeometryExposureMismatch,
+      interpretation
+    };
+    return r.shadeReconciliation;
+  }
+
+  function shadeCostReconciliationHtml(replay) {
+    const a = replay?.shadeCostAudit || null;
+    const r = replay?.shadeReconciliation || null;
+    if (!a?.available) return '';
+    const fmtS = (v) => Number.isFinite(Number(v)) ? formatMinutes(Number(v)) : '—';
+    const delta = Number.isFinite(Number(a.deltaSeconds)) ? `${Number(a.deltaSeconds) >= 0 ? '+' : ''}${(Number(a.deltaSeconds) / 60).toFixed(1)} 分` : '—';
+    const top = (a.topEdgeMismatches || []).slice(0, 5).map((e) => {
+      const way = e.wayIds?.length ? `way ${escapeHtml(e.wayIds.join('/'))}` : 'way —';
+      const d = Number(e.deltaSeconds || 0);
+      return `${escapeHtml(e.edgeId || '—')} / ${escapeHtml(e.highway || 'unknown')} / ${way}：coarse ${fmtS(e.coarseDirectSunSeconds)} → dense ${fmtS(e.denseDirectSunSeconds)}（Δ ${d >= 0 ? '+' : ''}${(d/60).toFixed(1)} 分）`;
+    }).join('；');
+    const head = `<span><strong>dev18 Shade-Cost Reconciliation：</strong>對<strong>同一條 ordered graph path</strong>做兩次計分：搜尋器 coarse edge sampler = ${fmtS(a.coarseDirectSunSeconds)}；10 m dense ShadeMap replay = ${fmtS(a.denseDirectSunSeconds)}；差 ${delta}。${a.materialMismatch ? '<b>這個差異已達實質門檻。</b>' : '兩者在目前門檻內大致一致。'}</span>`;
+    const manual = r?.available ? `<span><strong>與最終候選評分對照：</strong>手繪原線 ${fmtS(r.manualFinalSunSeconds)}；matched graph geometry 的 dense replay ${fmtS(r.matchedDenseSunSeconds)}；自動 graph 解 coarse ${fmtS(r.autoCoarseSunSeconds)} / 最終 ShadeMap ${fmtS(r.autoFinalSunSeconds)}。</span>` : '';
+    const geom = r?.available ? `<span><strong>幾何忠實度：</strong>手繪線到最近 graph 平均 ${Number.isFinite(Number(r.nearestGraphAverageDistanceM)) ? Number(r.nearestGraphAverageDistanceM).toFixed(1) + ' m' : '—'}；ordered path 平均 ${Number.isFinite(Number(r.mapMatchAverageDistanceM)) ? Number(r.mapMatchAverageDistanceM).toFixed(1) + ' m' : '—'}${Number.isFinite(Number(r.geometryExcessOffsetM)) ? `，額外偏移約 ${Number(r.geometryExcessOffsetM).toFixed(1)} m` : ''}；strict corridor ${r.strictCorridorFailure ? '<b>仍失敗</b>' : '可連通'}。</span>` : '';
+    const edgeRows = top ? `<span><strong>同一路徑 coarse↔dense 差異最大的 edge：</strong>${top}。</span>` : '';
+    const verdict = r?.available ? `<p><strong>dev18 判讀：</strong>${escapeHtml(r.interpretation || '')}</p>` : '';
+    return head + manual + geom + edgeRows + verdict;
+  }
+
   function graphDiagnosisHtml(diagnosis) {
     if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
     const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
     const overlap = Math.round((diagnosis.overlapWithSelectedRatio || 0) * 100);
     const replayOutcome = diagnosis.replay?.outcome || '';
-    const cls = diagnosis.replay?.searchMissConfirmed ? "is-bad" : replayOutcome === 'connected-low-coverage' ? "is-warning" : coverage >= 80 ? "is-good" : coverage < 50 ? "is-bad" : "is-warning";
+    const reconciliationOutcome = diagnosis.replay?.shadeReconciliation?.outcome || '';
+    const reconciliationWarning = reconciliationOutcome && reconciliationOutcome !== 'same-geometry-reconciled';
+    const cls = diagnosis.replay?.searchMissConfirmed ? "is-bad" : replayOutcome === 'connected-low-coverage' || reconciliationWarning ? "is-warning" : coverage >= 80 ? "is-good" : coverage < 50 ? "is-bad" : "is-warning";
     const types = (diagnosis.matchedEdges || []).slice(0, 5).map((e) => `${escapeHtml(e.highway)} (${e.count})`).join("、") || "—";
     let replay = '';
     if (diagnosis.replay) {
@@ -1641,8 +1725,10 @@
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
           edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
+        const strictWarning = r.strictFidelityAccepted === false ? `<span><strong>注意：</strong>coverage 門檻雖通過，但 strict faithful corridor 並未通過；這個 ordered path 仍可能是貼著手繪線的平行廊道，不能直接當成「同一條手繪路」。</span>` : '';
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
+          strictWarning + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + rawOsmJunctionAuditHtml(r) + shadeCostReconciliationHtml(r) +
           `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else {
         const f = r.failureDiagnostics || null;
@@ -1709,6 +1795,7 @@
           shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
           canopyTimeoutMs: config.canopyTimeoutMs
         });
+        enrichShadeReconciliation(diagnosis);
         if (diagnosis.replay?.graphReachedGoal === true && diagnosis.replay?.manualFidelityAccepted === false) {
           const pct = Math.round((diagnosis.replay.mapMatchCoverageRatio || 0) * 100);
           diagnosis.interpretation = `Graph 已可連到 B，但 ordered path 與手繪線只有約 ${pct}% 貼合；這是低貼合匹配，不是拓樸不連通。請優先看第一個偏離 edge / way / highway 與平行廊道判斷。`;
@@ -1729,8 +1816,12 @@
               ? `Graph 可連到 B，但目前貼合手繪線只有 ${Math.round((diagnosis.replay?.mapMatchCoverageRatio || 0) * 100)}%；這是低貼合匹配，不是拓樸不連通。請看第一個偏離 edge / way。`
               : diagnosis.replay?.connected === false
                 ? "已定位 graph 無法到 B 的最佳拓樸／轉換斷點；請看 node / way / connector 與 matcher 拒絕原因。"
-                : "Progress-state 手繪 Graph map-match 完成；現在的 edge 日照比較才可用來判斷 shade-cost 或搜尋漏解。",
-          diagnosis.replay?.searchMissConfirmed || lowFidelity || diagnosis.replay?.connected === false ? "warning" : "ok"
+                : diagnosis.replay?.shadeReconciliation?.outcome === "shade-cost-mismatch"
+                  ? "dev18 已確認同一 graph geometry 的 coarse 與 dense ShadeMap 計分不一致；下一步查 shade-cost 採樣／時間模型。"
+                  : diagnosis.replay?.shadeReconciliation?.outcome === "coverage-pass-strict-corridor-fail" || diagnosis.replay?.shadeReconciliation?.outcome === "map-match-geometry-mismatch"
+                    ? "dev18 顯示同一路徑 coarse/dense 大致一致，但 ordered path 幾何仍不是忠實手繪路；先修 map-match／source junction，不要怪 shade-cost。"
+                    : "dev18 同幾何日照 reconciliation 已完成；請看 coarse↔dense 與手繪原線的三方對照。",
+          diagnosis.replay?.searchMissConfirmed || lowFidelity || diagnosis.replay?.connected === false || diagnosis.replay?.shadeReconciliation?.outcome !== "same-geometry-reconciled" ? "warning" : "ok"
         );
       } catch (error) {
         diagnosis.replay = { available: true, connected: false, reason: error?.message || String(error) };

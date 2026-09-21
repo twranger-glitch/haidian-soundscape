@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev17 Raw OSM Junction Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev18 Shade-Cost Reconciliation
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev17";
+  const VERSION = "v9.0.0-dev18";
 
   const DEFAULTS = {
     enabled: true,
@@ -51,6 +51,9 @@
     maxLabelsPerState: 5, // legacy compatibility only; dev7 no longer truncates nondominated labels
     shadeSampleSpacingM: 18,
     shadeMaxSamplesPerEdge: 5,
+    shadeReconcileSampleSpacingM: 10,
+    shadeReconcileMismatchSec: 45,
+    shadeReconcileTopEdges: 8,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -741,6 +744,143 @@
     }
     const total = models.length || 1;
     return { directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, samples: total };
+  }
+
+  function denseShadeSegmentsForPath(graph, steps, spacingM) {
+    const spacing = Math.max(4, Number(spacingM) || 10);
+    const out = [];
+    let cumulativeM = 0;
+    for (let stepIndex = 0; stepIndex < (steps || []).length; stepIndex += 1) {
+      const step = steps[stepIndex];
+      const edge = graph.edges.get(step.edgeId);
+      if (!edge) continue;
+      const geometry = edgeGeometryFor(edge, step.from);
+      for (let i = 1; i < (geometry || []).length; i += 1) {
+        const a = geometry[i - 1], b = geometry[i];
+        const len = haversineM(a, b);
+        if (!(len > 0.05)) continue;
+        const chunks = Math.max(1, Math.ceil(len / spacing));
+        const chunkLen = len / chunks;
+        for (let c = 0; c < chunks; c += 1) {
+          const fm = (c + 0.5) / chunks;
+          out.push({
+            edgeId: edge.id,
+            from: String(step.from),
+            highway: primaryHighway(edge),
+            wayIds: edge.wayIds?.slice?.() || [],
+            lengthM: chunkLen,
+            cumulativeMidM: cumulativeM + chunkLen / 2,
+            sample: {
+              lat: a.lat + (b.lat - a.lat) * fm,
+              lng: a.lng + (b.lng - a.lng) * fm
+            }
+          });
+          cumulativeM += chunkLen;
+        }
+      }
+    }
+    return { segments: out, totalDistanceM: cumulativeM };
+  }
+
+  async function reconcilePathShadeCost(graph, steps, coarseEdgeSun, departure, speedMps, options = {}) {
+    if (!window.HaidianShade || typeof window.HaidianShade.analyzeShadeModelAt !== "function") {
+      return { available: false, reason: "shade-api-unavailable" };
+    }
+    const spacingM = Math.max(4, Number(options.shadeReconcileSampleSpacingM || config.shadeReconcileSampleSpacingM || 10));
+    const mismatchSec = Math.max(10, Number(options.shadeReconcileMismatchSec || config.shadeReconcileMismatchSec || 45));
+    const topN = Math.max(3, Number(options.shadeReconcileTopEdges || config.shadeReconcileTopEdges || 8));
+    const built = denseShadeSegmentsForPath(graph, steps, spacingM);
+    if (!built.segments.length) return { available: false, reason: "no-path-segments" };
+    const dep = departure instanceof Date ? departure : new Date(departure || Date.now());
+    const safeSpeed = Math.max(0.4, Number(speedMps) || 1.25);
+    const results = await runPool(
+      built.segments,
+      Math.max(1, Math.min(4, Number(options.shadeConcurrency || config.shadeConcurrency || 2))),
+      async (seg) => {
+        const at = new Date(dep.getTime() + (seg.cumulativeMidM / safeSpeed) * 1000);
+        const model = await window.HaidianShade.analyzeShadeModelAt(seg.sample.lat, seg.sample.lng, at, {
+          canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        });
+        return { seg, at, model };
+      }
+    );
+
+    const denseByEdge = new Map();
+    let denseSunS = 0, denseShadeS = 0, denseNightS = 0;
+    for (const item of results) {
+      const sec = item.seg.lengthM / safeSpeed;
+      const state = item.model?.state === "night" ? "night" : item.model?.shaded === true ? "shade" : "sun";
+      if (state === "sun") denseSunS += sec;
+      else if (state === "shade") denseShadeS += sec;
+      else denseNightS += sec;
+      const row = denseByEdge.get(item.seg.edgeId) || {
+        edgeId: item.seg.edgeId,
+        highway: item.seg.highway,
+        wayIds: item.seg.wayIds,
+        distanceM: 0,
+        sunS: 0,
+        shadeS: 0,
+        nightS: 0,
+        samples: 0
+      };
+      row.distanceM += item.seg.lengthM;
+      row.samples += 1;
+      if (state === "sun") row.sunS += sec;
+      else if (state === "shade") row.shadeS += sec;
+      else row.nightS += sec;
+      denseByEdge.set(item.seg.edgeId, row);
+    }
+
+    const coarseByEdge = new Map();
+    for (const row of coarseEdgeSun || []) {
+      const id = String(row.edgeId);
+      const cur = coarseByEdge.get(id) || { sunS: 0, distanceM: 0, directSunFractionWeighted: 0 };
+      cur.sunS += Number(row.directSunSeconds || 0);
+      cur.distanceM += Number(row.distanceM || 0);
+      cur.directSunFractionWeighted += Number(row.directSunFraction || 0) * Number(row.distanceM || 0);
+      coarseByEdge.set(id, cur);
+    }
+    const coarseSunS = Array.from(coarseByEdge.values()).reduce((sum, row) => sum + row.sunS, 0);
+    const edgeDiffs = [];
+    for (const [edgeId, dense] of denseByEdge) {
+      const coarse = coarseByEdge.get(String(edgeId)) || { sunS: 0, distanceM: dense.distanceM, directSunFractionWeighted: 0 };
+      const denseDayS = dense.sunS + dense.shadeS;
+      const denseFrac = denseDayS > 0 ? dense.sunS / denseDayS : 0;
+      const coarseFrac = coarse.distanceM > 0 ? coarse.directSunFractionWeighted / coarse.distanceM : 0;
+      edgeDiffs.push({
+        edgeId,
+        highway: dense.highway,
+        wayIds: dense.wayIds,
+        distanceM: dense.distanceM,
+        denseSamples: dense.samples,
+        coarseDirectSunFraction: coarseFrac,
+        denseDirectSunFraction: denseFrac,
+        coarseDirectSunSeconds: coarse.sunS,
+        denseDirectSunSeconds: dense.sunS,
+        deltaSeconds: coarse.sunS - dense.sunS,
+        absDeltaSeconds: Math.abs(coarse.sunS - dense.sunS)
+      });
+    }
+    edgeDiffs.sort((a, b) => b.absDeltaSeconds - a.absDeltaSeconds);
+    const deltaSeconds = coarseSunS - denseSunS;
+    const walkS = built.totalDistanceM / safeSpeed;
+    const materialThresholdSec = Math.max(mismatchSec, walkS * 0.05);
+    return {
+      available: true,
+      sampleSpacingM: spacingM,
+      sampleCount: built.segments.length,
+      distanceM: built.totalDistanceM,
+      walkSeconds: walkS,
+      coarseDirectSunSeconds: coarseSunS,
+      denseDirectSunSeconds: denseSunS,
+      denseShadedSeconds: denseShadeS,
+      denseNightSeconds: denseNightS,
+      deltaSeconds,
+      absoluteDeltaSeconds: Math.abs(deltaSeconds),
+      materialThresholdSec,
+      materialMismatch: Math.abs(deltaSeconds) > materialThresholdSec,
+      topEdgeMismatches: edgeDiffs.slice(0, topN)
+    };
   }
 
   function pathHasNode(label, nodeId) {
@@ -2345,7 +2485,7 @@
   }
 
 
-  // v9.0.0-dev17: trace each dev16 component boundary back to the raw Overpass
+  // v9.0.0-dev18: trace each dev16 component boundary back to the raw Overpass
   // way/node topology that produced it.  This audit is intentionally read-only:
   // it distinguishes a source OSM noding gap from a custom graph-builder loss,
   // but never inserts a production connector or rewrites OSM data.
@@ -3238,6 +3378,20 @@
       edgeSun.push({ edgeId: edge.id, highway: primaryHighway(edge), distanceM: edge.distanceM, directSunFraction, directSunSeconds: edgeSunSeconds });
       if ((i % 3) === 2) await cooperativeYield();
     }
+    const fidelityThresholdM = path.mapMatchAttempt?.fidelityThresholdM ?? Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
+    // dev18: even a coverage-passing ordered match can still ride a nearby parallel corridor.
+    // Always retain the strict faithful-corridor evidence for accepted paths, then compare
+    // the exact same graph geometry under the coarse search sampler and a dense 10 m sampler.
+    const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
+    const strictCorridorAuditsAccepted = corridorDiagnostics.strictCorridorAudits;
+    const strictCorridorAuditAccepted = corridorDiagnostics.strictCorridorAudit;
+    const thresholdDeltaAuditAccepted = corridorDiagnostics.thresholdDeltaAudit;
+    const endpointSnapCounterfactualAuditAccepted = corridorDiagnostics.endpointSnapCounterfactualAudit;
+    const corridorComponentTraceAuditAccepted = corridorDiagnostics.corridorComponentTraceAudit;
+    const rawOsmJunctionAuditAccepted = corridorDiagnostics.rawOsmJunctionAudit;
+    const shadeCostAudit = await reconcilePathShadeCost(graph, path.steps, edgeSun, departure, speedMps, options);
+    const strictFidelityAccepted = Boolean(strictCorridorAuditAccepted?.connected) && (path.coverage?.coverageRatio || 0) >= minCoverage;
+
     const fastestS = Number(lastDiagnostics?.fastestSeconds);
     const detourPct = Number.isFinite(Number(options.detourPct)) ? Number(options.detourPct) : Number(lastDiagnostics?.detourPct || 30);
     const detourLimitS = Number.isFinite(fastestS) ? fastestS * (1 + Math.max(0, detourPct) / 100) : Infinity;
@@ -3246,8 +3400,10 @@
     const searchMissConfirmed = withinDetour && Number.isFinite(autoSunS) && sunS + 0.5 < autoSunS;
     let interpretation = "手繪路線已按前進順序 map-match 成 OSM graph 的連通 A→B edge path。";
     if (!withinDetour) interpretation = "手繪 ordered map-match 路徑在 OSM graph 中連通，但依 graph 步行時間已超過目前繞路上限。";
+    else if (!strictFidelityAccepted) interpretation = "ordered matcher 雖通過點覆蓋門檻，但 14 m strict faithful corridor 仍不連通；這個 match 可能借用了貼近手繪線的平行廊道，不能直接拿來判定 shade-cost 或搜尋漏解。";
     else if (searchMissConfirmed) interpretation = "已確認搜尋漏解：同一 OSM graph、同一日照成本模型中，手繪 ordered map-match 路徑符合繞路上限且直接日照更少。";
-    else if (Number.isFinite(autoSunS)) interpretation = "手繪 ordered map-match 路徑在 graph 中連通，但用搜尋器自己的 edge 日照模型計分後，未證明比目前自動解更少曬；此時才應檢查 graph edge shade 與最終高精度 ShadeMap 評分差異。";
+    else if (shadeCostAudit?.materialMismatch) interpretation = "同一條 ordered graph path 在搜尋用 coarse edge sampler 與 10 m dense ShadeMap 重算之間有實質日照差異；優先追 shade-cost 採樣／時間模型。";
+    else if (Number.isFinite(autoSunS)) interpretation = "同一條 ordered graph path 的 coarse edge 日照與 10 m dense ShadeMap 大致一致；若它仍與手繪路線最終曝曬差很多，優先懷疑 map-match 幾何而不是 shade-cost。";
     return {
       available: true,
       connected: true,
@@ -3265,7 +3421,15 @@
       mapMatchMaxDistanceM: path.coverage?.maxDistanceM ?? null,
       mapMatchScore: path.mapMatchScore ?? null,
       minCoverage,
-      fidelityThresholdM: path.mapMatchAttempt?.fidelityThresholdM ?? null,
+      fidelityThresholdM,
+      strictFidelityAccepted,
+      strictCorridorAudit: strictCorridorAuditAccepted,
+      strictCorridorAudits: strictCorridorAuditsAccepted,
+      thresholdDeltaAudit: thresholdDeltaAuditAccepted,
+      endpointSnapCounterfactualAudit: endpointSnapCounterfactualAuditAccepted,
+      corridorComponentTraceAudit: corridorComponentTraceAuditAccepted,
+      rawOsmJunctionAudit: rawOsmJunctionAuditAccepted,
+      shadeCostAudit,
       firstDivergence: path.mapMatchAttempt?.firstDivergence || null,
       switchedToNearbyParallel: Boolean(path.mapMatchAttempt?.switchedToNearbyParallel),
       directSunSeconds: sunS,
@@ -3650,6 +3814,8 @@
       endpointSnapCounterfactualAudit,
       faithfulCorridorComponentTraceAudit,
       rawOsmJunctionAudit,
+      reconcilePathShadeCost,
+      denseShadeSegmentsForPath,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
