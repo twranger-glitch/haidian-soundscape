@@ -1,14 +1,14 @@
 /*
- * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev24
+ * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev25
  *
  * Loads preprocessed Overture / NLMA / Tainan evidence, renders optional map
  * overlays, and classifies source-gap junction evidence. This module never
- * mutates the production pedestrian graph. In dev24 verified evidence may expose source-following routable witnesses to the isolated experimental router, while every cross-source junction remains productionAllowed=false by design.
+ * mutates the production pedestrian graph. In dev25 verified evidence may expose source-following routable witnesses to the isolated experimental router, while every cross-source junction remains productionAllowed=false by design.
  */
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev24";
+  const VERSION = "v9.0.0-dev25";
   const DEFAULTS = {
     enabled: true,
     evidenceIndexUrl: "./data/multisource/evidence-index.json",
@@ -94,7 +94,7 @@
       reason = "幾何看似連續，但缺少足夠獨立 provenance 或明確 topology。";
     } else if (proximityOnly) {
       decision = "manual-review";
-      reason = "只有 proximity / geometry-near 證據；dev24 仍禁止以距離自動補橋。";
+      reason = "只有 proximity / geometry-near 證據；dev25 仍禁止以距離自動補橋。";
     }
 
     return {
@@ -106,7 +106,7 @@
       gradeSeparationConflict: gradeConflict,
       accessConflict,
       productionAllowed: false,
-      productionReason: "dev24 production lock: evidence may be used only by the isolated experimental graph; production mutation remains disabled."
+      productionReason: "dev25 production lock: evidence may be used only by the isolated experimental graph; production mutation remains disabled."
     };
   }
 
@@ -306,7 +306,7 @@
         };
       }),
       interpretation: verified.length
-        ? "Verified junction evidence is available. Only independently sourced, explicitly pedestrian-allowed preferredFusionWitness geometry may enter the isolated dev24 experimental graph; production routing is unchanged."
+        ? "Verified junction evidence is available. Only independently sourced, explicitly pedestrian-allowed preferredFusionWitness geometry may enter the isolated dev25 experimental graph; production routing is unchanged."
         : "No verified cross-source junction is available; production and experimental connector insertion both remain empty."
     };
   }

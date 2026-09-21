@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev24 Experimental Multi-source Fusion
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev25 Verified Fused Route Comparison
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev24";
+  const VERSION = "v9.0.0-dev25";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -33,6 +33,11 @@
     exploreCandidates: false,
     exploreMaxRoutes: 6,
     maxScoredCandidates: 10,
+    // dev25: automatically compare the detached verified-fusion min-sun route
+    // alongside production/provider/manual candidates. This never mutates production.
+    autoCompareVerifiedFusion: true,
+    fusionFidelityThresholdM: 14,
+    fusionFidelitySampleM: 10,
     // dev5 route-quality guard: shaded dead-ends / out-and-back loops never count as a benefit.
     routeQualityEnabled: true,
     routeQualitySampleM: 8,
@@ -897,9 +902,9 @@
     const out = [];
     for (const candidate of candidates || []) {
       if (!candidate?.points?.length) continue;
-      if (candidate.kind === 'manual') { out.push(candidate); continue; }
+      if (candidate.kind === 'manual' || candidate.kind === 'experimental-fused') { out.push(candidate); continue; }
       const duplicate = out.some((existing) => {
-        if (existing.kind === 'manual') return false;
+        if (existing.kind === 'manual' || existing.kind === 'experimental-fused') return false;
         const distanceClose = Math.abs((Number(existing.distanceM) || 0) - (Number(candidate.distanceM) || 0)) < 25;
         return distanceClose && routeSimilarityM(existing, candidate) < 35;
       });
@@ -1147,7 +1152,7 @@
     const qualityValid = qualityChecked.filter((c) => c?.routeQuality?.valid !== false);
     const rejectedQuality = qualityChecked.filter((c) => c?.routeQuality?.valid === false);
     if (!qualityValid.length) throw new Error("候選路線都有明顯折返或重複走廊，已全部淘汰。請重新設定 A、B。");
-    const baselineCandidates = qualityValid.filter((c) => c?.kind !== "manual");
+    const baselineCandidates = qualityValid.filter((c) => c?.kind !== "manual" && c?.kind !== "experimental-fused");
     const fastest = (baselineCandidates.length ? baselineCandidates : qualityValid).reduce((best, c) => {
       if (!best) return c;
       const d = Number(c.distanceM) || Infinity;
@@ -1158,7 +1163,7 @@
     let eligible = qualityValid.filter((c) => candidateWithinDetour(c, fastest, detourPct));
     const maxScored = clamp(config.maxScoredCandidates, 2, 14, 10);
     if (eligible.length > maxScored) {
-      const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual").map((c) => c.id)].filter(Boolean));
+      const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual" || c.kind === "experimental-fused").map((c) => c.id)].filter(Boolean));
       const chosen = [];
       for (const c of eligible) if (mustKeep.has(c.id) && !chosen.some((x) => x.id === c.id)) chosen.push(c);
       for (const c of eligible) {
@@ -1168,11 +1173,14 @@
       eligible = chosen;
     }
     const eligibleIds = new Set(eligible.map((c) => c.id));
-    // Even when a hand-drawn route is just outside the detour cap, score it once
-    // so the user can inspect it and understand the trade-off instead of having
-    // it silently disappear from the comparison UI.
-    const manualOutside = qualityChecked.filter((c) => c?.kind === "manual" && c?.routeQuality?.valid !== false && !eligibleIds.has(c.id));
-    const scoringPool = eligible.concat(manualOutside);
+    // Even when a user-drawn or verified-fusion route is just outside the detour
+    // cap, score it once so the user can inspect the trade-off instead of having
+    // an evidence-backed comparison silently disappear from the UI.
+    const comparisonOutside = qualityChecked.filter((c) =>
+      (c?.kind === "manual" || c?.kind === "experimental-fused") &&
+      c?.routeQuality?.valid !== false && !eligibleIds.has(c.id)
+    );
+    const scoringPool = eligible.concat(comparisonOutside);
     const scored = [];
     for (let i = 0; i < scoringPool.length; i += 1) {
       if (serial !== analysisSerial) throw new Error("ROUTE_ANALYSIS_CANCELLED");
@@ -1219,6 +1227,7 @@
   }
 
   function candidateName(candidate, bundle) {
+    if (candidate?.kind === "experimental-fused") return "官方資料融合最不曬";
     if (candidate?.kind === "graph-shade") return "OSM Graph 最不曬候選";
     if (candidate?.kind === "graph-fastest") return "OSM Graph 最快";
     if (candidate?.kind === "manual") return "我的手繪路線";
@@ -1231,6 +1240,164 @@
     return `替代路線 ${providers.findIndex((c) => c.id === candidate.id) + 1}`;
   }
 
+
+  function directionalRouteFidelity(sourcePoints, targetPoints, options = {}) {
+    const source = (sourcePoints || []).map(asLatLng).filter(Boolean);
+    const target = (targetPoints || []).map(asLatLng).filter(Boolean);
+    const thresholdM = clamp(options.thresholdM, 2, 60, config.fusionFidelityThresholdM || 14);
+    const sampleM = clamp(options.sampleM, 4, 30, config.fusionFidelitySampleM || 10);
+    if (source.length < 2 || target.length < 2) {
+      return { available: false, reason: "route-too-short", thresholdM, sampleM };
+    }
+    const samples = buildSampleSegments(source, sampleM);
+    const totalM = samples.reduce((sum, seg) => sum + Number(seg.lengthM || 0), 0);
+    if (!(totalM > 0)) return { available: false, reason: "route-too-short", thresholdM, sampleM };
+    let coveredM = 0, weightedDistance = 0, maxDistanceM = 0, firstDivergence = null;
+    for (const seg of samples) {
+      const hit = nearestPointOnRoute(target, seg.sample);
+      const distanceM = Number(hit?.distanceM);
+      if (!Number.isFinite(distanceM)) continue;
+      weightedDistance += distanceM * seg.lengthM;
+      maxDistanceM = Math.max(maxDistanceM, distanceM);
+      if (distanceM <= thresholdM) coveredM += seg.lengthM;
+      else if (!firstDivergence) {
+        firstDivergence = {
+          progressRatio: totalM > 0 ? seg.cumulativeMidM / totalM : 0,
+          point: { lat: seg.sample.lat, lng: seg.sample.lng },
+          distanceM
+        };
+      }
+    }
+    return {
+      available: true,
+      thresholdM,
+      sampleM,
+      distanceM: totalM,
+      coveredDistanceM: coveredM,
+      coverageRatio: totalM > 0 ? coveredM / totalM : 0,
+      averageDistanceM: totalM > 0 ? weightedDistance / totalM : Infinity,
+      maxDistanceM,
+      firstDivergence
+    };
+  }
+
+  function compareRouteFidelity(fusedPoints, manualPoints, options = {}) {
+    const fusedToManual = directionalRouteFidelity(fusedPoints, manualPoints, options);
+    const manualToFused = directionalRouteFidelity(manualPoints, fusedPoints, options);
+    if (!fusedToManual.available || !manualToFused.available) {
+      return { available: false, reason: "route-too-short", fusedToManual, manualToFused };
+    }
+    return {
+      available: true,
+      thresholdM: fusedToManual.thresholdM,
+      sampleM: fusedToManual.sampleM,
+      // Conservative symmetric coverage: both routes must agree, not only one
+      // short route sitting inside a longer one.
+      coverageRatio: Math.min(fusedToManual.coverageRatio, manualToFused.coverageRatio),
+      commonCorridorM: Math.min(fusedToManual.coveredDistanceM, manualToFused.coveredDistanceM),
+      averageDistanceM: (fusedToManual.averageDistanceM + manualToFused.averageDistanceM) / 2,
+      maxDistanceM: Math.max(fusedToManual.maxDistanceM, manualToFused.maxDistanceM),
+      firstDivergence: fusedToManual.firstDivergence || manualToFused.firstDivergence || null,
+      fusedToManual,
+      manualToFused
+    };
+  }
+
+  function experimentalFusionCandidateFromRun(result, speedMps) {
+    const route = result?.search?.minSun;
+    const points = (route?.points || []).map(asLatLng).filter(Boolean);
+    if (!result?.available || points.length < 2) return null;
+    const distanceM = routeDistanceM(points);
+    const safeSpeed = Math.max(0.4, Number(speedMps) || config.walkingSpeedKmh / 3.6);
+    return {
+      id: "experimental-fused-minsun",
+      kind: "experimental-fused",
+      label: "官方資料融合最不曬",
+      providerIndex: null,
+      distanceM,
+      durationS: Number(route.durationS) || distanceM / safeSpeed,
+      points,
+      raw: null,
+      experimentalFusion: {
+        version: result.version || null,
+        connectorCount: Number(result.overlay?.connectorCount || 0),
+        verifiedCandidateCount: Number(result.overlay?.verifiedCandidateCount || 0),
+        connectorIds: (result.overlay?.connectors || []).map((c) => c.edgeId).filter(Boolean),
+        gapIds: (result.overlay?.connectors || []).map((c) => c.gapId).filter(Boolean),
+        sources: [...new Set((result.overlay?.connectors || []).map((c) => c.source).filter(Boolean))],
+        coarseDirectSunSeconds: Number.isFinite(Number(route.directSunSeconds)) ? Number(route.directSunSeconds) : null,
+        coarseWalkSeconds: Number.isFinite(Number(route.walkSeconds)) ? Number(route.walkSeconds) : Number(route.durationS) || null,
+        productionGraphMutated: result.productionGraphMutated === true,
+        productionMutationEnabled: result.productionMutationEnabled === true
+      }
+    };
+  }
+
+  async function buildAutomaticExperimentalFusionCandidate(options = {}) {
+    if (config.autoCompareVerifiedFusion === false) return { candidate: null, status: { available: false, reason: "disabled" } };
+    const evidenceApi = window.HaidianMultiSourceEvidence;
+    const fusionApi = window.HaidianExperimentalFusionRouter;
+    if (!evidenceApi || !fusionApi) return { candidate: null, status: { available: false, reason: "fusion-modules-unavailable" } };
+    let evidenceState = evidenceApi.getState?.();
+    if (evidenceState?.status !== "ready") evidenceState = await evidenceApi.loadEvidence?.();
+    if (evidenceState?.status !== "ready") {
+      return { candidate: null, status: { available: false, reason: evidenceState?.error || "evidence-not-ready" } };
+    }
+    if (!Number(evidenceState?.fusionPlan?.routableWitnessCount || 0)) {
+      return { candidate: null, status: { available: false, reason: "no-routable-verified-witness" } };
+    }
+    const result = await fusionApi.runFromLastProductionGraph(Object.assign({}, options, { renderOnMap: false }));
+    const candidate = experimentalFusionCandidateFromRun(result, options.speedMps);
+    return {
+      candidate,
+      result,
+      status: {
+        available: Boolean(candidate),
+        reason: candidate ? null : (result?.reason || result?.search?.reason || "experimental-fusion-unavailable"),
+        connectorCount: Number(result?.overlay?.connectorCount || 0),
+        productionGraphMutated: result?.productionGraphMutated === true
+      }
+    };
+  }
+
+  function buildFusionManualComparison(bundle) {
+    const fused = (bundle?.scored || []).find((c) => c.kind === "experimental-fused");
+    const manual = (bundle?.scored || []).find((c) => c.kind === "manual");
+    if (!fused?.analysis || !manual?.analysis) return null;
+    const fidelity = compareRouteFidelity(fused.points, manual.points, {
+      thresholdM: config.fusionFidelityThresholdM,
+      sampleM: config.fusionFidelitySampleM
+    });
+    if (!fidelity.available) return null;
+    return {
+      available: true,
+      fidelity,
+      fusedId: fused.id,
+      manualId: manual.id,
+      distanceDeltaM: Number(fused.analysis.summary.totalDistanceM || 0) - Number(manual.analysis.summary.totalDistanceM || 0),
+      sunDeltaSeconds: Number(fused.analysis.summary.directSunSeconds || 0) - Number(manual.analysis.summary.directSunSeconds || 0),
+      fusedDirectSunSeconds: Number(fused.analysis.summary.directSunSeconds || 0),
+      manualDirectSunSeconds: Number(manual.analysis.summary.directSunSeconds || 0),
+      connectorCount: Number(fused.experimentalFusion?.connectorCount || 0),
+      productionGraphMutated: fused.experimentalFusion?.productionGraphMutated === true
+    };
+  }
+
+  function fusionManualComparisonHtml(bundle) {
+    const c = bundle?.fusionManualComparison;
+    if (!c?.available) return "";
+    const f = c.fidelity;
+    const pct = Math.round(Number(f.coverageRatio || 0) * 100);
+    const ftm = Math.round(Number(f.fusedToManual?.coverageRatio || 0) * 100);
+    const mtf = Math.round(Number(f.manualToFused?.coverageRatio || 0) * 100);
+    const sunDeltaMin = c.sunDeltaSeconds / 60;
+    const distDelta = c.distanceDeltaM;
+    const divergence = f.firstDivergence;
+    const divergenceText = divergence
+      ? `第一個超過 ${Number(f.thresholdM).toFixed(0)} m 的偏離約在融合路線 ${Math.round(Number(divergence.progressRatio || 0) * 100)}%（${Number(divergence.distanceM || 0).toFixed(1)} m）。`
+      : `整條採樣均落在 ${Number(f.thresholdM).toFixed(0)} m 門檻內。`;
+    return `<div class="re-fusion-compare"><b>dev25 官方融合 ↔ 手繪 fidelity</b><span>保守雙向貼合 <strong>${pct}%</strong>（融合→手繪 ${ftm}%／手繪→融合 ${mtf}%）；共同走廊約 ${Math.round(Number(f.commonCorridorM || 0))} m。</span><span>雙向平均偏移 ${Number(f.averageDistanceM || 0).toFixed(1)} m；最大偏移 ${Number(f.maxDistanceM || 0).toFixed(1)} m。${escapeHtml(divergenceText)}</span><span>同一套 dense ShadeMap：融合 ${formatMinutes(c.fusedDirectSunSeconds)}、手繪 ${formatMinutes(c.manualDirectSunSeconds)}；融合相差 ${sunDeltaMin >= 0 ? "+" : ""}${sunDeltaMin.toFixed(1)} 分，距離相差 ${distDelta >= 0 ? "+" : ""}${Math.round(distDelta)} m。</span><span>${c.connectorCount} 個 verified official witness；productionGraphMutated=${c.productionGraphMutated ? "true" : "false"}。</span></div>`;
+  }
 
   function clearMatureEngineOverlay() {
     engineCrossCheckVisible = false;
@@ -2064,16 +2231,16 @@
 
   function multiSourcePanelHtml() {
     const api = window.HaidianMultiSourceEvidence;
-    if (!api) return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>模組未載入；production graph 未修改。</span></div>';
+    if (!api) return '<div class="re-multisource-note" data-re-multisource><b>dev25 Multi-source Evidence</b><span>模組未載入；production graph 未修改。</span></div>';
     const st = api.getState();
     if (st.status === 'idle') {
-      return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>OSM 仍是 production base graph；外部來源只作 provenance/evidence，不做 proximity 自動補橋。</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>載入多來源證據矩陣</button></div></div>';
+      return '<div class="re-multisource-note" data-re-multisource><b>dev25 Multi-source Evidence</b><span>OSM 仍是 production base graph；外部來源只作 provenance/evidence，不做 proximity 自動補橋。</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>載入多來源證據矩陣</button></div></div>';
     }
     if (st.status === 'loading') {
-      return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>正在讀取預處理 AOI evidence index…</span></div>';
+      return '<div class="re-multisource-note" data-re-multisource><b>dev25 Multi-source Evidence</b><span>正在讀取預處理 AOI evidence index…</span></div>';
     }
     if (st.status === 'error') {
-      return `<div class="re-multisource-note is-error" data-re-multisource><b>dev24 Multi-source Evidence</b><span>讀取失敗：${escapeHtml(st.error || 'unknown')}</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>重試</button></div></div>`;
+      return `<div class="re-multisource-note is-error" data-re-multisource><b>dev25 Multi-source Evidence</b><span>讀取失敗：${escapeHtml(st.error || 'unknown')}</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>重試</button></div></div>`;
     }
 
     const sourceOrder = ['overture-segments','overture-connectors','nlma-sidewalk','nlma-bikeway','tainan-sidewalk','tainan-bikeway','source-gaps'];
@@ -2094,7 +2261,7 @@
         ['臺南人行道', multiSourceGapSourceText(gap.sources?.['tainan-sidewalk'])],
         ['臺南自行車道', multiSourceGapSourceText(gap.sources?.['tainan-bikeway'])]
       ].map(([name, value]) => `<div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(value)}</span></div>`).join('');
-      return `<details class="re-evidence-gap"><summary>${escapeHtml(gap.id || 'gap')} · ${Number(gap.geometryGapM || 0).toFixed(1)}m · <b>${escapeHtml(gap.decision || 'unknown')}</b></summary><div class="re-evidence-matrix">${rows}</div><p>${escapeHtml(gap.decisionReason || '')}</p><p><strong>productionAllowed=false</strong> · ${escapeHtml(gap.productionReason || 'dev24 production lock')}</p></details>`;
+      return `<details class="re-evidence-gap"><summary>${escapeHtml(gap.id || 'gap')} · ${Number(gap.geometryGapM || 0).toFixed(1)}m · <b>${escapeHtml(gap.decision || 'unknown')}</b></summary><div class="re-evidence-matrix">${rows}</div><p>${escapeHtml(gap.decisionReason || '')}</p><p><strong>productionAllowed=false</strong> · ${escapeHtml(gap.productionReason || 'dev25 production lock')}</p></details>`;
     }).join('');
 
     const summary = st.evidenceIndex?.summary || {};
@@ -2116,14 +2283,14 @@
       fusionResult = `最近一次 experimental run 未成立：${lastRun.reason}；production graph 未修改。`;
     }
     const fusionButton = fusionApi
-      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev24 experimental fused graph (${routable})`}</button>`
+      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev25 experimental fused graph (${routable})`}</button>`
       : '';
     const witnessNotes = (st.evidenceIndex?.gaps || []).map((gap) => {
       const w = gap.preferredFusionWitness;
       if (!w) return '';
       return `<p class="re-fusion-note"><strong>${escapeHtml(gap.id || 'gap')} pedestrian witness：</strong>${escapeHtml(w.source || 'unknown')} · ${escapeHtml(w.evidenceType || 'unknown')} · pedestrianAllowed=${w.pedestrianAllowed === true ? 'true' : 'false'} · productionAllowed=false</p>`;
     }).join('');
-    return `<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p></div>`;
+    return `<div class="re-multisource-note" data-re-multisource><b>dev25 Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p></div>`;
   }
 
   function refreshMultiSourcePanel() {
@@ -2137,14 +2304,14 @@
 
   async function loadMultiSourceEvidence() {
     const api = window.HaidianMultiSourceEvidence;
-    if (!api) return setStatus('dev24 multi-source evidence 模組未載入。', 'warning');
+    if (!api) return setStatus('dev25 multi-source evidence 模組未載入。', 'warning');
     refreshMultiSourcePanel();
     setStatus('正在載入預處理 multi-source evidence index；不會修改 production graph…', 'loading');
     const result = await api.loadEvidence();
     refreshMultiSourcePanel();
     if (result.status === 'ready') {
       const u = Number(result.evidenceIndex?.summary?.unbound || 0);
-      setStatus(u ? `dev24 證據矩陣已載入；目前仍有 ${u} 個 gap 含未綁定來源，這些是未知，不是負證據。` : 'dev24 證據矩陣已載入；production graph 保持不變。', u ? 'warning' : 'ok');
+      setStatus(u ? `dev25 證據矩陣已載入；目前仍有 ${u} 個 gap 含未綁定來源，這些是未知，不是負證據。` : 'dev25 證據矩陣已載入；production graph 保持不變。', u ? 'warning' : 'ok');
     } else {
       setStatus(`multi-source evidence 載入失敗：${result.error || 'unknown'}`, 'warning');
     }
@@ -2164,7 +2331,7 @@
     const evidenceApi = window.HaidianMultiSourceEvidence;
     const fusionApi = window.HaidianExperimentalFusionRouter;
     if (!evidenceApi || !fusionApi) {
-      setStatus('dev24 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
+      setStatus('dev25 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
       return;
     }
     let evidenceState = evidenceApi.getState?.();
@@ -2185,9 +2352,10 @@
     if (button) button.disabled = true;
     try {
       await ensureShadeReady();
-      setStatus('dev24：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
+      setStatus('dev25：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
       let lastUiAt = 0;
       const result = await fusionApi.runFromLastProductionGraph({
+        renderOnMap: true,
         departure: departureDateFromPanel(),
         speedMps: speedMpsFromPanel(),
         detourPct: detourCapFromPanel(),
@@ -2201,22 +2369,22 @@
           const now = Date.now();
           if (now - lastUiAt < 180) return;
           lastUiAt = now;
-          if (info?.message) setStatus(`dev24 experimental：${info.message}`, 'loading');
+          if (info?.message) setStatus(`dev25 experimental：${info.message}`, 'loading');
         }
       });
       refreshMultiSourcePanel();
       if (!result?.available) {
         const reason = result?.reason || result?.search?.reason || 'experimental-fusion-unavailable';
-        setStatus(`dev24 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
+        setStatus(`dev25 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
         return;
       }
       const connectorCount = Number(result.overlay?.connectorCount || 0);
       const minSun = result.search?.minSun;
       const sunS = Number(minSun?.directSunSeconds);
-      setStatus(`dev24 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
+      setStatus(`dev25 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
     } catch (error) {
       refreshMultiSourcePanel();
-      setStatus(`dev24 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev25 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     } finally {
       const b = panel?.querySelector('[data-re-multisource-fusion-run]');
       if (b) b.disabled = false;
@@ -2231,6 +2399,7 @@
       const detour = candidateDetourPct(c, bundle);
       const badges = [];
       if (c.kind === 'manual') badges.push('<em class="manual">手繪</em>');
+      if (c.kind === 'experimental-fused') badges.push('<em class="fusion">官方融合</em>');
       if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
       if (c.kind === 'graph-shade' || c.kind === 'graph-fastest') badges.push('<em class="graph">OSM Graph</em>');
       if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">最不曬</em>');
@@ -2239,7 +2408,7 @@
       return `<button type="button" class="re-candidate${c.id === activeId ? " is-selected" : ""}" data-re-candidate-id="${escapeHtml(c.id)}" aria-pressed="${c.id === activeId ? "true" : "false"}">
         <div class="re-candidate-title"><b>${escapeHtml(candidateName(c, bundle))}</b><span>${badges.join('')}</span></div>
         <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>${s.daylightDistanceM <= 0.01 && s.nightDistanceM > 0 ? "夜間 100%" : `遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}`}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
-        <small>${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
+        <small>${c.kind === "experimental-fused" ? `${Number(c.experimentalFusion?.connectorCount || 0)} 個 verified witness · productionGraphMutated=${c.experimentalFusion?.productionGraphMutated === true ? "true" : "false"} · ` : ""}${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
       </button>`;
     }).join('');
 
@@ -2277,7 +2446,7 @@
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
-      ${notice}${graphNote}${multiSourcePanelHtml()}${manualState}${qualityNote}${rows}
+      ${notice}${graphNote}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -2288,11 +2457,12 @@
     for (const candidate of bundle.scored || []) {
       if (!candidate?.points?.length || candidate.id === activeId) continue;
       const isManual = candidate.kind === 'manual';
+      const isFusion = candidate.kind === 'experimental-fused';
       window.L.polyline(candidate.points, {
-        color: isManual ? '#be123c' : '#64748b',
-        weight: isManual ? 4 : 3,
-        opacity: isManual ? 0.48 : 0.28,
-        dashArray: isManual ? '8 7' : '5 7',
+        color: isManual ? '#be123c' : (isFusion ? '#0f766e' : '#64748b'),
+        weight: (isManual || isFusion) ? 4 : 3,
+        opacity: isManual ? 0.48 : (isFusion ? 0.5 : 0.28),
+        dashArray: isManual ? '8 7' : (isFusion ? '11 6' : '5 7'),
         interactive: false
       }).addTo(comparisonLayer);
     }
@@ -2309,6 +2479,7 @@
     const title = isBest ? `最不曬：${activeName}` : `正在查看：${activeName}`;
     const eyebrow = bundle.comparisonValid ? `已分析 ${bundle.scored.length} 條路線 · 點下方卡片切換` : '候選不足，先顯示曝曬分析';
     el.innerHTML = resultHtml(active.analysis, { title, eyebrow }) + candidatesHtml(bundle);
+    try { window.HaidianExperimentalFusionRouter?.clearMapLayer?.(); } catch (_) {}
     clearLayer(drawLayer);
     renderCandidateOutlines(bundle, active.id);
     renderAnalyzedRoute(active.analysis, { fit: options.fit !== false && config.fitCandidateRoute !== false, weight: 7 });
@@ -2503,11 +2674,36 @@
       if (serial !== analysisSerial) return;
 
       const manualMatch = buildManualCandidate(aPoint, bPoint, speedMps);
+      let experimentalFusion = { candidate: null, status: { available: false, reason: "not-run" } };
+      if (graphResult?.available !== false && graphCandidates.length && config.autoCompareVerifiedFusion !== false) {
+        try {
+          setStatus("dev25：正在 detached graph 產生 verified official-fusion min-sun 候選…", "loading");
+          experimentalFusion = await buildAutomaticExperimentalFusionCandidate({
+            departure,
+            speedMps,
+            detourPct,
+            shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
+            canopyTimeoutMs: config.canopyTimeoutMs,
+            maxExpandedStates: config.graphRouting?.maxExpandedStates,
+            maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
+            cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
+            yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded,
+            shouldCancel: () => serial !== analysisSerial
+          });
+        } catch (fusionError) {
+          experimentalFusion = { candidate: null, status: { available: false, reason: fusionError?.message || String(fusionError) } };
+          console.warn("[Haidian dev25 fusion] automatic comparison unavailable", fusionError);
+        }
+      }
+      if (serial !== analysisSerial) return;
       const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, exploratoryCandidates));
       if (manualMatch?.matched && manualMatch.candidate) candidates.push(manualMatch.candidate);
+      // Keep the historical five-card ordering stable; verified fusion is the
+      // additional dev25 comparison card rather than silently replacing/reordering one.
+      if (experimentalFusion?.candidate) candidates.push(experimentalFusion.candidate);
       lastCandidates = candidates;
 
-      setStatus(`正在用實際到達時間重新精算 ${candidates.length} 條候選的 ShadeMap 曝曬…`, "loading");
+      setStatus(`正在用同一套 dense ShadeMap 重新精算 ${candidates.length} 條候選的曝曬…`, "loading");
       const bundle = await scoreCandidates(candidates, {
         serial,
         departure,
@@ -2518,6 +2714,9 @@
       if (serial !== analysisSerial) return;
       bundle.manualMatch = manualMatch;
       bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn" && candidate.eligible !== false);
+      bundle.experimentalFusion = experimentalFusion;
+      bundle.experimentalFusionStatus = experimentalFusion?.status || null;
+      bundle.fusionManualComparison = buildFusionManualComparison(bundle);
       bundle.graphDiagnostics = graphResult?.diagnostics || null;
       bundle.graphError = graphResult?.error || null;
       bundle.graphDebugAvailable = Boolean(window.HaidianPedestrianGraph?.getDebugSnapshot?.()?.edges?.length);
@@ -2534,7 +2733,8 @@
       renderCandidateBundle(bundle);
       if (bundle.comparisonValid) {
         const graphText = bundle.graphDiagnostics ? "；已加入 v9 OSM Graph 直接搜尋結果" : "";
-        setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}。下方可逐條點選切換地圖。`, "ok");
+        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev25 verified official-fusion 候選" : "";
+        setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}。下方可逐條點選切換地圖。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
         setStatus(`目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。${suffix}`, "warning");
@@ -2718,7 +2918,7 @@
       .re-advanced{margin-top:11px;border-top:1px solid #edf2f1;padding-top:9px}.re-advanced summary,.re-export summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.re-bottom-actions{display:flex;justify-content:center;margin-top:12px}.re-link-btn{border:0;background:transparent;color:#64748b;padding:7px 10px;text-decoration:underline;text-underline-offset:3px}.re-cancel-wrap{margin-top:10px;padding:9px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:12px;font-weight:800}.re-cancel-wrap button{margin-left:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#1d4ed8;font-weight:900;cursor:pointer}
       .re-status{margin:12px 0 0;padding:10px 11px;border-radius:10px;background:#f8fafc;color:#475569;font-size:13px;font-weight:750;line-height:1.55}.re-status[data-tone="error"]{background:#fff1f2;color:#be123c}.re-status[data-tone="ok"]{background:#ecfdf5;color:#047857}.re-status[data-tone="loading"]{background:#eff6ff;color:#1d4ed8}.re-status[data-tone="drawing"]{background:#fffbeb;color:#a16207}.re-status[data-tone="warning"]{background:#fff7ed;color:#9a3412}
       .re-results{margin-top:12px}.re-result-card{padding:13px;border:1px solid #dce9e7;border-radius:16px;background:linear-gradient(145deg,#fff,#f7fbfa)}.re-result-eyebrow{color:#0f766e;font-size:11.5px;font-weight:900;letter-spacing:.04em}.re-result-card h3{margin:5px 0 12px;color:#123f46;font-size:17px}.re-result-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}.re-result-hero>div{padding:12px;border-radius:13px}.re-result-hero span{display:block;font-size:12px;font-weight:850}.re-result-hero b{display:block;margin-top:3px;font-size:24px}.re-result-hero .shade{background:#ecfdf5;color:#047857}.re-result-hero .night{background:#f1f5f9;color:#475569}.re-result-hero .sun{background:#fff7ed;color:#c2410c}.re-result-sentence{margin:11px 0 0;color:#334155;font-size:13.5px;line-height:1.6}.re-result-details{margin-top:10px}.re-result-details summary{cursor:pointer;color:#64748b;font-size:12px;font-weight:850}.re-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:8px}.re-summary-grid>div{padding:9px 7px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.re-summary-grid span{display:block;color:#64748b;font-size:11.5px;font-weight:800}.re-summary-grid b{display:block;margin-top:3px;color:#0f3d46;font-size:14px}.re-note,.re-warn,.re-heat{margin-top:9px;padding:10px 11px;border-radius:10px;font-size:12px;line-height:1.55;font-weight:700}.re-note{background:#f1f5f9;color:#475569}.re-note--manual{background:#fff1f2;color:#9f1239}.re-warn{background:#fff7ed;color:#9a3412}.re-heat{display:grid;gap:3px;background:#fff7ed;color:#9a3412}.re-heat small{color:#7c5a45}
-      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
+      .re-candidates{margin-top:11px}.re-candidate-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:#334155;font-size:13px}.re-candidate-head span{color:#64748b;font-size:11.5px}.re-candidate-alert,.re-candidate-success{display:grid;gap:5px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.55}.re-candidate-alert{background:#fff7ed;color:#9a3412}.re-candidate-success{background:#ecfdf5;color:#047857}.re-quality-note{margin-top:8px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#475569;font-size:12.5px;line-height:1.55;font-weight:750}.re-candidate-alert button{justify-self:start;margin-top:3px;padding:6px 8px;border:1px solid #fdba74;background:#fff;color:#9a3412}.re-candidate{width:100%;display:grid;gap:5px;padding:12px;margin-top:8px;border:1px solid #dbe5e4;border-radius:12px;background:#fff;text-align:left;font:inherit;cursor:pointer;transition:.16s}.re-candidate:hover{border-color:#5eead4;box-shadow:0 6px 16px rgba(15,118,110,.10);transform:translateY(-1px)}.re-candidate.is-selected{border-color:#10b981;background:#ecfdf5;box-shadow:0 0 0 2px rgba(16,185,129,.10)}.re-candidate-title{display:flex;justify-content:space-between;gap:8px}.re-candidate-title b{font-size:14px;color:#0f766e}.re-candidate-title em{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:10px;font-style:normal;font-weight:900}.re-candidate-title em.best{background:#dcfce7;color:#166534}.re-candidate-title em.manual{background:#ffe4e6;color:#9f1239}.re-candidate-title em.explore{background:#e0f2fe;color:#0369a1}.re-candidate-title em.graph{background:#ede9fe;color:#6d28d9}.re-candidate-title em.fusion{background:#ccfbf1;color:#0f766e}.re-candidate-title em.over{background:#ffedd5;color:#9a3412}.re-candidate-title em.viewing{background:#ccfbf1;color:#115e59}.re-candidate-metrics{display:flex;flex-wrap:wrap;gap:10px;color:#334155;font-size:12.5px;font-weight:750}.re-candidate small{color:#64748b;font-size:11.5px;line-height:1.45}.re-graph-note{display:grid;gap:4px;margin:8px 0;padding:10px 11px;border-radius:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;font-size:12.5px;line-height:1.5}.re-graph-note b{font-size:13px}.re-fusion-compare{display:grid;gap:5px;margin:9px 0;padding:11px;border-radius:11px;background:#f0fdfa;border:1px solid #99f6e4;color:#115e59;font-size:12.5px;line-height:1.55}.re-fusion-compare b{font-size:13px;color:#0f766e}.re-method-note{margin-top:9px;color:#64748b;font-size:11px;line-height:1.55}.re-export{margin-top:10px}.re-export div{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}.re-export button{min-height:36px;border:1px solid #cfdedc;background:#fff;color:#0f766e}
       .re-graph-note.is-error{background:#fff7ed;border-color:#fdba74;color:#9a3412}.re-graph-note.is-error .re-graph-actions button{border-color:#fdba74;color:#9a3412}
       .re-graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.re-graph-actions button{min-height:36px;padding:8px 11px;border:1px solid #c4b5fd;border-radius:10px;background:#fff;color:#5b21b6;font-size:12.5px;font-weight:900;cursor:pointer}.re-graph-actions button:hover{background:#f5f3ff}.re-graph-diagnosis{display:grid;gap:5px;margin-top:9px;padding:10px 11px;border-radius:11px;background:#f8fafc;border:1px solid #cbd5e1;color:#334155;font-size:12.5px;line-height:1.5}.re-graph-diagnosis b{font-size:13px}.re-graph-diagnosis span{display:block}.re-graph-diagnosis p{margin:2px 0 0;font-weight:800}.re-graph-diagnosis.is-good{background:#ecfdf5;border-color:#86efac;color:#166534}.re-graph-diagnosis.is-warning{background:#fffbeb;border-color:#fde68a;color:#92400e}.re-graph-diagnosis.is-bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
       .re-time-step{border-color:#99d9cf;background:linear-gradient(145deg,#f0fdfa,#ffffff)}
@@ -3032,7 +3232,11 @@
       dedupeCandidates,
       fetchExploratoryCandidates,
       evaluateRouteQuality,
-      applyRouteQuality
+      applyRouteQuality,
+      directionalRouteFidelity,
+      compareRouteFidelity,
+      experimentalFusionCandidateFromRun,
+      buildFusionManualComparison
     }
   };
 

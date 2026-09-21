@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev24
+ * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev25
  *
  * Safety model:
  * - consumes only evidence gaps already classified `verified`;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev24";
+  const VERSION = "v9.0.0-dev25";
   const DEFAULTS = {
     enabled: true,
     sourceAttachMaxM: 18,
@@ -149,15 +149,15 @@
 
     const parts = splitGeometryAtHit(edge.geometry, hit);
     if (!parts || parts.left.length < 2 || parts.right.length < 2) return { ok: false, reason: "anchor-split-failed" };
-    const nodeId = `dev24-anchor:${gapId}:${side}`;
+    const nodeId = `dev25-anchor:${gapId}:${side}`;
     graph.nodes.set(nodeId, { id: nodeId, lat: point.lat, lng: point.lng, virtual: true, experimentalFusionAnchor: true, sourceEdgeId: edge.id });
     ensureAdjacency(graph, nodeId);
     removeAdjacencyEdge(graph, edge.a, edge.id);
     removeAdjacencyEdge(graph, edge.b, edge.id);
     graph.edges.delete(edge.id);
     const meta = copyEdgeMeta(edge);
-    const e1 = addClonedEdge(graph, `${edge.id}:dev24a:${gapId}:${side}`, edge.a, nodeId, parts.left, meta);
-    const e2 = addClonedEdge(graph, `${edge.id}:dev24b:${gapId}:${side}`, nodeId, edge.b, parts.right, meta);
+    const e1 = addClonedEdge(graph, `${edge.id}:dev25a:${gapId}:${side}`, edge.a, nodeId, parts.left, meta);
+    const e2 = addClonedEdge(graph, `${edge.id}:dev25b:${gapId}:${side}`, nodeId, edge.b, parts.right, meta);
     if (!e1 || !e2) return { ok: false, reason: "anchor-replacement-edge-failed" };
     return { ok: true, nodeId, point, split: true, edgeId: edge.id, replacementEdgeIds: [e1.id, e2.id] };
   }
@@ -210,12 +210,12 @@
     if (String(fromAnchor.nodeId) === String(toAnchor.nodeId)) return { added: false, gapId, reason: "same-anchor-node" };
 
     const geometry = dedupeGeometry([fromAnchor.point, ...oriented.geometry, toAnchor.point]);
-    const id = `dev24-fused:${gapId}`;
+    const id = `dev25-fused:${gapId}`;
     const edge = addClonedEdge(graph, id, fromAnchor.nodeId, toAnchor.nodeId, geometry, {
       wayIds: [],
       tagsSummary: {
         highway: ["path"], foot: ["yes"],
-        experimental_fusion: ["dev24"],
+        experimental_fusion: ["dev25"],
         evidence_decision: ["verified"],
         evidence_source: safeArray(gap.evidenceSources).map(String)
       },
@@ -297,7 +297,7 @@
       const pts = safeArray(edge?.geometry).map(asLatLng).filter(Boolean);
       if (pts.length >= 2 && window.L.polyline) {
         window.L.polyline(pts.map((p) => [p.lat, p.lng]), { color: "#ea580c", weight: 6, opacity: 0.92, dashArray: "9 5" })
-          .bindTooltip(`dev24 experimental witness · ${c.gapId} · productionAllowed=false`, { sticky: true }).addTo(layer);
+          .bindTooltip(`dev25 experimental witness · ${c.gapId} · productionAllowed=false`, { sticky: true }).addTo(layer);
       }
     }
     const fastest = safeArray(run.search?.fastest?.points).map(asLatLng).filter(Boolean);
@@ -335,7 +335,7 @@
         productionMutationEnabled: false
       };
       state.status = "ready"; state.lastRun = result;
-      if (result.available) renderRun(result);
+      if (result.available && options.renderOnMap !== false) renderRun(result);
       return result;
     } catch (error) {
       state.status = "error"; state.error = String(error?.message || error);
