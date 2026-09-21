@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev24 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev25 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -18,6 +18,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   exploreCandidates: false,
   exploreMaxRoutes: 6,
   maxScoredCandidates: 10,
+  // dev25: expose the detached verified-fusion min-sun path as a normal comparison candidate.
+  autoCompareVerifiedFusion: true,
+  fusionFidelityThresholdM: 14,
+  fusionFidelitySampleM: 10,
   // dev6: reject only true loop-return / reverse repeated-corridor waste; normal street detours remain allowed.
   routeQualityEnabled: true,
   routeQualitySampleM: 8,
@@ -27,10 +31,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev24: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
+  // v9.0.0-dev25: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
-  // dev22–dev24: preprocessed multi-source evidence only. Browser never downloads national archives.
+  // dev22–dev25: preprocessed multi-source evidence only. Browser never downloads national archives.
   // Cross-source connectors remain outside production; only verified source-following witnesses may enter a detached experimental clone.
   multisource: {
     enabled: true,
