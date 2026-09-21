@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev21 Mature Engine Geometry Overlay
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev24 Experimental Multi-source Fusion
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev21";
+  const VERSION = "v9.0.0-dev24";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -2044,6 +2044,185 @@
     }
   }
 
+  function multiSourceStatusLabel(status) {
+    return ({ ready: 'ready', unbound: '未綁定', 'metadata-only': '僅清冊', error: '錯誤', loading: '載入中', idle: '尚未載入' })[status] || String(status || 'unknown');
+  }
+
+  function multiSourceGapSourceText(source) {
+    if (!source) return '—';
+    const availability = source.availability || 'unknown';
+    if (availability === 'unbound') return '未綁定（未知，不等於沒有）';
+    if (source.metadataOnly) return '僅清冊／無可用 graph geometry';
+    const bits = [];
+    if (source.explicitSharedTopology) bits.push('shared connector ✓');
+    if (source.officialContinuousGeometry) bits.push('continuous geometry ✓');
+    if (Number.isFinite(Number(source.nearestFromM))) bits.push(`from ${Number(source.nearestFromM).toFixed(1)}m`);
+    if (Number.isFinite(Number(source.nearestToM))) bits.push(`to ${Number(source.nearestToM).toFixed(1)}m`);
+    if (source.independentProvenance) bits.push('independent provenance ✓');
+    return bits.length ? bits.join(' · ') : availability;
+  }
+
+  function multiSourcePanelHtml() {
+    const api = window.HaidianMultiSourceEvidence;
+    if (!api) return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>模組未載入；production graph 未修改。</span></div>';
+    const st = api.getState();
+    if (st.status === 'idle') {
+      return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>OSM 仍是 production base graph；外部來源只作 provenance/evidence，不做 proximity 自動補橋。</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>載入多來源證據矩陣</button></div></div>';
+    }
+    if (st.status === 'loading') {
+      return '<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence</b><span>正在讀取預處理 AOI evidence index…</span></div>';
+    }
+    if (st.status === 'error') {
+      return `<div class="re-multisource-note is-error" data-re-multisource><b>dev24 Multi-source Evidence</b><span>讀取失敗：${escapeHtml(st.error || 'unknown')}</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>重試</button></div></div>`;
+    }
+
+    const sourceOrder = ['overture-segments','overture-connectors','nlma-sidewalk','nlma-bikeway','tainan-sidewalk','tainan-bikeway','source-gaps'];
+    const sourceButtons = sourceOrder.map((key) => {
+      const src = st.sources?.[key];
+      if (!src) return '';
+      const usable = src.status === 'ready';
+      const label = `${src.visible ? '隱藏' : '顯示'} ${src.label}`;
+      return `<button type="button" data-re-multisource-source="${escapeHtml(key)}" ${usable ? '' : 'disabled'}>${escapeHtml(label)} <small>${escapeHtml(multiSourceStatusLabel(src.status))}</small></button>`;
+    }).join('');
+
+    const gaps = (st.evidenceIndex?.gaps || []).map((gap) => {
+      const rows = [
+        ['OSM', gap.sources?.osm ? `source-gap · ${Number(gap.sources.osm.geometryGapM || gap.geometryGapM || 0).toFixed(1)}m` : '—'],
+        ['Overture', multiSourceGapSourceText(gap.sources?.overture)],
+        ['國土署人行道', multiSourceGapSourceText(gap.sources?.['nlma-sidewalk'])],
+        ['國土署自行車道', multiSourceGapSourceText(gap.sources?.['nlma-bikeway'])],
+        ['臺南人行道', multiSourceGapSourceText(gap.sources?.['tainan-sidewalk'])],
+        ['臺南自行車道', multiSourceGapSourceText(gap.sources?.['tainan-bikeway'])]
+      ].map(([name, value]) => `<div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(value)}</span></div>`).join('');
+      return `<details class="re-evidence-gap"><summary>${escapeHtml(gap.id || 'gap')} · ${Number(gap.geometryGapM || 0).toFixed(1)}m · <b>${escapeHtml(gap.decision || 'unknown')}</b></summary><div class="re-evidence-matrix">${rows}</div><p>${escapeHtml(gap.decisionReason || '')}</p><p><strong>productionAllowed=false</strong> · ${escapeHtml(gap.productionReason || 'dev24 production lock')}</p></details>`;
+    }).join('');
+
+    const summary = st.evidenceIndex?.summary || {};
+    const fusion = st.fusionPlan || {};
+    const fusionApi = window.HaidianExperimentalFusionRouter;
+    const fusionState = fusionApi?.getState?.() || null;
+    const lastRun = fusionState?.lastRun || null;
+    const fusionBusy = fusionState?.status === 'running';
+    const routable = Number(fusion.routableWitnessCount || 0);
+    let fusionResult = '尚未執行 experimental fused graph。先完成一次 A→B OSM graph 搜尋，sandbox 才有 production graph 可複製。';
+    if (!fusionApi) fusionResult = 'Experimental fusion router 模組未載入；production graph 仍保持不變。';
+    else if (fusionBusy) fusionResult = '正在 detached graph clone 上執行 experimental fused routing…';
+    else if (lastRun?.available) {
+      const connectors = Number(lastRun.overlay?.connectorCount || 0);
+      const minSun = lastRun.search?.minSun;
+      const sun = Number(minSun?.directSunSeconds);
+      fusionResult = `最近一次 experimental run：${connectors} 個 source-following connector；min-sun ${Number.isFinite(sun) ? formatMinutes(sun) : '—'}；productionGraphMutated=false。`;
+    } else if (lastRun?.reason) {
+      fusionResult = `最近一次 experimental run 未成立：${lastRun.reason}；production graph 未修改。`;
+    }
+    const fusionButton = fusionApi
+      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev24 experimental fused graph (${routable})`}</button>`
+      : '';
+    const witnessNotes = (st.evidenceIndex?.gaps || []).map((gap) => {
+      const w = gap.preferredFusionWitness;
+      if (!w) return '';
+      return `<p class="re-fusion-note"><strong>${escapeHtml(gap.id || 'gap')} pedestrian witness：</strong>${escapeHtml(w.source || 'unknown')} · ${escapeHtml(w.evidenceType || 'unknown')} · pedestrianAllowed=${w.pedestrianAllowed === true ? 'true' : 'false'} · productionAllowed=false</p>`;
+    }).join('');
+    return `<div class="re-multisource-note" data-re-multisource><b>dev24 Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p></div>`;
+  }
+
+  function refreshMultiSourcePanel() {
+    const current = panel?.querySelector('[data-re-multisource]');
+    if (!current) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = multiSourcePanelHtml();
+    const next = holder.firstElementChild;
+    if (next) current.replaceWith(next);
+  }
+
+  async function loadMultiSourceEvidence() {
+    const api = window.HaidianMultiSourceEvidence;
+    if (!api) return setStatus('dev24 multi-source evidence 模組未載入。', 'warning');
+    refreshMultiSourcePanel();
+    setStatus('正在載入預處理 multi-source evidence index；不會修改 production graph…', 'loading');
+    const result = await api.loadEvidence();
+    refreshMultiSourcePanel();
+    if (result.status === 'ready') {
+      const u = Number(result.evidenceIndex?.summary?.unbound || 0);
+      setStatus(u ? `dev24 證據矩陣已載入；目前仍有 ${u} 個 gap 含未綁定來源，這些是未知，不是負證據。` : 'dev24 證據矩陣已載入；production graph 保持不變。', u ? 'warning' : 'ok');
+    } else {
+      setStatus(`multi-source evidence 載入失敗：${result.error || 'unknown'}`, 'warning');
+    }
+  }
+
+  async function toggleMultiSourceOverlay(key) {
+    const api = window.HaidianMultiSourceEvidence;
+    if (!api) return;
+    const result = await api.toggleSourceOverlay(key);
+    refreshMultiSourcePanel();
+    if (!result.visible && result.reason && result.reason !== 'ready') {
+      setStatus(`無法顯示 ${key}：${result.reason}。若為未綁定，代表尚未取得資料，不是來源不存在。`, 'warning');
+    }
+  }
+
+  async function runExperimentalFusion() {
+    const evidenceApi = window.HaidianMultiSourceEvidence;
+    const fusionApi = window.HaidianExperimentalFusionRouter;
+    if (!evidenceApi || !fusionApi) {
+      setStatus('dev24 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
+      return;
+    }
+    let evidenceState = evidenceApi.getState?.();
+    if (evidenceState?.status !== 'ready') {
+      setStatus('先載入 multi-source evidence index，再建立 experimental graph。', 'loading');
+      evidenceState = await evidenceApi.loadEvidence();
+      refreshMultiSourcePanel();
+      if (evidenceState?.status !== 'ready') {
+        setStatus(`multi-source evidence 載入失敗：${evidenceState?.error || 'unknown'}`, 'warning');
+        return;
+      }
+    }
+    if (!Number(evidenceState?.fusionPlan?.routableWitnessCount || 0)) {
+      setStatus('目前沒有 independent + pedestrianAllowed=true 的 verified source-following witness；不建立 experimental connector。', 'warning');
+      return;
+    }
+    const button = panel?.querySelector('[data-re-multisource-fusion-run]');
+    if (button) button.disabled = true;
+    try {
+      await ensureShadeReady();
+      setStatus('dev24：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
+      let lastUiAt = 0;
+      const result = await fusionApi.runFromLastProductionGraph({
+        departure: departureDateFromPanel(),
+        speedMps: speedMpsFromPanel(),
+        detourPct: detourCapFromPanel(),
+        shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
+        canopyTimeoutMs: config.canopyTimeoutMs,
+        maxExpandedStates: config.graphRouting?.maxExpandedStates,
+        maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
+        cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
+        yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded,
+        onProgress: (info) => {
+          const now = Date.now();
+          if (now - lastUiAt < 180) return;
+          lastUiAt = now;
+          if (info?.message) setStatus(`dev24 experimental：${info.message}`, 'loading');
+        }
+      });
+      refreshMultiSourcePanel();
+      if (!result?.available) {
+        const reason = result?.reason || result?.search?.reason || 'experimental-fusion-unavailable';
+        setStatus(`dev24 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
+        return;
+      }
+      const connectorCount = Number(result.overlay?.connectorCount || 0);
+      const minSun = result.search?.minSun;
+      const sunS = Number(minSun?.directSunSeconds);
+      setStatus(`dev24 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
+    } catch (error) {
+      refreshMultiSourcePanel();
+      setStatus(`dev24 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+    } finally {
+      const b = panel?.querySelector('[data-re-multisource-fusion-run]');
+      if (b) b.disabled = false;
+    }
+  }
+
   function candidatesHtml(bundle) {
     const activeId = bundle.activeCandidateId || bundle.best?.id || bundle.selected?.id;
     const bestId = bundle.best?.id || bundle.selected?.id;
@@ -2098,7 +2277,7 @@
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
-      ${notice}${graphNote}${manualState}${qualityNote}${rows}
+      ${notice}${graphNote}${multiSourcePanelHtml()}${manualState}${qualityNote}${rows}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -2225,6 +2404,8 @@
     clearLayer(endpointsLayer);
     clearLayer(comparisonLayer);
     clearMatureEngineOverlay();
+    try { window.HaidianMultiSourceEvidence?.clearOverlays?.(); } catch (_) {}
+    try { window.HaidianExperimentalFusionRouter?.clearMapLayer?.(); } catch (_) {}
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
     if (clearStatus) setStatus("已重新開始。", "");
@@ -2546,6 +2727,7 @@
       .re-time-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:8px;margin-bottom:10px}.re-time-grid label{display:grid;gap:5px;color:#64748b;font-size:12px;font-weight:850}.re-time-grid input{width:100%;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid #cfdedc;border-radius:10px;background:#fff;color:#123f46;font-size:14px;font-weight:800}
       .re-time-next{margin-top:2px;box-shadow:0 7px 18px rgba(15,118,110,.18)}.re-time-hint{margin:8px 1px 0;color:#64748b;font-size:12px;line-height:1.5;font-weight:700}
       .re-draw-warning{margin:8px 0 10px;padding:10px 11px;border:1px solid #fdba74;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:12.5px;line-height:1.55;font-weight:800}
+      .re-multisource-note{display:grid;gap:7px;margin:9px 0;padding:10px 11px;border:1px solid #bae6fd;border-radius:12px;background:#f0f9ff;color:#0c4a6e;font-size:12px;line-height:1.5}.re-multisource-note>b{font-size:13px}.re-multisource-note.is-error{background:#fff1f2;border-color:#fecdd3;color:#9f1239}.re-multisource-actions{display:flex;flex-wrap:wrap;gap:6px}.re-multisource-actions button{min-height:34px;padding:7px 9px;border:1px solid #7dd3fc;border-radius:9px;background:#fff;color:#075985;font-size:11.5px;font-weight:900;cursor:pointer}.re-multisource-actions button:disabled{opacity:.5;cursor:not-allowed}.re-multisource-actions small{font-size:9px;opacity:.7}.re-evidence-gap{border-top:1px solid #bae6fd;padding-top:6px}.re-evidence-gap summary{cursor:pointer;font-weight:850}.re-evidence-matrix{display:grid;gap:4px;margin-top:6px}.re-evidence-matrix>div{display:grid;grid-template-columns:105px 1fr;gap:6px;padding:5px 6px;border-radius:7px;background:rgba(255,255,255,.75)}.re-evidence-matrix strong{font-size:11px}.re-evidence-matrix span{font-size:11px}.re-evidence-gap p,.re-fusion-note{margin:4px 0 0;font-size:11px}
       .route-exposure-drawing{cursor:crosshair!important}
       @media(max-width:700px){.re-panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:82vh;border-radius:18px}.re-head{padding:13px 14px 10px}.re-body{padding:12px 14px 14px}.re-mode-card{grid-template-columns:38px 1fr auto;padding:12px}.re-mode-icon{width:38px;height:38px}.re-result-hero b{font-size:21px}}
     `;
@@ -2662,6 +2844,12 @@
       if (graphDiagnose) { void diagnoseSavedManualRoute(); return; }
       const sourceGapLive = event.target?.closest?.("[data-re-source-gap-live]");
       if (sourceGapLive) { void runSourceGapCounterfactualLive(); return; }
+      const multiLoad = event.target?.closest?.("[data-re-multisource-load]");
+      if (multiLoad) { void loadMultiSourceEvidence(); return; }
+      const multiSource = event.target?.closest?.("[data-re-multisource-source]");
+      if (multiSource) { void toggleMultiSourceOverlay(multiSource.dataset.reMultisourceSource); return; }
+      const multiFusion = event.target?.closest?.("[data-re-multisource-fusion-run]");
+      if (multiFusion) { void runExperimentalFusion(); return; }
       const engineLive = event.target?.closest?.("[data-re-engine-live]");
       if (engineLive) { void runMatureEngineCrossCheck(); return; }
       const engineMap = event.target?.closest?.("[data-re-engine-map]");
@@ -2803,6 +2991,8 @@
       attempts += 1;
       map = map || window.map || null;
       if (map && window.L && addButton()) {
+        try { window.HaidianMultiSourceEvidence?.attachMap?.(map); } catch (_) {}
+        try { window.HaidianExperimentalFusionRouter?.attachMap?.(map); } catch (_) {}
         panel = createPanel();
         map.on("click", onMapClick);
         map.on("dragstart", () => suppressMapPointAfterDrag(false));

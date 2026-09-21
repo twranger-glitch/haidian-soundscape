@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev21 Mature Engine Geometry Overlay
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev24 Experimental Fusion
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev21";
+  const VERSION = "v9.0.0-dev24";
 
   const DEFAULTS = {
     enabled: true,
@@ -2692,6 +2692,117 @@
     };
   }
 
+  // v9.0.0-dev24: hand a fully detached fine-graph clone to the experimental
+  // multi-source router.  This is the only supported bridge from the production
+  // graph engine into the dev24 sandbox. Existing node/edge/adjacency objects are
+  // copied so an experimental overlay cannot mutate production state by aliasing.
+  function graphStructuralFingerprint(graph) {
+    let adjacencyRefs = 0;
+    for (const refs of graph?.adjacency?.values?.() || []) adjacencyRefs += (refs || []).length;
+    return {
+      nodeCount: Number(graph?.nodes?.size || 0),
+      edgeCount: Number(graph?.edges?.size || 0),
+      adjacencyNodeCount: Number(graph?.adjacency?.size || 0),
+      adjacencyRefCount: adjacencyRefs
+    };
+  }
+
+  function cloneFineGraphForExperimentalUse(graph) {
+    if (!graph?.nodes || !graph?.edges || !graph?.adjacency) return null;
+    const nodes = new Map();
+    for (const [id, node] of graph.nodes) nodes.set(String(id), Object.assign({}, node));
+    const edges = new Map();
+    for (const [id, edge] of graph.edges) {
+      edges.set(String(id), Object.assign({}, edge, {
+        geometry: (edge.geometry || []).map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) })),
+        wayIds: (edge.wayIds || []).slice(),
+        tagsSummary: edge.tagsSummary ? JSON.parse(JSON.stringify(edge.tagsSummary)) : {}
+      }));
+    }
+    const adjacency = new Map();
+    for (const [id, refs] of graph.adjacency) adjacency.set(String(id), (refs || []).map((r) => Object.assign({}, r)));
+    return Object.assign({}, graph, {
+      nodes, edges, adjacency,
+      experimentalClone: true,
+      productionGraphMutated: false,
+      sourceFingerprint: graphStructuralFingerprint(graph)
+    });
+  }
+
+  function createExperimentalGraphClone() {
+    const state = lastGraphDebug;
+    if (!state?.graph || !state.snapA || !state.snapB) return { available: false, reason: 'no-production-graph' };
+    const graph = cloneFineGraphForExperimentalUse(state.graph);
+    if (!graph) return { available: false, reason: 'clone-failed' };
+    return {
+      available: true,
+      version: VERSION,
+      graph,
+      snapA: Object.assign({}, state.snapA),
+      snapB: Object.assign({}, state.snapB),
+      bbox: state.bbox ? Object.assign({}, state.bbox) : null,
+      productionFingerprint: graphStructuralFingerprint(state.graph),
+      cloneFingerprint: graphStructuralFingerprint(graph),
+      productionGraphMutated: false
+    };
+  }
+
+  async function runExperimentalSearchOnClone(graph, startId, endId, options = {}) {
+    if (!graph?.nodes?.has(String(startId)) || !graph?.nodes?.has(String(endId))) {
+      return { available: false, reason: 'missing-experimental-endpoints', productionGraphMutated: false };
+    }
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const detourPct = clamp(options.detourPct, 0, 80, 30);
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    const savedShadeDebug = new Map(lastShadeDebug);
+    const savedRouteEdges = { fastest: new Set(lastRouteEdges.fastest || []), minSun: new Set(lastRouteEdges.minSun || []) };
+    try {
+      const fromA = await dijkstraTimesResponsive(graph, String(startId), speedMps, false, options);
+      const toB = await dijkstraTimesResponsive(graph, String(endId), speedMps, true, options);
+      const fastestTime = fromA.dist.get(String(endId));
+      if (!Number.isFinite(fastestTime)) return { available: false, reason: 'experimental-graph-disconnected', productionGraphMutated: false };
+      const fastestPath = reconstructDijkstra(graph, fromA.prev, String(startId), String(endId));
+      if (!fastestPath?.points?.length) return { available: false, reason: 'experimental-fastest-reconstruction-failed', productionGraphMutated: false };
+      fastestPath.walkSeconds = fastestTime;
+      const detourLimitS = fastestTime * (1 + detourPct / 100);
+      const minSun = await searchMinSun(graph, String(startId), String(endId), {
+        speedMps,
+        detourLimitS,
+        fastestToEnd: toB,
+        departure,
+        edgeSunProvider: options.edgeSunProvider,
+        timeBucketSec: options.timeBucketSec,
+        shadeTimeBucketSec: options.shadeTimeBucketSec,
+        shadeSampleSpacingM: options.shadeSampleSpacingM,
+        shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge,
+        shadeConcurrency: options.shadeConcurrency,
+        canopyTimeoutMs: options.canopyTimeoutMs,
+        maxExpandedStates: options.maxExpandedStates,
+        maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
+        cooperativeYieldMs: options.cooperativeYieldMs,
+        yieldEveryExpanded: options.yieldEveryExpanded,
+        onProgress: options.onProgress,
+        shouldCancel: options.shouldCancel
+      });
+      return {
+        available: true,
+        productionGraphMutated: false,
+        fastest: Object.assign({}, fastestPath, { durationS: fastestTime }),
+        minSun: minSun.path ? Object.assign({}, minSun.path, { durationS: minSun.path.walkSeconds }) : null,
+        detourPct,
+        detourLimitSeconds: detourLimitS,
+        searchExpandedStates: minSun.expanded,
+        shadeEdgeEvaluations: minSun.shadeEvals,
+        dominanceRejected: minSun.dominanceRejected || 0,
+        dominanceRemoved: minSun.dominanceRemoved || 0
+      };
+    } finally {
+      lastShadeDebug.clear();
+      for (const [key, value] of savedShadeDebug) lastShadeDebug.set(key, value);
+      lastRouteEdges = savedRouteEdges;
+    }
+  }
+
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
   // source-gap connectors already justified by dev16 route-support transitions
   // and dev17 raw-OSM evidence. The production graph is never mutated.
@@ -4454,6 +4565,8 @@
     get config() { return Object.assign({}, config); },
     findRoutes,
     buildGraphForAB,
+    createExperimentalGraphClone,
+    runExperimentalSearchOnClone,
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
     replayPolyline,
@@ -4492,6 +4605,9 @@
       faithfulCorridorComponentTraceAudit,
       rawOsmJunctionAudit,
       cloneFineGraphWithDiagnosticConnectors,
+      cloneFineGraphForExperimentalUse,
+      graphStructuralFingerprint,
+      runExperimentalSearchOnClone,
       controlledSourceGapConnectorAudit,
       runSourceGapCounterfactualAudit,
       deferredSourceGapCounterfactual,
