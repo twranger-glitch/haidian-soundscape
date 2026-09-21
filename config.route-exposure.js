@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev13 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev14 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,8 +27,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev13: preserves dev12 outcome truthfulness and adds a strict 14/16 m
-  // corridor-connectivity audit before any matcher-score tuning.
+  // v9.0.0-dev14: preserves dev13 strict-corridor truthfulness and adds a
+  // 14→16 m threshold-delta bridge audit plus diagnostic-only exclusion tests.
+  // No matcher cost or shade weighting is changed in this build.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
