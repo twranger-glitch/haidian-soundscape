@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev21 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev24 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,9 +27,25 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev21: mature-engine geometry overlay; preserves dev13–dev20.1 diagnostics, keeps all source-gap
+  // v9.0.0-dev24: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
+  // dev22–dev24: preprocessed multi-source evidence only. Browser never downloads national archives.
+  // Cross-source connectors remain outside production; only verified source-following witnesses may enter a detached experimental clone.
+  multisource: {
+    enabled: true,
+    evidenceIndexUrl: "./data/multisource/evidence-index.json",
+    sourceMetadataUrl: "./data/multisource/source-metadata.json",
+    productionMutationEnabled: false,
+    autoLoad: false
+  },
+  multisourceFusion: {
+    enabled: true,
+    sourceAttachMaxM: 18,
+    endpointReuseM: 0.8,
+    renderOnMap: true,
+    productionMutationEnabled: false
+  },
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
