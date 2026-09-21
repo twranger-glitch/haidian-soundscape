@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev20 Safe Connector + Mature Engine Cross-check
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev20.1 Cross-check-first + Deferred Causal Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev20";
+  const VERSION = "v9.0.0-dev20.1";
 
   const DEFAULTS = {
     enabled: true,
@@ -60,6 +60,9 @@
     sourceGapCounterfactualEnabled: true,
     sourceGapCounterfactualMaxGapM: 55,
     sourceGapCounterfactualStrictM: 14,
+    // dev20.1: the graph API still supports the full dev19 causal rerun, but the
+    // UI can defer it so the mature-engine benchmark becomes available quickly.
+    deferSourceGapCounterfactual: false,
     // dev20: production connectors remain disabled.  The policy below only
     // classifies source gaps and permits live mature-engine corroboration.
     safeConnectorNearTouchM: 2.5,
@@ -2758,6 +2761,10 @@
   }
 
   async function controlledSourceGapConnectorAuditUnsafe(graph, startId, endId, route, componentTraceAudit, rawAudit, departure, speedMps, options = {}) {
+    const emit = (stage, message, extra = {}) => {
+      try { options.onProgress?.(Object.assign({}, extra, { stage, message })); } catch (_) {}
+    };
+    emit('source-gap-prepare', '正在準備 dev19 source-gap 診斷副本；production graph 不會被修改…');
     const manualRoute = (route || []).map(asLatLng).filter(Boolean);
     if (options.sourceGapCounterfactualEnabled === false || config.sourceGapCounterfactualEnabled === false) return { available: false, reason: 'disabled' };
     if (!graph?.edges?.size || manualRoute.length < 2 || !componentTraceAudit?.available || !rawAudit?.available) return { available: false, reason: 'missing-component-or-raw-audit' };
@@ -2787,19 +2794,23 @@
       return { available: true, tested: false, strictM, maxGapM, connectorCount: 0, connectors: [], outcome: 'no-controlled-connectors', interpretation: 'dev17 沒有留下同時滿足 source-gap、無立體交會疑慮、且貼著手繪忠實走廊的受控 connector；不進行 patched-graph 因果測試。' };
     }
 
+    emit('source-gap-overlay', `已確認 ${eligible.length} 個受控 source-gap；正在建立只存在於診斷中的 patched graph…`, { connectorCount: eligible.length });
     const over = cloneFineGraphWithDiagnosticConnectors(graph, eligible);
     const patched = over.graph;
     const strict = strictCorridorConnectivityAudit(patched, startId, endId, manualRoute, strictM, options, new Map());
+    emit('source-gap-ordered', 'patched graph 已建立；正在驗證忠實 ordered A→B 路徑…');
     const ordered = await orderedMapMatchDijkstra(patched, startId, endId, manualRoute, strictM, speedMps, options);
     let orderedScore = null;
     let orderedDenseShade = null;
     if (ordered?.steps?.length) {
+      emit('source-gap-coarse-shade', `忠實路徑已恢復；正在以搜尋器 coarse edge sampler 計分（${ordered.steps.length} steps）…`, { stepCount: ordered.steps.length });
       orderedScore = await coarseShadeScoreForSteps(patched, ordered.steps, departure, speedMps, options);
       // Reconcile the restored faithful geometry immediately instead of forcing
       // another release/test cycle when the coarse search model still dislikes it.
       // This reuses dev18's exact-same-geometry dense ShadeMap audit and remains
       // diagnostic-only. A dense failure must never invalidate the connector test.
       try {
+        emit('source-gap-dense-shade', 'coarse 計分完成；正在對同一 patched geometry 做 10 m dense ShadeMap 對帳…');
         orderedDenseShade = await reconcilePathShadeCost(
           patched, ordered.steps, orderedScore?.edgeSun || [], departure, speedMps, options
         );
@@ -2811,9 +2822,12 @@
     const detourLimitS = Number.isFinite(Number(options.referenceDetourLimitSeconds))
       ? Number(options.referenceDetourLimitSeconds)
       : Number.isFinite(Number(lastDiagnostics?.detourLimitSeconds)) ? Number(lastDiagnostics.detourLimitSeconds) : Infinity;
+    emit('source-gap-global-prepare', '同一路徑日照對帳完成；正在準備 patched graph 全域 min-sun 搜尋…');
     const toEnd = await dijkstraTimesResponsive(patched, endId, speedMps, true, {
-      onProgress: null, shouldCancel: options.shouldCancel, cooperativeYieldMs: options.cooperativeYieldMs
+      onProgress: (p) => emit('source-gap-fastest-reverse', `patched graph：${p?.message || '正在整理終點反向時間…'}`, p || {}),
+      shouldCancel: options.shouldCancel, cooperativeYieldMs: options.cooperativeYieldMs
     });
+    emit('source-gap-global-search', '正在 patched graph 上重新執行完整 history-safe min-sun 搜尋…');
     const minSun = await searchMinSun(patched, startId, endId, {
       speedMps, detourLimitS, fastestToEnd: toEnd, departure,
       edgeSunProvider: options.edgeSunProvider,
@@ -2827,7 +2841,8 @@
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
       cooperativeYieldMs: options.cooperativeYieldMs,
       yieldEveryExpanded: options.yieldEveryExpanded,
-      onProgress: null, shouldCancel: options.shouldCancel
+      onProgress: (p) => emit('source-gap-global-search', `patched graph：${p?.message || '正在搜尋最少直接日照路徑…'}`, p || {}),
+      shouldCancel: options.shouldCancel
     });
     const searchPath = minSun?.path || null;
     const searchCoverage = searchPath?.points?.length ? pathCoverageAgainstRoute(searchPath.points, manualRoute, strictM, 10) : null;
@@ -2870,6 +2885,7 @@
       }
     }
 
+    emit('source-gap-complete', `dev19 因果測試完成：${outcome}。`, { outcome });
     return {
       available: true, tested: true, strictM, maxGapM,
       connectorCount: over.connectors.length,
@@ -2923,6 +2939,40 @@
       for (const [key, value] of savedShadeDebug) lastShadeDebug.set(key, value);
       lastOrderedMapMatchFailure = savedMatchFailure;
     }
+  }
+
+  function deferredSourceGapCounterfactual(rawAudit) {
+    const sourceGapCount = Number(rawAudit?.sourceGapCount || (rawAudit?.junctions || []).filter((j) => j?.evidenceLayer === 'source-osm-topology').length || 0);
+    return {
+      available: true, tested: false, deferred: true, reason: 'deferred-expensive-audit',
+      outcome: 'deferred-expensive-audit', sourceGapCount, connectorCount: 0, connectors: [],
+      productionGraphMutated: false,
+      interpretation: sourceGapCount
+        ? `已找到 ${sourceGapCount} 個 source-gap；dev20.1 先完成 topology / mature-engine benchmark，耗時的 patched shade + global min-sun 因果重算改由按鈕明確啟動。`
+        : '目前沒有 source-gap 需要執行 patched-graph 因果重算。'
+    };
+  }
+
+  async function runSourceGapCounterfactualAudit(points, options = {}) {
+    const state = lastGraphDebug;
+    if (!state?.graph || !state.snapA || !state.snapB) return { available: false, reason: 'no-graph' };
+    const route = (points || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) return { available: false, reason: 'route-too-short' };
+    const graph = state.graph;
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    const fidelity = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
+    const cache = new Map();
+    try { options.onProgress?.({ stage:'source-gap-topology', message:'正在重建 14 m faithful component trace 與 raw OSM junction audit…' }); } catch (_) {}
+    const componentTraceAudit = faithfulCorridorComponentTraceAudit(graph, state.snapA.id, state.snapB.id, route, fidelity, options, cache);
+    const rawAudit = rawOsmJunctionAudit(graph, state.raw, route, componentTraceAudit, options);
+    const audit = await controlledSourceGapConnectorAudit(
+      graph, state.snapA.id, state.snapB.id, route, componentTraceAudit, rawAudit, departure, speedMps,
+      Object.assign({}, options, { deferSourceGapCounterfactual:false, referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+    );
+    const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(rawAudit, audit, null, options);
+    const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawAudit, audit);
+    return { available:true, audit, connectorSafetyPolicy, engineBenchmark, corridorComponentTraceAudit:componentTraceAudit, rawOsmJunctionAudit:rawAudit };
   }
 
 
@@ -3804,6 +3854,7 @@
     }
 
     for (const thresholdM of thresholds) {
+      try { options.onProgress?.({ stage:'manual-replay-mapmatch', thresholdM, message:`ordered map-match：正在測試 ${Math.round(thresholdM)} m corridor…` }); } catch (_) {}
       path = await orderedMapMatchDijkstra(graph, state.snapA.id, state.snapB.id, route, thresholdM, speedMps, options);
       if (path) {
         const attempt = cloneAttempt(path.mapMatchAttempt || {
@@ -3845,10 +3896,14 @@
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
       const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
-      const sourceGapCounterfactualAudit = await controlledSourceGapConnectorAudit(
-        graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
-        Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
-      );
+      try { options.onProgress?.({ stage:'manual-replay-audit', message:'ordered path 已到 B；正在整理 strict corridor / source topology 診斷…' }); } catch (_) {}
+      const deferSourceGap = options.deferSourceGapCounterfactual ?? config.deferSourceGapCounterfactual;
+      const sourceGapCounterfactualAudit = deferSourceGap
+        ? deferredSourceGapCounterfactual(rawOsmJunctionAudit)
+        : await controlledSourceGapConnectorAudit(
+            graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
+            Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+          );
       const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(rawOsmJunctionAudit, sourceGapCounterfactualAudit, null, options);
       const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = null;
@@ -3895,10 +3950,14 @@
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
       const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit, rawOsmJunctionAudit } = corridorDiagnostics;
-      const sourceGapCounterfactualAudit = await controlledSourceGapConnectorAudit(
-        graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
-        Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
-      );
+      try { options.onProgress?.({ stage:'manual-replay-audit', message:'ordered path 已到 B；正在整理 strict corridor / source topology 診斷…' }); } catch (_) {}
+      const deferSourceGap = options.deferSourceGapCounterfactual ?? config.deferSourceGapCounterfactual;
+      const sourceGapCounterfactualAudit = deferSourceGap
+        ? deferredSourceGapCounterfactual(rawOsmJunctionAudit)
+        : await controlledSourceGapConnectorAudit(
+            graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAudit, rawOsmJunctionAudit, departure, speedMps,
+            Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+          );
       const connectorSafetyPolicy = sourceGapConnectorSafetyPolicy(rawOsmJunctionAudit, sourceGapCounterfactualAudit, null, options);
       const engineBenchmark = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAudit, sourceGapCounterfactualAudit);
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
@@ -3961,11 +4020,14 @@
     const endpointSnapCounterfactualAuditAccepted = corridorDiagnostics.endpointSnapCounterfactualAudit;
     const corridorComponentTraceAuditAccepted = corridorDiagnostics.corridorComponentTraceAudit;
     const rawOsmJunctionAuditAccepted = corridorDiagnostics.rawOsmJunctionAudit;
+    const deferSourceGapAccepted = options.deferSourceGapCounterfactual ?? config.deferSourceGapCounterfactual;
     const sourceGapCounterfactualAuditAccepted = !strictCorridorAuditAccepted?.connected
-      ? await controlledSourceGapConnectorAudit(
-          graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAuditAccepted, rawOsmJunctionAuditAccepted, departure, speedMps,
-          Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
-        )
+      ? (deferSourceGapAccepted
+          ? deferredSourceGapCounterfactual(rawOsmJunctionAuditAccepted)
+          : await controlledSourceGapConnectorAudit(
+              graph, state.snapA.id, state.snapB.id, route, corridorComponentTraceAuditAccepted, rawOsmJunctionAuditAccepted, departure, speedMps,
+              Object.assign({}, options, { referenceDetourLimitSeconds: lastDiagnostics?.detourLimitSeconds })
+            ))
       : { available: false, reason: 'strict-corridor-already-connected' };
     const connectorSafetyPolicyAccepted = sourceGapConnectorSafetyPolicy(rawOsmJunctionAuditAccepted, sourceGapCounterfactualAuditAccepted, null, options);
     const engineBenchmarkAccepted = engineBenchmarkManifest(route, route[0], route[route.length - 1], rawOsmJunctionAuditAccepted, sourceGapCounterfactualAuditAccepted);
@@ -4365,6 +4427,7 @@
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
     replayPolyline,
+    runSourceGapCounterfactualAudit,
     runMatureEngineBenchmark,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
@@ -4400,6 +4463,8 @@
       rawOsmJunctionAudit,
       cloneFineGraphWithDiagnosticConnectors,
       controlledSourceGapConnectorAudit,
+      runSourceGapCounterfactualAudit,
+      deferredSourceGapCounterfactual,
       sourceGapConnectorSafetyPolicy,
       engineBenchmarkManifest,
       runMatureEngineBenchmark,

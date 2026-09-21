@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev20 Safe Connector + Mature Engine Cross-check
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev20.1 Cross-check-first + Deferred Causal Audit
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev20";
+  const VERSION = "v9.0.0-dev20.1";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1636,10 +1636,19 @@
     return summary + rows + `<p><strong>dev17 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
+  function engineBenchmarkControlsHtml(replay) {
+    if (!replay?.engineBenchmark) return '';
+    return `<span><strong>Mature-engine benchmark：</strong>已準備 Valhalla pedestrian route / trace_route 與 GraphHopper foot GPX 對照 payload。執行時會把這次 A/B 與手繪 shape 傳給所設定的外部 routing service。<button type="button" data-re-engine-live>執行外部成熟引擎對照</button> <button type="button" data-re-engine-benchmark>匯出 benchmark JSON</button></span>`;
+  }
+
   function sourceGapCounterfactualAuditHtml(replay) {
     const d = replay?.sourceGapCounterfactualAudit || null;
     if (!d?.available) return '';
-    if (!d.tested) return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${escapeHtml(d.interpretation || '目前沒有可安全測試的受控 source-gap connector。')}</span>`;
+    const benchmarkControls = engineBenchmarkControlsHtml(replay);
+    if (!d.tested) {
+      const action = d.deferred ? ' <button type="button" data-re-source-gap-live>執行完整 source-gap 因果測試</button>' : '';
+      return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${escapeHtml(d.interpretation || '目前沒有可安全測試的受控 source-gap connector。')}${action}</span>${benchmarkControls}`;
+    }
     const pct = (v) => Number.isFinite(Number(v)) ? `${Math.round(Number(v) * 100)}%` : '—';
     const mins = (v) => Number.isFinite(Number(v)) ? formatMinutes(Number(v)) : '—';
     const dist = (v) => Number.isFinite(Number(v)) ? formatDistance(Number(v)) : '—';
@@ -1654,8 +1663,8 @@
       : '';
     const ordered = `<span><strong>patched ordered faithful path：</strong>${d.orderedReachedGoal ? `到 B；貼合 ${pct(d.orderedCoverageRatio)}、平均偏移 ${Number.isFinite(Number(d.orderedAverageDistanceM)) ? Number(d.orderedAverageDistanceM).toFixed(1) + ' m' : '—'}、距離 ${dist(d.orderedDistanceM)}、coarse graph 日照 ${mins(d.orderedDirectSunSeconds)}${densePart}` : '仍沒有重建到 B'}。</span>`;
     const search = `<span><strong>patched global min-sun search：</strong>${d.patchedSearchFound ? `日照 ${mins(d.patchedSearchDirectSunSeconds)}、距離 ${dist(d.patchedSearchDistanceM)}、對手繪貼合 ${pct(d.patchedSearchCoverageRatio)}；使用診斷 connector ${Math.round((d.patchedSearchUsedConnectorIds || []).length)} 條` : '沒有產生路徑'}。production 自動解 coarse 日照 ${mins(d.referenceProductionMinSunSeconds)}。</span>`;
-    const benchmark = replay?.engineBenchmark ? `<span><strong>Mature-engine benchmark：</strong>已準備 Valhalla pedestrian route / trace_route 與 GraphHopper foot GPX 對照 payload。執行時會把這次 A/B 與手繪 shape 傳給所設定的外部 routing service。<button type="button" data-re-engine-live>執行外部成熟引擎對照</button> <button type="button" data-re-engine-benchmark>匯出 benchmark JSON</button></span>` : '';
-    return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${connectors}</span>${strict}${ordered}${search}<p><strong>dev19 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>${benchmark}`;
+    const rerun = '<span><button type="button" data-re-source-gap-live>重新執行完整 source-gap 因果測試</button></span>';
+    return `<span><strong>dev19 Controlled Source-Gap Counterfactual：</strong>${connectors}</span>${strict}${ordered}${search}<p><strong>dev19 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>${rerun}${benchmarkControls}`;
   }
 
 
@@ -1850,6 +1859,12 @@
       `<span>主要對應：${types}</span>${replay}<p>${escapeHtml(diagnosis.interpretation || "")}</p></div>`;
   }
 
+  function currentManualReplayPoints() {
+    if (!savedDrawnRoute?.length || savedDrawnRoute.length < 2) return [];
+    const manualMatch = aPoint && bPoint ? buildManualCandidate(aPoint, bPoint, speedMpsFromPanel()) : null;
+    return manualMatch?.matched && manualMatch?.candidate?.points?.length ? manualMatch.candidate.points : savedDrawnRoute;
+  }
+
   async function diagnoseSavedManualRoute() {
     if (!savedDrawnRoute?.length || savedDrawnRoute.length < 2) {
       setStatus("還沒有手繪路線。請先用『分析我自己的路線』沿河堤/道路畫一條，再回來跑 A→B。", "warning");
@@ -1860,8 +1875,7 @@
       setStatus("目前版本沒有 OSM Graph 手繪診斷 API。", "error");
       return;
     }
-    const manualMatch = aPoint && bPoint ? buildManualCandidate(aPoint, bPoint, speedMpsFromPanel()) : null;
-    const replayPoints = manualMatch?.matched && manualMatch?.candidate?.points?.length ? manualMatch.candidate.points : savedDrawnRoute;
+    const replayPoints = currentManualReplayPoints();
     const diagnosis = api.diagnosePolyline(replayPoints);
     lastManualGraphDiagnosis = diagnosis;
     const box = panel?.querySelector("[data-re-graph-diagnosis]");
@@ -1876,7 +1890,17 @@
           corridorM: config.graphRouting?.manualReplayCorridorM || 16,
           maxCorridorM: config.graphRouting?.manualReplayMaxCorridorM || 36,
           shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
-          canopyTimeoutMs: config.canopyTimeoutMs
+          canopyTimeoutMs: config.canopyTimeoutMs,
+          deferSourceGapCounterfactual: config.graphRouting?.deferSourceGapCounterfactual !== false,
+          onProgress: (() => {
+            let lastUiAt = 0;
+            return (info) => {
+              const now = Date.now();
+              if (now - lastUiAt < 180 && info?.stage !== 'source-gap-complete') return;
+              lastUiAt = now;
+              if (info?.message) setStatus(info.message, 'drawing');
+            };
+          })()
         });
         enrichShadeReconciliation(diagnosis);
         if (diagnosis.replay?.graphReachedGoal === true && diagnosis.replay?.manualFidelityAccepted === false) {
@@ -2306,6 +2330,53 @@
     setStatus("已匯出 Valhalla / GraphHopper 對照 benchmark JSON；這份資料不會修改 OSM 或 production graph。", "ok");
   }
 
+  async function runSourceGapCounterfactualLive() {
+    const replay = lastManualGraphDiagnosis?.replay || null;
+    const api = window.HaidianPedestrianGraph;
+    const replayPoints = currentManualReplayPoints();
+    if (!replay || !replayPoints.length || !api?.runSourceGapCounterfactualAudit) {
+      setStatus("目前沒有可執行的 source-gap 因果測試；請先按『驗證手繪 Graph 路徑』。", "warning");
+      return;
+    }
+    const button = panel?.querySelector("[data-re-source-gap-live]");
+    if (button) { button.disabled = true; button.textContent = "source-gap 因果測試中…"; }
+    setStatus("正在只對診斷副本補 source-gap，重新跑 faithful path、dense ShadeMap 與 patched global min-sun；production graph 不會改動…", "loading");
+    let lastUiAt = 0;
+    try {
+      const result = await api.runSourceGapCounterfactualAudit(replayPoints, {
+        departure: departureDateFromPanel(),
+        speedMps: speedMpsFromPanel(),
+        detourPct: detourCapFromPanel(),
+        manualReplayFidelityThresholdM: config.graphRouting?.manualReplayFidelityThresholdM || 14,
+        sourceGapCounterfactualEnabled: true,
+        sourceGapCounterfactualMaxGapM: config.graphRouting?.sourceGapCounterfactualMaxGapM || 55,
+        sourceGapCounterfactualStrictM: config.graphRouting?.sourceGapCounterfactualStrictM || 14,
+        shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
+        canopyTimeoutMs: config.canopyTimeoutMs,
+        onProgress: (info) => {
+          const now = Date.now();
+          if (now - lastUiAt < 160 && info?.stage !== 'source-gap-complete') return;
+          lastUiAt = now;
+          if (info?.message) setStatus(info.message, 'loading');
+        }
+      });
+      if (!result?.available) throw new Error(result?.reason || 'source-gap audit unavailable');
+      replay.sourceGapCounterfactualAudit = result.audit;
+      replay.connectorSafetyPolicy = result.connectorSafetyPolicy;
+      replay.engineBenchmark = result.engineBenchmark || replay.engineBenchmark;
+      replay.corridorComponentTraceAudit = result.corridorComponentTraceAudit || replay.corridorComponentTraceAudit;
+      replay.rawOsmJunctionAudit = result.rawOsmJunctionAudit || replay.rawOsmJunctionAudit;
+      const box = panel?.querySelector("[data-re-graph-diagnosis]");
+      if (box) box.innerHTML = graphDiagnosisHtml(lastManualGraphDiagnosis);
+      setStatus(`完整 source-gap 因果測試完成：${result.audit?.outcome || 'done'}。production graph 未修改。`, result.audit?.outcome === 'source-gaps-causally-explain-search-miss' ? 'ok' : 'warning');
+    } catch (error) {
+      setStatus(`source-gap 因果測試失敗：${error?.message || error}。已保留快速 topology / engine benchmark 結果。`, "warning");
+    } finally {
+      const fresh = panel?.querySelector("[data-re-source-gap-live]");
+      if (fresh) { fresh.disabled = false; fresh.textContent = "重新執行完整 source-gap 因果測試"; }
+    }
+  }
+
   async function runMatureEngineCrossCheck() {
     const replay = lastManualGraphDiagnosis?.replay || null;
     const manifest = replay?.engineBenchmark || null;
@@ -2514,6 +2585,8 @@
       if (graphToggle) { toggleGraphDiagnostics(); return; }
       const graphDiagnose = event.target?.closest?.("[data-re-graph-diagnose]");
       if (graphDiagnose) { void diagnoseSavedManualRoute(); return; }
+      const sourceGapLive = event.target?.closest?.("[data-re-source-gap-live]");
+      if (sourceGapLive) { void runSourceGapCounterfactualLive(); return; }
       const engineLive = event.target?.closest?.("[data-re-engine-live]");
       if (engineLive) { void runMatureEngineCrossCheck(); return; }
       const benchmarkExport = event.target?.closest?.("[data-re-engine-benchmark]");
