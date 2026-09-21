@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev15 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev16 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,9 +27,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev15: preserves dev13/dev14 diagnostics and adds endpoint-snap
-  // counterfactual testing: nearby legal graph anchors are tried without adding
-  // connectors or changing matcher/shade costs.
+  // v9.0.0-dev16: preserves dev13–dev15 diagnostics and adds a faithful-corridor
+  // weak-component/source trace. Diagnostic virtual joins are counterfactual only
+  // and are never inserted into the production routing graph.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -54,6 +54,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     topologyBreakpointMaxCandidates: 8,
     endpointCounterfactualRadiusM: 24,
     endpointCounterfactualMaxCandidates: 8,
+    corridorTraceSampleSpacingM: 8,
+    corridorTraceMaxComponents: 16,
+    corridorTraceTransitionWindowM: 90,
+    corridorTraceConnectorMaxGapM: 90,
     manualReplayLateralWeight: 4,
     maxFineNodes: 12000,
     maxExpandedStates: 12000,
