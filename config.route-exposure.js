@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev19 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev20 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,9 +27,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev19: preserves dev13–dev18 diagnostics, then tests only the source-gap
-  // connectors already justified by raw OSM evidence in an ephemeral graph copy.
-  // No connector is written into production routing.
+  // v9.0.0-dev20: preserves dev13–dev19 diagnostics, keeps all source-gap
+  // connectors diagnostic/manual-review only, and can cross-check the same benchmark
+  // against mature pedestrian routing engines. No connector is written into production.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -78,6 +78,18 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     sourceGapCounterfactualEnabled: true,
     sourceGapCounterfactualMaxGapM: 55,
     sourceGapCounterfactualStrictM: 14,
+    // dev20: never auto-promote a hand-drawn source gap into production.
+    // These thresholds only classify what needs manual review.
+    safeConnectorNearTouchM: 2.5,
+    safeConnectorReviewGapM: 12,
+    matureEngineCrossCheckEnabled: true,
+    matureEngineTimeoutMs: 15000,
+    matureEngineShapeMaxPoints: 180,
+    valhallaBenchmarkEndpoint: "https://valhalla1.openstreetmap.de",
+    valhallaClientId: "haidian-route-exposure-research",
+    valhallaMinIntervalMs: 1100, // FOSSGIS public demo: keep at <= 1 request/sec
+    graphHopperBenchmarkEndpoint: "https://graphhopper.com/api/1",
+    graphHopperApiKey: "", // optional; leave blank to run Valhalla only
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,
