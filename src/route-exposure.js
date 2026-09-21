@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev15 Endpoint Snap Counterfactual Audit
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev16 Corridor Component Trace
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev15";
+  const VERSION = "v9.0.0-dev16";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1336,6 +1336,29 @@
       }
     }
 
+    const componentTrace = lastManualGraphDiagnosis?.replay?.corridorComponentTraceAudit || null;
+    if (componentTrace?.available) {
+      const cf = componentTrace.connectorCounterfactual || null;
+      const witness = cf?.connected ? (cf.witness?.points || []) : [];
+      if (witness.length >= 2) {
+        window.L.polyline(witness, { color: "#9333ea", weight: 5.5, opacity: 0.82, dashArray: "7 6", interactive: true })
+          .bindTooltip(`dev16 diagnostic-only component-join witness・${Math.round(Number(componentTrace.thresholdM || 0))} m corridor`, { direction: "top" })
+          .addTo(graphDebugLayer);
+      }
+      for (const t of (componentTrace.transitions || []).slice(0, 12)) {
+        const pair = t?.nearestNodePair || null;
+        const a = pair?.a?.node || null, b = pair?.b?.node || null;
+        if (!a || !b || !Number.isFinite(Number(a.lat)) || !Number.isFinite(Number(a.lng)) || !Number.isFinite(Number(b.lat)) || !Number.isFinite(Number(b.lng))) continue;
+        const pts = [{ lat: Number(a.lat), lng: Number(a.lng) }, { lat: Number(b.lat), lng: Number(b.lng) }];
+        const label = `dev16 component gap ${escapeHtml(t.fromComponentId || '—')}→${escapeHtml(t.toComponentId || '—')}<br>進度 ${Math.round(Number(t.progressRatio || 0) * 100)}%・node gap ${Number(pair.gapM || 0).toFixed(1)} m<br>${escapeHtml(t.classification || 'component-gap')}${t.commonSourceWays?.length ? `<br>共同 source way ${escapeHtml(t.commonSourceWays.join('/'))}` : ''}`;
+        window.L.polyline(pts, { color: "#a21caf", weight: 4, opacity: 0.9, dashArray: "4 5", interactive: true })
+          .bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+        window.L.circleMarker(pts[0], { radius: 5.5, weight: 2, color: "#86198f", fillColor: "#fae8ff", fillOpacity: 1, interactive: true }).bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+        window.L.circleMarker(pts[1], { radius: 5.5, weight: 2, color: "#86198f", fillColor: "#fae8ff", fillOpacity: 1, interactive: true }).bindTooltip(label, { direction: "top" }).addTo(graphDebugLayer);
+      }
+    }
+
+
     graphDebugVisible = true;
     return true;
   }
@@ -1510,6 +1533,41 @@
     return `<span><strong>dev15 Endpoint Snap Counterfactual Audit：</strong>不改 routing 成本，只把 A/B 改吸到端點附近其他合法 graph edge，檢查 ${threshold} m faithful corridor 能否被恢復。</span>` + currentText + altText + exclusionText + verdict;
   }
 
+
+
+  function corridorComponentTraceAuditHtml(replay) {
+    const d = replay?.corridorComponentTraceAudit || null;
+    if (!d?.available) return '';
+    const threshold = Math.round(Number(d.thresholdM || 0));
+    const fmtDominant = (items, fallback = '—') => (items || []).slice(0, 3).map((x) => `${escapeHtml(x.key || 'unknown')} ${Math.round(Number(x.distanceM || 0))} m`).join('、') || fallback;
+    const runs = (d.componentRuns || []).filter((x) => x.componentId);
+    const runText = runs.slice(0, 8).map((r) => {
+      const a = Math.round(Number(r.startProgressRatio || 0) * 100), b = Math.round(Number(r.endProgressRatio || 0) * 100);
+      const h = fmtDominant(r.dominantHighways, 'unknown');
+      const w = (r.dominantWays || []).slice(0, 2).map((x) => x.key).filter(Boolean).join('/') || '—';
+      return `${escapeHtml(r.componentId)} ${a}–${b}%：${h}；way ${escapeHtml(w)}；平均離手繪 ${Number(r.averageDistanceM || 0).toFixed(1)} m`;
+    }).join(' → ');
+    const head = `<span><strong>dev16 Faithful Corridor Component Trace：</strong>${threshold} m corridor 內共有 ${Math.round(Number(d.weakComponentCount || 0))} 個 weak component，其中 ${Math.round(Number(d.supportComponentCount || 0))} 個實際貼著手繪線；目前 A=${escapeHtml(d.startComponentId || '無')}、B=${escapeHtml(d.endComponentId || '無')}。</span>`;
+    const sequence = runText ? `<span><strong>手繪線最近 component 序列：</strong>${runText}。</span>` : '';
+    const transitionText = (d.transitions || []).slice(0, 8).map((t) => {
+      const p = Math.round(Number(t.progressRatio || 0) * 100);
+      const nodeGap = Number.isFinite(Number(t.nearestNodePair?.gapM)) ? `${Number(t.nearestNodePair.gapM).toFixed(1)} m` : '—';
+      const geomGap = Number.isFinite(Number(t.geometryPair?.distanceM)) ? `${Number(t.geometryPair.distanceM).toFixed(1)} m` : '—';
+      const ways = t.commonSourceWays?.length ? `；兩 component 仍共享 source way ${escapeHtml(t.commonSourceWays.join('/'))}` : '';
+      const na = t.nearestNodePair?.a?.node?.id || '—', nb = t.nearestNodePair?.b?.node?.id || '—';
+      return `${p}% ${escapeHtml(t.fromComponentId || '—')}→${escapeHtml(t.toComponentId || '—')}：node gap ${nodeGap}（${escapeHtml(na)} ↔ ${escapeHtml(nb)}），geometry gap ${geomGap}，${escapeHtml(t.classification || 'component-gap')}${ways}`;
+    }).join('；');
+    const transitions = transitionText ? `<span><strong>component 斷接：</strong>${transitionText}。</span>` : '';
+    const cf = d.connectorCounterfactual || null;
+    let cfText = '';
+    if (cf?.tested) {
+      const cov = Number.isFinite(Number(cf.witness?.coverageRatio)) ? `${Math.round(Number(cf.witness.coverageRatio) * 100)}%` : '—';
+      const avg = Number.isFinite(Number(cf.witness?.averageDistanceM)) ? `${Number(cf.witness.averageDistanceM).toFixed(1)} m` : '—';
+      cfText = `<span><strong>Diagnostic-only connector counterfactual：</strong>只在上述 component 邊界暫時加入 ${Math.round(Number(cf.connectorCount || 0))} 條雙向診斷 join（不寫回 production graph），${cf.connected ? `<b>即可恢復 directed A→B</b>；witness 貼合 ${cov}、平均偏移 ${avg}` : '<b>仍無法恢復 directed A→B</b>'}。</span>`;
+    }
+    return head + sequence + transitions + cfText + `<p><strong>dev16 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
+  }
+
   function graphDiagnosisHtml(diagnosis) {
     if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
     const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
@@ -1536,7 +1594,7 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
@@ -1568,7 +1626,7 @@
           breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + breakpointHtml +
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + endpointSnapCounterfactualAuditHtml(r) + corridorComponentTraceAuditHtml(r) + breakpointHtml +
           `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }

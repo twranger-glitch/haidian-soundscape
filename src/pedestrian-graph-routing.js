@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev15 Endpoint Snap Counterfactual Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev16 Corridor Component Trace
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev15";
+  const VERSION = "v9.0.0-dev16";
 
   const DEFAULTS = {
     enabled: true,
@@ -1936,6 +1936,414 @@
   }
 
 
+
+  function faithfulCorridorComponentTraceAudit(graph, startId, endId, route, thresholdM, options = {}, sharedEdgeDistanceCache = null) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    const threshold = Math.max(4, Number(thresholdM || 0));
+    const routeLen = routeDistanceM(manualRoute);
+    const start = String(startId), end = String(endId);
+    const edgeDistanceCache = sharedEdgeDistanceCache || new Map();
+    const sampleSpacingM = Math.max(5, Number(options.corridorTraceSampleSpacingM || 8));
+    const maxComponents = Math.max(4, Number(options.corridorTraceMaxComponents || 16));
+    const transitionWindowM = Math.max(35, Number(options.corridorTraceTransitionWindowM || 90));
+    const connectorMaxGapM = Math.max(8, Number(options.corridorTraceConnectorMaxGapM || 90));
+
+    if (!graph || manualRoute.length < 2 || !graph.nodes?.has(start) || !graph.nodes?.has(end)) {
+      return { available: false, thresholdM: threshold, reason: 'missing-graph-route-or-endpoint' };
+    }
+
+    function edgeCorridorDistance(edge) {
+      if (!edge) return Infinity;
+      let value = edgeDistanceCache.get(edge.id);
+      if (value == null) {
+        value = edgeDistanceToPolylineM(edge, manualRoute, 5);
+        edgeDistanceCache.set(edge.id, value);
+      }
+      return value;
+    }
+
+    // Build the exact induced faithful-corridor graph, but compute weak components
+    // separately from directed A→B reachability.  Dev13 only compared the A-side and
+    // B-side directed components; this trace intentionally surfaces any third/fourth
+    // disconnected component (for example a floating cycleway) that still hugs the
+    // hand-drawn line and can be hidden between those two sets.
+    const allowedEdgeIds = new Set();
+    const weakAdj = new Map();
+    const edgeEndpointPairs = new Map();
+    function addWeak(a, b) {
+      a = String(a); b = String(b);
+      if (!weakAdj.has(a)) weakAdj.set(a, new Set());
+      if (!weakAdj.has(b)) weakAdj.set(b, new Set());
+      weakAdj.get(a).add(b); weakAdj.get(b).add(a);
+    }
+    for (const [from0, refs] of graph.adjacency || []) {
+      const from = String(from0);
+      for (const ref of refs || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge || edgeCorridorDistance(edge) > threshold + 1e-9) continue;
+        const to = String(ref.to);
+        allowedEdgeIds.add(edge.id);
+        addWeak(from, to);
+        if (!edgeEndpointPairs.has(edge.id)) edgeEndpointPairs.set(edge.id, []);
+        edgeEndpointPairs.get(edge.id).push([from, to]);
+      }
+    }
+
+    const componentOf = new Map();
+    const components = [];
+    for (const nodeId of weakAdj.keys()) {
+      if (componentOf.has(nodeId)) continue;
+      const id = `c${components.length + 1}`;
+      const nodes = [];
+      const queue = [nodeId];
+      componentOf.set(nodeId, id);
+      for (let qi = 0; qi < queue.length; qi += 1) {
+        const u = queue[qi]; nodes.push(u);
+        for (const v of weakAdj.get(u) || []) {
+          if (componentOf.has(v)) continue;
+          componentOf.set(v, id); queue.push(v);
+        }
+      }
+      components.push({ id, nodeIds: nodes, edgeIds: [], edgeIdSet: new Set(), totalEdgeM: 0, highwayCounts: {}, wayCounts: {}, supportSamples: 0, supportMinProgressM: Infinity, supportMaxProgressM: -Infinity, supportDistanceSumM: 0 });
+    }
+    const componentById = new Map(components.map((c) => [c.id, c]));
+
+    for (const edgeId of allowedEdgeIds) {
+      const edge = graph.edges.get(edgeId);
+      if (!edge) continue;
+      const pairs = edgeEndpointPairs.get(edgeId) || [];
+      let cid = null;
+      for (const pair of pairs) {
+        cid = componentOf.get(String(pair[0])) || componentOf.get(String(pair[1])) || null;
+        if (cid) break;
+      }
+      if (!cid && edge.a != null) cid = componentOf.get(String(edge.a)) || null;
+      if (!cid) continue;
+      const c = componentById.get(cid);
+      if (!c || c.edgeIdSet.has(edge.id)) continue;
+      c.edgeIdSet.add(edge.id); c.edgeIds.push(edge.id); c.totalEdgeM += Number(edge.distanceM || 0);
+      const h = primaryHighway(edge);
+      c.highwayCounts[h] = (c.highwayCounts[h] || 0) + Number(edge.distanceM || 0);
+      for (const w of edge.wayIds || []) c.wayCounts[String(w)] = (c.wayCounts[String(w)] || 0) + Number(edge.distanceM || 0);
+    }
+
+    function componentForEdge(edge) {
+      if (!edge) return null;
+      if (edge.a != null && componentOf.has(String(edge.a))) return componentOf.get(String(edge.a));
+      if (edge.b != null && componentOf.has(String(edge.b))) return componentOf.get(String(edge.b));
+      const pair = (edgeEndpointPairs.get(edge.id) || [])[0];
+      return pair ? (componentOf.get(String(pair[0])) || componentOf.get(String(pair[1])) || null) : null;
+    }
+
+    // Map the hand-drawn trace itself to the nearest *faithful-corridor* edge.  This
+    // is deliberately score-free: it is not a map matcher, only a topology/source
+    // trace that tells us which weak component physically supports each route sample.
+    const routeSamples = samplePolyline(manualRoute, sampleSpacingM);
+    const sampleTrace = [];
+    for (let i = 0; i < routeSamples.length; i += 1) {
+      const point = routeSamples[i];
+      let best = null;
+      for (const edgeId of allowedEdgeIds) {
+        const edge = graph.edges.get(edgeId);
+        if (!edge) continue;
+        const hit = nearestPointOnGeometry(point, edge.geometry || []);
+        if (!hit || hit.distanceM > threshold + 1e-9) continue;
+        if (!best || hit.distanceM < best.distanceM - 1e-9) best = Object.assign({ edge }, hit);
+      }
+      const progressM = routeSamples.length > 1 ? routeLen * (i / (routeSamples.length - 1)) : 0;
+      const cid = best ? componentForEdge(best.edge) : null;
+      const item = {
+        index: i,
+        point: { lat: Number(point.lat), lng: Number(point.lng) },
+        progressM,
+        progressRatio: routeLen > 0 ? progressM / routeLen : 0,
+        componentId: cid,
+        edgeId: best?.edge?.id || null,
+        highway: best?.edge ? primaryHighway(best.edge) : null,
+        wayIds: best?.edge ? (best.edge.wayIds || []).map(String).slice(0, 8) : [],
+        distanceM: best ? Number(best.distanceM) : null,
+        nearest: best?.point ? { lat: Number(best.point.lat), lng: Number(best.point.lng) } : null
+      };
+      sampleTrace.push(item);
+      const c = cid ? componentById.get(cid) : null;
+      if (c) {
+        c.supportSamples += 1;
+        c.supportMinProgressM = Math.min(c.supportMinProgressM, progressM);
+        c.supportMaxProgressM = Math.max(c.supportMaxProgressM, progressM);
+        c.supportDistanceSumM += Number(best.distanceM || 0);
+      }
+    }
+
+    // Compress consecutive nearest-component assignments.  One-sample A-B-A noise is
+    // folded back into A so that a single crossing vertex does not look like a genuine
+    // independent corridor component.
+    const rawRuns = [];
+    for (const s of sampleTrace) {
+      const key = s.componentId || 'none';
+      const last = rawRuns[rawRuns.length - 1];
+      if (last && last.key === key) {
+        last.samples.push(s); last.endProgressM = s.progressM;
+      } else {
+        rawRuns.push({ key, componentId: s.componentId, samples: [s], startProgressM: s.progressM, endProgressM: s.progressM });
+      }
+    }
+    for (let i = 1; i + 1 < rawRuns.length; i += 1) {
+      if (rawRuns[i].samples.length === 1 && rawRuns[i - 1].key === rawRuns[i + 1].key) rawRuns[i].key = rawRuns[i - 1].key, rawRuns[i].componentId = rawRuns[i - 1].componentId;
+    }
+    const runs = [];
+    for (const r of rawRuns) {
+      const last = runs[runs.length - 1];
+      if (last && last.key === r.key) {
+        last.samples.push(...r.samples); last.endProgressM = r.endProgressM;
+      } else runs.push(Object.assign({}, r, { samples: r.samples.slice() }));
+    }
+
+    function dominantEntries(obj, limit = 4) {
+      return Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([key, distanceM]) => ({ key, distanceM }));
+    }
+    function compactComponent(c) {
+      if (!c) return null;
+      const dominantHighways = dominantEntries(c.highwayCounts, 4);
+      const dominantWays = dominantEntries(c.wayCounts, 5);
+      return {
+        id: c.id,
+        nodeCount: c.nodeIds.length,
+        edgeCount: c.edgeIds.length,
+        totalEdgeM: c.totalEdgeM,
+        supportSamples: c.supportSamples,
+        supportMinProgressM: Number.isFinite(c.supportMinProgressM) ? c.supportMinProgressM : null,
+        supportMaxProgressM: Number.isFinite(c.supportMaxProgressM) ? c.supportMaxProgressM : null,
+        supportMinProgressRatio: Number.isFinite(c.supportMinProgressM) && routeLen > 0 ? c.supportMinProgressM / routeLen : null,
+        supportMaxProgressRatio: Number.isFinite(c.supportMaxProgressM) && routeLen > 0 ? c.supportMaxProgressM / routeLen : null,
+        supportAverageDistanceM: c.supportSamples ? c.supportDistanceSumM / c.supportSamples : null,
+        dominantHighways,
+        dominantWays,
+        containsA: componentOf.get(start) === c.id,
+        containsB: componentOf.get(end) === c.id
+      };
+    }
+
+    const startComponentId = componentOf.get(start) || null;
+    const endComponentId = componentOf.get(end) || null;
+    const supportComponents = components.filter((c) => c.supportSamples > 0).sort((a, b) => a.supportMinProgressM - b.supportMinProgressM || b.supportSamples - a.supportSamples);
+
+    // Build an ordered component chain that explicitly includes the current snapped A/B
+    // components even when neither is the nearest geometric support component at the
+    // first/last manual sample.
+    const chainIds = [];
+    function pushChain(cid) { if (cid && chainIds[chainIds.length - 1] !== cid) chainIds.push(cid); }
+    pushChain(startComponentId);
+    for (const r of runs) pushChain(r.componentId);
+    pushChain(endComponentId);
+
+    function nodeProjection(nodeId) {
+      const n = graph.nodes.get(String(nodeId));
+      const p = n ? projectPointToPolylineProgressM(n, manualRoute) : null;
+      return p ? { nodeId: String(nodeId), node: { id: String(nodeId), lat: Number(n.lat), lng: Number(n.lng) }, progressM: p.progressM, progressRatio: routeLen > 0 ? p.progressM / routeLen : 0, routeDistanceM: p.distanceM } : null;
+    }
+
+    const projectedNodesByComp = new Map();
+    function projectedNodes(cid) {
+      if (projectedNodesByComp.has(cid)) return projectedNodesByComp.get(cid);
+      const c = componentById.get(cid);
+      const arr = [];
+      for (const id of c?.nodeIds || []) { const p = nodeProjection(id); if (p) arr.push(p); }
+      projectedNodesByComp.set(cid, arr);
+      return arr;
+    }
+
+    function componentEdgesNearProgress(cid, progressM) {
+      const c = componentById.get(cid);
+      const out = [];
+      for (const edgeId of c?.edgeIds || []) {
+        const edge = graph.edges.get(edgeId); if (!edge) continue;
+        const g = edge.geometry || [];
+        const mid = g.length ? g[Math.floor(g.length / 2)] : null;
+        const p = mid ? projectPointToPolylineProgressM(mid, manualRoute) : null;
+        if (!p) continue;
+        out.push({ edge, progressDeltaM: Math.abs(p.progressM - progressM), routeDistanceM: p.distanceM });
+      }
+      out.sort((a, b) => a.progressDeltaM - b.progressDeltaM || a.routeDistanceM - b.routeDistanceM);
+      return out.slice(0, 20);
+    }
+
+    function closestGeometryPair(cidA, cidB, progressM) {
+      const aa = componentEdgesNearProgress(cidA, progressM), bb = componentEdgesNearProgress(cidB, progressM);
+      let best = null;
+      for (const x of aa) for (const y of bb) {
+        const gx = x.edge.geometry || [], gy = y.edge.geometry || [];
+        const xSamples = [gx[0], ...shadeSamplePoints(gx, 12, 8), gx[gx.length - 1]].filter(Boolean);
+        for (const p of xSamples) {
+          const hit = nearestPointOnGeometry(p, gy);
+          if (hit && (!best || hit.distanceM < best.distanceM)) best = { distanceM: hit.distanceM, aPoint: { lat: Number(p.lat), lng: Number(p.lng) }, bPoint: { lat: Number(hit.point.lat), lng: Number(hit.point.lng) }, aEdgeId: x.edge.id, bEdgeId: y.edge.id };
+        }
+        const ySamples = [gy[0], ...shadeSamplePoints(gy, 12, 8), gy[gy.length - 1]].filter(Boolean);
+        for (const p of ySamples) {
+          const hit = nearestPointOnGeometry(p, gx);
+          if (hit && (!best || hit.distanceM < best.distanceM)) best = { distanceM: hit.distanceM, aPoint: { lat: Number(hit.point.lat), lng: Number(hit.point.lng) }, bPoint: { lat: Number(p.lat), lng: Number(p.lng) }, aEdgeId: x.edge.id, bEdgeId: y.edge.id };
+        }
+      }
+      return best;
+    }
+
+    function commonSourceWays(cidA, cidB) {
+      const a = componentById.get(cidA), b = componentById.get(cidB);
+      if (!a || !b) return [];
+      const ways = new Set(Object.keys(a.wayCounts || {}));
+      return Object.keys(b.wayCounts || {}).filter((w) => ways.has(w)).slice(0, 12);
+    }
+
+    function transitionProgress(cidA, cidB, index) {
+      for (let i = 0; i + 1 < runs.length; i += 1) {
+        if (runs[i].componentId === cidA && runs[i + 1].componentId === cidB) return (runs[i].endProgressM + runs[i + 1].startProgressM) / 2;
+      }
+      if (index === 0) return 0;
+      if (index === chainIds.length - 2) return routeLen;
+      const ca = componentById.get(cidA), cb = componentById.get(cidB);
+      const pa = Number.isFinite(ca?.supportMaxProgressM) ? ca.supportMaxProgressM : routeLen * index / Math.max(1, chainIds.length - 1);
+      const pb = Number.isFinite(cb?.supportMinProgressM) ? cb.supportMinProgressM : routeLen * (index + 1) / Math.max(1, chainIds.length - 1);
+      return (pa + pb) / 2;
+    }
+
+    const transitions = [];
+    for (let i = 0; i + 1 < chainIds.length; i += 1) {
+      const cidA = chainIds[i], cidB = chainIds[i + 1];
+      if (!cidA || !cidB || cidA === cidB) continue;
+      const progressM = transitionProgress(cidA, cidB, i);
+      const paAll = projectedNodes(cidA), pbAll = projectedNodes(cidB);
+      let pa = paAll.filter((x) => Math.abs(x.progressM - progressM) <= transitionWindowM);
+      let pb = pbAll.filter((x) => Math.abs(x.progressM - progressM) <= transitionWindowM);
+      if (!pa.length) pa = paAll.slice().sort((x, y) => Math.abs(x.progressM - progressM) - Math.abs(y.progressM - progressM)).slice(0, 80);
+      if (!pb.length) pb = pbAll.slice().sort((x, y) => Math.abs(x.progressM - progressM) - Math.abs(y.progressM - progressM)).slice(0, 80);
+      let nearestNodePair = null;
+      for (const a of pa.slice(0, 120)) for (const b of pb.slice(0, 120)) {
+        const gapM = haversineM(a.node, b.node);
+        const score = gapM + (a.routeDistanceM + b.routeDistanceM) * 0.08 + (Math.abs(a.progressM - progressM) + Math.abs(b.progressM - progressM)) * 0.01;
+        if (!nearestNodePair || score < nearestNodePair._score) nearestNodePair = { _score: score, gapM, a, b };
+      }
+      if (nearestNodePair) delete nearestNodePair._score;
+      const geometryPair = closestGeometryPair(cidA, cidB, progressM);
+      const commonWays = commonSourceWays(cidA, cidB);
+      let classification = 'component-gap';
+      if (commonWays.length) classification = 'same-source-way-split-across-components';
+      else if (geometryPair && geometryPair.distanceM <= 2.5 && (!nearestNodePair || nearestNodePair.gapM > 2.5)) classification = 'geometric-touch-without-shared-node';
+      else if (nearestNodePair && nearestNodePair.gapM <= 8) classification = 'nearby-components-without-graph-join';
+      transitions.push({
+        fromComponentId: cidA,
+        toComponentId: cidB,
+        progressM,
+        progressRatio: routeLen > 0 ? progressM / routeLen : 0,
+        nearestNodePair,
+        geometryPair,
+        commonSourceWays: commonWays,
+        classification,
+        candidateForConnectorCounterfactual: Boolean(nearestNodePair && nearestNodePair.gapM <= connectorMaxGapM + 1e-9)
+      });
+    }
+
+    // Diagnostic-only virtual joins.  These are never inserted into the production graph.
+    // They answer a narrow causal question: if the observed route-support components were
+    // joined exactly at their nearest boundary nodes, would the faithful corridor become
+    // directed A→B?  This can distinguish disconnected source topology from matcher scoring.
+    const virtualFrom = new Map();
+    const virtualConnectors = [];
+    for (let i = 0; i < transitions.length; i += 1) {
+      const t = transitions[i], pair = t.nearestNodePair;
+      if (!t.candidateForConnectorCounterfactual || !pair) continue;
+      const a = String(pair.a.nodeId), b = String(pair.b.nodeId);
+      const id = `dev16-v${i + 1}`;
+      virtualConnectors.push({ id, a, b, gapM: pair.gapM, progressM: t.progressM, progressRatio: t.progressRatio, classification: t.classification, fromComponentId: t.fromComponentId, toComponentId: t.toComponentId });
+      for (const [u, v] of [[a, b], [b, a]]) {
+        if (!virtualFrom.has(u)) virtualFrom.set(u, []);
+        virtualFrom.get(u).push({ to: v, virtualId: id });
+      }
+    }
+
+    const seen = new Set([start]), prev = new Map(), queue = [start];
+    for (let qi = 0; qi < queue.length; qi += 1) {
+      const u = queue[qi];
+      for (const ref of graph.adjacency.get(u) || []) {
+        const edge = graph.edges.get(ref.edgeId);
+        if (!edge || !allowedEdgeIds.has(edge.id)) continue;
+        const v = String(ref.to); if (seen.has(v)) continue;
+        seen.add(v); prev.set(v, { from: u, edgeId: edge.id, virtualId: null }); queue.push(v);
+      }
+      for (const ref of virtualFrom.get(u) || []) {
+        const v = String(ref.to); if (seen.has(v)) continue;
+        seen.add(v); prev.set(v, { from: u, edgeId: null, virtualId: ref.virtualId }); queue.push(v);
+      }
+    }
+    const connectorCounterfactual = { tested: virtualConnectors.length > 0, connectorCount: virtualConnectors.length, connectors: virtualConnectors, connected: seen.has(end), witness: null };
+    if (connectorCounterfactual.connected) {
+      const steps = []; let cur = end, guard = 0;
+      while (cur !== start && guard++ < 20000) { const p = prev.get(cur); if (!p) break; steps.push({ from: p.from, to: cur, edgeId: p.edgeId, virtualId: p.virtualId }); cur = p.from; }
+      if (cur === start) {
+        steps.reverse();
+        const points = [], edgeIds = [], usedVirtual = [];
+        function pushPoint(p) { if (!p) return; const q = asLatLng(p); if (!q) return; const last = points[points.length - 1]; if (!last || haversineM(last, q) > 0.2) points.push({ lat: Number(q.lat), lng: Number(q.lng) }); }
+        for (const step of steps) {
+          if (step.edgeId) {
+            const edge = graph.edges.get(step.edgeId); if (!edge) continue;
+            for (const p of edgeGeometryFor(edge, step.from, step.to) || []) pushPoint(p);
+            edgeIds.push(edge.id);
+          } else if (step.virtualId) {
+            pushPoint(graph.nodes.get(String(step.from))); pushPoint(graph.nodes.get(String(step.to))); usedVirtual.push(step.virtualId);
+          }
+        }
+        const coverage = pathCoverageAgainstRoute(points, manualRoute, threshold, 10);
+        connectorCounterfactual.witness = { points, edgeIds, virtualConnectorIds: usedVirtual, distanceM: routeDistanceM(points), coverageRatio: coverage.coverageRatio, averageDistanceM: coverage.averageDistanceM, maxDistanceM: coverage.maxDistanceM };
+      }
+    }
+
+    const compactRuns = runs.map((r) => {
+      const c = r.componentId ? componentById.get(r.componentId) : null;
+      const ways = c ? dominantEntries(c.wayCounts, 3) : [];
+      const highways = c ? dominantEntries(c.highwayCounts, 3) : [];
+      return {
+        componentId: r.componentId,
+        sampleCount: r.samples.length,
+        startProgressM: r.startProgressM,
+        endProgressM: r.endProgressM,
+        startProgressRatio: routeLen > 0 ? r.startProgressM / routeLen : 0,
+        endProgressRatio: routeLen > 0 ? r.endProgressM / routeLen : 0,
+        averageDistanceM: r.samples.reduce((sum, x) => sum + Number(x.distanceM || 0), 0) / Math.max(1, r.samples.length),
+        dominantWays: ways,
+        dominantHighways: highways
+      };
+    });
+
+    let outcome = 'multiple-faithful-components';
+    let interpretation = '';
+    if (startComponentId && endComponentId && startComponentId === endComponentId) {
+      outcome = 'same-weak-component';
+      interpretation = `A 與 B 在 ${Math.round(threshold)} m 忠實走廊內屬於同一 weak component；若 directed A→B 仍失敗，應優先檢查單向/方向性或 directed graph 建構，而不是補實體 connector。`;
+    } else if (connectorCounterfactual.connected) {
+      outcome = 'virtual-boundary-joins-restore-directed-path';
+      interpretation = `${Math.round(threshold)} m 手繪廊道旁存在多個彼此分離、但依序貼著手繪線的 graph component；只在診斷中連接 ${virtualConnectors.length} 個 component 邊界，就能恢復 directed A→B。這支持「忠實廊道來源拓樸/共享節點斷接」而非 matcher scoring 是主要瓶頸；虛擬 connector 不會進入正式 routing。`;
+    } else {
+      interpretation = `${Math.round(threshold)} m 手繪廊道旁存在多個 route-support graph component，但目前以最近邊界建立的診斷 connector 仍不足以恢復 directed A→B；下一步應檢查 component 內方向性與 source-way/node 拓樸，不能直接補通用距離橋。`;
+    }
+
+    return {
+      available: true,
+      thresholdM: threshold,
+      routeLengthM: routeLen,
+      allowedEdgeCount: allowedEdgeIds.size,
+      weakComponentCount: components.length,
+      supportComponentCount: supportComponents.length,
+      startComponentId,
+      endComponentId,
+      startEndSameWeakComponent: Boolean(startComponentId && startComponentId === endComponentId),
+      supportComponents: supportComponents.slice(0, maxComponents).map(compactComponent),
+      componentRuns: compactRuns.slice(0, maxComponents * 2),
+      transitions: transitions.slice(0, maxComponents * 2),
+      connectorCounterfactual,
+      outcome,
+      interpretation,
+      sampleTrace: sampleTrace.slice(0, 240)
+    };
+  }
+
   function endpointSnapCounterfactualAudit(graph, currentSnapA, currentSnapB, route, thresholdM, options = {}, sharedEdgeDistanceCache = null, context = {}) {
     const manualRoute = (route || []).map(asLatLng).filter(Boolean);
     if (manualRoute.length < 2 || !graph?.edges?.size) return { available: false, reason: 'route-or-graph-missing' };
@@ -2473,7 +2881,10 @@
         graph, state.snapA, state.snapB, route, fidelity, options, cache,
         { thresholdDeltaAudit, upperThresholdM: baseThreshold }
       );
-      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit: endpointSnapAudit };
+      const corridorComponentTraceAudit = faithfulCorridorComponentTraceAudit(
+        graph, state.snapA.id, state.snapB.id, route, fidelity, options, cache
+      );
+      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit: endpointSnapAudit, corridorComponentTraceAudit };
     }
 
     function cloneAttempt(attempt) {
@@ -2549,7 +2960,7 @@
       const low = bestLowCoverage.attempt;
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -2573,6 +2984,7 @@
         strictCorridorAudits,
         thresholdDeltaAudit,
         endpointSnapCounterfactualAudit,
+        corridorComponentTraceAudit,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -2588,7 +3000,7 @@
     if (!path) {
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
       const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
-      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit } = corridorDiagnostics;
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit, endpointSnapCounterfactualAudit, corridorComponentTraceAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -2604,6 +3016,7 @@
         strictCorridorAudits,
         thresholdDeltaAudit,
         endpointSnapCounterfactualAudit,
+        corridorComponentTraceAudit,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -3043,6 +3456,7 @@
       strictCorridorConnectivityAudit,
       corridorThresholdDeltaAudit,
       endpointSnapCounterfactualAudit,
+      faithfulCorridorComponentTraceAudit,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
