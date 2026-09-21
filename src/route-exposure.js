@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev13 Strict Corridor Audit
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev14 Threshold Delta Audit
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev13";
+  const VERSION = "v9.0.0-dev14";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1304,6 +1304,21 @@
         .bindTooltip(`dev13 strict corridor・B-side component 邊界<br>node ${escapeHtml(gapB.id || '—')}`, { direction: "top" }).addTo(graphDebugLayer);
       window.L.polyline([aPoint, bPoint], { color: "#dc2626", weight: 3, opacity: 0.9, dashArray: "6 6", interactive: false }).addTo(graphDebugLayer);
     }
+
+    const delta = lastManualGraphDiagnosis?.replay?.thresholdDeltaAudit || null;
+    const bridgePoints = delta?.bridgeChain?.points || [];
+    if (delta?.transitionFound && bridgePoints.length >= 2) {
+      window.L.polyline(bridgePoints, { color: "#0284c7", weight: 6, opacity: 0.88, dashArray: "10 6", interactive: true })
+        .bindTooltip(`dev14 ${Math.round(Number(delta.lowerThresholdM || 0))}→${Math.round(Number(delta.upperThresholdM || 0))} m threshold bridge chain`, { direction: "top" })
+        .addTo(graphDebugLayer);
+      const first = delta?.bridgeChain?.firstNewEdge || null;
+      if (first?.point && Number.isFinite(Number(first.point.lat)) && Number.isFinite(Number(first.point.lng))) {
+        window.L.circleMarker(first.point, { radius: 8, weight: 3, color: "#0369a1", fillColor: "#e0f2fe", fillOpacity: 1, interactive: true })
+          .bindTooltip(`dev14 第一個新增帶寬 edge<br>${escapeHtml(first.edgeId || '—')} / ${escapeHtml(first.highway || 'unknown')}${first.wayIds?.length ? `<br>way ${escapeHtml(first.wayIds.join('/'))}` : ''}<br>距手繪最遠 ${Number(first.corridorDistanceM || 0).toFixed(1)} m`, { direction: "top" })
+          .addTo(graphDebugLayer);
+      }
+    }
+
     graphDebugVisible = true;
     return true;
   }
@@ -1379,6 +1394,64 @@
     return `<span><strong>dev13 Strict Corridor Audit：</strong>把「整張 Graph 可到 B」與「手繪忠實 corridor 自己是否連通」分開檢查。</span>${pieces.join('')}`;
   }
 
+
+
+  function thresholdDeltaAuditHtml(replay) {
+    const d = replay?.thresholdDeltaAudit || null;
+    if (!d) return '';
+    const lower = Math.round(Number(d.lowerThresholdM || 0));
+    const upper = Math.round(Number(d.upperThresholdM || 0));
+    if (d.outcome === 'lower-already-connected') {
+      return `<span><strong>dev14 Threshold Delta Audit：</strong>${lower} m 已經可連通，因此 ${lower}→${upper} m 並不是這次 connectivity transition 的來源。</span>`;
+    }
+    if (d.outcome === 'upper-still-disconnected' || d.outcome === 'upper-witness-missing') {
+      return `<span><strong>dev14 Threshold Delta Audit：</strong>${lower} m 與 ${upper} m 都沒有形成 faithful-corridor A→B path；這一輪沒有「放寬 2 m 突然變通」的 transition 可解剖。</span>`;
+    }
+    if (!d.transitionFound) return '';
+
+    const bridge = d.bridgeChain || {};
+    const bridgeDistance = Number.isFinite(Number(bridge.distanceM)) ? `${Number(bridge.distanceM).toFixed(1)} m` : '—';
+    const newDistance = Number.isFinite(Number(bridge.newlyAdmittedDistanceM)) ? `${Number(bridge.newlyAdmittedDistanceM).toFixed(1)} m` : '—';
+    const maxCross = Number.isFinite(Number(bridge.maxCorridorDistanceM)) ? `${Number(bridge.maxCorridorDistanceM).toFixed(1)} m` : '—';
+    const sp = bridge.startProgress && Number.isFinite(Number(bridge.startProgress.progressRatio)) ? Math.round(Number(bridge.startProgress.progressRatio) * 100) : null;
+    const ep = bridge.endProgress && Number.isFinite(Number(bridge.endProgress.progressRatio)) ? Math.round(Number(bridge.endProgress.progressRatio) * 100) : null;
+    const progressText = sp != null && ep != null ? `（手繪進度約 ${sp}%→${ep}%）` : '';
+    const first = bridge.firstNewEdge || null;
+    const firstWay = first?.wayIds?.length ? `；${first.wayIds.length > 1 ? 'source way 候選' : 'way'} ${escapeHtml(first.wayIds.join('/'))}` : '';
+    const firstHighway = first?.highways?.length ? first.highways.join('/') : (first?.highway || 'unknown');
+    const firstText = first
+      ? `<span><strong>第一個 ${lower} m 外、${upper} m 內的新 edge：</strong>${escapeHtml(first.edgeId || '—')} / ${escapeHtml(firstHighway)}${firstWay}；edge 幾何最遠離手繪約 ${Number(first.corridorDistanceM || 0).toFixed(1)} m。</span>`
+      : '';
+    const dominant = bridge.dominantWay || null;
+    const dominantText = dominant?.key && dominant.key !== '—'
+      ? `<span><strong>bridge chain ${bridge.sourceWayProvenanceAmbiguous ? 'source way 候選' : '主要 way'}：</strong>${escapeHtml(dominant.key)} / ${escapeHtml(dominant.highway || 'unknown')}，在這段 witness 約 ${Number(dominant.distanceM || 0).toFixed(1)} m${bridge.sourceWayProvenanceAmbiguous ? '；注意 fine edge provenance 同時含多個 way，這裡不可視為單一 way 的精確歸因' : ''}。</span>`
+      : '';
+    const edgeTests = Array.isArray(d.edgeExclusionTests) ? d.edgeExclusionTests : [];
+    const criticalEdge = d.criticalEdge || edgeTests.find((t) => t.essentialForUpperCorridor) || null;
+    const edgeTestText = criticalEdge
+      ? `<span><strong>Exact edge 排除測試：</strong>暫時拿掉 fine edge ${escapeHtml(criticalEdge.edgeId)} 後，${upper} m corridor <b>不再可到 B</b>；這條 edge 可被乾淨驗證為 threshold transition 的必要 graph 通道之一。</span>`
+      : (edgeTests.length ? `<span><strong>Exact edge 排除測試：</strong>目前逐一排除新增帶寬 edge 後仍存在替代 A→B path，沒有單一 fine edge 可被判定為唯一必要。</span>` : '');
+    const tests = Array.isArray(d.wayExclusionTests) ? d.wayExclusionTests : [];
+    const testText = tests.length
+      ? `<span><strong>Source way 排除測試：</strong>${tests.map((t) => `way ${escapeHtml(t.wayId)} (${escapeHtml(t.highway || 'unknown')})${t.provenanceAmbiguous ? '［fine edge 同時含多個 way，僅作保守候選］' : ''} → 排除後 ${upper} m corridor ${t.connectedWithoutWay ? '仍可到 B' : '<b>不再可到 B</b>'}`).join('；')}。</span>`
+      : '';
+    const criticalWay = d.criticalWay || null;
+    const criticalWayCandidate = d.criticalWayCandidate || null;
+    let conclusion = criticalEdge
+      ? `已確認 fine edge ${escapeHtml(criticalEdge.edgeId)} 是讓 ${lower}→${upper} m transition 成立的必要 graph edge。`
+      : `目前只能確認 ${upper} m witness 必須離開 ${lower} m corridor，尚未隔離出唯一必要 fine edge。`;
+    if (criticalWay) {
+      conclusion += ` source way ${escapeHtml(criticalWay.wayId)} 也能被乾淨隔離為必要。`;
+    } else if (criticalWayCandidate?.provenanceAmbiguous) {
+      conclusion += ` way ${escapeHtml(criticalWayCandidate.wayId)} 的排除結果雖會斷路，但 fine edge provenance 同時含多個 way，因此只能列為候選，不能宣告單一 OSM way 就是根因。`;
+    }
+    conclusion += ` 這些結果證明的是目前 graph 的 threshold transition，仍不能單憑此結果宣告真實世界或 OSM 一定缺了一段道路。`;
+
+    return `<span><strong>dev14 Threshold Delta Audit：</strong>${lower} m 不通、${upper} m 可通；系統直接解剖 ${upper} m witness 在兩個 ${lower} m component 之間使用的 bridge chain。</span>` +
+      `<span>bridge chain 約 ${bridgeDistance}${progressText}；其中真正落在 ${lower}–${upper} m 新增帶寬內的 edge 共 ${Math.round(Number(bridge.newlyAdmittedEdgeCount || 0))} 條、約 ${newDistance}；整段最大橫向距離 ${maxCross}。</span>` +
+      firstText + dominantText + edgeTestText + testText + `<p>${conclusion}</p>`;
+  }
+
   function graphDiagnosisHtml(diagnosis) {
     if (!diagnosis?.available) return '<div class="re-graph-diagnosis is-warning">目前沒有可診斷的手繪路線或 OSM Graph。</div>';
     const coverage = Math.round((diagnosis.coverageRatio || 0) * 100);
@@ -1405,7 +1478,7 @@
           : '<span><strong>平行廊道判斷：</strong>目前未偵測到明顯的平行廊道切換。</span>';
         replay = `<span><strong>Progress-state Graph map-match：</strong>Graph 可以連到 B，但目前匹配路徑只貼合手繪線 <strong>${matchPct}%</strong>，低於 ${minPct}% 門檻。這是「低貼合匹配」，不是「拓樸不連通」。</span>` +
           `<span>使用容許範圍 ${Math.round(Number(r.corridorM || 0))} m；貼合距離門檻 ${Math.round(Number(r.fidelityThresholdM || 0))} m；平均偏移 ${avg}、最大偏移 ${max}；map-match score ${score}。</span>` +
-          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
+          edgeText + parallel + graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + `<p>${escapeHtml(r.interpretation || '')}</p>`;
       } else if (r.connected) {
         replay = `<span><strong>Progress-state Graph map-match：</strong>已依手繪線前進順序重建 A→B；貼合覆蓋 ${Math.round((r.mapMatchCoverageRatio || 0) * 100)}%、平均偏移 ${Number(r.mapMatchAverageDistanceM || 0).toFixed(1)} m；graph 距離 ${formatDistance(r.distanceM)}、graph 估計直接日照 ${formatMinutes(r.directSunSeconds)}、${r.withinDetour ? '符合' : '超過'} ${Math.round(r.detourPct || 0)}% 上限。</span>` +
           (Number.isFinite(r.autoEstimatedDirectSunSeconds) ? `<span>同一 edge 日照模型下：自動解約 ${formatMinutes(r.autoEstimatedDirectSunSeconds)}；ordered 手繪 map-match 約 ${formatMinutes(r.directSunSeconds)}。</span>` : '') +
@@ -1437,7 +1510,7 @@
           breakpointHtml = `<span><strong>拓樸／轉換斷點分類：</strong>${escapeHtml(causeLabel)}。目前 fine node ${escapeHtml(cur.id || f?.nodeId || '—')}${curSource}；可接受鄰接 edge ${Math.round(bp.acceptedIncidentCount || 0)}、被拒 ${Math.round(bp.rejectedIncidentCount || 0)}${directionDetail}。</span>${nearDetail}${edgeDetail}`;
         }
         replay = `<span><strong>Progress-state Graph map-match：</strong>在 ${escapeHtml((r.triedCorridorM || []).join('/'))} m 容許範圍內，Graph 真的沒有找到符合 ordered matching 約束且可到 B 的 path${where}${bestCorridor}${roads}${rejected}。</span>` +
-          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + breakpointHtml +
+          graphAttemptLadderHtml(r) + strictCorridorAuditHtml(r) + thresholdDeltaAuditHtml(r) + breakpointHtml +
           `<p>dev13 會另外驗證忠實 corridor 本身是否連通；只有這一步也失敗時，才把焦點放到 corridor component／connector，而不是先調日照權重。</p>`;
       }
     }

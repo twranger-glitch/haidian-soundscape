@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev13 Strict Corridor Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev14 Threshold Delta Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev13";
+  const VERSION = "v9.0.0-dev14";
 
   const DEFAULTS = {
     enabled: true,
@@ -1679,6 +1679,260 @@
     };
   }
 
+
+  function corridorThresholdDeltaAudit(graph, startId, endId, route, lowerThresholdM, upperThresholdM, options = {}, sharedEdgeDistanceCache = null, precomputed = {}) {
+    const manualRoute = (route || []).map(asLatLng).filter(Boolean);
+    const routeLen = routeDistanceM(manualRoute);
+    const lower = Math.max(4, Number(lowerThresholdM || 0));
+    const upper = Math.max(lower, Number(upperThresholdM || lower));
+    const start = String(startId), end = String(endId);
+    const edgeDistanceCache = sharedEdgeDistanceCache || new Map();
+
+    function edgeCorridorDistance(edge) {
+      if (!edge) return Infinity;
+      let value = edgeDistanceCache.get(edge.id);
+      if (value == null) {
+        value = edgeDistanceToPolylineM(edge, manualRoute, 5);
+        edgeDistanceCache.set(edge.id, value);
+      }
+      return value;
+    }
+
+    const lowerAudit = precomputed.lowerAudit || strictCorridorConnectivityAudit(graph, start, end, manualRoute, lower, options, edgeDistanceCache);
+    const upperAudit = precomputed.upperAudit || strictCorridorConnectivityAudit(graph, start, end, manualRoute, upper, options, edgeDistanceCache);
+    const base = {
+      lowerThresholdM: lower,
+      upperThresholdM: upper,
+      lowerConnected: Boolean(lowerAudit?.connected),
+      upperConnected: Boolean(upperAudit?.connected),
+      transitionFound: !lowerAudit?.connected && Boolean(upperAudit?.connected),
+      outcome: lowerAudit?.connected ? 'lower-already-connected' : (upperAudit?.connected ? 'lower-disconnected-upper-connected' : 'upper-still-disconnected')
+    };
+    if (!(upper > lower + 1e-9) || lowerAudit?.connected || !upperAudit?.connected) return base;
+
+    const reverseAdjacency = new Map();
+    for (const [from, refs] of graph?.adjacency || []) {
+      for (const ref of refs || []) {
+        const key = String(ref.to);
+        if (!reverseAdjacency.has(key)) reverseAdjacency.set(key, []);
+        reverseAdjacency.get(key).push({ from: String(from), edgeId: ref.edgeId });
+      }
+    }
+
+    function reachableFromA(thresholdM, forbiddenEdgeIds = null, forbiddenWayIds = null) {
+      const seen = new Set([start]);
+      const prev = new Map();
+      const queue = [start];
+      for (let qi = 0; qi < queue.length; qi += 1) {
+        const nodeId = queue[qi];
+        for (const ref of graph?.adjacency?.get(nodeId) || []) {
+          const edge = graph.edges.get(ref.edgeId);
+          if (!edge || edgeCorridorDistance(edge) > thresholdM + 1e-9) continue;
+          if (forbiddenEdgeIds?.has(edge.id)) continue;
+          if (forbiddenWayIds?.size && (edge.wayIds || []).some((w) => forbiddenWayIds.has(String(w)))) continue;
+          const next = String(ref.to);
+          if (seen.has(next)) continue;
+          seen.add(next);
+          prev.set(next, { from: nodeId, edgeId: edge.id });
+          queue.push(next);
+        }
+      }
+      return { seen, prev };
+    }
+
+    function reverseReachableToB(thresholdM) {
+      const seen = new Set([end]);
+      const queue = [end];
+      for (let qi = 0; qi < queue.length; qi += 1) {
+        const nodeId = queue[qi];
+        for (const ref of reverseAdjacency.get(nodeId) || []) {
+          const edge = graph.edges.get(ref.edgeId);
+          if (!edge || edgeCorridorDistance(edge) > thresholdM + 1e-9) continue;
+          const prevNode = String(ref.from);
+          if (seen.has(prevNode)) continue;
+          seen.add(prevNode);
+          queue.push(prevNode);
+        }
+      }
+      return seen;
+    }
+
+    const lowerA = reachableFromA(lower).seen;
+    const lowerB = reverseReachableToB(lower);
+    const upperSearch = reachableFromA(upper);
+    if (!upperSearch.seen.has(end)) return Object.assign(base, { transitionFound: false, outcome: 'upper-witness-missing' });
+
+    const steps = [];
+    let cur = end;
+    let guard = 0;
+    while (cur !== start && guard++ < 20000) {
+      const prev = upperSearch.prev.get(cur);
+      if (!prev) break;
+      steps.push({ edgeId: prev.edgeId, from: prev.from, to: cur });
+      cur = prev.from;
+    }
+    if (cur !== start) return Object.assign(base, { transitionFound: false, outcome: 'upper-witness-reconstruction-failed' });
+    steps.reverse();
+    const nodeSeq = [start, ...steps.map((x) => String(x.to))];
+
+    let bridgeEndNodeIndex = -1;
+    for (let i = 1; i < nodeSeq.length; i += 1) {
+      if (lowerB.has(nodeSeq[i])) { bridgeEndNodeIndex = i; break; }
+    }
+    let bridgeStartNodeIndex = -1;
+    if (bridgeEndNodeIndex > 0) {
+      for (let i = bridgeEndNodeIndex - 1; i >= 0; i -= 1) {
+        if (lowerA.has(nodeSeq[i])) { bridgeStartNodeIndex = i; break; }
+      }
+    }
+    if (bridgeStartNodeIndex < 0) bridgeStartNodeIndex = 0;
+    if (bridgeEndNodeIndex < 0) bridgeEndNodeIndex = nodeSeq.length - 1;
+    const bridgeSteps = steps.slice(bridgeStartNodeIndex, bridgeEndNodeIndex);
+
+    function nodeProgress(nodeId) {
+      const node = graph?.nodes?.get(String(nodeId));
+      const proj = node ? projectPointToPolylineProgressM(node, manualRoute) : null;
+      return proj ? {
+        progressM: proj.progressM,
+        progressRatio: routeLen > 0 ? proj.progressM / routeLen : 0,
+        routeDistanceM: proj.distanceM
+      } : null;
+    }
+
+    function edgeDetail(step) {
+      const edge = graph.edges.get(step.edgeId);
+      if (!edge) return null;
+      const geometry = edge.geometry || [];
+      const point = geometry.length ? geometry[Math.floor(geometry.length / 2)] : graph.nodes.get(String(step.from)) || null;
+      return {
+        edgeId: edge.id,
+        from: String(step.from),
+        to: String(step.to),
+        highway: primaryHighway(edge),
+        highways: (edge?.tagsSummary?.highway || [primaryHighway(edge)]).map(String).slice(0, 8),
+        wayIds: (edge.wayIds || []).map(String).slice(0, 8),
+        distanceM: Number(edge.distanceM || 0),
+        corridorDistanceM: edgeCorridorDistance(edge),
+        newlyAdmitted: edgeCorridorDistance(edge) > lower + 1e-9 && edgeCorridorDistance(edge) <= upper + 1e-9,
+        tags: compactTagsForBreakpoint(edge),
+        point: point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)) ? { lat: Number(point.lat), lng: Number(point.lng) } : null
+      };
+    }
+
+    const bridgeEdges = bridgeSteps.map(edgeDetail).filter(Boolean);
+    const newlyAdmittedEdges = bridgeEdges.filter((e) => e.newlyAdmitted);
+    const allWitnessDeltaEdges = steps.map(edgeDetail).filter((e) => e?.newlyAdmitted);
+    const bridgePath = bridgeSteps.length ? pathFromEdgeSteps(graph, bridgeSteps) : null;
+    const bridgeDistanceM = bridgeEdges.reduce((sum, e) => sum + Number(e.distanceM || 0), 0);
+    const newlyAdmittedDistanceM = newlyAdmittedEdges.reduce((sum, e) => sum + Number(e.distanceM || 0), 0);
+
+    function summarizeBy(field, edges) {
+      const stats = new Map();
+      for (const e of edges) {
+        const keys = field === 'wayIds' ? (e.wayIds?.length ? e.wayIds : ['—']) : [e[field] || 'unknown'];
+        for (const keyRaw of keys) {
+          const key = String(keyRaw);
+          const item = stats.get(key) || { key, distanceM: 0, edgeCount: 0, highway: e.highway || 'unknown' };
+          item.distanceM += Number(e.distanceM || 0);
+          item.edgeCount += 1;
+          if (!item.highway || item.highway === 'unknown') item.highway = e.highway || 'unknown';
+          stats.set(key, item);
+        }
+      }
+      return Array.from(stats.values()).sort((a, b) => b.distanceM - a.distanceM || b.edgeCount - a.edgeCount);
+    }
+
+    const bridgeWayStats = summarizeBy('wayIds', bridgeEdges);
+    const deltaWayStats = summarizeBy('wayIds', newlyAdmittedEdges);
+    const bridgeHighwayStats = summarizeBy('highway', bridgeEdges);
+    const candidateWays = [];
+    for (const stat of [...deltaWayStats, ...bridgeWayStats]) {
+      if (!stat.key || stat.key === '—' || candidateWays.some((x) => x.key === stat.key)) continue;
+      candidateWays.push(stat);
+      if (candidateWays.length >= 3) break;
+    }
+
+    const edgeExclusionTests = newlyAdmittedEdges.slice(0, 16).map((edgeInfo) => {
+      const forbidden = new Set([String(edgeInfo.edgeId)]);
+      const connectedWithoutEdge = reachableFromA(upper, forbidden, null).seen.has(end);
+      return {
+        edgeId: String(edgeInfo.edgeId),
+        highway: edgeInfo.highway || 'unknown',
+        highways: (edgeInfo.highways || [edgeInfo.highway || 'unknown']).slice(),
+        wayIds: (edgeInfo.wayIds || []).slice(),
+        corridorDistanceM: edgeInfo.corridorDistanceM,
+        connectedWithoutEdge,
+        essentialForUpperCorridor: !connectedWithoutEdge
+      };
+    });
+
+    const wayExclusionTests = candidateWays.map((stat) => {
+      const forbidden = new Set([String(stat.key)]);
+      const connectedWithoutWay = reachableFromA(upper, null, forbidden).seen.has(end);
+      const carryingEdges = bridgeEdges.filter((e) => (e.wayIds || []).includes(String(stat.key)));
+      const provenanceAmbiguous = carryingEdges.some((e) => (e.wayIds || []).length > 1);
+      return {
+        wayId: String(stat.key),
+        highway: stat.highway || 'unknown',
+        bridgeDistanceM: stat.distanceM,
+        connectedWithoutWay,
+        essentialForUpperCorridor: !connectedWithoutWay,
+        provenanceAmbiguous
+      };
+    });
+
+    const criticalEdge = edgeExclusionTests.find((x) => x.essentialForUpperCorridor) || null;
+    const criticalWay = wayExclusionTests.find((x) => x.essentialForUpperCorridor && !x.provenanceAmbiguous) || null;
+    const criticalWayCandidate = wayExclusionTests.find((x) => x.essentialForUpperCorridor) || null;
+    const firstNewEdge = newlyAdmittedEdges[0] || allWitnessDeltaEdges[0] || null;
+    const maxBridgeCorridorDistanceM = bridgeEdges.reduce((m, e) => Math.max(m, Number(e.corridorDistanceM || 0)), 0);
+    const startProgress = nodeProgress(nodeSeq[bridgeStartNodeIndex]);
+    const endProgress = nodeProgress(nodeSeq[bridgeEndNodeIndex]);
+
+    let interpretation = `${Math.round(upper)} m witness 需要使用至少一條位於 ${Math.round(lower)}–${Math.round(upper)} m 新增帶寬內的 edge，才把 ${Math.round(lower)} m 下分離的 component 接起來。`;
+    if (criticalEdge) {
+      interpretation += ` 暫時排除 fine edge ${criticalEdge.edgeId} 後，${Math.round(upper)} m corridor 也無法 A→B；因此這條 edge 是目前 threshold transition 的必要 graph 通道之一。`;
+    }
+    if (criticalWay) {
+      interpretation += ` 其 source way ${criticalWay.wayId} 也可被單獨驗證為必要。這仍不能單獨證明 OSM 存在實體缺路。`;
+    } else if (criticalWayCandidate?.provenanceAmbiguous) {
+      interpretation += ` way ${criticalWayCandidate.wayId} 的排除測試也會令路徑中斷，但相關 fine edge 同時攜帶多個 source way provenance，因此只能視為候選 way group，不能據此宣告單一 OSM way 就是根因。這仍不能單獨證明 OSM 存在實體缺路。`;
+    } else {
+      interpretation += ' 目前沒有單一 source way 可被乾淨隔離成唯一原因；這仍不能單獨證明 OSM 存在實體缺路。';
+    }
+
+    return Object.assign(base, {
+      transitionFound: true,
+      upperWitnessDistanceM: steps.reduce((sum, step) => sum + Number(graph.edges.get(step.edgeId)?.distanceM || 0), 0),
+      upperWitnessEdgeCount: steps.length,
+      deltaWitnessEdgeCount: allWitnessDeltaEdges.length,
+      bridgeChain: {
+        startNode: nodeMetaForBreakpoint(graph, nodeSeq[bridgeStartNodeIndex]),
+        endNode: nodeMetaForBreakpoint(graph, nodeSeq[bridgeEndNodeIndex]),
+        startProgress,
+        endProgress,
+        distanceM: bridgeDistanceM,
+        maxCorridorDistanceM: maxBridgeCorridorDistanceM,
+        newlyAdmittedDistanceM,
+        newlyAdmittedEdgeCount: newlyAdmittedEdges.length,
+        edgeCount: bridgeEdges.length,
+        points: bridgePath?.points || [],
+        edges: bridgeEdges.slice(0, 40),
+        firstNewEdge,
+        dominantWay: bridgeWayStats[0] || null,
+        dominantDeltaWay: deltaWayStats[0] || null,
+        dominantHighway: bridgeHighwayStats[0] || null,
+        sourceWayProvenanceAmbiguous: bridgeEdges.some((e) => (e.wayIds || []).length > 1)
+      },
+      edgeExclusionTests,
+      wayExclusionTests,
+      criticalEdge,
+      criticalWay,
+      criticalWayCandidate,
+      interpretation
+    });
+  }
+
   async function orderedMapMatchDijkstra(graph, startId, endId, route, thresholdM, speedMps, options = {}) {
     lastOrderedMapMatchFailure = null;
     // dev10+: ordered map matching is a state-space problem, not just a node shortest path.
@@ -1910,15 +2164,23 @@
     const failureAttempts = [];
     const attempts = [];
 
-    function buildStrictCorridorAudits(fidelityThresholdM) {
+    function buildCorridorDiagnostics(fidelityThresholdM) {
       const cache = new Map();
-      const auditThresholds = Array.from(new Set([
-        Math.max(4, Number(fidelityThresholdM || config.manualReplayFidelityThresholdM || 14)),
-        baseThreshold
-      ])).sort((a, b) => a - b);
-      return auditThresholds.map((thresholdM) => strictCorridorConnectivityAudit(
+      const fidelity = Math.max(4, Number(fidelityThresholdM || config.manualReplayFidelityThresholdM || 14));
+      const auditThresholds = Array.from(new Set([fidelity, baseThreshold])).sort((a, b) => a - b);
+      const strictCorridorAudits = auditThresholds.map((thresholdM) => strictCorridorConnectivityAudit(
         graph, state.snapA.id, state.snapB.id, route, thresholdM, options, cache
       ));
+      const strictCorridorAudit = strictCorridorAudits[0] || null;
+      const lowerAudit = strictCorridorAudits.find((a) => Math.abs(Number(a.thresholdM) - fidelity) < 1e-6) || strictCorridorAudit;
+      const upperAudit = strictCorridorAudits.find((a) => Math.abs(Number(a.thresholdM) - baseThreshold) < 1e-6) || strictCorridorAudits[strictCorridorAudits.length - 1] || null;
+      const thresholdDeltaAudit = baseThreshold > fidelity + 1e-9
+        ? corridorThresholdDeltaAudit(
+            graph, state.snapA.id, state.snapB.id, route, fidelity, baseThreshold, options, cache,
+            { lowerAudit, upperAudit }
+          )
+        : null;
+      return { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit };
     }
 
     function cloneAttempt(attempt) {
@@ -1993,8 +2255,8 @@
       const lowPath = bestLowCoverage.path;
       const low = bestLowCoverage.attempt;
       const fidelityThresholdM = low.fidelityThresholdM ?? Math.min(14, Number(low.thresholdM || baseThreshold));
-      const strictCorridorAudits = buildStrictCorridorAudits(fidelityThresholdM);
-      const strictCorridorAudit = strictCorridorAudits[0] || null;
+      const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = null;
       return {
         available: true,
@@ -2016,6 +2278,7 @@
         fidelityThresholdM,
         strictCorridorAudit,
         strictCorridorAudits,
+        thresholdDeltaAudit,
         firstDivergence: low.firstDivergence || null,
         firstThresholdExceeded: low.firstThresholdExceeded || null,
         switchedToNearbyParallel: Boolean(low.switchedToNearbyParallel),
@@ -2030,8 +2293,8 @@
 
     if (!path) {
       const fidelityThresholdM = Math.max(4, Number(options.manualReplayFidelityThresholdM ?? config.manualReplayFidelityThresholdM ?? 14));
-      const strictCorridorAudits = buildStrictCorridorAudits(fidelityThresholdM);
-      const strictCorridorAudit = strictCorridorAudits[0] || null;
+      const corridorDiagnostics = buildCorridorDiagnostics(fidelityThresholdM);
+      const { strictCorridorAudits, strictCorridorAudit, thresholdDeltaAudit } = corridorDiagnostics;
       lastOrderedMapMatchFailure = bestFailure || lastOrderedMapMatchFailure;
       return {
         available: true,
@@ -2045,6 +2308,7 @@
         fidelityThresholdM,
         strictCorridorAudit,
         strictCorridorAudits,
+        thresholdDeltaAudit,
         failureDiagnostics: bestFailure ? Object.assign({}, bestFailure) : (lastOrderedMapMatchFailure ? Object.assign({}, lastOrderedMapMatchFailure) : null),
         failureAttempts: failureAttempts.map((f) => ({ thresholdM: f.thresholdM, maxProgressRatio: f.maxProgressRatio, maxProgressM: f.maxProgressM, nodeId: f.nodeId, breakpoint: f.breakpoint || null })),
         attempts
@@ -2482,6 +2746,7 @@
       replayPolyline,
       orderedMapMatchDijkstra,
       strictCorridorConnectivityAudit,
+      corridorThresholdDeltaAudit,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
