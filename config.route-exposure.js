@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev12 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev13 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,7 +27,8 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev12: distinguishes true no-goal topology/transition failure from connected-but-low-fidelity map matching.
+  // v9.0.0-dev13: preserves dev12 outcome truthfulness and adds a strict 14/16 m
+  // corridor-connectivity audit before any matcher-score tuning.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
