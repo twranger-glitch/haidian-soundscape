@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev20.1 Cross-check-first + Deferred Causal Audit
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev21 Mature Engine Geometry Overlay
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev20.1";
+  const VERSION = "v9.0.0-dev21";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -54,6 +54,8 @@
   let comparisonLayer = null;
   let graphDebugLayer = null;
   let graphDebugVisible = false;
+  let engineCrossCheckLayer = null;
+  let engineCrossCheckVisible = false;
   let lastManualGraphDiagnosis = null;
   let drawMode = "idle";
   let drawPoints = [];
@@ -1230,6 +1232,70 @@
   }
 
 
+  function clearMatureEngineOverlay() {
+    engineCrossCheckVisible = false;
+    clearLayer(engineCrossCheckLayer);
+  }
+
+  function matureEngineOverlayEntries(live) {
+    if (!live) return [];
+    return [
+      { id: "valhalla-route", label: "Valhalla ordinary pedestrian", engine: "Valhalla", mode: "ordinary", result: live.valhalla?.route, color: "#2563eb", dashArray: null, weight: 6 },
+      { id: "valhalla-trace", label: "Valhalla trace_route map_snap", engine: "Valhalla", mode: "map-match", result: live.valhalla?.traceRoute, color: "#0ea5e9", dashArray: "10 6", weight: 5.5 },
+      { id: "graphhopper-route", label: "GraphHopper foot route", engine: "GraphHopper", mode: "ordinary", result: live.graphhopper?.route, color: "#d97706", dashArray: null, weight: 5.5 },
+      { id: "graphhopper-match", label: "GraphHopper GPX map-match", engine: "GraphHopper", mode: "map-match", result: live.graphhopper?.match, color: "#f59e0b", dashArray: "8 6", weight: 5 }
+    ].filter((entry) => entry.result?.available && Array.isArray(entry.result.points) && entry.result.points.length >= 2);
+  }
+
+  function engineOverlayTooltip(entry) {
+    const x = entry.result || {};
+    const coverage = Number.isFinite(Number(x.coverageRatio)) ? `${Math.round(Number(x.coverageRatio) * 100)}%` : "—";
+    const avg = Number.isFinite(Number(x.averageDistanceM)) ? `${Number(x.averageDistanceM).toFixed(1)} m` : "—";
+    const max = Number.isFinite(Number(x.maxDistanceM)) ? `${Number(x.maxDistanceM).toFixed(1)} m` : "—";
+    const divergence = x.firstDivergence && Number.isFinite(Number(x.firstDivergence.progressRatio))
+      ? `<br>首個超出門檻：約 ${Math.round(Number(x.firstDivergence.progressRatio) * 100)}%・${Number(x.firstDivergence.distanceM || 0).toFixed(1)} m`
+      : "";
+    return `<b>${escapeHtml(entry.label)}</b><br>${x.faithful ? "忠實河堤" : "非忠實河堤"}・貼合 ${coverage}<br>平均偏移 ${avg}・最大偏移 ${max}<br>距離 ${escapeHtml(formatDistance(Number(x.distanceM || 0)))}${divergence}`;
+  }
+
+  function renderMatureEngineOverlay(live) {
+    const entries = matureEngineOverlayEntries(live);
+    if (!entries.length || !window.L || !map) {
+      clearMatureEngineOverlay();
+      return false;
+    }
+    if (!engineCrossCheckLayer) engineCrossCheckLayer = createLayerGroup();
+    clearLayer(engineCrossCheckLayer);
+    for (const entry of entries) {
+      const x = entry.result;
+      const line = window.L.polyline(x.points, {
+        color: entry.color, weight: entry.weight, opacity: entry.mode === "ordinary" ? 0.9 : 0.82,
+        dashArray: entry.dashArray || undefined, interactive: true
+      }).addTo(engineCrossCheckLayer);
+      line.bindTooltip(engineOverlayTooltip(entry), { direction: "top", sticky: true });
+      const div = x.firstDivergence;
+      if (div?.manualPoint && div?.enginePoint) {
+        const gap = [div.manualPoint, div.enginePoint];
+        window.L.polyline(gap, { color: entry.color, weight: 2.5, opacity: 0.8, dashArray: "3 5", interactive: false }).addTo(engineCrossCheckLayer);
+        window.L.circleMarker(div.manualPoint, { radius: 6, weight: 2.5, color: entry.color, fillColor: "#ffffff", fillOpacity: 0.96, interactive: true })
+          .bindTooltip(`${escapeHtml(entry.label)}<br>首個超出 fidelity 門檻：約 ${Math.round(Number(div.progressRatio || 0) * 100)}%・${Number(div.distanceM || 0).toFixed(1)} m`, { direction: "top" })
+          .addTo(engineCrossCheckLayer);
+      }
+    }
+    engineCrossCheckVisible = true;
+    return true;
+  }
+
+  function toggleMatureEngineOverlay() {
+    if (engineCrossCheckVisible) {
+      clearMatureEngineOverlay();
+    } else {
+      renderMatureEngineOverlay(lastManualGraphDiagnosis?.replay?.matureEngineCrossCheck || null);
+    }
+    const button = panel?.querySelector("[data-re-engine-map]");
+    if (button) button.textContent = engineCrossCheckVisible ? "隱藏成熟引擎路線" : "顯示成熟引擎路線";
+  }
+
   function graphEdgeColor(edge) {
     if (edge?.inMinSun) return "#7c3aed";
     if (edge?.inFastest) return "#0f766e";
@@ -1687,14 +1753,17 @@
   function matureEngineCrossCheckHtml(replay) {
     const d = replay?.matureEngineCrossCheck || null;
     if (!d) return '';
-    if (!d.available) return `<span><strong>dev20 Mature Engine Cross-check：</strong>${escapeHtml(d.reason || '不可用')}</span>`;
+    if (!d.available) return `<span><strong>dev21 Mature Engine Cross-check：</strong>${escapeHtml(d.reason || '不可用')}</span>`;
     const pct = (v) => Number.isFinite(Number(v)) ? `${Math.round(Number(v) * 100)}%` : '—';
     const meters = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)} m` : '—';
     const row = (name, x) => {
       if (!x) return `${name}：未執行`;
       if (x.ok === false) return `${name}：失敗（${escapeHtml(x.error || 'unknown')}）`;
       if (!x.available) return `${name}：沒有 geometry`;
-      return `${name}：${x.faithful ? '<b>忠實河堤</b>' : '非忠實河堤'}・貼合 ${pct(x.coverageRatio)}・平均偏移 ${meters(x.averageDistanceM)}・距離 ${formatDistance(x.distanceM || 0)}`;
+      const first = x.firstDivergence && Number.isFinite(Number(x.firstDivergence.progressRatio))
+        ? `・首個超出 ${meters(x.fidelityThresholdM || d.fidelityThresholdM || 14)} 門檻：${Math.round(Number(x.firstDivergence.progressRatio) * 100)}% / ${meters(x.firstDivergence.distanceM)}`
+        : '';
+      return `${name}：${x.faithful ? '<b>忠實河堤</b>' : '非忠實河堤'}・貼合 ${pct(x.coverageRatio)}・平均偏移 ${meters(x.averageDistanceM)}・最大偏移 ${meters(x.maxDistanceM)}・距離 ${formatDistance(x.distanceM || 0)}${first}`;
     };
     const val = d.valhalla?.available
       ? `<span><strong>Valhalla：</strong>${row('ordinary pedestrian route', d.valhalla.route)}；${row('trace_route map_snap', d.valhalla.traceRoute)}。</span>`
@@ -1702,7 +1771,10 @@
     const gh = d.graphhopper?.available
       ? `<span><strong>GraphHopper：</strong>${row('foot route', d.graphhopper.route)}；${row('GPX map-match', d.graphhopper.match)}。</span>`
       : `<span><strong>GraphHopper：</strong>${d.graphhopper?.reason === 'api-key-not-configured' ? '未設定 API key，因此本次只跑 Valhalla；可在 graphRouting.graphHopperApiKey 設定後再比對。' : escapeHtml(d.graphhopper?.reason || '未執行')}。</span>`;
-    return `<span><strong>dev20 Mature Engine Cross-check：</strong>${escapeHtml(d.outcome || '')}</span>${val}${gh}<p><strong>dev20 engine 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
+    const hasGeometry = matureEngineOverlayEntries(d).length > 0;
+    const mapButton = hasGeometry ? `<span><button type="button" data-re-engine-map>${engineCrossCheckVisible ? '隱藏成熟引擎路線' : '顯示成熟引擎路線'}</button> ordinary＝實線；map-match＝虛線。地圖上的短連線標示第一個超出 fidelity 門檻的位置。</span>` : '';
+    const tested = d.testedAt ? `<span><small>外部引擎測試時間：${escapeHtml(String(d.testedAt))}；fidelity 門檻 ${meters(d.fidelityThresholdM || 14)}。</small></span>` : '';
+    return `<span><strong>dev21 Mature Engine Cross-check：</strong>${escapeHtml(d.outcome || '')}</span>${val}${gh}${tested}${mapButton}<p><strong>dev21 engine 判讀：</strong>${escapeHtml(d.interpretation || '')}</p>`;
   }
 
   function enrichShadeReconciliation(diagnosis) {
@@ -1866,6 +1938,7 @@
   }
 
   async function diagnoseSavedManualRoute() {
+    clearMatureEngineOverlay();
     if (!savedDrawnRoute?.length || savedDrawnRoute.length < 2) {
       setStatus("還沒有手繪路線。請先用『分析我自己的路線』沿河堤/道路畫一條，再回來跑 A→B。", "warning");
       return;
@@ -2151,6 +2224,7 @@
     clearLayer(resultLayer);
     clearLayer(endpointsLayer);
     clearLayer(comparisonLayer);
+    clearMatureEngineOverlay();
     const results = panel?.querySelector("[data-re-results]");
     if (results) results.innerHTML = "";
     if (clearStatus) setStatus("已重新開始。", "");
@@ -2412,6 +2486,7 @@
           }
         );
       }
+      renderMatureEngineOverlay(live);
       const box = panel?.querySelector("[data-re-graph-diagnosis]");
       if (box) box.innerHTML = graphDiagnosisHtml(lastManualGraphDiagnosis);
       const outcome = live?.outcome || "engine-crosscheck-inconclusive";
@@ -2589,6 +2664,8 @@
       if (sourceGapLive) { void runSourceGapCounterfactualLive(); return; }
       const engineLive = event.target?.closest?.("[data-re-engine-live]");
       if (engineLive) { void runMatureEngineCrossCheck(); return; }
+      const engineMap = event.target?.closest?.("[data-re-engine-map]");
+      if (engineMap) { toggleMatureEngineOverlay(); return; }
       const benchmarkExport = event.target?.closest?.("[data-re-engine-benchmark]");
       if (benchmarkExport) { exportEngineBenchmark(); return; }
       const action = event.target?.closest?.("[data-re-result-draw]");

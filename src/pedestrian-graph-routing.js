@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev20.1 Cross-check-first + Deferred Causal Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev21 Mature Engine Geometry Overlay
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev20.1";
+  const VERSION = "v9.0.0-dev21";
 
   const DEFAULTS = {
     enabled: true,
@@ -3115,9 +3115,39 @@
     const coverage = pathCoverageAgainstRoute(path, manual, thresholdM, 10);
     const avgDistanceM = Number(coverage.averageDistanceM);
     const faithful = Number(coverage.coverageRatio || 0) >= 0.88 && Number.isFinite(avgDistanceM) && avgDistanceM <= thresholdM;
+    const manualDistanceM = routeDistanceM(manual);
+    const spacingM = 10;
+    const samples = Math.max(1, Math.ceil(manualDistanceM / spacingM));
+    let firstDivergence = null;
+    let largestOffset = null;
+    for (let i = 0; i <= samples; i += 1) {
+      const progressM = Math.min(manualDistanceM, i * spacingM);
+      const p = pointAlongPolyline(manual, progressM);
+      if (!p) continue;
+      const hit = nearestPointOnGeometry(p, path);
+      const distanceM = Number(hit?.distanceM);
+      if (!Number.isFinite(distanceM)) continue;
+      const item = {
+        progressRatio: manualDistanceM > 0 ? progressM / manualDistanceM : 0,
+        manualPoint: { lat: Number(p.lat), lng: Number(p.lng) },
+        enginePoint: hit?.point ? { lat: Number(hit.point.lat), lng: Number(hit.point.lng) } : null,
+        distanceM
+      };
+      if (!largestOffset || distanceM > largestOffset.distanceM) largestOffset = item;
+      if (!firstDivergence && distanceM > thresholdM) firstDivergence = item;
+    }
     return {
-      available: true, pointCount: path.length, distanceM: routeDistanceM(path), faithful,
-      coverageRatio: coverage.coverageRatio, averageDistanceM: coverage.averageDistanceM, maxDistanceM: coverage.maxDistanceM,
+      available: true,
+      pointCount: path.length,
+      distanceM: routeDistanceM(path),
+      manualDistanceM,
+      faithful,
+      fidelityThresholdM: thresholdM,
+      coverageRatio: coverage.coverageRatio,
+      averageDistanceM: coverage.averageDistanceM,
+      maxDistanceM: coverage.maxDistanceM,
+      firstDivergence,
+      largestOffset,
       points: path.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }))
     };
   }
@@ -3155,7 +3185,7 @@
     const manualShape = downsampleBenchmarkShape(manifest.manualShape, maxPoints).map((p) => ({ lat: p.lat, lon: p.lng }));
     const thresholdM = Number(options.fidelityThresholdM || config.manualReplayFidelityThresholdM || 14);
     const fetchImpl = options.fetchImpl || null;
-    const result = { available: true, generatedBy: VERSION, valhalla: { available: false }, graphhopper: { available: false } };
+    const result = { available: true, generatedBy: VERSION, testedAt: new Date().toISOString(), fidelityThresholdM: thresholdM, manualDistanceM: routeDistanceM(manualShape.map((p) => ({ lat:Number(p.lat), lng:Number(p.lon ?? p.lng) }))), valhalla: { available: false }, graphhopper: { available: false } };
 
     const valBase = String(options.valhallaEndpoint || config.valhallaBenchmarkEndpoint || '').replace(/\/$/, '');
     if (valBase) {
