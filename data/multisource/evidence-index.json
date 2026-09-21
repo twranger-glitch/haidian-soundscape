@@ -1,1 +1,1715 @@
-
+{
+  "schema": "haidian-multisource-evidence-index-v1",
+  "version": "v9.0.0-dev24",
+  "generatedAt": "2026-09-21T11:54:39Z",
+  "benchmarkSchema": "haidian-routing-engine-benchmark-v2",
+  "productionGraphMutation": false,
+  "policy": {
+    "noProximityAutoBridge": true,
+    "manualRouteIsEvidence": false,
+    "unboundIsNotNegativeEvidence": true,
+    "verifiedStillProductionAllowed": false,
+    "experimentalWitnessRequiresPedestrianAllowed": true,
+    "matchToleranceM": 16.0
+  },
+  "gaps": [
+    {
+      "id": "gap-1",
+      "classification": "source-topology-gap",
+      "geometryGapM": 41.5145386570379,
+      "graphNodeGapM": 41.5145386570379,
+      "fromWays": [
+        {
+          "wayId": "1481086149",
+          "highway": "footway"
+        }
+      ],
+      "toWays": [
+        {
+          "wayId": "764376782",
+          "highway": "cycleway"
+        }
+      ],
+      "geometry": [
+        {
+          "lat": 23.0289382,
+          "lon": 120.1996821
+        },
+        {
+          "lat": 23.028965021879905,
+          "lon": 120.20008673005543
+        }
+      ],
+      "location": {
+        "lat": 23.028951610939952,
+        "lng": 120.19988441502773
+      },
+      "gradeSeparationConflict": false,
+      "accessConflict": false,
+      "sources": {
+        "osm": {
+          "availability": "ready",
+          "sharedNode": false,
+          "classification": "source-topology-gap",
+          "geometryGapM": 41.5145386570379,
+          "independentProvenance": false
+        },
+        "overture": {
+          "availability": "ready",
+          "nearestFromM": 0.0,
+          "nearestToM": 0.0,
+          "explicitSharedTopology": true,
+          "sharedTopologyEvidence": [
+            {
+              "connectorId": "4ffccc32-bdd1-4cbf-92e5-0988df4b552d",
+              "fromSegmentId": "f5cbafb7-2a95-47b3-ac02-7ab043ad46da",
+              "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+              "fromDistanceM": 0.0,
+              "toDistanceM": 12.894,
+              "provenance": [
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w1481086149@1",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w152801177@20",
+                  "update_time": "2026-07-11T01:32:44Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "n13584546707@1",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "overture-shared-connector",
+                "source": "overture",
+                "connectorId": "4ffccc32-bdd1-4cbf-92e5-0988df4b552d",
+                "fromSegmentId": "f5cbafb7-2a95-47b3-ac02-7ab043ad46da",
+                "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+                "fromDistanceM": 0.0,
+                "toDistanceM": 12.894,
+                "lengthM": 47.296,
+                "geometry": [
+                  {
+                    "lat": 23.0289382,
+                    "lon": 120.1996821
+                  },
+                  {
+                    "lat": 23.0288805,
+                    "lon": 120.1996783
+                  },
+                  {
+                    "lat": 23.028849467093135,
+                    "lon": 120.2000762389758
+                  }
+                ],
+                "pedestrianAllowed": false,
+                "accessBasis": "unknown-or-not-explicit",
+                "provenance": [
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "w1481086149@1",
+                    "update_time": "2026-02-20T11:12:42Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  },
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "w152801177@20",
+                    "update_time": "2026-07-11T01:32:44Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  },
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "n13584546707@1",
+                    "update_time": "2026-02-20T11:12:42Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  }
+                ]
+              }
+            },
+            {
+              "connectorId": "84ea8703-0125-4ffb-a450-c9d6dade6fbe",
+              "fromSegmentId": "ffbed656-65a9-46fb-bdbe-f03177f8d8bf",
+              "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+              "fromDistanceM": 11.069,
+              "toDistanceM": 12.894,
+              "provenance": [
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w1481086148@1",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w152801177@20",
+                  "update_time": "2026-07-11T01:32:44Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "n13584546706@1",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "overture-shared-connector",
+                "source": "overture",
+                "connectorId": "84ea8703-0125-4ffb-a450-c9d6dade6fbe",
+                "fromSegmentId": "ffbed656-65a9-46fb-bdbe-f03177f8d8bf",
+                "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+                "fromDistanceM": 11.069,
+                "toDistanceM": 12.894,
+                "lengthM": 58.173,
+                "geometry": [
+                  {
+                    "lat": 23.028944208289587,
+                    "lon": 120.19957412844401
+                  },
+                  {
+                    "lat": 23.0288882,
+                    "lon": 120.1995705
+                  },
+                  {
+                    "lat": 23.028885,
+                    "lon": 120.1996208
+                  },
+                  {
+                    "lat": 23.0288805,
+                    "lon": 120.1996783
+                  },
+                  {
+                    "lat": 23.028849467093135,
+                    "lon": 120.2000762389758
+                  }
+                ],
+                "pedestrianAllowed": false,
+                "accessBasis": "unknown-or-not-explicit",
+                "provenance": [
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "w1481086148@1",
+                    "update_time": "2026-02-20T11:12:42Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  },
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "w152801177@20",
+                    "update_time": "2026-07-11T01:32:44Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  },
+                  {
+                    "property": "",
+                    "dataset": "OpenStreetMap",
+                    "license": "ODbL-1.0",
+                    "record_id": "n13584546706@1",
+                    "update_time": "2026-02-20T11:12:42Z",
+                    "confidence": null,
+                    "between": null,
+                    "provider": "osm",
+                    "resource": "planet",
+                    "version": "2026-08-05"
+                  }
+                ]
+              }
+            }
+          ],
+          "independentProvenance": false,
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086149@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546707@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086148@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546706@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ]
+        },
+        "nlma-sidewalk": {
+          "availability": "ready",
+          "nearestFromM": 4.784,
+          "nearestToM": 0.0,
+          "officialContinuousGeometry": true,
+          "continuousGeometryEvidence": [
+            {
+              "sourceFeatureId": "4476",
+              "fromDistanceM": 4.784,
+              "toDistanceM": 0.0,
+              "officialInventory": true,
+              "provenance": [
+                {
+                  "dataset": "nlma-sidewalk",
+                  "record_id": "4476"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "official-continuous-geometry",
+                "source": "nlma-sidewalk",
+                "sourceFeatureId": "4476",
+                "fromDistanceM": 4.784,
+                "toDistanceM": 0.0,
+                "lengthM": 41.029,
+                "geometry": [
+                  {
+                    "lat": 23.02898130989376,
+                    "lon": 120.19968618741127
+                  },
+                  {
+                    "lat": 23.028965021879905,
+                    "lon": 120.20008673005543
+                  }
+                ],
+                "geometryBasis": "official-surface-contained-path",
+                "pedestrianAllowed": true,
+                "accessBasis": "official-sidewalk-inventory",
+                "provenance": [
+                  {
+                    "dataset": "nlma-sidewalk",
+                    "record_id": "4476"
+                  }
+                ]
+              }
+            }
+          ],
+          "independentProvenance": true,
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ]
+        },
+        "nlma-bikeway": {
+          "availability": "ready",
+          "nearestFromM": 93.967,
+          "nearestToM": 87.14,
+          "officialContinuousGeometry": false,
+          "continuousGeometryEvidence": [],
+          "independentProvenance": false,
+          "provenance": []
+        },
+        "tainan-sidewalk": {
+          "availability": "ready",
+          "nearestFromM": 4.784,
+          "nearestToM": 0.0,
+          "officialContinuousGeometry": true,
+          "continuousGeometryEvidence": [
+            {
+              "sourceFeatureId": "4483",
+              "fromDistanceM": 4.784,
+              "toDistanceM": 0.0,
+              "officialInventory": true,
+              "provenance": [
+                {
+                  "dataset": "tainan-sidewalk",
+                  "record_id": "4483"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "official-continuous-geometry",
+                "source": "tainan-sidewalk",
+                "sourceFeatureId": "4483",
+                "fromDistanceM": 4.784,
+                "toDistanceM": 0.0,
+                "lengthM": 41.029,
+                "geometry": [
+                  {
+                    "lat": 23.028981309893606,
+                    "lon": 120.19968618741126
+                  },
+                  {
+                    "lat": 23.028965021879905,
+                    "lon": 120.20008673005543
+                  }
+                ],
+                "geometryBasis": "official-surface-contained-path",
+                "pedestrianAllowed": true,
+                "accessBasis": "official-sidewalk-inventory",
+                "provenance": [
+                  {
+                    "dataset": "tainan-sidewalk",
+                    "record_id": "4483"
+                  }
+                ]
+              }
+            }
+          ],
+          "independentProvenance": true,
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ]
+        },
+        "tainan-bikeway": {
+          "availability": "metadata-only",
+          "metadataOnly": true,
+          "unknownNotNegative": true
+        }
+      },
+      "sharedTopologyEvidence": [
+        {
+          "connectorId": "4ffccc32-bdd1-4cbf-92e5-0988df4b552d",
+          "fromSegmentId": "f5cbafb7-2a95-47b3-ac02-7ab043ad46da",
+          "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+          "fromDistanceM": 0.0,
+          "toDistanceM": 12.894,
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086149@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546707@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "overture-shared-connector",
+            "source": "overture",
+            "connectorId": "4ffccc32-bdd1-4cbf-92e5-0988df4b552d",
+            "fromSegmentId": "f5cbafb7-2a95-47b3-ac02-7ab043ad46da",
+            "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+            "fromDistanceM": 0.0,
+            "toDistanceM": 12.894,
+            "lengthM": 47.296,
+            "geometry": [
+              {
+                "lat": 23.0289382,
+                "lon": 120.1996821
+              },
+              {
+                "lat": 23.0288805,
+                "lon": 120.1996783
+              },
+              {
+                "lat": 23.028849467093135,
+                "lon": 120.2000762389758
+              }
+            ],
+            "pedestrianAllowed": false,
+            "accessBasis": "unknown-or-not-explicit",
+            "provenance": [
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "w1481086149@1",
+                "update_time": "2026-02-20T11:12:42Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              },
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "w152801177@20",
+                "update_time": "2026-07-11T01:32:44Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              },
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "n13584546707@1",
+                "update_time": "2026-02-20T11:12:42Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              }
+            ]
+          }
+        },
+        {
+          "connectorId": "84ea8703-0125-4ffb-a450-c9d6dade6fbe",
+          "fromSegmentId": "ffbed656-65a9-46fb-bdbe-f03177f8d8bf",
+          "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+          "fromDistanceM": 11.069,
+          "toDistanceM": 12.894,
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086148@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546706@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "overture-shared-connector",
+            "source": "overture",
+            "connectorId": "84ea8703-0125-4ffb-a450-c9d6dade6fbe",
+            "fromSegmentId": "ffbed656-65a9-46fb-bdbe-f03177f8d8bf",
+            "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+            "fromDistanceM": 11.069,
+            "toDistanceM": 12.894,
+            "lengthM": 58.173,
+            "geometry": [
+              {
+                "lat": 23.028944208289587,
+                "lon": 120.19957412844401
+              },
+              {
+                "lat": 23.0288882,
+                "lon": 120.1995705
+              },
+              {
+                "lat": 23.028885,
+                "lon": 120.1996208
+              },
+              {
+                "lat": 23.0288805,
+                "lon": 120.1996783
+              },
+              {
+                "lat": 23.028849467093135,
+                "lon": 120.2000762389758
+              }
+            ],
+            "pedestrianAllowed": false,
+            "accessBasis": "unknown-or-not-explicit",
+            "provenance": [
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "w1481086148@1",
+                "update_time": "2026-02-20T11:12:42Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              },
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "w152801177@20",
+                "update_time": "2026-07-11T01:32:44Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              },
+              {
+                "property": "",
+                "dataset": "OpenStreetMap",
+                "license": "ODbL-1.0",
+                "record_id": "n13584546706@1",
+                "update_time": "2026-02-20T11:12:42Z",
+                "confidence": null,
+                "between": null,
+                "provider": "osm",
+                "resource": "planet",
+                "version": "2026-08-05"
+              }
+            ]
+          }
+        }
+      ],
+      "continuousGeometryEvidence": [
+        {
+          "sourceFeatureId": "4476",
+          "fromDistanceM": 4.784,
+          "toDistanceM": 0.0,
+          "officialInventory": true,
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "official-continuous-geometry",
+            "source": "nlma-sidewalk",
+            "sourceFeatureId": "4476",
+            "fromDistanceM": 4.784,
+            "toDistanceM": 0.0,
+            "lengthM": 41.029,
+            "geometry": [
+              {
+                "lat": 23.02898130989376,
+                "lon": 120.19968618741127
+              },
+              {
+                "lat": 23.028965021879905,
+                "lon": 120.20008673005543
+              }
+            ],
+            "geometryBasis": "official-surface-contained-path",
+            "pedestrianAllowed": true,
+            "accessBasis": "official-sidewalk-inventory",
+            "provenance": [
+              {
+                "dataset": "nlma-sidewalk",
+                "record_id": "4476"
+              }
+            ]
+          },
+          "source": "nlma-sidewalk"
+        },
+        {
+          "sourceFeatureId": "4483",
+          "fromDistanceM": 4.784,
+          "toDistanceM": 0.0,
+          "officialInventory": true,
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "official-continuous-geometry",
+            "source": "tainan-sidewalk",
+            "sourceFeatureId": "4483",
+            "fromDistanceM": 4.784,
+            "toDistanceM": 0.0,
+            "lengthM": 41.029,
+            "geometry": [
+              {
+                "lat": 23.028981309893606,
+                "lon": 120.19968618741126
+              },
+              {
+                "lat": 23.028965021879905,
+                "lon": 120.20008673005543
+              }
+            ],
+            "geometryBasis": "official-surface-contained-path",
+            "pedestrianAllowed": true,
+            "accessBasis": "official-sidewalk-inventory",
+            "provenance": [
+              {
+                "dataset": "tainan-sidewalk",
+                "record_id": "4483"
+              }
+            ]
+          },
+          "source": "tainan-sidewalk"
+        }
+      ],
+      "geometryEvidence": [
+        {
+          "source": "overture",
+          "nearestFromM": 0.0,
+          "nearestToM": 0.0
+        },
+        {
+          "source": "nlma-sidewalk",
+          "nearestFromM": 4.784,
+          "nearestToM": 0.0
+        },
+        {
+          "source": "nlma-bikeway",
+          "nearestFromM": 93.967,
+          "nearestToM": 87.14
+        },
+        {
+          "source": "tainan-sidewalk",
+          "nearestFromM": 4.784,
+          "nearestToM": 0.0
+        }
+      ],
+      "evidenceSources": [
+        "osm",
+        "overture",
+        "nlma-sidewalk",
+        "nlma-bikeway",
+        "tainan-sidewalk"
+      ],
+      "explicitSharedTopologyIndependent": false,
+      "explicitSharedTopology": true,
+      "officialContinuousGeometry": true,
+      "officialIndependentProvenance": true,
+      "provenance": [
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w1481086149@1",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w152801177@20",
+          "update_time": "2026-07-11T01:32:44Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "n13584546707@1",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w1481086148@1",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w152801177@20",
+          "update_time": "2026-07-11T01:32:44Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "n13584546706@1",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "dataset": "nlma-sidewalk",
+          "record_id": "4476"
+        },
+        {
+          "dataset": "tainan-sidewalk",
+          "record_id": "4483"
+        }
+      ],
+      "independentProvenance": true,
+      "routableWitnesses": [
+        {
+          "evidenceType": "overture-shared-connector",
+          "source": "overture",
+          "connectorId": "4ffccc32-bdd1-4cbf-92e5-0988df4b552d",
+          "fromSegmentId": "f5cbafb7-2a95-47b3-ac02-7ab043ad46da",
+          "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+          "fromDistanceM": 0.0,
+          "toDistanceM": 12.894,
+          "lengthM": 47.296,
+          "geometry": [
+            {
+              "lat": 23.0289382,
+              "lon": 120.1996821
+            },
+            {
+              "lat": 23.0288805,
+              "lon": 120.1996783
+            },
+            {
+              "lat": 23.028849467093135,
+              "lon": 120.2000762389758
+            }
+          ],
+          "pedestrianAllowed": false,
+          "accessBasis": "unknown-or-not-explicit",
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086149@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546707@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ],
+          "independentProvenance": false
+        },
+        {
+          "evidenceType": "overture-shared-connector",
+          "source": "overture",
+          "connectorId": "84ea8703-0125-4ffb-a450-c9d6dade6fbe",
+          "fromSegmentId": "ffbed656-65a9-46fb-bdbe-f03177f8d8bf",
+          "toSegmentId": "86d5172a-e2ad-4821-a899-9cb1b96e1b99",
+          "fromDistanceM": 11.069,
+          "toDistanceM": 12.894,
+          "lengthM": 58.173,
+          "geometry": [
+            {
+              "lat": 23.028944208289587,
+              "lon": 120.19957412844401
+            },
+            {
+              "lat": 23.0288882,
+              "lon": 120.1995705
+            },
+            {
+              "lat": 23.028885,
+              "lon": 120.1996208
+            },
+            {
+              "lat": 23.0288805,
+              "lon": 120.1996783
+            },
+            {
+              "lat": 23.028849467093135,
+              "lon": 120.2000762389758
+            }
+          ],
+          "pedestrianAllowed": false,
+          "accessBasis": "unknown-or-not-explicit",
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w1481086148@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801177@20",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n13584546706@1",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ],
+          "independentProvenance": false
+        },
+        {
+          "evidenceType": "official-continuous-geometry",
+          "source": "nlma-sidewalk",
+          "sourceFeatureId": "4476",
+          "fromDistanceM": 4.784,
+          "toDistanceM": 0.0,
+          "lengthM": 41.029,
+          "geometry": [
+            {
+              "lat": 23.02898130989376,
+              "lon": 120.19968618741127
+            },
+            {
+              "lat": 23.028965021879905,
+              "lon": 120.20008673005543
+            }
+          ],
+          "geometryBasis": "official-surface-contained-path",
+          "pedestrianAllowed": true,
+          "accessBasis": "official-sidewalk-inventory",
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ],
+          "independentProvenance": true
+        },
+        {
+          "evidenceType": "official-continuous-geometry",
+          "source": "tainan-sidewalk",
+          "sourceFeatureId": "4483",
+          "fromDistanceM": 4.784,
+          "toDistanceM": 0.0,
+          "lengthM": 41.029,
+          "geometry": [
+            {
+              "lat": 23.028981309893606,
+              "lon": 120.19968618741126
+            },
+            {
+              "lat": 23.028965021879905,
+              "lon": 120.20008673005543
+            }
+          ],
+          "geometryBasis": "official-surface-contained-path",
+          "pedestrianAllowed": true,
+          "accessBasis": "official-sidewalk-inventory",
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ],
+          "independentProvenance": true
+        }
+      ],
+      "preferredFusionWitness": {
+        "evidenceType": "official-continuous-geometry",
+        "source": "nlma-sidewalk",
+        "sourceFeatureId": "4476",
+        "fromDistanceM": 4.784,
+        "toDistanceM": 0.0,
+        "lengthM": 41.029,
+        "geometry": [
+          {
+            "lat": 23.02898130989376,
+            "lon": 120.19968618741127
+          },
+          {
+            "lat": 23.028965021879905,
+            "lon": 120.20008673005543
+          }
+        ],
+        "geometryBasis": "official-surface-contained-path",
+        "pedestrianAllowed": true,
+        "accessBasis": "official-sidewalk-inventory",
+        "provenance": [
+          {
+            "dataset": "nlma-sidewalk",
+            "record_id": "4476"
+          }
+        ],
+        "independentProvenance": true
+      },
+      "hasRoutableWitness": true,
+      "hasUnboundSources": false,
+      "proximityOnly": false,
+      "decision": "verified",
+      "decisionReason": "official continuous geometry + independent provenance + compatible access/grade",
+      "productionAllowed": false,
+      "productionReason": "dev24 production lock: cross-source evidence is routable only inside an isolated experimental graph clone"
+    },
+    {
+      "id": "gap-2",
+      "classification": "source-topology-gap",
+      "geometryGapM": 8.454807621880803,
+      "graphNodeGapM": 10.104639686293737,
+      "fromWays": [
+        {
+          "wayId": "764376782",
+          "highway": "cycleway"
+        }
+      ],
+      "toWays": [
+        {
+          "wayId": "152801180",
+          "highway": "tertiary"
+        }
+      ],
+      "geometry": [
+        {
+          "lat": 23.028371931373293,
+          "lon": 120.20758346496075
+        },
+        {
+          "lat": 23.0282987,
+          "lon": 120.207525
+        }
+      ],
+      "location": {
+        "lat": 23.028335315686647,
+        "lng": 120.20755423248038
+      },
+      "gradeSeparationConflict": false,
+      "accessConflict": false,
+      "sources": {
+        "osm": {
+          "availability": "ready",
+          "sharedNode": false,
+          "classification": "source-topology-gap",
+          "geometryGapM": 8.454807621880803,
+          "independentProvenance": false
+        },
+        "overture": {
+          "availability": "ready",
+          "nearestFromM": 0.0,
+          "nearestToM": 0.0,
+          "explicitSharedTopology": true,
+          "sharedTopologyEvidence": [
+            {
+              "connectorId": "179bcf90-e2c1-4465-b9ee-ea02bb95b554",
+              "fromSegmentId": "a6f362d7-0c65-44a1-b412-4dff716972cb",
+              "toSegmentId": "1ef560e0-da20-4c8e-adc6-c7550c55f021",
+              "fromDistanceM": 8.578,
+              "toDistanceM": 0.0,
+              "provenance": [
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w152801180@21",
+                  "update_time": "2026-07-11T01:32:44Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "w159025860@6",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                },
+                {
+                  "property": "",
+                  "dataset": "OpenStreetMap",
+                  "license": "ODbL-1.0",
+                  "record_id": "n4994319302@4",
+                  "update_time": "2026-02-20T11:12:42Z",
+                  "confidence": null,
+                  "between": null,
+                  "provider": "osm",
+                  "resource": "planet",
+                  "version": "2026-08-05"
+                }
+              ]
+            }
+          ],
+          "independentProvenance": false,
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801180@21",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w159025860@6",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n4994319302@4",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ]
+        },
+        "nlma-sidewalk": {
+          "availability": "ready",
+          "nearestFromM": 0.786,
+          "nearestToM": 9.295,
+          "officialContinuousGeometry": true,
+          "continuousGeometryEvidence": [
+            {
+              "sourceFeatureId": "4476",
+              "fromDistanceM": 0.786,
+              "toDistanceM": 9.295,
+              "officialInventory": true,
+              "provenance": [
+                {
+                  "dataset": "nlma-sidewalk",
+                  "record_id": "4476"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "official-continuous-geometry",
+                "source": "nlma-sidewalk",
+                "sourceFeatureId": "4476",
+                "fromDistanceM": 0.786,
+                "toDistanceM": 9.295,
+                "lengthM": 5.38,
+                "geometry": [
+                  {
+                    "lat": 23.028379025476326,
+                    "lon": 120.20758402216852
+                  },
+                  {
+                    "lat": 23.028382563160935,
+                    "lon": 120.20753158704909
+                  }
+                ],
+                "geometryBasis": "official-surface-contained-path",
+                "pedestrianAllowed": true,
+                "accessBasis": "official-sidewalk-inventory",
+                "provenance": [
+                  {
+                    "dataset": "nlma-sidewalk",
+                    "record_id": "4476"
+                  }
+                ]
+              }
+            }
+          ],
+          "independentProvenance": true,
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ]
+        },
+        "nlma-bikeway": {
+          "availability": "ready",
+          "nearestFromM": 86.173,
+          "nearestToM": 94.691,
+          "officialContinuousGeometry": false,
+          "continuousGeometryEvidence": [],
+          "independentProvenance": false,
+          "provenance": []
+        },
+        "tainan-sidewalk": {
+          "availability": "ready",
+          "nearestFromM": 0.786,
+          "nearestToM": 9.295,
+          "officialContinuousGeometry": true,
+          "continuousGeometryEvidence": [
+            {
+              "sourceFeatureId": "4483",
+              "fromDistanceM": 0.786,
+              "toDistanceM": 9.295,
+              "officialInventory": true,
+              "provenance": [
+                {
+                  "dataset": "tainan-sidewalk",
+                  "record_id": "4483"
+                }
+              ],
+              "routableWitness": {
+                "evidenceType": "official-continuous-geometry",
+                "source": "tainan-sidewalk",
+                "sourceFeatureId": "4483",
+                "fromDistanceM": 0.786,
+                "toDistanceM": 9.295,
+                "lengthM": 5.38,
+                "geometry": [
+                  {
+                    "lat": 23.0283790254764,
+                    "lon": 120.20758402216852
+                  },
+                  {
+                    "lat": 23.02838256316101,
+                    "lon": 120.20753158704908
+                  }
+                ],
+                "geometryBasis": "official-surface-contained-path",
+                "pedestrianAllowed": true,
+                "accessBasis": "official-sidewalk-inventory",
+                "provenance": [
+                  {
+                    "dataset": "tainan-sidewalk",
+                    "record_id": "4483"
+                  }
+                ]
+              }
+            }
+          ],
+          "independentProvenance": true,
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ]
+        },
+        "tainan-bikeway": {
+          "availability": "metadata-only",
+          "metadataOnly": true,
+          "unknownNotNegative": true
+        }
+      },
+      "sharedTopologyEvidence": [
+        {
+          "connectorId": "179bcf90-e2c1-4465-b9ee-ea02bb95b554",
+          "fromSegmentId": "a6f362d7-0c65-44a1-b412-4dff716972cb",
+          "toSegmentId": "1ef560e0-da20-4c8e-adc6-c7550c55f021",
+          "fromDistanceM": 8.578,
+          "toDistanceM": 0.0,
+          "provenance": [
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w152801180@21",
+              "update_time": "2026-07-11T01:32:44Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "w159025860@6",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            },
+            {
+              "property": "",
+              "dataset": "OpenStreetMap",
+              "license": "ODbL-1.0",
+              "record_id": "n4994319302@4",
+              "update_time": "2026-02-20T11:12:42Z",
+              "confidence": null,
+              "between": null,
+              "provider": "osm",
+              "resource": "planet",
+              "version": "2026-08-05"
+            }
+          ]
+        }
+      ],
+      "continuousGeometryEvidence": [
+        {
+          "sourceFeatureId": "4476",
+          "fromDistanceM": 0.786,
+          "toDistanceM": 9.295,
+          "officialInventory": true,
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "official-continuous-geometry",
+            "source": "nlma-sidewalk",
+            "sourceFeatureId": "4476",
+            "fromDistanceM": 0.786,
+            "toDistanceM": 9.295,
+            "lengthM": 5.38,
+            "geometry": [
+              {
+                "lat": 23.028379025476326,
+                "lon": 120.20758402216852
+              },
+              {
+                "lat": 23.028382563160935,
+                "lon": 120.20753158704909
+              }
+            ],
+            "geometryBasis": "official-surface-contained-path",
+            "pedestrianAllowed": true,
+            "accessBasis": "official-sidewalk-inventory",
+            "provenance": [
+              {
+                "dataset": "nlma-sidewalk",
+                "record_id": "4476"
+              }
+            ]
+          },
+          "source": "nlma-sidewalk"
+        },
+        {
+          "sourceFeatureId": "4483",
+          "fromDistanceM": 0.786,
+          "toDistanceM": 9.295,
+          "officialInventory": true,
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ],
+          "routableWitness": {
+            "evidenceType": "official-continuous-geometry",
+            "source": "tainan-sidewalk",
+            "sourceFeatureId": "4483",
+            "fromDistanceM": 0.786,
+            "toDistanceM": 9.295,
+            "lengthM": 5.38,
+            "geometry": [
+              {
+                "lat": 23.0283790254764,
+                "lon": 120.20758402216852
+              },
+              {
+                "lat": 23.02838256316101,
+                "lon": 120.20753158704908
+              }
+            ],
+            "geometryBasis": "official-surface-contained-path",
+            "pedestrianAllowed": true,
+            "accessBasis": "official-sidewalk-inventory",
+            "provenance": [
+              {
+                "dataset": "tainan-sidewalk",
+                "record_id": "4483"
+              }
+            ]
+          },
+          "source": "tainan-sidewalk"
+        }
+      ],
+      "geometryEvidence": [
+        {
+          "source": "overture",
+          "nearestFromM": 0.0,
+          "nearestToM": 0.0
+        },
+        {
+          "source": "nlma-sidewalk",
+          "nearestFromM": 0.786,
+          "nearestToM": 9.295
+        },
+        {
+          "source": "nlma-bikeway",
+          "nearestFromM": 86.173,
+          "nearestToM": 94.691
+        },
+        {
+          "source": "tainan-sidewalk",
+          "nearestFromM": 0.786,
+          "nearestToM": 9.295
+        }
+      ],
+      "evidenceSources": [
+        "osm",
+        "overture",
+        "nlma-sidewalk",
+        "nlma-bikeway",
+        "tainan-sidewalk"
+      ],
+      "explicitSharedTopologyIndependent": false,
+      "explicitSharedTopology": true,
+      "officialContinuousGeometry": true,
+      "officialIndependentProvenance": true,
+      "provenance": [
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w152801180@21",
+          "update_time": "2026-07-11T01:32:44Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "w159025860@6",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "property": "",
+          "dataset": "OpenStreetMap",
+          "license": "ODbL-1.0",
+          "record_id": "n4994319302@4",
+          "update_time": "2026-02-20T11:12:42Z",
+          "confidence": null,
+          "between": null,
+          "provider": "osm",
+          "resource": "planet",
+          "version": "2026-08-05"
+        },
+        {
+          "dataset": "nlma-sidewalk",
+          "record_id": "4476"
+        },
+        {
+          "dataset": "tainan-sidewalk",
+          "record_id": "4483"
+        }
+      ],
+      "independentProvenance": true,
+      "routableWitnesses": [
+        {
+          "evidenceType": "official-continuous-geometry",
+          "source": "nlma-sidewalk",
+          "sourceFeatureId": "4476",
+          "fromDistanceM": 0.786,
+          "toDistanceM": 9.295,
+          "lengthM": 5.38,
+          "geometry": [
+            {
+              "lat": 23.028379025476326,
+              "lon": 120.20758402216852
+            },
+            {
+              "lat": 23.028382563160935,
+              "lon": 120.20753158704909
+            }
+          ],
+          "geometryBasis": "official-surface-contained-path",
+          "pedestrianAllowed": true,
+          "accessBasis": "official-sidewalk-inventory",
+          "provenance": [
+            {
+              "dataset": "nlma-sidewalk",
+              "record_id": "4476"
+            }
+          ],
+          "independentProvenance": true
+        },
+        {
+          "evidenceType": "official-continuous-geometry",
+          "source": "tainan-sidewalk",
+          "sourceFeatureId": "4483",
+          "fromDistanceM": 0.786,
+          "toDistanceM": 9.295,
+          "lengthM": 5.38,
+          "geometry": [
+            {
+              "lat": 23.0283790254764,
+              "lon": 120.20758402216852
+            },
+            {
+              "lat": 23.02838256316101,
+              "lon": 120.20753158704908
+            }
+          ],
+          "geometryBasis": "official-surface-contained-path",
+          "pedestrianAllowed": true,
+          "accessBasis": "official-sidewalk-inventory",
+          "provenance": [
+            {
+              "dataset": "tainan-sidewalk",
+              "record_id": "4483"
+            }
+          ],
+          "independentProvenance": true
+        }
+      ],
+      "preferredFusionWitness": {
+        "evidenceType": "official-continuous-geometry",
+        "source": "nlma-sidewalk",
+        "sourceFeatureId": "4476",
+        "fromDistanceM": 0.786,
+        "toDistanceM": 9.295,
+        "lengthM": 5.38,
+        "geometry": [
+          {
+            "lat": 23.028379025476326,
+            "lon": 120.20758402216852
+          },
+          {
+            "lat": 23.028382563160935,
+            "lon": 120.20753158704909
+          }
+        ],
+        "geometryBasis": "official-surface-contained-path",
+        "pedestrianAllowed": true,
+        "accessBasis": "official-sidewalk-inventory",
+        "provenance": [
+          {
+            "dataset": "nlma-sidewalk",
+            "record_id": "4476"
+          }
+        ],
+        "independentProvenance": true
+      },
+      "hasRoutableWitness": true,
+      "hasUnboundSources": false,
+      "proximityOnly": false,
+      "decision": "verified",
+      "decisionReason": "official continuous geometry + independent provenance + compatible access/grade",
+      "productionAllowed": false,
+      "productionReason": "dev24 production lock: cross-source evidence is routable only inside an isolated experimental graph clone"
+    }
+  ],
+  "summary": {
+    "gapCount": 2,
+    "verified": 2,
+    "manualReview": 0,
+    "unbound": 0,
+    "rejected": 0,
+    "routableVerified": 2
+  }
+}

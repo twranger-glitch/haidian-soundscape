@@ -1,0 +1,105 @@
+{
+  "schema": "haidian-multisource-source-metadata-v1",
+  "generatedAt": "2026-09-21T11:46:23Z",
+  "crs": "EPSG:4326",
+  "bbox": [
+    120.197,
+    23.024,
+    120.21,
+    23.031
+  ],
+  "productionGraphMutation": false,
+  "sources": {
+    "overture-segments": {
+      "label": "Overture Transportation segments",
+      "source": "overture",
+      "sourceVersion": "latest",
+      "datasetUrl": "https://docs.overturemaps.org/guides/transportation/",
+      "resourceUrl": null,
+      "license": "ODbL-1.0",
+      "originalCrs": "EPSG:4326",
+      "archiveMember": null,
+      "browserPath": "./data/multisource/overture-segments.geojson",
+      "availability": "ready",
+      "featureCount": 246,
+      "sha256": "4d631d4b6f999e3abd5a2d89d852ed0e6e94d41bb5dd147954c4c040f2bb8154",
+      "bytes": 854084
+    },
+    "overture-connectors": {
+      "label": "Overture Transportation connectors",
+      "source": "overture",
+      "sourceVersion": "latest",
+      "datasetUrl": "https://docs.overturemaps.org/guides/transportation/",
+      "resourceUrl": null,
+      "license": "ODbL-1.0",
+      "originalCrs": "EPSG:4326",
+      "archiveMember": null,
+      "browserPath": "./data/multisource/overture-connectors.geojson",
+      "availability": "ready",
+      "featureCount": 360,
+      "sha256": "b1d4985d7269999af11cccd7d5436c9262fa9ed4332f1c9b83bd79d2b27f7d5e",
+      "bytes": 578980
+    },
+    "nlma-sidewalk": {
+      "label": "內政部國土管理署全國人行道",
+      "source": "nlma-sidewalk",
+      "sourceVersion": "SIDEWALK_202606",
+      "datasetUrl": "https://data.gov.tw/dataset/58791",
+      "resourceUrl": null,
+      "license": "政府資料開放授權條款-第1版",
+      "originalCrs": "OGC:CRS84",
+      "archiveMember": "SIDEWALK_台南市_202606_WGS84.geojson",
+      "browserPath": "./data/multisource/nlma-sidewalk.geojson",
+      "availability": "ready",
+      "featureCount": 22,
+      "sha256": "7edc6e494e868dfb17667a3db71d837a0cc1f8d0d24c95f957442809b58b34b0",
+      "bytes": 78141
+    },
+    "nlma-bikeway": {
+      "label": "內政部國土管理署全國自行車道",
+      "source": "nlma-bikeway",
+      "sourceVersion": "115年上半年度",
+      "datasetUrl": "https://data.gov.tw/dataset/90135",
+      "resourceUrl": null,
+      "license": "政府資料開放授權條款-第1版",
+      "originalCrs": "EPSG:4326",
+      "archiveMember": "附件一/202606_SOUTH.geojson",
+      "browserPath": "./data/multisource/nlma-bikeway.geojson",
+      "availability": "ready",
+      "featureCount": 2,
+      "sha256": "29dd6b9b47b4235a7095b4316872af9f83c8bfe2e7e82693000a54eaabf4a445",
+      "bytes": 8413
+    },
+    "tainan-sidewalk": {
+      "label": "臺南市政府人行道資訊",
+      "source": "tainan-sidewalk",
+      "sourceVersion": "202312",
+      "datasetUrl": "https://data.tainan.gov.tw/DataSet/Detail/89fd1cca-ad55-401e-bf1c-1be39c053e31",
+      "resourceUrl": null,
+      "license": "政府資料開放授權條款第一版",
+      "originalCrs": "assumed:EPSG:4326",
+      "archiveMember": "85d57929-ff26-4543-9335-2542aa365664.shp",
+      "browserPath": "./data/multisource/tainan-sidewalk.geojson",
+      "availability": "ready",
+      "featureCount": 22,
+      "sha256": "94503a6fa9bec58aa9610e892def995b094315ae05be4ac462f068d97ab5ff33",
+      "bytes": 81538,
+      "crsAssumption": {
+        "crs": "EPSG:4326",
+        "reason": "Legacy ShapeFile omits .prj; coordinate bounds are valid lon/lat and align with the NLMA WGS84 Tainan sidewalk inventory."
+      }
+    },
+    "tainan-bikeway": {
+      "label": "臺南市自行車道資訊",
+      "source": "tainan-bikeway",
+      "sourceVersion": "portal inventory",
+      "datasetUrl": "https://data.tainan.gov.tw/DataSet/Detail/a9cdbcd4-fc82-4e81-9509-7289130099fa",
+      "resourceUrl": null,
+      "license": "政府資料開放授權條款第一版",
+      "originalCrs": null,
+      "browserPath": null,
+      "availability": "metadata-only",
+      "note": "No route geometry is assumed from the public inventory fields."
+    }
+  }
+}
