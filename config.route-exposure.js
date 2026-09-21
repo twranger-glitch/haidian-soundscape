@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev16 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev17 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -27,9 +27,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev16: preserves dev13–dev15 diagnostics and adds a faithful-corridor
-  // weak-component/source trace. Diagnostic virtual joins are counterfactual only
-  // and are never inserted into the production routing graph.
+  // v9.0.0-dev17: preserves dev13–dev16 diagnostics and traces each faithful-corridor
+  // component boundary back to raw Overpass OSM way/node topology. Diagnostic joins
+  // remain counterfactual only and are never inserted into production routing.
   graphRouting: {
     enabled: true,
     overpassEndpoints: [
@@ -58,6 +58,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     corridorTraceMaxComponents: 16,
     corridorTraceTransitionWindowM: 90,
     corridorTraceConnectorMaxGapM: 90,
+    rawJunctionNearRadiusM: 45,
+    rawJunctionEndpointGapMaxM: 20,
+    rawJunctionTouchMaxM: 2.5,
     manualReplayLateralWeight: 4,
     maxFineNodes: 12000,
     maxExpandedStates: 12000,
