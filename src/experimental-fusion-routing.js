@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev26
+ * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev27
  *
  * Safety model:
  * - consumes only evidence gaps already classified `verified`;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev26";
+  const VERSION = "v9.0.0-dev27";
   const DEFAULTS = {
     enabled: true,
     sourceAttachMaxM: 18,
@@ -80,6 +80,19 @@
   function sideWayIds(gap, key) {
     return safeArray(gap?.[key]).map((x) => String(x?.wayId ?? x)).filter(Boolean);
   }
+  function sideHighways(gap, key) {
+    return [...new Set(safeArray(gap?.[key]).map((x) => String(x?.highway || "").trim().toLowerCase()).filter(Boolean))];
+  }
+  function edgeHighways(edge) {
+    const raw = edge?.tagsSummary?.highway;
+    const values = Array.isArray(raw) ? raw : [raw];
+    return values.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+  }
+  function edgeHasAnyHighway(edge, highways) {
+    const wanted = new Set(safeArray(highways).map((x) => String(x || "").trim().toLowerCase()).filter(Boolean));
+    if (!wanted.size) return false;
+    return edgeHighways(edge).some((x) => wanted.has(x));
+  }
   function nearestMatchingEdge(graph, point, wayIds) {
     if (!graph?.edges?.size || !safeArray(wayIds).length) return null;
     let best = null;
@@ -90,6 +103,23 @@
       if (!best || hit.distanceM < best.distanceM) best = Object.assign({ edge }, hit);
     }
     return best;
+  }
+  function nearestMatchingHighwayEdge(graph, point, highways) {
+    if (!graph?.edges?.size || !safeArray(highways).length) return null;
+    let best = null;
+    for (const edge of graph.edges.values()) {
+      if (!edgeHasAnyHighway(edge, highways)) continue;
+      const hit = nearestOnGeometry(point, edge.geometry || []);
+      if (!hit) continue;
+      if (!best || hit.distanceM < best.distanceM) best = Object.assign({ edge }, hit);
+    }
+    return best;
+  }
+  function findAnchorHit(graph, point, spec) {
+    if (!spec) return null;
+    if (spec.mode === "audited-osm-way") return nearestMatchingEdge(graph, point, spec.wayIds);
+    if (spec.mode === "nationwide-audited-highway") return nearestMatchingHighwayEdge(graph, point, spec.highways);
+    return null;
   }
   function dedupeGeometry(points) {
     const out = [];
@@ -149,15 +179,15 @@
 
     const parts = splitGeometryAtHit(edge.geometry, hit);
     if (!parts || parts.left.length < 2 || parts.right.length < 2) return { ok: false, reason: "anchor-split-failed" };
-    const nodeId = `dev26-anchor:${gapId}:${side}`;
+    const nodeId = `dev27-anchor:${gapId}:${side}`;
     graph.nodes.set(nodeId, { id: nodeId, lat: point.lat, lng: point.lng, virtual: true, experimentalFusionAnchor: true, sourceEdgeId: edge.id });
     ensureAdjacency(graph, nodeId);
     removeAdjacencyEdge(graph, edge.a, edge.id);
     removeAdjacencyEdge(graph, edge.b, edge.id);
     graph.edges.delete(edge.id);
     const meta = copyEdgeMeta(edge);
-    const e1 = addClonedEdge(graph, `${edge.id}:dev26a:${gapId}:${side}`, edge.a, nodeId, parts.left, meta);
-    const e2 = addClonedEdge(graph, `${edge.id}:dev26b:${gapId}:${side}`, nodeId, edge.b, parts.right, meta);
+    const e1 = addClonedEdge(graph, `${edge.id}:dev27a:${gapId}:${side}`, edge.a, nodeId, parts.left, meta);
+    const e2 = addClonedEdge(graph, `${edge.id}:dev27b:${gapId}:${side}`, nodeId, edge.b, parts.right, meta);
     if (!e1 || !e2) return { ok: false, reason: "anchor-replacement-edge-failed" };
     return { ok: true, nodeId, point, split: true, edgeId: edge.id, replacementEdgeIds: [e1.id, e2.id] };
   }
@@ -168,17 +198,50 @@
     const fromWays = sideWayIds(gap, "fromWays"), toWays = sideWayIds(gap, "toWays");
     if (!fromWays.length || !toWays.length) return { ok: false, reason: "missing-audited-way-anchors" };
     const first = geometry[0], last = geometry[geometry.length - 1];
-    const forwardFrom = nearestMatchingEdge(graph, first, fromWays);
-    const forwardTo = nearestMatchingEdge(graph, last, toWays);
-    const reverseFrom = nearestMatchingEdge(graph, last, fromWays);
-    const reverseTo = nearestMatchingEdge(graph, first, toWays);
-    const forwardScore = (forwardFrom?.distanceM ?? Infinity) + (forwardTo?.distanceM ?? Infinity);
-    const reverseScore = (reverseFrom?.distanceM ?? Infinity) + (reverseTo?.distanceM ?? Infinity);
-    if (!Number.isFinite(forwardScore) && !Number.isFinite(reverseScore)) return { ok: false, reason: "audited-osm-way-not-found" };
-    if (reverseScore < forwardScore) {
-      return { ok: true, geometry: geometry.slice().reverse(), fromHit: reverseFrom, toHit: reverseTo, orientation: "reversed" };
+
+    // Primary/dev25 rule: anchor only to the exact audited OSM way IDs.
+    let fromSpec = { mode: "audited-osm-way", wayIds: fromWays };
+    let toSpec = { mode: "audited-osm-way", wayIds: toWays };
+    let anchorStrategy = "audited-osm-way";
+    let forwardFrom = findAnchorHit(graph, first, fromSpec);
+    let forwardTo = findAnchorHit(graph, last, toSpec);
+    let reverseFrom = findAnchorHit(graph, last, fromSpec);
+    let reverseTo = findAnchorHit(graph, first, toSpec);
+    let forwardScore = (forwardFrom?.distanceM ?? Infinity) + (forwardTo?.distanceM ?? Infinity);
+    let reverseScore = (reverseFrom?.distanceM ?? Infinity) + (reverseTo?.distanceM ?? Infinity);
+
+    // dev27 namespace bridge: nationwide HGR1 edges carry Overture segment UUIDs,
+    // not OSM way IDs.  Do NOT create a generic proximity bridge.  Only when:
+    //   1) the gap is already verified by an independent official pedestrian witness;
+    //   2) the nationwide graph is Overture-backed and the evidence index confirms
+    //      Overture is present at both audited gap sides; and
+    //   3) each witness endpoint can attach to the exact audited highway class.
+    // The official witness remains the connector geometry; proximity is used only
+    // to anchor that verified geometry into the different source-ID namespace.
+    if (!Number.isFinite(forwardScore) && !Number.isFinite(reverseScore) && graph?.nationwideTileGraph) {
+      const ov = gap?.sources?.overture || {};
+      const fromHighways = sideHighways(gap, "fromWays"), toHighways = sideHighways(gap, "toWays");
+      const overtureAtBothSides = ov?.availability === "ready" && Number.isFinite(Number(ov?.nearestFromM)) && Number.isFinite(Number(ov?.nearestToM));
+      if (overtureAtBothSides && fromHighways.length && toHighways.length) {
+        fromSpec = { mode: "nationwide-audited-highway", highways: fromHighways };
+        toSpec = { mode: "nationwide-audited-highway", highways: toHighways };
+        anchorStrategy = "nationwide-verified-witness-highway-anchor";
+        forwardFrom = findAnchorHit(graph, first, fromSpec);
+        forwardTo = findAnchorHit(graph, last, toSpec);
+        reverseFrom = findAnchorHit(graph, last, fromSpec);
+        reverseTo = findAnchorHit(graph, first, toSpec);
+        forwardScore = (forwardFrom?.distanceM ?? Infinity) + (forwardTo?.distanceM ?? Infinity);
+        reverseScore = (reverseFrom?.distanceM ?? Infinity) + (reverseTo?.distanceM ?? Infinity);
+      }
     }
-    return { ok: true, geometry, fromHit: forwardFrom, toHit: forwardTo, orientation: "forward" };
+
+    if (!Number.isFinite(forwardScore) && !Number.isFinite(reverseScore)) {
+      return { ok: false, reason: graph?.nationwideTileGraph ? "nationwide-audited-anchor-not-found" : "audited-osm-way-not-found" };
+    }
+    if (reverseScore < forwardScore) {
+      return { ok: true, geometry: geometry.slice().reverse(), fromHit: reverseFrom, toHit: reverseTo, orientation: "reversed", fromAnchorSpec: fromSpec, toAnchorSpec: toSpec, anchorStrategy };
+    }
+    return { ok: true, geometry, fromHit: forwardFrom, toHit: forwardTo, orientation: "forward", fromAnchorSpec: fromSpec, toAnchorSpec: toSpec, anchorStrategy };
   }
 
   function addVerifiedGap(graph, gap, options = {}) {
@@ -201,21 +264,23 @@
     const fromAnchor = attachWitnessEndpoint(graph, oriented.fromHit, gapId, "from", options);
     if (!fromAnchor.ok) return { added: false, gapId, reason: fromAnchor.reason };
     // Re-resolve the to-side after the first split, since the same source edge may have changed IDs.
-    const toWays = sideWayIds(gap, "toWays");
+    // Use the exact same audited anchor policy chosen above (OSM way ID or the
+    // dev27 nationwide highway-class namespace bridge); never fall back to an
+    // unconstrained nearest edge.
     const toTarget = oriented.geometry[oriented.geometry.length - 1];
-    const toHit = nearestMatchingEdge(graph, toTarget, toWays);
+    const toHit = findAnchorHit(graph, toTarget, oriented.toAnchorSpec);
     if (!toHit || toHit.distanceM > maxAttachM) return { added: false, gapId, reason: "to-anchor-lost-after-split", toDistanceM: toHit?.distanceM ?? null };
     const toAnchor = attachWitnessEndpoint(graph, toHit, gapId, "to", options);
     if (!toAnchor.ok) return { added: false, gapId, reason: toAnchor.reason };
     if (String(fromAnchor.nodeId) === String(toAnchor.nodeId)) return { added: false, gapId, reason: "same-anchor-node" };
 
     const geometry = dedupeGeometry([fromAnchor.point, ...oriented.geometry, toAnchor.point]);
-    const id = `dev26-fused:${gapId}`;
+    const id = `dev27-fused:${gapId}`;
     const edge = addClonedEdge(graph, id, fromAnchor.nodeId, toAnchor.nodeId, geometry, {
       wayIds: [],
       tagsSummary: {
         highway: ["path"], foot: ["yes"],
-        experimental_fusion: ["dev26"],
+        experimental_fusion: ["dev27"],
         evidence_decision: ["verified"],
         evidence_source: safeArray(gap.evidenceSources).map(String)
       },
@@ -233,6 +298,11 @@
       added: true, gapId, edgeId: edge.id, distanceM: edge.distanceM,
       sourceAttachFromM: fromDistanceM, sourceAttachToM: Number(toHit.distanceM),
       fromAnchor, toAnchor, orientation: oriented.orientation,
+      anchorStrategy: oriented.anchorStrategy || "audited-osm-way",
+      fromAnchorWayIds: safeArray(oriented.fromHit?.edge?.wayIds).map(String),
+      toAnchorWayIds: safeArray(toHit?.edge?.wayIds).map(String),
+      fromAnchorHighways: edgeHighways(oriented.fromHit?.edge),
+      toAnchorHighways: edgeHighways(toHit?.edge),
       evidenceType: witness.evidenceType || null, source: witness.source || null,
       productionAllowed: false
     };
@@ -297,7 +367,7 @@
       const pts = safeArray(edge?.geometry).map(asLatLng).filter(Boolean);
       if (pts.length >= 2 && window.L.polyline) {
         window.L.polyline(pts.map((p) => [p.lat, p.lng]), { color: "#ea580c", weight: 6, opacity: 0.92, dashArray: "9 5" })
-          .bindTooltip(`dev26 experimental witness · ${c.gapId} · productionAllowed=false`, { sticky: true }).addTo(layer);
+          .bindTooltip(`dev27 experimental witness · ${c.gapId} · productionAllowed=false`, { sticky: true }).addTo(layer);
       }
     }
     const fastest = safeArray(run.search?.fastest?.points).map(asLatLng).filter(Boolean);
@@ -360,6 +430,10 @@
     _internals: {
       nearestOnGeometry,
       nearestMatchingEdge,
+      nearestMatchingHighwayEdge,
+      findAnchorHit,
+      sideHighways,
+      edgeHighways,
       splitGeometryAtHit,
       attachWitnessEndpoint,
       chooseWitnessOrientation,

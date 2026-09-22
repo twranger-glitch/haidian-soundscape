@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev26 Experimental Fusion
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev27 Experimental Fusion
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev26";
+  const VERSION = "v9.0.0-dev27";
 
   const DEFAULTS = {
     enabled: true,
@@ -2692,7 +2692,7 @@
     };
   }
 
-  // v9.0.0-dev26: hand a fully detached fine-graph clone to the experimental
+  // v9.0.0-dev27: hand a fully detached fine-graph clone to the experimental
   // multi-source router.  This is the only supported bridge from the production
   // graph engine into the dev26 sandbox. Existing node/edge/adjacency objects are
   // copied so an experimental overlay cannot mutate production state by aliasing.

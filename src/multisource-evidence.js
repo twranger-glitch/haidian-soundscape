@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev26
+ * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev27
  *
  * Loads preprocessed Overture / NLMA / Tainan evidence, renders optional map
  * overlays, and classifies source-gap junction evidence. This module never
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev26";
+  const VERSION = "v9.0.0-dev27";
   const DEFAULTS = {
     enabled: true,
     evidenceIndexUrl: "./data/multisource/evidence-index.json",
