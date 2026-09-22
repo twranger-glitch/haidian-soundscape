@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev27
+ * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev28 Performance Pass
  *
  * Loads only the official GIS tiles needed near the active route.  Full national
  * archives stay on the dataset host (recommended: Hugging Face Dataset); the
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev27";
+  const VERSION = "v9.0.0-dev28";
   const DEFAULTS = {
     enabled: true,
     // Set huggingFaceRepo (e.g. "owner/taiwan-route-tiles") after publishing.
@@ -18,8 +18,8 @@
     manifestUrl: "./data/nationwide-sample/manifest.json",
     datasetBaseUrl: "./data/nationwide-sample/",
     requestTimeoutMs: 15000,
-    routeBufferM: 650,
-    neighborRing: 1,
+    routeBufferM: 180,
+    neighborRing: 0,
     maxTilesPerRequest: 96,
     attachToMultisource: true,
     cacheTiles: true
@@ -44,6 +44,10 @@
   const FEATURE_BYTES = 28;
   const COORD_SCALE = 1000000;
 
+  function nowMs() {
+    try { return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now(); }
+    catch (_) { return Date.now(); }
+  }
   function safeArray(value) { return Array.isArray(value) ? value : []; }
   function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
@@ -320,14 +324,21 @@
   }
 
   async function loadGraphForBBox(bbox, options = {}) {
+    const started = nowMs();
+    let t = nowMs();
     const manifest = state.manifest || await loadManifest(options);
+    const manifestMs = nowMs() - t;
     const allIds = tileIdsForBBox(bbox, { ring: options.ring ?? config.neighborRing, manifest });
     const ids = allIds.filter((id) => Boolean(graphPathFor(id, manifest)));
     const maxTiles = Math.max(1, Number(options.maxTiles ?? config.maxTilesPerRequest) || 96);
     if (ids.length > maxTiles) throw new Error(`nationwide graph request too broad: ${ids.length} > ${maxTiles}`);
+    t = nowMs();
     const graphTiles = (await Promise.all(ids.map((id) => loadGraphTile(id, options)))).filter(Boolean);
+    const tileFetchMs = nowMs() - t;
+    t = nowMs();
     const graph = mergeGraphTiles(graphTiles);
-    state.lastGraphLoad = { bbox: safeArray(bbox).map(Number), loadedTileIds: ids, loadedTileCount: ids.length, nodeCount: graph.nodes.size, edgeCount: graph.edges.size, productionGraphMutated: false };
+    const mergeMs = nowMs() - t;
+    state.lastGraphLoad = { bbox: safeArray(bbox).map(Number), requestedTileCount:allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, nodeCount: graph.nodes.size, edgeCount: graph.edges.size, performance:{ manifestMs, tileFetchMs, mergeMs, totalMs:nowMs()-started }, productionGraphMutated: false };
     return { available: ids.length > 0, graph, ...state.lastGraphLoad };
   }
 
@@ -410,11 +421,16 @@
     if (ids.length > maxTiles) throw new Error(`nationwide tile request too broad: ${ids.length} > ${maxTiles}`);
     state.status = "loading-tiles"; state.error = null;
     try {
+      const started = nowMs();
+      let t = nowMs();
       const collections = (await Promise.all(ids.map((id) => loadTile(id, options)))).filter(Boolean);
+      const tileFetchMs = nowMs() - t;
+      t = nowMs();
       const merged = dedupeFeatures(collections);
       const bySource = splitBySource(merged);
       const attached = options.attach === false ? false : await attachCollections(bySource);
-      state.lastLoad = { bbox: safeArray(bbox).map(Number), requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, featureCount: merged.features.length, sourceCounts: Object.fromEntries(Object.entries(bySource).map(([k, v]) => [k, v.features.length])), attached };
+      const mergeAttachMs = nowMs() - t;
+      state.lastLoad = { bbox: safeArray(bbox).map(Number), requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, featureCount: merged.features.length, sourceCounts: Object.fromEntries(Object.entries(bySource).map(([k, v]) => [k, v.features.length])), attached, performance:{tileFetchMs,mergeAttachMs,totalMs:nowMs()-started} };
       state.status = "ready";
       return { available: true, manifest, collection: merged, bySource, ...state.lastLoad };
     } catch (error) {
