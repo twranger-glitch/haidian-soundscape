@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev25 Experimental Fusion
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev26 Experimental Fusion
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev25";
+  const VERSION = "v9.0.0-dev26";
 
   const DEFAULTS = {
     enabled: true,
@@ -2692,9 +2692,9 @@
     };
   }
 
-  // v9.0.0-dev25: hand a fully detached fine-graph clone to the experimental
+  // v9.0.0-dev26: hand a fully detached fine-graph clone to the experimental
   // multi-source router.  This is the only supported bridge from the production
-  // graph engine into the dev25 sandbox. Existing node/edge/adjacency objects are
+  // graph engine into the dev26 sandbox. Existing node/edge/adjacency objects are
   // copied so an experimental overlay cannot mutate production state by aliasing.
   function graphStructuralFingerprint(graph) {
     let adjacencyRefs = 0;
@@ -4383,6 +4383,221 @@
     return node ? Object.assign({}, node, { snapType: 'node-fallback', sourceHighway: null }) : null;
   }
 
+
+  // dev26 nationwide backend -------------------------------------------------
+  // HGR1 tiles already preserve Overture connector topology.  The browser
+  // loader merges only the tiles near A/B, then this adapter converts that
+  // detached tile graph into the same fine-graph shape used by the existing
+  // routing/search engine.  No generic proximity joins are created here.
+  function externalGraphToFineGraph(externalGraph, options = {}) {
+    if (!externalGraph?.nodes || !externalGraph?.edges) return null;
+    const generalMax = Math.max(30, Number(options.maxFineEdgeM || config.maxFineEdgeM || 85));
+    const pathMax = Math.max(25, Number(options.pathMaxFineEdgeM || config.pathMaxFineEdgeM || 55));
+    const nodes = new Map();
+    const adjacency = new Map();
+    const edges = new Map();
+    let virtualCounter = 0;
+    let edgeCounter = 0;
+
+    function addNode(id, point, meta = {}) {
+      const key = String(id);
+      if (!nodes.has(key)) nodes.set(key, Object.assign({ id: key, lat: Number(point.lat), lng: Number(point.lng) }, meta));
+      if (!adjacency.has(key)) adjacency.set(key, []);
+      return key;
+    }
+    for (const [id, n] of externalGraph.nodes) {
+      if (!Number.isFinite(Number(n?.lat)) || !Number.isFinite(Number(n?.lng))) continue;
+      addNode(id, n, { sourceNodeId: String(id), nationwideSource: true });
+    }
+
+    const seenUndirected = new Set();
+    function addFineEdge(aId, bId, geometry, source) {
+      if (!nodes.has(String(aId)) || !nodes.has(String(bId))) return;
+      const g = (geometry || []).map(asLatLng).filter(Boolean);
+      const distanceM = routeDistanceM(g);
+      if (!(distanceM > 0.2)) return;
+      const id = `ng${++edgeCounter}`;
+      const edge = {
+        id,
+        a: String(aId), b: String(bId), geometry: g.map((q) => ({ lat: q.lat, lng: q.lng })), distanceM,
+        wayIds: source?.sourceId ? [String(source.sourceId)] : [],
+        tagsSummary: { highway: String(source?.roadClass || 'unknown') },
+        sourceEdgeId: source?.id || null,
+        sourceDistanceM: Number(source?.distanceM || distanceM),
+        nationwideSource: true
+      };
+      edges.set(id, edge);
+      adjacency.get(String(aId)).push({ edgeId: id, to: String(bId) });
+      adjacency.get(String(bId)).push({ edgeId: id, to: String(aId) });
+    }
+
+    for (const e of externalGraph.edges.values()) {
+      if (!e || e.pedestrianAllowed === false || !e.from || !e.to) continue;
+      const aId = String(e.from), bId = String(e.to);
+      if (!nodes.has(aId) || !nodes.has(bId)) continue;
+      const endpoints = [aId, bId].sort();
+      const stable = `${e.sourceId || ''}|${endpoints[0]}|${endpoints[1]}|${Math.round(Number(e.distanceM || 0) * 10)}`;
+      if (seenUndirected.has(stable)) continue;
+      seenUndirected.add(stable);
+      let geometry = (e.geometry || []).map(asLatLng).filter(Boolean);
+      if (geometry.length < 2) geometry = [nodes.get(aId), nodes.get(bId)].map(asLatLng).filter(Boolean);
+      if (geometry.length < 2) continue;
+      // HGR1 geometry is stored in edge direction; orient it to aId -> bId.
+      const start = geometry[0], a = nodes.get(aId);
+      const end = geometry[geometry.length - 1];
+      if (haversineM(start, a) > haversineM(end, a)) geometry = geometry.slice().reverse();
+      const family = highwayFamily(String(e.roadClass || 'unknown'));
+      const chunks = splitGeometryByMaxLength(geometry, family === 'path' ? pathMax : generalMax);
+      if (!chunks.length) continue;
+      let fromId = aId;
+      for (let ci = 0; ci < chunks.length; ci += 1) {
+        const chunk = chunks[ci];
+        const last = ci === chunks.length - 1;
+        const endPoint = chunk[chunk.length - 1];
+        const toId = last ? bId : `nv:${e.sourceId || edgeCounter}:${++virtualCounter}`;
+        if (!last) addNode(toId, endPoint, { virtual: true, nationwideSource: true, sourceEdgeId: e.id || null });
+        addFineEdge(fromId, toId, chunk, e);
+        fromId = toId;
+      }
+    }
+    return {
+      nodes, adjacency, edges,
+      rawNodeCount: Number(externalGraph.nodes.size || 0),
+      rawSegmentCount: Number(seenUndirected.size || 0),
+      contractedNodeCount: Number(externalGraph.nodes.size || 0),
+      contractedEdgeCount: Number(seenUndirected.size || 0),
+      refinement: { generalMaxEdgeM: generalMax, pathMaxEdgeM: pathMax },
+      nationwideTileGraph: true,
+      productionGraphMutated: false
+    };
+  }
+
+  function removeFineEdge(graph, edgeId) {
+    const edge = graph?.edges?.get(String(edgeId));
+    if (!edge) return;
+    graph.edges.delete(String(edgeId));
+    for (const id of [String(edge.a), String(edge.b)]) {
+      const refs = graph.adjacency.get(id) || [];
+      graph.adjacency.set(id, refs.filter((r) => String(r.edgeId) !== String(edgeId)));
+    }
+  }
+
+  function splitGeometryAtHit(geometry, hit) {
+    const g = (geometry || []).map(asLatLng).filter(Boolean);
+    if (g.length < 2 || !hit?.point) return null;
+    const i = Math.max(0, Math.min(g.length - 2, Number(hit.segmentIndex || 0)));
+    const p = asLatLng(hit.point);
+    const before = g.slice(0, i + 1);
+    const after = g.slice(i + 1);
+    if (!before.length || haversineM(before[before.length - 1], p) > 0.05) before.push(p);
+    if (!after.length || haversineM(p, after[0]) > 0.05) after.unshift(p);
+    return { before, after, point: p };
+  }
+
+  function snapPointIntoFineGraph(graph, point, label, maxM = Infinity) {
+    const P = asLatLng(point);
+    if (!P) return null;
+    const hit = nearestGraphEdge(graph, P);
+    if (!hit || hit.distanceM > maxM) return null;
+    const edge = hit.edge;
+    const split = splitGeometryAtHit(edge.geometry, hit);
+    if (!split) return null;
+    const endpointToleranceM = Math.max(0.5, Number(config.snapEndpointToleranceM || 1.5));
+    const aNode = graph.nodes.get(String(edge.a)), bNode = graph.nodes.get(String(edge.b));
+    if (aNode && haversineM(split.point, aNode) <= endpointToleranceM) {
+      return { id: String(edge.a), node: aNode, distanceM: haversineM(P, aNode), snapType: 'nationwide-edge-endpoint', sourceWayId: edge.wayIds?.[0] || null, sourceHighway: primaryHighway(edge) };
+    }
+    if (bNode && haversineM(split.point, bNode) <= endpointToleranceM) {
+      return { id: String(edge.b), node: bNode, distanceM: haversineM(P, bNode), snapType: 'nationwide-edge-endpoint', sourceWayId: edge.wayIds?.[0] || null, sourceHighway: primaryHighway(edge) };
+    }
+    let id = `nationwide-snap:${String(label || 'P')}`;
+    let serial = 1;
+    while (graph.nodes.has(id)) id = `nationwide-snap:${String(label || 'P')}:${++serial}`;
+    graph.nodes.set(id, { id, lat: split.point.lat, lng: split.point.lng, virtualSnap: true, nationwideSource: true });
+    graph.adjacency.set(id, []);
+    removeFineEdge(graph, edge.id);
+    let edgeSerial = 0;
+    function addPiece(aId, bId, geometry) {
+      const d = routeDistanceM(geometry);
+      if (!(d > 0.05)) return;
+      const eid = `${edge.id}:snap:${String(label || 'P')}:${++edgeSerial}`;
+      const e = Object.assign({}, edge, { id: eid, a: String(aId), b: String(bId), geometry: geometry.map((q) => ({ lat: q.lat, lng: q.lng })), distanceM: d });
+      graph.edges.set(eid, e);
+      graph.adjacency.get(String(aId)).push({ edgeId: eid, to: String(bId) });
+      graph.adjacency.get(String(bId)).push({ edgeId: eid, to: String(aId) });
+    }
+    addPiece(edge.a, id, split.before);
+    addPiece(id, edge.b, split.after);
+    return { id, node: graph.nodes.get(id), distanceM: Number(hit.distanceM || 0), snapType: 'nationwide-edge', sourceWayId: edge.wayIds?.[0] || null, sourceHighway: primaryHighway(edge) };
+  }
+
+  async function findRoutesOnExternalGraph(a, b, externalGraph, options = {}) {
+    if (config.enabled === false) return { available: false, reason: 'disabled', candidates: [] };
+    const A = asLatLng(a), B = asLatLng(b);
+    if (!A || !B) throw new Error('A/B 座標不完整。');
+    if (!window.HaidianShade || typeof window.HaidianShade.analyzeShadeModelAt !== 'function') throw new Error('Nationwide graph routing 需要 HaidianShade.analyzeShadeModelAt。');
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const detourPct = clamp(options.detourPct, 0, 80, 30);
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    if (Number.isNaN(departure.getTime())) throw new Error('出發時間不正確。');
+    const graph = externalGraphToFineGraph(externalGraph, options);
+    if (!graph || !graph.edges.size) return { available: false, reason: 'empty-nationwide-graph', candidates: [] };
+    const snapMaxM = Number(options.snapMaxM || config.snapMaxM || 120);
+    const snapA = snapPointIntoFineGraph(graph, A, 'A', snapMaxM);
+    const snapB = snapPointIntoFineGraph(graph, B, 'B', snapMaxM);
+    if (!snapA || !snapB) return { available: false, reason: 'nationwide-endpoint-snap-failed', candidates: [] };
+    lastShadeDebug.clear();
+    lastRouteEdges = { fastest: new Set(), minSun: new Set() };
+    lastGraphDebug = { graph, raw: null, contracted: null, snapA, snapB, bbox: options.bbox || null, endpoint: 'nationwide-hgr1', builtAt: Date.now(), nationwide: true };
+
+    options.onProgress?.({ stage: 'fastest', message: '正在全臺 HGR1 graph 計算最快路線…' });
+    const fromA = await dijkstraTimesResponsive(graph, snapA.id, speedMps, false, options);
+    const toB = await dijkstraTimesResponsive(graph, snapB.id, speedMps, true, options);
+    const fastestTime = fromA.dist.get(String(snapB.id));
+    if (!Number.isFinite(fastestTime)) return { available: false, reason: 'nationwide-graph-disconnected', candidates: [], diagnostics: { graphBackend: 'nationwide-hgr1', snapA, snapB } };
+    const fastestPath = reconstructDijkstra(graph, fromA.prev, snapA.id, snapB.id);
+    if (!fastestPath?.points?.length) return { available: false, reason: 'nationwide-fastest-reconstruction-failed', candidates: [] };
+    fastestPath.walkSeconds = fastestTime;
+    const detourLimitS = fastestTime * (1 + detourPct / 100);
+    options.onProgress?.({ stage: 'shade-search', message: `正在全臺 HGR1 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
+    const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
+      speedMps, detourLimitS, fastestToEnd: toB, departure,
+      edgeSunProvider: options.edgeSunProvider,
+      timeBucketSec: options.timeBucketSec, shadeTimeBucketSec: options.shadeTimeBucketSec,
+      shadeSampleSpacingM: options.shadeSampleSpacingM, shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge,
+      shadeConcurrency: options.shadeConcurrency, canopyTimeoutMs: options.canopyTimeoutMs,
+      maxExpandedStates: options.maxExpandedStates, maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
+      cooperativeYieldMs: options.cooperativeYieldMs, yieldEveryExpanded: options.yieldEveryExpanded,
+      onProgress: options.onProgress, shouldCancel: options.shouldCancel
+    });
+    lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
+    lastRouteEdges.minSun = new Set(minSun.path?.edgeIds || []);
+    const candidates = [{ id: 'graph-fastest', kind: 'graph-fastest', distanceM: fastestPath.distanceM, durationS: fastestTime, points: fastestPath.points, graphMeta: { edgeIds: fastestPath.edgeIds, snapA, snapB, backend: 'nationwide-hgr1' } }];
+    if (minSun.path?.points?.length && routeSignature(minSun.path.points) !== routeSignature(fastestPath.points)) {
+      candidates.push({ id: 'graph-min-sun', kind: 'graph-shade', distanceM: minSun.path.distanceM, durationS: minSun.path.walkSeconds, points: minSun.path.points, graphEstimatedDirectSunSeconds: minSun.path.directSunSeconds, graphMeta: { edgeIds: minSun.path.edgeIds, snapA, snapB, backend: 'nationwide-hgr1' } });
+    }
+    lastDiagnostics = {
+      version: VERSION, graphBackend: 'nationwide-hgr1', overpassEndpoint: null,
+      bbox: options.bbox || null,
+      rawNodes: graph.rawNodeCount, rawSegments: graph.rawSegmentCount,
+      fineNodes: graph.nodes.size, fineEdges: graph.edges.size,
+      maxFineEdgeM: graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM,
+      pathMaxFineEdgeM: graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM,
+      snapA: { distanceM: snapA.distanceM, nodeId: snapA.id, snapType: snapA.snapType, highway: snapA.sourceHighway || null, wayId: snapA.sourceWayId || null },
+      snapB: { distanceM: snapB.distanceM, nodeId: snapB.id, snapType: snapB.snapType, highway: snapB.sourceHighway || null, wayId: snapB.sourceWayId || null },
+      fastestSeconds: fastestTime, fastestDistanceM: fastestPath.distanceM,
+      minSunEstimatedDirectSunSeconds: minSun.path?.directSunSeconds ?? null,
+      minSunDistanceM: minSun.path?.distanceM ?? null,
+      detourPct, detourLimitSeconds: detourLimitS,
+      searchExpandedStates: minSun.expanded, shadeEdgeEvaluations: minSun.shadeEvals,
+      dominanceRejected: minSun.dominanceRejected || 0, dominanceRemoved: minSun.dominanceRemoved || 0,
+      candidateCount: candidates.length, searchMode: 'resource-constrained-history-safe-labels',
+      labelPruningMode: 'equal-arrival + visited-subset dominance; no arbitrary label cap', responsiveScheduling: true,
+      graphStats: graphStats(graph), productionGraphMutated: false
+    };
+    return { available: true, candidates, diagnostics: lastDiagnostics, backend: 'nationwide-hgr1', productionGraphMutated: false };
+  }
+
   async function buildGraphForAB(a, b, options = {}) {
     const cooperativeYield = makeCooperativeYielder(options);
     const bbox = bboxForAB(a, b, options.bboxMarginM || config.bboxMarginM);
@@ -4564,6 +4779,7 @@
     version: VERSION,
     get config() { return Object.assign({}, config); },
     findRoutes,
+    findRoutesOnExternalGraph,
     buildGraphForAB,
     createExperimentalGraphClone,
     runExperimentalSearchOnClone,
@@ -4626,6 +4842,8 @@
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,
+      externalGraphToFineGraph,
+      snapPointIntoFineGraph,
       MinHeap
     }
   };

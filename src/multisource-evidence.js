@@ -1,14 +1,14 @@
 /*
- * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev25
+ * Haidian Soundscape — Multi-source Pedestrian Network Evidence v9.0.0-dev26
  *
  * Loads preprocessed Overture / NLMA / Tainan evidence, renders optional map
  * overlays, and classifies source-gap junction evidence. This module never
- * mutates the production pedestrian graph. In dev25 verified evidence may expose source-following routable witnesses to the isolated experimental router, while every cross-source junction remains productionAllowed=false by design.
+ * mutates the production pedestrian graph. In dev26 verified evidence may expose source-following routable witnesses to the isolated experimental router, while every cross-source junction remains productionAllowed=false by design.
  */
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev25";
+  const VERSION = "v9.0.0-dev26";
   const DEFAULTS = {
     enabled: true,
     evidenceIndexUrl: "./data/multisource/evidence-index.json",
@@ -38,7 +38,8 @@
     layers: {},
     visible: {},
     geojson: {},
-    sourceErrors: {}
+    sourceErrors: {},
+    runtimeSourceMeta: {}
   };
 
   function safeArray(value) { return Array.isArray(value) ? value : []; }
@@ -94,7 +95,7 @@
       reason = "幾何看似連續，但缺少足夠獨立 provenance 或明確 topology。";
     } else if (proximityOnly) {
       decision = "manual-review";
-      reason = "只有 proximity / geometry-near 證據；dev25 仍禁止以距離自動補橋。";
+      reason = "只有 proximity / geometry-near 證據；dev26 仍禁止以距離自動補橋。";
     }
 
     return {
@@ -106,7 +107,7 @@
       gradeSeparationConflict: gradeConflict,
       accessConflict,
       productionAllowed: false,
-      productionReason: "dev25 production lock: evidence may be used only by the isolated experimental graph; production mutation remains disabled."
+      productionReason: "dev26 production lock: evidence may be used only by the isolated experimental graph; production mutation remains disabled."
     };
   }
 
@@ -134,6 +135,7 @@
 
   function sourceStatus(key) {
     if (key === "source-gaps") return state.evidenceIndex ? "ready" : state.status;
+    if (state.runtimeSourceMeta[key] && state.geojson[key]) return "ready";
     const record = sourceRecord(key);
     if (!record) return "unbound";
     if (state.sourceErrors[key]) return "error";
@@ -227,6 +229,30 @@
     return { visible: true };
   }
 
+
+  function setRuntimeSourceGeojson(key, geojson, metadata = {}) {
+    if (!SOURCE_CATALOG[key] || key === "source-gaps") return { ok: false, reason: "unknown-or-non-geometry-source" };
+    if (!geojson || geojson.type !== "FeatureCollection" || !Array.isArray(geojson.features)) {
+      return { ok: false, reason: "invalid-feature-collection" };
+    }
+    state.geojson[key] = geojson;
+    state.runtimeSourceMeta[key] = Object.assign({ runtime: true, featureCount: geojson.features.length }, metadata || {});
+    delete state.sourceErrors[key];
+    if (state.visible[key]) renderGeoJsonLayer(key, geojson);
+    return { ok: true, key, featureCount: geojson.features.length };
+  }
+
+  function clearRuntimeSourceGeojson(key) {
+    if (key) {
+      delete state.runtimeSourceMeta[key];
+      delete state.geojson[key];
+      clearLayer(key);
+    } else {
+      for (const k of Object.keys(state.runtimeSourceMeta)) { delete state.geojson[k]; clearLayer(k); }
+      state.runtimeSourceMeta = {};
+    }
+  }
+
   async function loadSourceGeojson(key, options = {}) {
     if (key === "source-gaps") return state.evidenceIndex || null;
     if (state.geojson[key]) return state.geojson[key];
@@ -306,7 +332,7 @@
         };
       }),
       interpretation: verified.length
-        ? "Verified junction evidence is available. Only independently sourced, explicitly pedestrian-allowed preferredFusionWitness geometry may enter the isolated dev25 experimental graph; production routing is unchanged."
+        ? "Verified junction evidence is available. Only independently sourced, explicitly pedestrian-allowed preferredFusionWitness geometry may enter the isolated dev26 experimental graph; production routing is unchanged."
         : "No verified cross-source junction is available; production and experimental connector insertion both remain empty."
     };
   }
@@ -321,7 +347,8 @@
         status: sourceStatus(key),
         visible: Boolean(state.visible[key]),
         error: state.sourceErrors[key] || null,
-        metadata: key === "source-gaps" ? null : clone(sourceRecord(key))
+        metadata: key === "source-gaps" ? null : clone(sourceRecord(key)),
+        runtimeMetadata: clone(state.runtimeSourceMeta[key] || null)
       };
     }
     return {
@@ -343,6 +370,8 @@
     attachMap,
     toggleSourceOverlay,
     clearOverlays,
+    setRuntimeSourceGeojson,
+    clearRuntimeSourceGeojson,
     getState,
     buildExperimentalFusionPlan,
     evaluateJunctionEvidence,
