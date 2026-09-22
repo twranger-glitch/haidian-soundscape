@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev29b Performance Pass */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev30 Shade Cost Engine */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -31,7 +31,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev29b: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
+  // v9.0.0-dev30: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
   // dev22–dev27: preprocessed multi-source evidence; dev27 adds nationwide lazy-loaded tiles. Browser never downloads national archives.
@@ -48,13 +48,13 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     manifestUrl: "./data/nationwide-sample/manifest.json",
     datasetBaseUrl: "./data/nationwide-sample/",
     requestTimeoutMs: 15000,
-    // dev29 fast path: start with core tiles only; expand only when routing actually fails.
+    // dev30 keeps the staged HGR2 fast path: start with core tiles only; expand only when routing actually fails.
     routeBufferM: 180,
     neighborRing: 0,
     maxTilesPerRequest: 96,
     // dev27: prefer prebuilt nationwide HGR1 graph tiles; Overpass remains a fallback.
     preferGraphRouting: true,
-    // dev29: prefer 0.0125° pre-refined HGR2 microtiles when the HF manifest exposes graph2.
+    // dev30: prefer 0.0125° pre-refined HGR2 microtiles when the HF manifest exposes graph2.
     preferHgr2: true,
     fallbackToOverpass: true,
     graphRouteBufferM: 220,
@@ -150,6 +150,9 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,
+    // dev30: maximum number of independent outgoing edge shade costs in flight.
+    // Each edge still has its own bounded point-sample concurrency above.
+    shadeEdgeBatchConcurrency: 4,
     cooperativeYieldMs: 12,
     yieldEveryExpanded: 8,
     yieldEveryDijkstra: 180,

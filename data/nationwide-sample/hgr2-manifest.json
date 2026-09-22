@@ -1,7 +1,7 @@
 {
   "schema": "taiwan-hgr2-build-v1",
   "generatedAt": "2026-09-22T13:05:23Z",
-  "sourceGraphRoot": "/mnt/data/dev29work/project/DEPLOY/data/nationwide-sample/runtime/graph",
+  "sourceGraphRoot": "runtime/graph",
   "format": "HGR2",
   "grid": {
     "tileSizeDeg": 0.0125,

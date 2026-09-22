@@ -436,6 +436,8 @@
   };
   const routeModelPerf = {
     calls: 0,
+    buildingEvalMs: 0,
+    canopyEvalMs: 0,
     shaded: 0,
     sun: 0,
     night: 0,
@@ -459,6 +461,15 @@
   let lastBuildingPipelineStatus = { mode: "idle", sourceCounts: {}, tileCount: 0, error: null };
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
+  // dev30: exact broad-phase spatial index for route shade queries.  The grid
+  // only removes buildings whose geographic bbox cannot possibly intersect the
+  // configured source-ray search square; the existing polygon/ray test remains
+  // the final authority, so this changes cost, not semantics.
+  const routeBuildingSpatialIndex = {
+    source: null, cells: new Map(), globals: [], cellDeg: 0.001,
+    featureCount: 0, buildMs: 0, queryCount: 0, candidateTotal: 0,
+    fullCandidateTotal: 0, maxCandidates: 0
+  };
   const metaCogCache = new Map();
   const metaSurfaceUrls = new Map();
   const metaProvisionalSurfaceUrls = new Map();
@@ -3545,10 +3556,79 @@
     return offsets;
   }
 
+  function routeFeatureBounds(feature) {
+    let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+    for (const ring of outerRingsForFeature(feature)) {
+      for (const coord of ring || []) {
+        const lng = Number(coord?.[0]), lat = Number(coord?.[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+        minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
+      }
+    }
+    return Number.isFinite(minLat) ? { minLat, minLng, maxLat, maxLng } : null;
+  }
+
+  function ensureRouteBuildingSpatialIndex() {
+    const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    if (routeBuildingSpatialIndex.source === buildings) return routeBuildingSpatialIndex;
+    const started = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const cellDeg = routeBuildingSpatialIndex.cellDeg;
+    const cells = new Map();
+    const globals = [];
+    for (const feature of buildings) {
+      const bbox = routeFeatureBounds(feature);
+      if (!bbox) continue;
+      const x0 = Math.floor(bbox.minLng / cellDeg), x1 = Math.floor(bbox.maxLng / cellDeg);
+      const y0 = Math.floor(bbox.minLat / cellDeg), y1 = Math.floor(bbox.maxLat / cellDeg);
+      const cellCount = (x1 - x0 + 1) * (y1 - y0 + 1);
+      // Very large polygons are rare; keeping them in a tiny global list avoids
+      // pathological index expansion while preserving exact broad-phase safety.
+      if (cellCount > 256) { globals.push(feature); continue; }
+      for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) {
+        const key = `${x},${y}`;
+        const bucket = cells.get(key) || [];
+        bucket.push(feature);
+        cells.set(key, bucket);
+      }
+    }
+    routeBuildingSpatialIndex.source = buildings;
+    routeBuildingSpatialIndex.cells = cells;
+    routeBuildingSpatialIndex.globals = globals;
+    routeBuildingSpatialIndex.featureCount = buildings.length;
+    routeBuildingSpatialIndex.buildMs = Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - started);
+    return routeBuildingSpatialIndex;
+  }
+
+  function routeBuildingCandidates(latlng, radiusM) {
+    const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    if (!buildings.length) return buildings;
+    const idx = ensureRouteBuildingSpatialIndex();
+    const lat = Number(latlng?.lat), lng = Number(latlng?.lng);
+    const radius = Math.max(1, Number(radiusM) || 250);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !idx.cells.size) return buildings;
+    const latPad = radius / 110540;
+    const lngPad = radius / (111320 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+    const cellDeg = idx.cellDeg;
+    const x0 = Math.floor((lng - lngPad) / cellDeg), x1 = Math.floor((lng + lngPad) / cellDeg);
+    const y0 = Math.floor((lat - latPad) / cellDeg), y1 = Math.floor((lat + latPad) / cellDeg);
+    const seen = new Set(idx.globals);
+    for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) {
+      const bucket = idx.cells.get(`${x},${y}`);
+      if (bucket) for (const feature of bucket) seen.add(feature);
+    }
+    const out = Array.from(seen);
+    idx.queryCount += 1;
+    idx.candidateTotal += out.length;
+    idx.fullCandidateTotal += buildings.length;
+    idx.maxCandidates = Math.max(idx.maxCandidates, out.length);
+    return out;
+  }
+
   function findBuildingShadowEvidence(latlng, solar) {
     if (!solar || solar.night || state.mode === "trees" || effectiveBuildingMode() === "none") return null;
-    const buildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
-    if (!buildings.length) return null;
+    const allBuildings = Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : [];
+    if (!allBuildings.length) return null;
 
     const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
     const maxDistance = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
@@ -3559,6 +3639,7 @@
     const baseTolerance = Math.max(0, Number(config.queryShadeSourceRayBaseToleranceM) || 3.5);
     const angularToleranceRad = Math.max(0, Number(config.queryShadeSourceRayAngularToleranceDeg) || 3) * Math.PI / 180;
     const maxRayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 9);
+    const buildings = routeBuildingCandidates(latlng, maxDistance + maxRayWidth + 3);
     const offsets = shadeSourceRayOffsets();
     const confirmed = [];
     const plausible = [];
@@ -7328,15 +7409,20 @@
       let tree = null;
       let canopyQueryFailed = false;
       if (options.buildings !== false) {
+        const buildingStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         building = findBuildingShadowEvidence(latlng, solar);
+        routeModelPerf.buildingEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - buildingStarted);
       }
       if (options.canopy !== false && state.mode !== "buildings") {
         const timeoutMs = Math.max(700, Number(options.canopyTimeoutMs) || 4200);
+        const canopyStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         try {
           tree = await withTimeout(findCanopyShadowEvidence(latlng, solar), timeoutMs, "路線樹冠陰影");
         } catch (_) {
           tree = null;
           canopyQueryFailed = true;
+        } finally {
+          routeModelPerf.canopyEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - canopyStarted);
         }
       }
 
@@ -7419,8 +7505,22 @@
       maxMs: routeModelPerf.maxMs,
       lastMs: routeModelPerf.lastMs,
       lastResult: routeModelPerf.lastResult,
+      buildingEvalMs: routeModelPerf.buildingEvalMs,
+      canopyEvalMs: routeModelPerf.canopyEvalMs,
       buildingModelReady: routeBuildingModelReady(),
       buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+      buildingSpatialIndex: {
+        featureCount: routeBuildingSpatialIndex.featureCount,
+        cellCount: routeBuildingSpatialIndex.cells.size,
+        globalFeatureCount: routeBuildingSpatialIndex.globals.length,
+        buildMs: routeBuildingSpatialIndex.buildMs,
+        queryCount: routeBuildingSpatialIndex.queryCount,
+        candidateTotal: routeBuildingSpatialIndex.candidateTotal,
+        fullCandidateTotal: routeBuildingSpatialIndex.fullCandidateTotal,
+        averageCandidates: routeBuildingSpatialIndex.queryCount ? routeBuildingSpatialIndex.candidateTotal / routeBuildingSpatialIndex.queryCount : 0,
+        reductionRatio: routeBuildingSpatialIndex.fullCandidateTotal ? 1 - routeBuildingSpatialIndex.candidateTotal / routeBuildingSpatialIndex.fullCandidateTotal : 0,
+        maxCandidates: routeBuildingSpatialIndex.maxCandidates
+      },
       canopyRasterCacheSize: canopyRasterCache.size,
       canopyRasterPromiseCount: canopyRasterPromises.size,
       mode: state.mode
@@ -7430,6 +7530,8 @@
   function resetRouteDiagnostics() {
     Object.assign(routeModelPerf, {
       calls: 0,
+      buildingEvalMs: 0,
+      canopyEvalMs: 0,
       shaded: 0,
       sun: 0,
       night: 0,
@@ -7443,6 +7545,10 @@
       lastMs: 0,
       lastResult: null
     });
+    routeBuildingSpatialIndex.queryCount = 0;
+    routeBuildingSpatialIndex.candidateTotal = 0;
+    routeBuildingSpatialIndex.fullCandidateTotal = 0;
+    routeBuildingSpatialIndex.maxCandidates = 0;
     return getRouteDiagnostics();
   }
 
