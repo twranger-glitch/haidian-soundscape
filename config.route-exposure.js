@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev26 */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev27 */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -18,7 +18,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   exploreCandidates: false,
   exploreMaxRoutes: 6,
   maxScoredCandidates: 10,
-  // dev26: expose the detached verified-fusion min-sun path as a normal comparison candidate.
+  // dev27: expose the detached verified-fusion min-sun path as a normal comparison candidate.
   autoCompareVerifiedFusion: true,
   fusionFidelityThresholdM: 14,
   fusionFidelitySampleM: 10,
@@ -31,19 +31,19 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev26: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
+  // v9.0.0-dev27: mature-engine geometry overlay + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics, keeps all source-gap
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
-  // dev22–dev26: preprocessed multi-source evidence; dev26 adds nationwide lazy-loaded tiles. Browser never downloads national archives.
+  // dev22–dev27: preprocessed multi-source evidence; dev27 adds nationwide lazy-loaded tiles. Browser never downloads national archives.
   // Cross-source connectors remain outside production; only verified source-following witnesses may enter a detached experimental clone.
-  // dev26: nationwide official-data tiles.  Default deploy uses a real-data Haidian
+  // dev27: nationwide official-data tiles.  Default deploy uses a real-data Haidian
   // regression sample; set manifestUrl/datasetBaseUrl to the Hugging Face Dataset
   // resolve/main URLs after publishing the nationwide dataset package.
   nationwideTiles: {
     enabled: true,
     // After publishing to a public Hugging Face Dataset, set only this repo id.
     // Example: "your-name/taiwan-shade-routing-tiles". No Cloudflare/R2 required.
-    huggingFaceRepo: "",
+    huggingFaceRepo: "yhzkiki/taiwan-shade-routing-data",
     huggingFaceRevision: "main",
     manifestUrl: "./data/nationwide-sample/manifest.json",
     datasetBaseUrl: "./data/nationwide-sample/",
@@ -51,7 +51,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     routeBufferM: 650,
     neighborRing: 1,
     maxTilesPerRequest: 96,
-    // dev26: prefer prebuilt nationwide HGR1 graph tiles; Overpass remains a fallback.
+    // dev27: prefer prebuilt nationwide HGR1 graph tiles; Overpass remains a fallback.
     preferGraphRouting: true,
     fallbackToOverpass: true,
     graphRouteBufferM: 850,
