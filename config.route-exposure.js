@@ -43,7 +43,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     enabled: true,
     // After publishing to a public Hugging Face Dataset, set only this repo id.
     // Example: "your-name/taiwan-shade-routing-tiles". No Cloudflare/R2 required.
-    huggingFaceRepo: "yhzkiki/taiwan-shade-routing-data",
+    huggingFaceRepo: "",
     huggingFaceRevision: "main",
     manifestUrl: "./data/nationwide-sample/manifest.json",
     datasetBaseUrl: "./data/nationwide-sample/",
