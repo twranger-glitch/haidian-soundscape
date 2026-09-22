@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev30 Shade Cost Engine
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev31 Temporal Shade Table
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev30";
+  const VERSION = "v9.0.0-dev31";
 
   const DEFAULTS = {
     enabled: true,
@@ -78,9 +78,12 @@
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
-    // dev30: evaluate independent outgoing edge shade queries concurrently.
-    // This only changes scheduling; every edge still uses the same provider,
-    // samples and absolute shade-time bucket.
+    // dev31: deterministic temporal shade table on the pruned graph.
+    temporalShadeTableEnabled: true,
+    temporalShadeTableConcurrency: 8,
+    temporalShadeTableMaxBucketsPerEdge: 8,
+    temporalShadeTableMaxEvaluations: 1800,
+    // Fallback misses may still evaluate independent outgoing edges concurrently.
     shadeEdgeBatchConcurrency: 4,
     canopyTimeoutMs: 4200,
     progressEvery: 20,
@@ -957,6 +960,121 @@
     return Object.assign(path, { walkSeconds: label.walkS, directSunSeconds: label.sunS });
   }
 
+  function shadeBucketForMs(atMs, bucketSec) {
+    return Math.floor((Number(atMs) / 1000) / Math.max(1, Number(bucketSec) || 60));
+  }
+
+  function shadeCacheKey(edge, bucket) {
+    // Shade fraction is a property of the physical edge geometry + time bucket.
+    // Traversal direction only reverses sample order and must not duplicate work.
+    return `${String(edge?.id)}|${Number(bucket)}`;
+  }
+
+  function temporalBucketsForEdge(edge, fromStart, toEnd, speedMps, detourLimitS, departureMs, bucketSec, maxBucketsPerEdge) {
+    const edgeTime = Number(edge?.distanceM || 0) / Math.max(0.1, Number(speedMps) || 1.25);
+    if (!(edgeTime > 0)) return [];
+    const startDist = fromStart?.dist || fromStart || new Map();
+    const endDist = toEnd?.dist || toEnd || new Map();
+    const ranges = [];
+    const dirs = [[String(edge.a), String(edge.b)], [String(edge.b), String(edge.a)]];
+    for (const [u,v] of dirs) {
+      const du = Number(startDist.get(u)), dv = Number(endDist.get(v));
+      if (!Number.isFinite(du) || !Number.isFinite(dv)) continue;
+      const earliestMidS = du + edgeTime / 2;
+      const latestMidS = Number(detourLimitS) - dv - edgeTime / 2;
+      if (!Number.isFinite(latestMidS) || latestMidS + 0.5 < earliestMidS) continue;
+      const first = shadeBucketForMs(departureMs + earliestMidS * 1000, bucketSec);
+      const last = shadeBucketForMs(departureMs + latestMidS * 1000, bucketSec);
+      ranges.push([Math.min(first,last), Math.max(first,last)]);
+    }
+    if (!ranges.length) return [];
+    const buckets = new Set();
+    for (const [first,last] of ranges) {
+      for (let b=first; b<=last; b += 1) buckets.add(b);
+    }
+    const sorted = Array.from(buckets).sort((a,b)=>a-b);
+    const maxN = Math.max(1, Number(maxBucketsPerEdge) || 8);
+    if (sorted.length <= maxN) return sorted;
+    // Keep a deterministic evenly-spaced subset. Missing buckets remain legal:
+    // searchMinSun falls back to the exact on-demand provider for them.
+    const picked = [];
+    for (let i=0; i<maxN; i += 1) {
+      const idx = Math.round(i * (sorted.length - 1) / Math.max(1, maxN - 1));
+      const v = sorted[idx];
+      if (picked[picked.length - 1] !== v) picked.push(v);
+    }
+    return picked;
+  }
+
+  async function buildTemporalShadeTable(graph, fromStart, toEnd, options = {}) {
+    const started = nowMs();
+    if (options.temporalShadeTableEnabled === false) return { enabled:false, durationMs:0, tasks:0, evaluated:0, cacheHits:0 };
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const detourLimitS = Number(options.detourLimitS);
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    const departureMs = departure.getTime();
+    const bucketSec = Math.max(30, Number(options.shadeTimeBucketSec || config.shadeTimeBucketSec || 60));
+    const maxBucketsPerEdge = Math.max(1, Number(options.temporalShadeTableMaxBucketsPerEdge || config.temporalShadeTableMaxBucketsPerEdge || 8));
+    const maxEvaluations = Math.max(50, Number(options.temporalShadeTableMaxEvaluations || config.temporalShadeTableMaxEvaluations || 1800));
+    const concurrency = Math.max(1, Math.min(24, Number(options.temporalShadeTableConcurrency || config.temporalShadeTableConcurrency || 8)));
+    const provider = options.edgeSunProvider || defaultEdgeSunProvider;
+    const shadeCache = options.sharedShadeCache && typeof options.sharedShadeCache.has === 'function' ? options.sharedShadeCache : new Map();
+    const tasks = [];
+    let skippedExisting = 0, truncatedEdges = 0, potentialTasks = 0;
+    for (const edge of graph?.edges?.values?.() || []) {
+      const allBuckets = temporalBucketsForEdge(edge, fromStart, toEnd, speedMps, detourLimitS, departureMs, bucketSec, maxBucketsPerEdge);
+      if (!allBuckets.length) continue;
+      // Detect whether the feasible interval was wider than our deterministic cap.
+      const edgeTime = Number(edge.distanceM || 0) / speedMps;
+      const starts=fromStart?.dist||fromStart||new Map(), ends=toEnd?.dist||toEnd||new Map();
+      let rawMin=Infinity, rawMax=-Infinity;
+      for(const [u,v] of [[String(edge.a),String(edge.b)],[String(edge.b),String(edge.a)]]){
+        const du=Number(starts.get(u)), dv=Number(ends.get(v));
+        if(!Number.isFinite(du)||!Number.isFinite(dv)) continue;
+        const lo=shadeBucketForMs(departureMs+(du+edgeTime/2)*1000,bucketSec);
+        const hiS=detourLimitS-dv-edgeTime/2;
+        if(hiS+0.5<du+edgeTime/2) continue;
+        const hi=shadeBucketForMs(departureMs+hiS*1000,bucketSec);
+        rawMin=Math.min(rawMin,lo,hi); rawMax=Math.max(rawMax,lo,hi);
+      }
+      if(Number.isFinite(rawMin)&&Number.isFinite(rawMax)&&rawMax-rawMin+1>maxBucketsPerEdge) truncatedEdges += 1;
+      for (const bucket of allBuckets) {
+        potentialTasks += 1;
+        const key = shadeCacheKey(edge, bucket);
+        if (shadeCache.has(key)) { skippedExisting += 1; continue; }
+        tasks.push({ edge, bucket, key });
+      }
+    }
+    // Favor tasks closest to departure first if an unusually large graph exceeds
+    // the safety budget. Any omitted key is still evaluated lazily by search.
+    tasks.sort((a,b)=>Math.abs(a.bucket - shadeBucketForMs(departureMs,bucketSec))-Math.abs(b.bucket-shadeBucketForMs(departureMs,bucketSec)) || String(a.edge.id).localeCompare(String(b.edge.id)));
+    const scheduled = tasks.slice(0, maxEvaluations);
+    let evaluated = 0, errors = 0, maxActive = 0, active = 0;
+    options.onProgress?.({ stage:'temporal-shade-table', message:`dev31：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
+    await runPoolNoYield(scheduled, concurrency, async (task) => {
+      if (options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
+      if (shadeCache.has(task.key)) { skippedExisting += 1; return; }
+      const centerMs = (task.bucket * bucketSec + bucketSec / 2) * 1000;
+      active += 1; maxActive = Math.max(maxActive, active);
+      const promise = Promise.resolve(provider(task.edge, task.edge.a, new Date(centerMs), {
+        shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
+        shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
+        shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
+        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+      }));
+      shadeCache.set(task.key, promise);
+      try { await promise; evaluated += 1; }
+      catch (error) { errors += 1; shadeCache.delete(task.key); throw error; }
+      finally { active -= 1; }
+    });
+    return {
+      enabled:true, bucketSec, concurrency, potentialTasks, tasks:scheduled.length,
+      evaluated, cacheHits:skippedExisting, errors, truncatedEdges,
+      omittedBySafetyCap:Math.max(0,tasks.length-scheduled.length), maxActive,
+      cacheSize:shadeCache.size, durationMs:nowMs()-started
+    };
+  }
+
   async function searchMinSun(graph, startId, endId, options = {}) {
     const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
     const detourLimitS = Number(options.detourLimitS);
@@ -1056,8 +1174,8 @@
     async function sunForEdge(edge, fromId, walkS) {
       const edgeTime = edge.distanceM / speedMps;
       const atMs = departure.getTime() + (walkS + edgeTime / 2) * 1000;
-      const bucket = Math.floor(atMs / 1000 / shadeTimeBucketSec);
-      const key = `${edge.id}|${fromId}|${bucket}`;
+      const bucket = shadeBucketForMs(atMs, shadeTimeBucketSec);
+      const key = shadeCacheKey(edge, bucket);
       if (shadeCache.has(key)) {
         shadeCacheHits += 1;
         return shadeCache.get(key);
@@ -4683,13 +4801,16 @@
     const speedMps=clamp(options.speedMps,0.5,2.5,1.25), detourPct=clamp(options.detourPct,0,80,30);
     const departure=options.departure instanceof Date?options.departure:new Date(options.departure||Date.now());
     if(Number.isNaN(departure.getTime())) throw new Error('出發時間不正確。');
+    // dev31: temporal prewarm and the subsequent search must always share one
+    // analysis-local cache, even when callers do not explicitly provide one.
+    const sharedShadeCache = options.sharedShadeCache && typeof options.sharedShadeCache.has === 'function' ? options.sharedShadeCache : new Map();
     const perf={hgr2Direct:true}; let t=nowMs();
     const full=externalGraph; perf.graphReuseMs=nowMs()-t;
     if(!full?.edges?.size) return {available:false,reason:'empty-hgr2-graph',candidates:[]};
     const snapMaxM=Number(options.snapMaxM||config.snapMaxM||120);
     t=nowMs(); const snapA=snapPointIntoFineGraph(full,A,'A',snapMaxM), snapB=snapPointIntoFineGraph(full,B,'B',snapMaxM); perf.snapMs=nowMs()-t;
     if(!snapA||!snapB) return {available:false,reason:'hgr2-endpoint-snap-failed',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',performance:perf}};
-    options.onProgress?.({stage:'fastest-hgr2',message:'dev30：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
+    options.onProgress?.({stage:'fastest-hgr2',message:'dev31：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
     t=nowMs(); const fromA=await dijkstraTimesResponsive(full,snapA.id,speedMps,false,options); const toB=await dijkstraTimesResponsive(full,snapB.id,speedMps,true,options); perf.distanceBoundsMs=nowMs()-t;
     const fastestTime=fromA.dist.get(String(snapB.id));
     if(!Number.isFinite(fastestTime)) return {available:false,reason:'hgr2-graph-disconnected',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',snapA,snapB,performance:perf}};
@@ -4703,14 +4824,18 @@
     const prodSnapA=Object.assign({},snapA,{node:graph.nodes.get(String(snapA.id))}), prodSnapB=Object.assign({},snapB,{node:graph.nodes.get(String(snapB.id))});
     lastShadeDebug.clear(); lastRouteEdges={fastest:new Set(),minSun:new Set()};
     lastGraphDebug={graph,raw:null,contracted:null,snapA:prodSnapA,snapB:prodSnapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
-    options.onProgress?.({stage:'shade-search',message:`dev30：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；直接搜尋最少日照…`});
+    options.onProgress?.({stage:'shade-search',message:`dev31：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
     t=nowMs();
-    const minSun=await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,departure,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache:options.sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
+    const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
+    perf.temporalShadeTableMs=nowMs()-t; perf.temporalShade=temporalShade;
+    options.onProgress?.({stage:'shade-search',message:`dev31：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
+    t=nowMs();
+    const minSun=await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,departure,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
     lastRouteEdges.fastest=new Set(fastestPath.edgeIds||[]); lastRouteEdges.minSun=new Set(minSun.path?.edgeIds||[]);
     const candidates=[{id:'graph-fastest',kind:'graph-fastest',distanceM:fastestPath.distanceM,durationS:fastestTime,points:fastestPath.points,graphMeta:{edgeIds:fastestPath.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}}];
     if(minSun.path?.points?.length&&routeSignature(minSun.path.points)!==routeSignature(fastestPath.points)) candidates.push({id:'graph-min-sun',kind:'graph-shade',distanceM:minSun.path.distanceM,durationS:minSun.path.walkSeconds,points:minSun.path.points,graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds,graphMeta:{edgeIds:minSun.path.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
-    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
+    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
     return {available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false};
   }
 
@@ -4788,7 +4913,7 @@
     fastestPath.walkSeconds = fastestTime;
     const detourLimitS = fastestTime * (1 + detourPct / 100);
 
-    options.onProgress?.({ stage:'shade-search', message:`dev30：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
+    options.onProgress?.({ stage:'shade-search', message:`dev31：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
     t = nowMs();
     const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
       speedMps, detourLimitS, fastestToEnd:toB, departure,
@@ -5040,6 +5165,9 @@
       dijkstraTimesResponsive,
       reconstructDijkstra,
       searchMinSun,
+      buildTemporalShadeTable,
+      temporalBucketsForEdge,
+      shadeCacheKey,
       bboxForAB,
       routeDistanceM,
       pathFromEdgeSteps,
