@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev28 Performance Pass
+ * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev29 HGR2 Microtile Runtime
  *
  * Loads only the official GIS tiles needed near the active route.  Full national
  * archives stay on the dataset host (recommended: Hugging Face Dataset); the
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev28";
+  const VERSION = "v9.0.0-dev29";
   const DEFAULTS = {
     enabled: true,
     // Set huggingFaceRepo (e.g. "owner/taiwan-route-tiles") after publishing.
@@ -22,7 +22,8 @@
     neighborRing: 0,
     maxTilesPerRequest: 96,
     attachToMultisource: true,
-    cacheTiles: true
+    cacheTiles: true,
+    preferHgr2: true
   };
   const globalConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const config = Object.assign({}, DEFAULTS, globalConfig.nationwideTiles || {});
@@ -35,6 +36,7 @@
     baseUrl: null,
     tileCache: new Map(),
     graphTileCache: new Map(),
+    graph2TileCache: new Map(),
     lastLoad: null,
     lastGraphLoad: null
   };
@@ -106,21 +108,24 @@
     return hf ? `${hf}manifest.json` : config.manifestUrl;
   }
 
-  function grid(manifest = state.manifest) {
-    const g = manifest?.grid || {};
+  function normalizeGrid(g = {}, fallbackSize = 0.05) {
     return {
-      tileSizeDeg: Number(g.tileSizeDeg || 0.05),
+      tileSizeDeg: Number(g.tileSizeDeg || fallbackSize),
       originLon: Number(g.originLon ?? 118),
       originLat: Number(g.originLat ?? 21)
     };
   }
 
-  function tileXY(lon, lat, manifest = state.manifest) {
-    const g = grid(manifest);
+  function grid(manifest = state.manifest) { return normalizeGrid(manifest?.grid || {}, 0.05); }
+  function graph2Grid(manifest = state.manifest) { return normalizeGrid(manifest?.graph2?.grid || manifest?.grid || {}, 0.0125); }
+
+  function tileXYForGrid(lon, lat, g) {
     const x = Math.floor((Number(lon) - g.originLon) / g.tileSizeDeg + 1e-12);
     const y = Math.floor((Number(lat) - g.originLat) / g.tileSizeDeg + 1e-12);
     return { x, y };
   }
+
+  function tileXY(lon, lat, manifest = state.manifest) { return tileXYForGrid(lon, lat, grid(manifest)); }
 
   function axisId(value) { return value < 0 ? `m${String(Math.abs(value)).padStart(4, "0")}` : `p${String(value).padStart(4, "0")}`; }
   function tileId(x, y) { return `x${axisId(x)}_y${axisId(y)}`; }
@@ -137,25 +142,27 @@
     return { x: parseAxis(parts[0].slice(1)), y: parseAxis(parts[1].slice(1)) };
   }
 
-  function tileBBox(id, manifest = state.manifest) {
+  function tileBBoxForGrid(id, g) {
     const { x, y } = typeof id === "string" ? parseTileId(id) : id;
-    const g = grid(manifest);
     const west = g.originLon + x * g.tileSizeDeg;
     const south = g.originLat + y * g.tileSizeDeg;
     return [west, south, west + g.tileSizeDeg, south + g.tileSizeDeg];
   }
+  function tileBBox(id, manifest = state.manifest) { return tileBBoxForGrid(id, grid(manifest)); }
 
-  function tileIdsForBBox(bbox, options = {}) {
+  function tileIdsForBBoxGrid(bbox, g, ring = 0) {
     const [west, south, east, north] = safeArray(bbox).map(Number);
     if (![west, south, east, north].every(Number.isFinite) || west > east || south > north) return [];
-    const ring = Math.max(0, Number(options.ring ?? config.neighborRing) || 0);
-    const a = tileXY(west, south, options.manifest || state.manifest);
-    const b = tileXY(east - 1e-12, north - 1e-12, options.manifest || state.manifest);
+    const r = Math.max(0, Number(ring) || 0);
+    const a = tileXYForGrid(west, south, g);
+    const b = tileXYForGrid(east - 1e-12, north - 1e-12, g);
     const out = [];
-    for (let y = a.y - ring; y <= b.y + ring; y++) {
-      for (let x = a.x - ring; x <= b.x + ring; x++) out.push(tileId(x, y));
-    }
+    for (let y = a.y - r; y <= b.y + r; y++) for (let x = a.x - r; x <= b.x + r; x++) out.push(tileId(x, y));
     return out;
+  }
+
+  function tileIdsForBBox(bbox, options = {}) {
+    return tileIdsForBBoxGrid(bbox, grid(options.manifest || state.manifest), options.ring ?? config.neighborRing);
   }
 
   function routeBBox(points, marginM = config.routeBufferM) {
@@ -289,6 +296,107 @@
     return { format: "HGR1", nodes, edges, metadata: { nodeCount, edgeCount, coordCount, stringCount } };
   }
 
+  function decodeHgr2(input) {
+    const buffer = input instanceof ArrayBuffer ? input : input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    const HEADER2 = 44, NODE2 = 20, EDGE2 = 32, ADJ2 = 8;
+    if (buffer.byteLength < HEADER2) throw new Error("HGR2 tile too short");
+    const view = new DataView(buffer), u8 = new Uint8Array(buffer);
+    const magic = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+    if (magic !== "HGR2") throw new Error(`invalid HGR2 magic: ${magic}`);
+    const version = view.getUint16(4, true);
+    if (version !== 1) throw new Error(`unsupported HGR2 version: ${version}`);
+    const originLonE6=view.getInt32(8,true), originLatE6=view.getInt32(12,true);
+    const nodeCount=view.getUint32(16,true), edgeCount=view.getUint32(20,true), coordCount=view.getUint32(24,true);
+    const adjCount=view.getUint32(28,true), stringCount=view.getUint32(32,true), stringBytes=view.getUint32(36,true);
+    let pos=HEADER2;
+    const nodeRaw=new Array(nodeCount);
+    for(let i=0;i<nodeCount;i++,pos+=NODE2) nodeRaw[i]={dx:view.getInt32(pos,true),dy:view.getInt32(pos+4,true),sid:view.getUint32(pos+8,true),adjStart:view.getUint32(pos+12,true),adjCount:view.getUint32(pos+16,true)};
+    const edgeRaw=new Array(edgeCount);
+    for(let i=0;i<edgeCount;i++,pos+=EDGE2) edgeRaw[i]={a:view.getUint32(pos,true),b:view.getUint32(pos+4,true),distanceM:view.getFloat32(pos+8,true),geomStart:view.getUint32(pos+12,true),geomCount:view.getUint32(pos+16,true),flags:view.getUint16(pos+20,true),source:view.getUint32(pos+24,true),roadClass:view.getUint32(pos+28,true)};
+    const coords=new Array(coordCount);
+    for(let i=0;i<coordCount;i++,pos+=8) coords[i]=[(originLonE6+view.getInt32(pos,true))/COORD_SCALE,(originLatE6+view.getInt32(pos+4,true))/COORD_SCALE];
+    const adjRaw=new Array(adjCount);
+    for(let i=0;i<adjCount;i++,pos+=ADJ2) adjRaw[i]=[view.getUint32(pos,true),view.getUint32(pos+4,true)];
+    const offsets=new Array(stringCount+1);
+    for(let i=0;i<=stringCount;i++,pos+=4) offsets[i]=view.getUint32(pos,true);
+    const blob=u8.subarray(pos,pos+stringBytes);
+    if(blob.length!==stringBytes) throw new Error("truncated HGR2 string table");
+    const decoder=new TextDecoder("utf-8"),strings=new Array(stringCount);
+    for(let i=0;i<stringCount;i++) strings[i]=decoder.decode(blob.subarray(offsets[i],offsets[i+1]));
+    const str=(i)=>strings[i]||"";
+    const nodes=nodeRaw.map(n=>({id:str(n.sid),lng:(originLonE6+n.dx)/COORD_SCALE,lat:(originLatE6+n.dy)/COORD_SCALE,adjStart:n.adjStart,adjCount:n.adjCount}));
+    const edges=edgeRaw.map((e,index)=>{
+      const a=nodes[e.a]?.id,b=nodes[e.b]?.id;
+      return {id:`${str(e.source)}|${a||e.a}|${b||e.b}|${Math.round(e.distanceM*10)}`,a,b,distanceM:e.distanceM,sourceId:str(e.source),roadClass:str(e.roadClass),pedestrianAllowed:Boolean(e.flags&1),bicycleAllowed:Boolean(e.flags&2),experimental:Boolean(e.flags&4),geometry:coords.slice(e.geomStart,e.geomStart+e.geomCount).map(([lng,lat])=>({lat,lng}))};
+    });
+    return {format:"HGR2",nodes,edges,adjacencyRaw:adjRaw,metadata:{nodeCount,edgeCount,coordCount,adjacencyRefCount:adjCount,stringCount}};
+  }
+
+  function graph2PathFor(tileIdValue, manifest = state.manifest) {
+    const g2=manifest?.graph2;
+    const rec=g2?.tiles?.[tileIdValue];
+    if(rec?.path || rec?.runtime?.path) return rec?.path || rec?.runtime?.path;
+    if(Array.isArray(g2?.tileIds) && g2.tileIds.includes(String(tileIdValue))) {
+      const id=String(tileIdValue), shard=id.split('_',1)[0];
+      return String(g2.pathTemplate || 'runtime/graph-hgr2/{tileId}.hgr2').replaceAll('{shard}',shard).replaceAll('{tileId}',id);
+    }
+    return null;
+  }
+
+  function hasGraph2(manifest = state.manifest) {
+    const g2 = manifest?.graph2;
+    if (!g2) return false;
+    if (g2.tiles && Object.keys(g2.tiles).length) return true;
+    return Array.isArray(g2.tileIds) && g2.tileIds.length > 0;
+  }
+
+  async function loadGraph2Tile(tileIdValue, options = {}) {
+    if(config.cacheTiles!==false && state.graph2TileCache.has(tileIdValue)) return state.graph2TileCache.get(tileIdValue);
+    const manifest=state.manifest || await loadManifest(options);
+    const path=graph2PathFor(tileIdValue,manifest);
+    if(!path) return null;
+    const url=resolveUrl(path,options.datasetBaseUrl || state.baseUrl || effectiveDatasetBaseUrl(options));
+    const decoded=decodeHgr2(await fetchArrayBuffer(url,options));
+    decoded.metadata=Object.assign({},decoded.metadata,{tileId:tileIdValue,url});
+    if(config.cacheTiles!==false) state.graph2TileCache.set(tileIdValue,decoded);
+    return decoded;
+  }
+
+  function mergeGraph2Tiles(tiles) {
+    const nodes=new Map(),edges=new Map(),adjacency=new Map();
+    const ensure=(id)=>{const k=String(id);if(!adjacency.has(k)) adjacency.set(k,[]);return k;};
+    for(const tile of safeArray(tiles)){
+      for(const n of safeArray(tile?.nodes)){if(n?.id&&!nodes.has(n.id)) nodes.set(n.id,{id:n.id,lat:n.lat,lng:n.lng,nationwideSource:true,hgr2:true});}
+      for(const e0 of safeArray(tile?.edges)){
+        if(!e0?.a||!e0?.b||e0.pedestrianAllowed===false) continue;
+        const lo=String(e0.a)<String(e0.b)?String(e0.a):String(e0.b), hi=lo===String(e0.a)?String(e0.b):String(e0.a);
+        const stable=`${e0.sourceId||""}|${lo}|${hi}|${Math.round(Number(e0.distanceM||0)*10)}`;
+        if(edges.has(stable)) continue;
+        let geometry=safeArray(e0.geometry).map(p=>({lat:Number(p.lat),lng:Number(p.lng)}));
+        const aNode=nodes.get(String(e0.a));
+        if(geometry.length>=2&&aNode){const d0=Math.hypot(geometry[0].lat-aNode.lat,geometry[0].lng-aNode.lng),d1=Math.hypot(geometry[geometry.length-1].lat-aNode.lat,geometry[geometry.length-1].lng-aNode.lng);if(d0>d1) geometry=geometry.slice().reverse();}
+        const e={id:stable,a:String(e0.a),b:String(e0.b),geometry,distanceM:Number(e0.distanceM||0),wayIds:e0.sourceId?[String(e0.sourceId)]:[],tagsSummary:{highway:String(e0.roadClass||"unknown")},sourceEdgeId:stable,sourceDistanceM:Number(e0.distanceM||0),nationwideSource:true,hgr2:true,preRefined:true};
+        edges.set(stable,e); ensure(e.a);ensure(e.b);adjacency.get(e.a).push({edgeId:stable,to:e.b});adjacency.get(e.b).push({edgeId:stable,to:e.a});
+      }
+    }
+    return {nodes,edges,adjacency,nationwideTileGraph:true,preRefinedFineGraph:true,hgr2:true,productionGraphMutated:false};
+  }
+
+  async function loadGraph2ForBBox(bbox, options = {}) {
+    const started=nowMs(); let t=nowMs();
+    const manifest=state.manifest || await loadManifest(options); const manifestMs=nowMs()-t;
+    if(!manifest?.graph2) return {available:false,reason:"hgr2-unavailable"};
+    const g=graph2Grid(manifest);
+    const allIds=tileIdsForBBoxGrid(bbox,g,options.ring ?? 0);
+    const ids=allIds.filter(id=>Boolean(graph2PathFor(id,manifest)));
+    const maxTiles=Math.max(1,Number(options.maxTiles ?? config.maxTilesPerRequest)||96);
+    if(ids.length>maxTiles) throw new Error(`HGR2 graph request too broad: ${ids.length} > ${maxTiles}`);
+    t=nowMs();const graphTiles=(await Promise.all(ids.map(id=>loadGraph2Tile(id,options)))).filter(Boolean);const tileFetchMs=nowMs()-t;
+    t=nowMs();const graph=mergeGraph2Tiles(graphTiles);const mergeMs=nowMs()-t;
+    state.lastGraphLoad={backend:"nationwide-hgr2",bbox:safeArray(bbox).map(Number),requestedTileCount:allIds.length,loadedTileIds:ids,loadedTileCount:ids.length,nodeCount:graph.nodes.size,edgeCount:graph.edges.size,performance:{manifestMs,tileFetchMs,mergeMs,totalMs:nowMs()-started},productionGraphMutated:false};
+    return {available:ids.length>0,graph,...state.lastGraphLoad};
+  }
+
   function graphPathFor(tileIdValue, manifest = state.manifest) {
     const rec = manifest?.tiles?.[tileIdValue];
     return rec?.graph?.path || rec?.graph || null;
@@ -324,10 +432,14 @@
   }
 
   async function loadGraphForBBox(bbox, options = {}) {
+    const manifest = state.manifest || await loadManifest(options);
+    if ((options.preferHgr2 ?? config.preferHgr2) !== false && hasGraph2(manifest)) {
+      const h2 = await loadGraph2ForBBox(bbox, options);
+      if (h2?.available) return h2;
+    }
     const started = nowMs();
     let t = nowMs();
-    const manifest = state.manifest || await loadManifest(options);
-    const manifestMs = nowMs() - t;
+    const manifestMs = 0;
     const allIds = tileIdsForBBox(bbox, { ring: options.ring ?? config.neighborRing, manifest });
     const ids = allIds.filter((id) => Boolean(graphPathFor(id, manifest)));
     const maxTiles = Math.max(1, Number(options.maxTiles ?? config.maxTilesPerRequest) || 96);
@@ -444,12 +556,12 @@
     return loadEvidenceForBBox(bbox, options);
   }
 
-  function clearCache() { state.tileCache.clear(); state.graphTileCache.clear(); }
+  function clearCache() { state.tileCache.clear(); state.graphTileCache.clear(); state.graph2TileCache.clear(); }
   function getState() {
     return {
       version: VERSION, status: state.status, error: state.error,
       manifestLoaded: Boolean(state.manifest), manifestUrl: state.manifestUrl,
-      baseUrl: state.baseUrl, cachedTileCount: state.tileCache.size, cachedGraphTileCount: state.graphTileCache.size,
+      baseUrl: state.baseUrl, cachedTileCount: state.tileCache.size, cachedGraphTileCount: state.graphTileCache.size, cachedGraph2TileCount: state.graph2TileCache.size,
       tileCount: Number(state.manifest?.summary?.tileCount || state.manifest?.tileCount || Object.keys(state.manifest?.tiles || {}).length || 0),
       lastLoad: clone(state.lastLoad), lastGraphLoad: clone(state.lastGraphLoad)
     };
@@ -459,9 +571,9 @@
     version: VERSION,
     get config() { return Object.assign({}, config); },
     loadManifest, loadTile, loadEvidenceForBBox, loadEvidenceForPolyline,
-    loadGraphTile, loadGraphForBBox, loadGraphForPolyline, mergeGraphTiles,
+    loadGraphTile, loadGraph2Tile, loadGraphForBBox, loadGraphForPolyline, mergeGraphTiles, mergeGraph2Tiles,
     tileXY, tileId, parseTileId, tileBBox, tileIdsForBBox, routeBBox,
-    decodeHdt, decodeHgr, dedupeFeatures, splitBySource, clearCache, getState,
-    _internals: { resolveUrl, dirnameUrl, runtimePathFor, graphPathFor, huggingFaceBaseUrl, effectiveDatasetBaseUrl, effectiveManifestUrl }
+    decodeHdt, decodeHgr, decodeHgr2, dedupeFeatures, splitBySource, clearCache, getState,
+    _internals: { resolveUrl, dirnameUrl, runtimePathFor, graphPathFor, graph2PathFor, hasGraph2, graph2Grid, tileIdsForBBoxGrid, huggingFaceBaseUrl, effectiveDatasetBaseUrl, effectiveManifestUrl }
   };
 })();

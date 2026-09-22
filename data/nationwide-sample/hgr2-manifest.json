@@ -1,0 +1,301 @@
+{
+  "schema": "taiwan-hgr2-build-v1",
+  "generatedAt": "2026-09-22T13:05:23Z",
+  "sourceGraphRoot": "/mnt/data/dev29work/project/DEPLOY/data/nationwide-sample/runtime/graph",
+  "format": "HGR2",
+  "grid": {
+    "tileSizeDeg": 0.0125,
+    "originLon": 118.0,
+    "originLat": 21.0,
+    "scheme": "fixed-degree-v1"
+  },
+  "refinement": {
+    "generalMaxEdgeM": 85.0,
+    "pathMaxEdgeM": 55.0,
+    "preRefined": true
+  },
+  "summary": {
+    "inputTiles": 3,
+    "decodedDirectedEdges": 1238,
+    "uniqueSourceEdges": 607,
+    "fineEdges": 1006,
+    "tileAssignments": 1066,
+    "ingestSeconds": 0.07,
+    "tileCount": 14,
+    "bytes": 139355,
+    "writeSeconds": 0.02
+  },
+  "tiles": {
+    "xp0173_yp0161": {
+      "bbox": [
+        120.1625,
+        23.0125,
+        120.175,
+        23.025
+      ],
+      "path": "runtime/graph-hgr2/xp0173_yp0161.hgr2",
+      "format": "HGR2",
+      "bytes": 628,
+      "sha256": "34852495598950dabf206146fd36f9e57051adf240c7439967a5abb8c102605b",
+      "version": 1,
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "coordCount": 10,
+      "adjacencyRefCount": 8,
+      "stringCount": 8,
+      "stringBytes": 176
+    },
+    "xp0174_yp0161": {
+      "bbox": [
+        120.175,
+        23.0125,
+        120.1875,
+        23.025
+      ],
+      "path": "runtime/graph-hgr2/xp0174_yp0161.hgr2",
+      "format": "HGR2",
+      "bytes": 384,
+      "sha256": "5ef0203dec1a8096578edfa89e13ac124430b23e30f7db484d2da60620edca90",
+      "version": 1,
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "coordCount": 5,
+      "adjacencyRefCount": 4,
+      "stringCount": 6,
+      "stringBytes": 116
+    },
+    "xp0174_yp0162": {
+      "bbox": [
+        120.175,
+        23.025,
+        120.1875,
+        23.037499999999998
+      ],
+      "path": "runtime/graph-hgr2/xp0174_yp0162.hgr2",
+      "format": "HGR2",
+      "bytes": 3036,
+      "sha256": "3640f948f1118c594a860be7e2f1cd92eb8479e19fca7ac809a824ce77cf8314",
+      "version": 1,
+      "nodeCount": 26,
+      "edgeCount": 25,
+      "coordCount": 58,
+      "adjacencyRefCount": 50,
+      "stringCount": 29,
+      "stringBytes": 688
+    },
+    "xp0175_yp0161": {
+      "bbox": [
+        120.1875,
+        23.0125,
+        120.2,
+        23.025
+      ],
+      "path": "runtime/graph-hgr2/xp0175_yp0161.hgr2",
+      "format": "HGR2",
+      "bytes": 7326,
+      "sha256": "81b2e124098235446e0f40e308e9704b572554c47a7c8bad00880944bc21f343",
+      "version": 1,
+      "nodeCount": 59,
+      "edgeCount": 52,
+      "coordCount": 118,
+      "adjacencyRefCount": 104,
+      "stringCount": 78,
+      "stringBytes": 2346
+    },
+    "xp0175_yp0162": {
+      "bbox": [
+        120.1875,
+        23.025,
+        120.2,
+        23.037499999999998
+      ],
+      "path": "runtime/graph-hgr2/xp0175_yp0162.hgr2",
+      "format": "HGR2",
+      "bytes": 28442,
+      "sha256": "ebc2bf2a70922c1a092ec7140a40572bc92280f9ee1b69cd4ed7d6d38c6894bd",
+      "version": 1,
+      "nodeCount": 193,
+      "edgeCount": 219,
+      "coordCount": 532,
+      "adjacencyRefCount": 438,
+      "stringCount": 273,
+      "stringBytes": 8674
+    },
+    "xp0176_yp0161": {
+      "bbox": [
+        120.2,
+        23.0125,
+        120.2125,
+        23.025
+      ],
+      "path": "runtime/graph-hgr2/xp0176_yp0161.hgr2",
+      "format": "HGR2",
+      "bytes": 18400,
+      "sha256": "6bc1f9f4430f67d1516fc33eb86d8ecbaf1a768a561c1e10a550ae6dc2c68490",
+      "version": 1,
+      "nodeCount": 130,
+      "edgeCount": 135,
+      "coordCount": 341,
+      "adjacencyRefCount": 270,
+      "stringCount": 181,
+      "stringBytes": 5820
+    },
+    "xp0176_yp0162": {
+      "bbox": [
+        120.2,
+        23.025,
+        120.2125,
+        23.037499999999998
+      ],
+      "path": "runtime/graph-hgr2/xp0176_yp0162.hgr2",
+      "format": "HGR2",
+      "bytes": 63433,
+      "sha256": "3ede49ac51bec36c0d7863a3bc6fa0f508db9df376a270faabcccf7d4bdbf074",
+      "version": 1,
+      "nodeCount": 432,
+      "edgeCount": 494,
+      "coordCount": 1149,
+      "adjacencyRefCount": 988,
+      "stringCount": 597,
+      "stringBytes": 19453
+    },
+    "xp0177_yp0161": {
+      "bbox": [
+        120.2125,
+        23.0125,
+        120.22500000000001,
+        23.025
+      ],
+      "path": "runtime/graph-hgr2/xp0177_yp0161.hgr2",
+      "format": "HGR2",
+      "bytes": 278,
+      "sha256": "f742e4bd70026bcca921f17816b5de209179e0f8fcf50ac6cb036fdbeda2c174",
+      "version": 1,
+      "nodeCount": 2,
+      "edgeCount": 1,
+      "coordCount": 2,
+      "adjacencyRefCount": 2,
+      "stringCount": 5,
+      "stringBytes": 106
+    },
+    "xp0177_yp0162": {
+      "bbox": [
+        120.2125,
+        23.025,
+        120.22500000000001,
+        23.037499999999998
+      ],
+      "path": "runtime/graph-hgr2/xp0177_yp0162.hgr2",
+      "format": "HGR2",
+      "bytes": 7414,
+      "sha256": "02dd1458827d6d6643c8d7735478b224d8a8afbf2de8512e5f2550cc111b27d6",
+      "version": 1,
+      "nodeCount": 61,
+      "edgeCount": 55,
+      "coordCount": 150,
+      "adjacencyRefCount": 110,
+      "stringCount": 72,
+      "stringBytes": 2018
+    },
+    "xp0177_yp0163": {
+      "bbox": [
+        120.2125,
+        23.0375,
+        120.22500000000001,
+        23.05
+      ],
+      "path": "runtime/graph-hgr2/xp0177_yp0163.hgr2",
+      "format": "HGR2",
+      "bytes": 2103,
+      "sha256": "a4c6c75b8b51e5c34f5b92e92250d504ef6568ccb2d87d1d8f4d2f850b077ad3",
+      "version": 1,
+      "nodeCount": 18,
+      "edgeCount": 17,
+      "coordCount": 38,
+      "adjacencyRefCount": 34,
+      "stringCount": 21,
+      "stringBytes": 491
+    },
+    "xp0178_yp0163": {
+      "bbox": [
+        120.225,
+        23.0375,
+        120.2375,
+        23.05
+      ],
+      "path": "runtime/graph-hgr2/xp0178_yp0163.hgr2",
+      "format": "HGR2",
+      "bytes": 2080,
+      "sha256": "da538ec49a8f83f3895d70483bea0904e8ee27640131936e54f31c7467b3c350",
+      "version": 1,
+      "nodeCount": 17,
+      "edgeCount": 16,
+      "coordCount": 46,
+      "adjacencyRefCount": 32,
+      "stringCount": 20,
+      "stringBytes": 476
+    },
+    "xp0178_yp0164": {
+      "bbox": [
+        120.225,
+        23.05,
+        120.2375,
+        23.0625
+      ],
+      "path": "runtime/graph-hgr2/xp0178_yp0164.hgr2",
+      "format": "HGR2",
+      "bytes": 3078,
+      "sha256": "07ecadd07bcc8a002adc87040eb2f8455909aedb078261589370743ad3448d90",
+      "version": 1,
+      "nodeCount": 26,
+      "edgeCount": 25,
+      "coordCount": 59,
+      "adjacencyRefCount": 50,
+      "stringCount": 29,
+      "stringBytes": 722
+    },
+    "xp0179_yp0164": {
+      "bbox": [
+        120.2375,
+        23.05,
+        120.25,
+        23.0625
+      ],
+      "path": "runtime/graph-hgr2/xp0179_yp0164.hgr2",
+      "format": "HGR2",
+      "bytes": 1881,
+      "sha256": "9a56bc823a09f7160cdf5f23027faa040b9532eb03a43b108a610fb0d8dd89bc",
+      "version": 1,
+      "nodeCount": 16,
+      "edgeCount": 15,
+      "coordCount": 34,
+      "adjacencyRefCount": 30,
+      "stringCount": 19,
+      "stringBytes": 445
+    },
+    "xp0179_yp0165": {
+      "bbox": [
+        120.2375,
+        23.0625,
+        120.25,
+        23.075
+      ],
+      "path": "runtime/graph-hgr2/xp0179_yp0165.hgr2",
+      "format": "HGR2",
+      "bytes": 872,
+      "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2",
+      "version": 1,
+      "nodeCount": 7,
+      "edgeCount": 6,
+      "coordCount": 15,
+      "adjacencyRefCount": 12,
+      "stringCount": 10,
+      "stringBytes": 236
+    }
+  },
+  "policy": {
+    "genericProximityAutoBridge": false,
+    "productionGraphMutated": false,
+    "source": "finalized HGR1 post-build conversion"
+  }
+}

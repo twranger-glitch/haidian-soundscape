@@ -26,9 +26,7 @@
   "summary": {
     "tileCount": 20,
     "sourceFeatureCount": 49,
-    "graphTileCount": 3,
-    "graph2TileCount": 14,
-    "graph2Bytes": 139355
+    "graphTileCount": 3
   },
   "tiles": {
     "xp0043_yp0038": {
@@ -520,47 +518,5 @@
       "motorVehicleOnewayDoesNotAutomaticallyRestrictFoot": true
     },
     "samplePedestrianSegments": 244
-  },
-  "graph2": {
-    "format": "HGR2",
-    "grid": {
-      "tileSizeDeg": 0.0125,
-      "originLon": 118.0,
-      "originLat": 21.0,
-      "scheme": "fixed-degree-v1"
-    },
-    "refinement": {
-      "generalMaxEdgeM": 85.0,
-      "pathMaxEdgeM": 55.0,
-      "preRefined": true
-    },
-    "pathTemplate": "runtime/graph-hgr2/{tileId}.hgr2",
-    "tileIds": [
-      "xp0173_yp0161",
-      "xp0174_yp0161",
-      "xp0174_yp0162",
-      "xp0175_yp0161",
-      "xp0175_yp0162",
-      "xp0176_yp0161",
-      "xp0176_yp0162",
-      "xp0177_yp0161",
-      "xp0177_yp0162",
-      "xp0177_yp0163",
-      "xp0178_yp0163",
-      "xp0178_yp0164",
-      "xp0179_yp0164",
-      "xp0179_yp0165"
-    ],
-    "summary": {
-      "tileCount": 14,
-      "bytes": 139355,
-      "writeSeconds": 0.02
-    },
-    "policy": {
-      "genericProximityAutoBridge": false,
-      "productionGraphMutated": false,
-      "source": "finalized HGR1 post-build conversion"
-    }
-  },
-  "generatedAtDev29": "2026-09-22T13:05:23Z"
+  }
 }

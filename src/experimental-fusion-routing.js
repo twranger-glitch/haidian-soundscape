@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev28
+ * Haidian Soundscape — Experimental Multi-source Fusion Router v9.0.0-dev29
  *
  * Safety model:
  * - consumes only evidence gaps already classified `verified`;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev28";
+  const VERSION = "v9.0.0-dev29";
   const DEFAULTS = {
     enabled: true,
     sourceAttachMaxM: 18,
