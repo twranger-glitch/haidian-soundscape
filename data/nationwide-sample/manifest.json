@@ -1,0 +1,522 @@
+{
+  "schema": "taiwan-route-tiles-v1",
+  "generatedAt": "dev26-sample",
+  "scope": "Haidian regression sample from real NLMA data",
+  "crs": "EPSG:4326",
+  "grid": {
+    "scheme": "fixed-degree-v1",
+    "tileSizeDeg": 0.05,
+    "originLon": 118.0,
+    "originLat": 21.0,
+    "neighborRingRecommended": 1
+  },
+  "runtimeFormat": {
+    "name": "HDTL-v1",
+    "magic": "HDTL",
+    "coordinateScale": 1000000
+  },
+  "sources": {
+    "nlma-sidewalk": {
+      "version": "SIDEWALK_202606"
+    },
+    "nlma-bikeway": {
+      "version": "115年上半年度"
+    }
+  },
+  "summary": {
+    "tileCount": 20,
+    "sourceFeatureCount": 49,
+    "graphTileCount": 3
+  },
+  "tiles": {
+    "xp0043_yp0038": {
+      "bbox": [
+        120.15,
+        22.9,
+        120.2,
+        22.95
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0043_yp0038.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "c59189178532aacc04926e1be65b456c320e855e8ad7b1b602735cb57d0e4806",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0043_yp0039": {
+      "bbox": [
+        120.15,
+        22.95,
+        120.2,
+        23.0
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0043_yp0039.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "6d9af90cba696450e45e2c5783a20328cc720b154bc7e3d4074bd5eef5bf3820",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0043_yp0040": {
+      "bbox": [
+        120.15,
+        23.0,
+        120.2,
+        23.05
+      ],
+      "featureCount": 8,
+      "runtime": {
+        "path": "runtime/evidence/xp0043_yp0040.hdt",
+        "format": "HDTL-v1",
+        "bytes": 2762,
+        "sha256": "d5df6f64b58b99852e4437dca5a118766d921687f7126858ab967845ca76052a",
+        "version": 1,
+        "coordCount": 245,
+        "partCount": 12,
+        "groupCount": 12,
+        "featureCount": 8,
+        "stringCount": 21,
+        "stringBytes": 258
+      },
+      "graph": {
+        "path": "runtime/graph/xp0043_yp0040.hgr",
+        "format": "HGR1",
+        "bytes": 27966,
+        "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca",
+        "version": 1,
+        "nodeCount": 140,
+        "edgeCount": 334,
+        "coordCount": 1010,
+        "stringCount": 226,
+        "stringBytes": 7906
+      }
+    },
+    "xp0043_yp0041": {
+      "bbox": [
+        120.15,
+        23.05,
+        120.2,
+        23.1
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0043_yp0041.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "9a3f64ae236917ea33ac07f44e3102f8dc958d63d55a48ffc19bca123191342c",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0043_yp0042": {
+      "bbox": [
+        120.15,
+        23.1,
+        120.2,
+        23.150000000000002
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0043_yp0042.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "b159137800e1f3faba4657289fb5e8fc919281b3acbdeed23063d2a3002c8bff",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0044_yp0038": {
+      "bbox": [
+        120.2,
+        22.9,
+        120.25,
+        22.95
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0044_yp0038.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "153aea90b6909d59e384f906ba7a20753de6e81451b537f49cb632963c0b258a",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0044_yp0039": {
+      "bbox": [
+        120.2,
+        22.95,
+        120.25,
+        23.0
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0044_yp0039.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "0fa74cb7cf9b6a7fee4bc3961f90a61b39635eebc68d6bc007d4cf27445700db",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0044_yp0040": {
+      "bbox": [
+        120.2,
+        23.0,
+        120.25,
+        23.05
+      ],
+      "featureCount": 23,
+      "runtime": {
+        "path": "runtime/evidence/xp0044_yp0040.hdt",
+        "format": "HDTL-v1",
+        "bytes": 6289,
+        "sha256": "ab64f521f43306d00d75b4b6cab7e929bf11c69fe13026ba27d20573dde76cd8",
+        "version": 1,
+        "coordCount": 578,
+        "partCount": 29,
+        "groupCount": 29,
+        "featureCount": 23,
+        "stringCount": 39,
+        "stringBytes": 357
+      },
+      "graph": {
+        "path": "runtime/graph/xp0044_yp0040.hgr",
+        "format": "HGR1",
+        "bytes": 72091,
+        "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a",
+        "version": 1,
+        "nodeCount": 355,
+        "edgeCount": 894,
+        "coordCount": 2672,
+        "stringCount": 541,
+        "stringBytes": 19215
+      }
+    },
+    "xp0044_yp0041": {
+      "bbox": [
+        120.2,
+        23.05,
+        120.25,
+        23.1
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0044_yp0041.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "4acc8b4ed624ef322b1fbed650f58702a4b81cde1e1d97a2b32a037a9c9acf85",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      },
+      "graph": {
+        "path": "runtime/graph/xp0044_yp0041.hgr",
+        "format": "HGR1",
+        "bytes": 1124,
+        "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c",
+        "version": 1,
+        "nodeCount": 6,
+        "edgeCount": 10,
+        "coordCount": 54,
+        "stringCount": 9,
+        "stringBytes": 260
+      }
+    },
+    "xp0044_yp0042": {
+      "bbox": [
+        120.2,
+        23.1,
+        120.25,
+        23.150000000000002
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0044_yp0042.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "c6fe6d44d9a3b4bcf47f11d46f9ad8d3fd6b4488ed69588f7982f34cbb124039",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0045_yp0038": {
+      "bbox": [
+        120.25,
+        22.9,
+        120.3,
+        22.95
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0045_yp0038.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "515443b680798bd256c96cc4056ef70b46062e6d6eea956f05a6c2f4df1be5a4",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0045_yp0039": {
+      "bbox": [
+        120.25,
+        22.95,
+        120.3,
+        23.0
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0045_yp0039.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "27e0512785319ee5296c3b89eacc69f3cc4ed4f5f9834f61f8e5b54b4281a261",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0045_yp0040": {
+      "bbox": [
+        120.25,
+        23.0,
+        120.3,
+        23.05
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0045_yp0040.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "fe3039b94d0ba79c36359f296dcae00ab58515f31ac914ad1fae08d9ff84f3c0",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0045_yp0041": {
+      "bbox": [
+        120.25,
+        23.05,
+        120.3,
+        23.1
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0045_yp0041.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "edb0ae53a5464afcc91b14d45a101544b164afb560964d9b1845e690e874aa3d",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0045_yp0042": {
+      "bbox": [
+        120.25,
+        23.1,
+        120.3,
+        23.150000000000002
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0045_yp0042.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "4f5d51c0ed0aa189df1b79c764c13ec358d34a98b4ffc34272cf3abc813904d2",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0046_yp0038": {
+      "bbox": [
+        120.3,
+        22.9,
+        120.35,
+        22.95
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0046_yp0038.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "e787112ae2914afc1cfa75132bfda07a645374f893660c9ad2b56ece93a0e0f7",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0046_yp0039": {
+      "bbox": [
+        120.3,
+        22.95,
+        120.35,
+        23.0
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0046_yp0039.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "1a6fe4bf8fffeea1bfafbfcee9398b1795e6ccf8c2bcb87537b3de53be0b1aea",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0046_yp0040": {
+      "bbox": [
+        120.3,
+        23.0,
+        120.35,
+        23.05
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0046_yp0040.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "77ffd3b3dcae243116450b60ab54c93f38d45bc9b273a8fdc32e44965a1da80f",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0046_yp0041": {
+      "bbox": [
+        120.3,
+        23.05,
+        120.35,
+        23.1
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0046_yp0041.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "81591b0079284629c3c5bab31edb364c920db84da7703cde4e144172f76edc36",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    },
+    "xp0046_yp0042": {
+      "bbox": [
+        120.3,
+        23.1,
+        120.35,
+        23.150000000000002
+      ],
+      "featureCount": 1,
+      "runtime": {
+        "path": "runtime/evidence/xp0046_yp0042.hdt",
+        "format": "HDTL-v1",
+        "bytes": 497,
+        "sha256": "21e42ea48d4ecb222c5a8c2035ae00615dc061e8a46674cb1c5a3096b983353a",
+        "version": 1,
+        "coordCount": 42,
+        "partCount": 1,
+        "groupCount": 1,
+        "featureCount": 1,
+        "stringCount": 6,
+        "stringBytes": 49
+      }
+    }
+  },
+  "hosting": {
+    "sampleOnly": true
+  },
+  "graphFormat": {
+    "name": "HGR1",
+    "magic": "HGR1",
+    "policy": {
+      "genericProximityAutoBridge": false,
+      "pedestrianFootDeniedExcluded": true,
+      "motorVehicleOnewayDoesNotAutomaticallyRestrictFoot": true
+    },
+    "samplePedestrianSegments": 244
+  }
+}
