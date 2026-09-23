@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev31 Temporal Shade Table */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev32 Candidate Correctness Audit */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -31,7 +31,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev31: HGR2 temporal shade prewarm + isolated experimental multi-source fusion; preserves dev13–dev20.1 diagnostics and source-gap safety
+  // v9.0.0-dev32: candidate correctness audit + exact replay on top of dev32 temporal shade runtime; preserves production graph isolation
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
   // dev22–dev27: preprocessed multi-source evidence; dev27 adds nationwide lazy-loaded tiles. Browser never downloads national archives.
@@ -150,12 +150,17 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,
-    // dev31: prewarm a deterministic edge/time table on the already-pruned local graph.
+    // dev32: prewarm a deterministic edge/time table on the already-pruned local graph.
     // Search then performs Map lookups instead of serially waiting for ShadeMap at each label expansion.
     temporalShadeTableEnabled: true,
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
+    // dev32 correctness gates. Exact replay checks the temporal winner at true
+    // traversal timestamps; full temporal-vs-on-demand A/B audit remains opt-in.
+    candidateCorrectnessExactReplayEnabled: true,
+    candidateCorrectnessExactReplayToleranceSec: 45,
+    candidateCorrectnessAuditEnabled: true,
     // Maximum number of independent outgoing edge shade costs in flight for fallback misses.
     shadeEdgeBatchConcurrency: 4,
     cooperativeYieldMs: 12,

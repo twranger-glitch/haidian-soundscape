@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev31 Temporal Shade Table
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev32 Candidate Correctness Audit
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev31";
+  const VERSION = "v9.0.0-dev32";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -62,6 +62,7 @@
   let engineCrossCheckLayer = null;
   let engineCrossCheckVisible = false;
   let lastManualGraphDiagnosis = null;
+  let lastCandidateCorrectnessAudit = null;
   let drawMode = "idle";
   let drawPoints = [];
   let aPoint = null;
@@ -904,19 +905,162 @@
     return total / fractions.length;
   }
 
-  function dedupeCandidates(candidates) {
+  function candidateGeometryHash(points) {
+    const pts = (points || []).map(asLatLng).filter(Boolean);
+    if (!pts.length) return "geom-empty";
+    let h = 2166136261 >>> 0;
+    const payload = pts.map((p) => `${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`).join("|");
+    for (let i = 0; i < payload.length; i += 1) {
+      h ^= payload.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return `g${h.toString(16).padStart(8, "0")}`;
+  }
+
+  function withCandidateIdentity(candidate) {
+    if (!candidate?.points?.length) return candidate;
+    const geometryHash = candidate.geometryHash || candidateGeometryHash(candidate.points);
+    return Object.assign({}, candidate, {
+      geometryHash,
+      stableCandidateId: candidate.stableCandidateId || `${candidate.id || candidate.kind || 'candidate'}:${geometryHash}`
+    });
+  }
+
+  function geometryDuplicateEvidence(a, b) {
+    const A = (a?.points || []).map(asLatLng).filter(Boolean);
+    const B = (b?.points || []).map(asLatLng).filter(Boolean);
+    if (A.length < 2 || B.length < 2) return { duplicate:false, reason:'missing-geometry' };
+    const distanceDeltaM = Math.abs((Number(a.distanceM) || routeDistanceM(A)) - (Number(b.distanceM) || routeDistanceM(B)));
+    if (distanceDeltaM > 8) return { duplicate:false, reason:'distance-delta', distanceDeltaM };
+    if (haversineM(A[0], B[0]) > 4 || haversineM(A[A.length - 1], B[B.length - 1]) > 4) {
+      return { duplicate:false, reason:'endpoint-delta', distanceDeltaM };
+    }
+    const samplesA = buildSampleSegments(A, 8).map((x) => x.sample);
+    const samplesB = buildSampleSegments(B, 8).map((x) => x.sample);
+    let maxOffsetM = 0, sumOffsetM = 0, count = 0;
+    for (const [samples, target] of [[samplesA, B], [samplesB, A]]) {
+      for (const point of samples) {
+        const hit = nearestPointOnRoute(target, point);
+        const d = Number(hit?.distanceM ?? Infinity);
+        if (!Number.isFinite(d)) return { duplicate:false, reason:'projection-failed', distanceDeltaM };
+        maxOffsetM = Math.max(maxOffsetM, d); sumOffsetM += d; count += 1;
+        if (d > 4) return { duplicate:false, reason:'corridor-offset', distanceDeltaM, maxOffsetM };
+      }
+    }
+    const meanOffsetM = count ? sumOffsetM / count : Infinity;
+    const duplicate = maxOffsetM <= 4 && meanOffsetM <= 2.5;
+    return { duplicate, reason:duplicate?'geometry-proven-duplicate':'mean-offset', distanceDeltaM, maxOffsetM, meanOffsetM };
+  }
+
+  function dedupeCandidates(candidates, audit = null) {
     const out = [];
-    for (const candidate of candidates || []) {
-      if (!candidate?.points?.length) continue;
-      if (candidate.kind === 'manual' || candidate.kind === 'experimental-fused') { out.push(candidate); continue; }
-      const duplicate = out.some((existing) => {
-        if (existing.kind === 'manual' || existing.kind === 'experimental-fused') return false;
-        const distanceClose = Math.abs((Number(existing.distanceM) || 0) - (Number(candidate.distanceM) || 0)) < 25;
-        return distanceClose && routeSimilarityM(existing, candidate) < 35;
-      });
-      if (!duplicate) out.push(candidate);
+    for (const raw of candidates || []) {
+      if (!raw?.points?.length) {
+        audit?.dedupe?.push?.({ stage:'dedupe', status:'dropped', reason:'missing-geometry', candidateId:raw?.id || null });
+        continue;
+      }
+      const candidate = withCandidateIdentity(raw);
+      if (candidate.kind === 'manual' || candidate.kind === 'experimental-fused') {
+        out.push(candidate);
+        audit?.dedupe?.push?.({ stage:'dedupe', status:'kept', candidateId:candidate.id, stableCandidateId:candidate.stableCandidateId, geometryHash:candidate.geometryHash, reason:'protected-evidence-candidate' });
+        continue;
+      }
+      let duplicateOf = null, proof = null;
+      for (const existing of out) {
+        if (existing.kind === 'manual' || existing.kind === 'experimental-fused') continue;
+        proof = geometryDuplicateEvidence(existing, candidate);
+        if (proof.duplicate) { duplicateOf = existing; break; }
+      }
+      if (duplicateOf) {
+        audit?.dedupe?.push?.({ stage:'dedupe', status:'deduped', candidateId:candidate.id, stableCandidateId:candidate.stableCandidateId, geometryHash:candidate.geometryHash, duplicateOf:duplicateOf.stableCandidateId, proof });
+      } else {
+        out.push(candidate);
+        audit?.dedupe?.push?.({ stage:'dedupe', status:'kept', candidateId:candidate.id, stableCandidateId:candidate.stableCandidateId, geometryHash:candidate.geometryHash });
+      }
     }
     return out;
+  }
+
+  // dev32: convert lifecycle events into a machine-checkable loss ledger.
+  // A candidate may disappear only with an explicit, positive explanation.
+  function finalizeCandidateAudit(audit) {
+    if (!audit) return null;
+    const keyOf = (x) => x?.stableCandidateId || (x?.candidateId ? `id:${x.candidateId}` : null);
+    const firstByKey = (items) => {
+      const map = new Map();
+      for (const item of items || []) {
+        const key = keyOf(item);
+        if (key && !map.has(key)) map.set(key, item);
+      }
+      return map;
+    };
+    const dedupe = firstByKey(audit.dedupe);
+    const quality = firstByKey(audit.quality);
+    const detour = firstByKey(audit.detour);
+    const scored = firstByKey(audit.scored);
+    const displayed = firstByKey(audit.displayed);
+    const outcomes = [], unexplained = [];
+
+    for (const generated of audit.generated || []) {
+      const key = keyOf(generated);
+      if (!key) continue;
+      let result;
+      if (displayed.has(key)) {
+        result = { status:'displayed', reason:'displayed' };
+      } else {
+        const d = dedupe.get(key), q = quality.get(key), dt = detour.get(key), sc = scored.get(key);
+        if (d?.status === 'deduped') {
+          result = d?.proof?.duplicate
+            ? { status:'hidden', reason:'proven-duplicate', duplicateOf:d.duplicateOf || null }
+            : { status:'unexplained', reason:'dedupe-without-positive-proof' };
+        } else if (d?.status === 'dropped' && d?.reason === 'missing-geometry') {
+          result = { status:'hidden', reason:'missing-geometry' };
+        } else if (q?.status === 'rejected') {
+          result = { status:'hidden', reason:'route-quality-rejected', details:q.reasons || [] };
+        } else if (dt && dt.status !== 'eligible') {
+          result = { status:'hidden', reason:dt.status };
+        } else if (sc) {
+          result = { status:'unexplained', reason:'scored-but-not-displayed' };
+        } else {
+          result = { status:'unexplained', reason:'candidate-vanished-without-lifecycle-reason' };
+        }
+      }
+      const row = Object.assign({
+        candidateId:generated.candidateId || null,
+        stableCandidateId:generated.stableCandidateId || null,
+        geometryHash:generated.geometryHash || null
+      }, result);
+      outcomes.push(row);
+      if (row.status === 'unexplained') unexplained.push(row);
+    }
+
+    const graphHidden = [];
+    for (const event of audit.graphLifecycle || []) {
+      if (event?.status !== 'suppressed' && event?.status !== 'not-generated') continue;
+      const explained = event.status === 'not-generated'
+        ? Boolean(event.reason)
+        : event.reason === 'exact-same-edge-sequence-as-fastest';
+      const row = Object.assign({}, event, { explained });
+      graphHidden.push(row);
+      if (!explained) unexplained.push({
+        candidateId:event.candidateId || null,
+        stableCandidateId:event.stableCandidateId || null,
+        geometryHash:event.geometryHash || null,
+        status:'unexplained',
+        reason:event.reason || 'graph-candidate-suppressed-without-proof'
+      });
+    }
+
+    audit.accounting = {
+      valid: unexplained.length === 0,
+      generatedCount:(audit.generated || []).length,
+      displayedCount:(audit.displayed || []).length,
+      hiddenCount:outcomes.filter((x) => x.status === 'hidden').length + graphHidden.length,
+      graphHiddenCount:graphHidden.length,
+      unexplainedLossCount:unexplained.length,
+      outcomes, graphHidden, unexplained
+    };
+    return audit.accounting;
   }
 
   async function fetchExploratoryCandidates(a, b) {
@@ -1154,7 +1298,9 @@
   async function scoreCandidates(candidates, options = {}) {
     if (!Array.isArray(candidates) || !candidates.length) throw new Error("沒有候選路線。");
     const serial = options.serial ?? analysisSerial;
-    const qualityChecked = applyRouteQuality(candidates);
+    const candidateAudit = options.candidateAudit || null;
+    const qualityChecked = applyRouteQuality(candidates).map(withCandidateIdentity);
+    if (candidateAudit) candidateAudit.quality = qualityChecked.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:c?.routeQuality?.valid === false ? 'rejected' : 'kept', reasons:c?.routeQuality?.reasons || [] }));
     const qualityValid = qualityChecked.filter((c) => c?.routeQuality?.valid !== false);
     const rejectedQuality = qualityChecked.filter((c) => c?.routeQuality?.valid === false);
     if (!qualityValid.length) throw new Error("候選路線都有明顯折返或重複走廊，已全部淘汰。請重新設定 A、B。");
@@ -1179,6 +1325,7 @@
       eligible = chosen;
     }
     const eligibleIds = new Set(eligible.map((c) => c.id));
+    if (candidateAudit) candidateAudit.detour = qualityValid.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:eligibleIds.has(c.id) ? 'eligible' : 'outside-detour-or-score-cap' }));
     // Even when a user-drawn or verified-fusion route is just outside the detour
     // cap, score it once so the user can inspect the trade-off instead of having
     // an evidence-backed comparison silently disappear from the UI.
@@ -1211,6 +1358,11 @@
     if (selected && serial === analysisSerial) {
       const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || departureDateFromPanel());
       selected.analysis.heat = await maybeHeatContext(selected.points, departure, serial);
+    }
+    if (candidateAudit) {
+      candidateAudit.scored = scored.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, eligible:c.eligible !== false }));
+      candidateAudit.displayed = candidateAudit.scored.slice();
+      finalizeCandidateAudit(candidateAudit);
     }
     return {
       fastest,
@@ -1402,7 +1554,7 @@
     const divergenceText = divergence
       ? `第一個超過 ${Number(f.thresholdM).toFixed(0)} m 的偏離約在融合路線 ${Math.round(Number(divergence.progressRatio || 0) * 100)}%（${Number(divergence.distanceM || 0).toFixed(1)} m）。`
       : `整條採樣均落在 ${Number(f.thresholdM).toFixed(0)} m 門檻內。`;
-    return `<div class="re-fusion-compare"><b>dev30 官方融合 ↔ 手繪 fidelity</b><span>保守雙向貼合 <strong>${pct}%</strong>（融合→手繪 ${ftm}%／手繪→融合 ${mtf}%）；共同走廊約 ${Math.round(Number(f.commonCorridorM || 0))} m。</span><span>雙向平均偏移 ${Number(f.averageDistanceM || 0).toFixed(1)} m；最大偏移 ${Number(f.maxDistanceM || 0).toFixed(1)} m。${escapeHtml(divergenceText)}</span><span>同一套 dense ShadeMap：融合 ${formatMinutes(c.fusedDirectSunSeconds)}、手繪 ${formatMinutes(c.manualDirectSunSeconds)}；融合相差 ${sunDeltaMin >= 0 ? "+" : ""}${sunDeltaMin.toFixed(1)} 分，距離相差 ${distDelta >= 0 ? "+" : ""}${Math.round(distDelta)} m。</span><span>${c.connectorCount} 個 verified official witness；productionGraphMutated=${c.productionGraphMutated ? "true" : "false"}。</span></div>`;
+    return `<div class="re-fusion-compare"><b>官方融合 ↔ 手繪 fidelity</b><span>保守雙向貼合 <strong>${pct}%</strong>（融合→手繪 ${ftm}%／手繪→融合 ${mtf}%）；共同走廊約 ${Math.round(Number(f.commonCorridorM || 0))} m。</span><span>雙向平均偏移 ${Number(f.averageDistanceM || 0).toFixed(1)} m；最大偏移 ${Number(f.maxDistanceM || 0).toFixed(1)} m。${escapeHtml(divergenceText)}</span><span>同一套 dense ShadeMap：融合 ${formatMinutes(c.fusedDirectSunSeconds)}、手繪 ${formatMinutes(c.manualDirectSunSeconds)}；融合相差 ${sunDeltaMin >= 0 ? "+" : ""}${sunDeltaMin.toFixed(1)} 分，距離相差 ${distDelta >= 0 ? "+" : ""}${Math.round(distDelta)} m。</span><span>${c.connectorCount} 個 verified official witness；productionGraphMutated=${c.productionGraphMutated ? "true" : "false"}。</span></div>`;
   }
 
   function clearMatureEngineOverlay() {
@@ -2238,19 +2390,19 @@
 
   function nationwideTilesStatusHtml() {
     const api = window.HaidianNationwideTiles;
-    if (!api) return '<p class="re-fusion-note"><strong>dev30 Taiwan tiles：</strong>loader 未載入；目前仍可使用既有 AOI evidence。</p>';
+    if (!api) return '<p class="re-fusion-note"><strong>Nationwide tiles：</strong>loader 未載入；目前仍可使用既有 AOI evidence。</p>';
     const st = api.getState?.() || {};
     const last = st.lastLoad || lastNationwideTileLoad;
     const graphLast = st.lastGraphLoad || lastNationwideGraphLoad;
-    if (st.status === 'error') return `<p class="re-fusion-note"><strong>dev30 Taiwan tiles：</strong>載入錯誤 ${escapeHtml(st.error || 'unknown')}；production routing 可回退 Overpass。</p>`;
-    if (!last && !graphLast) return `<p class="re-fusion-note"><strong>dev30 Taiwan tiles：</strong>${st.manifestLoaded ? `manifest ready · 全國 index ${Number(st.tileCount || 0)} tiles` : '尚未載入 manifest'}；A→B 時只會 lazy-load 路線附近 tile。</p>`;
+    if (st.status === 'error') return `<p class="re-fusion-note"><strong>Nationwide tiles：</strong>載入錯誤 ${escapeHtml(st.error || 'unknown')}；production routing 可回退 Overpass。</p>`;
+    if (!last && !graphLast) return `<p class="re-fusion-note"><strong>Nationwide tiles：</strong>${st.manifestLoaded ? `manifest ready · 全國 index ${Number(st.tileCount || 0)} tiles` : '尚未載入 manifest'}；A→B 時只會 lazy-load 路線附近 tile。</p>`;
     const counts = Object.entries(last?.sourceCounts || {}).map(([k,v]) => `${k} ${v}`).join('、');
     const evidenceText = last ? `evidence ${Number(last.loadedTileCount || 0)} tiles／${Number(last.featureCount || 0)} features${counts ? `（${escapeHtml(counts)}）` : ''}` : 'evidence 尚未載入';
     const graphBackend = graphLast?.backend === 'nationwide-hgr2' ? 'HGR2' : 'HGR1';
     const graphUnit = graphBackend === 'HGR2' ? 'fine edges' : 'directed edges';
     const graphText = graphLast ? `${graphBackend} graph ${Number(graphLast.loadedTileCount || 0)} tiles／${Number(graphLast.nodeCount || 0)} nodes／${Number(graphLast.edgeCount || 0)} ${graphUnit}` : 'graph 尚未載入';
     const graphCache = Number(st.cachedGraph2TileCount || 0) ? `${Number(st.cachedGraph2TileCount || 0)} HGR2` : `${Number(st.cachedGraphTileCount || 0)} HGR1`;
-    return `<p class="re-fusion-note"><strong>dev30 Taiwan tiles：</strong>${evidenceText}；${graphText}；cache ${Number(st.cachedTileCount || 0)} evidence／${graphCache} graph tiles。全國原始 ZIP 未進瀏覽器。</p>`;
+    return `<p class="re-fusion-note"><strong>Nationwide tiles：</strong>${evidenceText}；${graphText}；cache ${Number(st.cachedTileCount || 0)} evidence／${graphCache} graph tiles。全國原始 ZIP 未進瀏覽器。</p>`;
   }
 
   async function prefetchNationwideEvidence(points, overrides = {}) {
@@ -2269,7 +2421,7 @@
     } catch (error) {
       lastNationwideTileLoad = { available: false, error: String(error?.message || error) };
       refreshMultiSourcePanel();
-      console.warn('[Haidian dev31 nationwide tiles] prefetch unavailable; continuing with local routing.', error);
+      console.warn('[Haidian dev32 nationwide tiles] prefetch unavailable; continuing with local routing.', error);
       return null;
     }
   }
@@ -2290,7 +2442,7 @@
     } catch (error) {
       lastNationwideGraphLoad = { available: false, error: String(error?.message || error), loadStage: overrides.stage || null, productionGraphMutated: false };
       refreshMultiSourcePanel();
-      console.warn('[Haidian dev31 nationwide graph] lazy-load unavailable; may fall back to Overpass.', error);
+      console.warn('[Haidian dev32 nationwide graph] lazy-load unavailable; may fall back to Overpass.', error);
       return null;
     }
   }
@@ -2309,16 +2461,16 @@
 
   function multiSourcePanelHtml() {
     const api = window.HaidianMultiSourceEvidence;
-    if (!api) return '<div class="re-multisource-note" data-re-multisource><b>dev30 Multi-source Evidence</b><span>模組未載入；production graph 未修改。</span></div>';
+    if (!api) return '<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence</b><span>模組未載入；production graph 未修改。</span></div>';
     const st = api.getState();
     if (st.status === 'idle') {
-      return '<div class="re-multisource-note" data-re-multisource><b>dev30 Multi-source Evidence</b><span>OSM 仍是 production base graph；外部來源只作 provenance/evidence，不做 proximity 自動補橋。</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>載入多來源證據矩陣</button></div></div>';
+      return '<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence</b><span>OSM 仍是 production base graph；外部來源只作 provenance/evidence，不做 proximity 自動補橋。</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>載入多來源證據矩陣</button></div></div>';
     }
     if (st.status === 'loading') {
-      return '<div class="re-multisource-note" data-re-multisource><b>dev30 Multi-source Evidence</b><span>正在讀取預處理 AOI evidence index…</span></div>';
+      return '<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence</b><span>正在讀取預處理 AOI evidence index…</span></div>';
     }
     if (st.status === 'error') {
-      return `<div class="re-multisource-note is-error" data-re-multisource><b>dev30 Multi-source Evidence</b><span>讀取失敗：${escapeHtml(st.error || 'unknown')}</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>重試</button></div></div>`;
+      return `<div class="re-multisource-note is-error" data-re-multisource><b>Multi-source Evidence</b><span>讀取失敗：${escapeHtml(st.error || 'unknown')}</span><div class="re-multisource-actions"><button type="button" data-re-multisource-load>重試</button></div></div>`;
     }
 
     const sourceOrder = ['overture-segments','overture-connectors','nlma-sidewalk','nlma-bikeway','tainan-sidewalk','tainan-bikeway','source-gaps'];
@@ -2339,7 +2491,7 @@
         ['臺南人行道', multiSourceGapSourceText(gap.sources?.['tainan-sidewalk'])],
         ['臺南自行車道', multiSourceGapSourceText(gap.sources?.['tainan-bikeway'])]
       ].map(([name, value]) => `<div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(value)}</span></div>`).join('');
-      return `<details class="re-evidence-gap"><summary>${escapeHtml(gap.id || 'gap')} · ${Number(gap.geometryGapM || 0).toFixed(1)}m · <b>${escapeHtml(gap.decision || 'unknown')}</b></summary><div class="re-evidence-matrix">${rows}</div><p>${escapeHtml(gap.decisionReason || '')}</p><p><strong>productionAllowed=false</strong> · ${escapeHtml(gap.productionReason || 'dev30 production lock')}</p></details>`;
+      return `<details class="re-evidence-gap"><summary>${escapeHtml(gap.id || 'gap')} · ${Number(gap.geometryGapM || 0).toFixed(1)}m · <b>${escapeHtml(gap.decision || 'unknown')}</b></summary><div class="re-evidence-matrix">${rows}</div><p>${escapeHtml(gap.decisionReason || '')}</p><p><strong>productionAllowed=false</strong> · ${escapeHtml(gap.productionReason || 'production graph safety lock')}</p></details>`;
     }).join('');
 
     const summary = st.evidenceIndex?.summary || {};
@@ -2361,14 +2513,14 @@
       fusionResult = `最近一次 experimental run 未成立：${lastRun.reason}；production graph 未修改。`;
     }
     const fusionButton = fusionApi
-      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev31 experimental fused graph (${routable})`}</button>`
+      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev32 experimental fused graph (${routable})`}</button>`
       : '';
     const witnessNotes = (st.evidenceIndex?.gaps || []).map((gap) => {
       const w = gap.preferredFusionWitness;
       if (!w) return '';
       return `<p class="re-fusion-note"><strong>${escapeHtml(gap.id || 'gap')} pedestrian witness：</strong>${escapeHtml(w.source || 'unknown')} · ${escapeHtml(w.evidenceType || 'unknown')} · pedestrianAllowed=${w.pedestrianAllowed === true ? 'true' : 'false'} · productionAllowed=false</p>`;
     }).join('');
-    return `<div class="re-multisource-note" data-re-multisource><b>dev30 Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p>${nationwideTilesStatusHtml()}</div>`;
+    return `<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p>${nationwideTilesStatusHtml()}</div>`;
   }
 
   function refreshMultiSourcePanel() {
@@ -2382,14 +2534,14 @@
 
   async function loadMultiSourceEvidence() {
     const api = window.HaidianMultiSourceEvidence;
-    if (!api) return setStatus('dev30 multi-source evidence 模組未載入。', 'warning');
+    if (!api) return setStatus('multi-source evidence 模組未載入。', 'warning');
     refreshMultiSourcePanel();
     setStatus('正在載入預處理 multi-source evidence index；不會修改 production graph…', 'loading');
     const result = await api.loadEvidence();
     refreshMultiSourcePanel();
     if (result.status === 'ready') {
       const u = Number(result.evidenceIndex?.summary?.unbound || 0);
-      setStatus(u ? `dev30 證據矩陣已載入；目前仍有 ${u} 個 gap 含未綁定來源，這些是未知，不是負證據。` : 'dev30 證據矩陣已載入；production graph 保持不變。', u ? 'warning' : 'ok');
+      setStatus(u ? `證據矩陣已載入；目前仍有 ${u} 個 gap 含未綁定來源，這些是未知，不是負證據。` : '證據矩陣已載入；production graph 保持不變。', u ? 'warning' : 'ok');
     } else {
       setStatus(`multi-source evidence 載入失敗：${result.error || 'unknown'}`, 'warning');
     }
@@ -2409,7 +2561,7 @@
     const evidenceApi = window.HaidianMultiSourceEvidence;
     const fusionApi = window.HaidianExperimentalFusionRouter;
     if (!evidenceApi || !fusionApi) {
-      setStatus('dev31 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
+      setStatus('dev32 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
       return;
     }
     let evidenceState = evidenceApi.getState?.();
@@ -2430,7 +2582,7 @@
     if (button) button.disabled = true;
     try {
       await ensureShadeReady();
-      setStatus('dev31：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
+      setStatus('dev32：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
       let lastUiAt = 0;
       const result = await fusionApi.runFromLastProductionGraph({
         renderOnMap: true,
@@ -2447,25 +2599,89 @@
           const now = Date.now();
           if (now - lastUiAt < 180) return;
           lastUiAt = now;
-          if (info?.message) setStatus(`dev31 experimental：${info.message}`, 'loading');
+          if (info?.message) setStatus(`dev32 experimental：${info.message}`, 'loading');
         }
       });
       refreshMultiSourcePanel();
       if (!result?.available) {
         const reason = result?.reason || result?.search?.reason || 'experimental-fusion-unavailable';
-        setStatus(`dev31 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
+        setStatus(`dev32 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
         return;
       }
       const connectorCount = Number(result.overlay?.connectorCount || 0);
       const minSun = result.search?.minSun;
       const sunS = Number(minSun?.directSunSeconds);
-      setStatus(`dev31 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
+      setStatus(`dev32 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
     } catch (error) {
       refreshMultiSourcePanel();
-      setStatus(`dev31 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev32 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     } finally {
       const b = panel?.querySelector('[data-re-multisource-fusion-run]');
       if (b) b.disabled = false;
+    }
+  }
+
+  function candidateCorrectnessSummaryHtml(bundle) {
+    const d = bundle?.graphDiagnostics || null;
+    const audit = bundle?.candidateAudit || null;
+    if (!d && !audit) return '';
+    const graphLifecycle = Array.isArray(d?.candidateLifecycle) ? d.candidateLifecycle : [];
+    const suppressed = graphLifecycle.filter((x) => x?.status === 'suppressed');
+    const collisions = graphLifecycle.filter((x) => x?.legacyRouteSignatureCollision === true);
+    const prune = d?.pruningCertificate || null;
+    const replay = d?.exactReplay || null;
+    const deduped = (audit?.dedupe || []).filter((x) => x?.status === 'deduped');
+    const generated = (audit?.generated || []).length;
+    const displayed = (audit?.displayed || []).length;
+    const rows = [];
+    if (generated || displayed) rows.push(`candidate lifecycle：generated ${generated} → displayed ${displayed}；UI dedupe ${deduped.length}`);
+    if (audit?.accounting) rows.push(`Loss accounting：${audit.accounting.valid ? 'PASS' : 'FAIL'}；unexplained ${Number(audit.accounting.unexplainedLossCount || 0)}；graph hidden ${Number(audit.accounting.graphHiddenCount || 0)}`);
+    if (graphLifecycle.length) rows.push(`Graph candidates：${graphLifecycle.length} 個生成事件；suppressed ${suppressed.length}${collisions.length ? `；偵測到 ${collisions.length} 個舊 routeSignature collision` : ''}`);
+    if (prune) rows.push(`Pruning proof：${prune.valid ? 'PASS' : 'FAIL'}；kept ${Number(prune.keptEdges || 0)} / omitted ${Number(prune.omittedEdges || 0)}；違反 ${Number(prune.violationCount || 0)}`);
+    if (replay?.available) rows.push(`Exact replay：temporal ${formatMinutes(replay.estimatedDirectSunSeconds || 0)} → exact ${formatMinutes(replay.directSunSeconds || 0)}；Δ ${Number(replay.errorSeconds || 0).toFixed(1)}s；${replay.withinTolerance ? 'within tolerance' : 'OUTSIDE tolerance'}`);
+    const live = lastCandidateCorrectnessAudit;
+    if (live?.available) rows.push(`A/B audit：temporal ${Number(live.temporal?.candidateCount || 0)} vs on-demand ${Number(live.onDemand?.candidateCount ?? live.exact?.candidateCount ?? 0)}；fastest geometry ${live.comparison?.sameFastestGeometry ? 'same' : 'DIFF'}；min-sun geometry ${live.comparison?.sameMinSunGeometry ? 'same' : 'DIFF'}；pruning ${live.pruningValid ? 'PASS' : 'FAIL'}`);
+    const details = rows.map((x) => `<span>${escapeHtml(x)}</span>`).join('');
+    return `<div class="re-method-note"><b>dev32 Candidate Correctness：</b>${details}<div class="re-graph-actions"><button type="button" data-re-candidate-correctness-audit>執行 temporal ↔ on-demand A/B audit</button></div></div>`;
+  }
+
+  async function runCandidateCorrectnessAuditLive() {
+    const api = window.HaidianPedestrianGraph;
+    if (!api?.runCandidateCorrectnessAudit || !aPoint || !bPoint) {
+      setStatus('目前沒有可執行 dev32 candidate correctness audit 的 A/B graph。', 'warning');
+      return;
+    }
+    try {
+      setStatus('dev32：正在同一份 graph 上執行 temporal-table ↔ on-demand A/B correctness audit…', 'loading');
+      const result = await api.runCandidateCorrectnessAudit(aPoint, bPoint, null, {
+        departure: departureDateFromPanel(),
+        speedMps: speedMpsFromPanel(),
+        detourPct: detourCapFromPanel(),
+        snapMaxM: config.graphRouting?.snapMaxM,
+        externalGraphDetourPrune: config.graphRouting?.externalGraphDetourPrune,
+        externalGraphPruneSlackSec: config.graphRouting?.externalGraphPruneSlackSec,
+        shadeConcurrency: config.graphRouting?.shadeConcurrency,
+        shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
+        temporalShadeTableConcurrency: config.graphRouting?.temporalShadeTableConcurrency,
+        temporalShadeTableMaxBucketsPerEdge: config.graphRouting?.temporalShadeTableMaxBucketsPerEdge,
+        temporalShadeTableMaxEvaluations: config.graphRouting?.temporalShadeTableMaxEvaluations,
+        canopyTimeoutMs: config.canopyTimeoutMs,
+        maxExpandedStates: config.graphRouting?.maxExpandedStates,
+        maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
+        cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
+        yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded
+      });
+      lastCandidateCorrectnessAudit = result;
+      if (lastCandidateBundle) renderCandidateBundle(lastCandidateBundle, { fit:false });
+      if (!result?.available) {
+        setStatus(`dev32 correctness audit 無法執行：${result?.reason || 'unknown'}`, 'warning');
+        return;
+      }
+      const ok = result.comparison?.sameCandidateCount && result.comparison?.sameFastestGeometry && result.comparison?.sameMinSunGeometry && result.pruningValid;
+      const onDemandCount = result.onDemand?.candidateCount ?? result.exact?.candidateCount ?? 0;
+      setStatus(`dev32 audit 完成：temporal ${result.temporal?.candidateCount || 0} 條 / on-demand ${onDemandCount} 條；fastest ${result.comparison?.sameFastestGeometry ? '一致' : '不同'}；min-sun ${result.comparison?.sameMinSunGeometry ? '一致' : '不同'}；pruning ${result.pruningValid ? 'PASS' : 'FAIL'}。`, ok ? 'ok' : 'warning');
+    } catch (error) {
+      setStatus(`dev32 correctness audit 失敗：${error?.message || error}`, 'warning');
     }
   }
 
@@ -2520,7 +2736,7 @@
       const hgr2Backend = graphDiag.graphBackend === 'nationwide-hgr2';
       const hgr1Backend = graphDiag.graphBackend === 'nationwide-hgr1';
       const nationwideBackend = hgr2Backend || hgr1Backend;
-      const graphLabel = hgr2Backend ? 'dev31 全臺 HGR2 Micrograph' : (hgr1Backend ? 'dev31 全臺 HGR1 Graph' : 'v9 OSM Graph');
+      const graphLabel = hgr2Backend ? 'dev32 全臺 HGR2 Micrograph' : (hgr1Backend ? 'dev32 全臺 HGR1 Graph' : 'OSM Pedestrian Graph');
       const rawCount = Math.round(graphDiag.rawNodes || graphDiag.contractedNodes || 0);
       const rawEdges = Math.round(graphDiag.rawSegments || graphDiag.contractedEdges || 0);
       const pruned = Math.round(graphDiag.prunedSourceEdges ?? rawEdges);
@@ -2538,15 +2754,15 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev31 temporal shade runtime</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 candidate correctness runtime</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
 
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
-      ${notice}${graphNote}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
-      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev31 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
+      ${notice}${graphNote}${candidateCorrectnessSummaryHtml(bundle)}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
+      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev32 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -2735,14 +2951,15 @@
       const speedMps = speedMpsFromPanel();
       const detourPct = detourCapFromPanel();
       lastManualGraphDiagnosis = null;
+      lastCandidateCorrectnessAudit = null;
 
-      setStatus("正在準備 A→B 候選；dev30 優先載核心全臺 HGR2 microtiles，只有必要時才擴張…", "loading");
+      setStatus("正在準備 A→B 候選；dev32 優先載核心全臺 HGR2 microtiles，並追蹤每條 candidate lifecycle…", "loading");
       // Provider is comparison-only. Start it in parallel instead of blocking our
       // nationwide graph search. The nationwide seed intentionally uses only A/B
       // so a provider detour cannot expand the first tile request.
       const providerStarted = nowMs();
       const providerPromise = fetchRouteCandidates(aPoint, bPoint).catch((providerError) => {
-        console.warn("[Haidian dev31 provider] comparison route unavailable; continuing with nationwide HGR2/HGR1.", providerError);
+        console.warn("[Haidian dev32 provider] comparison route unavailable; continuing with nationwide HGR2/HGR1.", providerError);
         return [];
       }).then((items) => { perf.providerMs = nowMs() - providerStarted; return items || []; });
       const nationwideSeed = [aPoint, bPoint];
@@ -2767,7 +2984,7 @@
           for (const stage of nationwideGraphLoadStages()) {
             if (serial !== analysisSerial) return;
             try {
-              setStatus(`dev31：載入全臺 HGR2/HGR1 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
+              setStatus(`dev32：載入全臺 HGR2/HGR1 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
               const loaded = await prefetchNationwideGraph(nationwideSeed, stage);
               const attempt = {
                 stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
@@ -2791,6 +3008,8 @@
                   temporalShadeTableConcurrency: config.graphRouting?.temporalShadeTableConcurrency,
                   temporalShadeTableMaxBucketsPerEdge: config.graphRouting?.temporalShadeTableMaxBucketsPerEdge,
                   temporalShadeTableMaxEvaluations: config.graphRouting?.temporalShadeTableMaxEvaluations,
+                  candidateCorrectnessExactReplayEnabled: config.graphRouting?.candidateCorrectnessExactReplayEnabled,
+                  candidateCorrectnessExactReplayToleranceSec: config.graphRouting?.candidateCorrectnessExactReplayToleranceSec,
                   sharedShadeCache: sharedGraphShadeCache,
                   canopyTimeoutMs: config.canopyTimeoutMs,
                   maxExpandedStates: config.graphRouting?.maxExpandedStates,
@@ -2813,7 +3032,7 @@
               }
             } catch (nationwideError) {
               if (nationwideError?.message === "ROUTE_ANALYSIS_CANCELLED") throw nationwideError;
-              console.warn(`[Haidian dev31 nationwide graph] stage ${stage.stage} unavailable; expanding if another stage exists.`, nationwideError);
+              console.warn(`[Haidian dev32 nationwide graph] stage ${stage.stage} unavailable; expanding if another stage exists.`, nationwideError);
               lastGraphFailure = nationwideError?.message || String(nationwideError);
               graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, error: lastGraphFailure, routed: false });
             }
@@ -2857,7 +3076,7 @@
       if (graphResult?.available !== false && graphCandidates.length && config.autoCompareVerifiedFusion !== false) {
         const fusionStarted = nowMs();
         try {
-          setStatus("dev31：在 detached local graph 產生 verified official-fusion min-sun 候選…", "loading");
+          setStatus("dev32：在 detached local graph 產生 verified official-fusion min-sun 候選…", "loading");
           experimentalFusion = await buildAutomaticExperimentalFusionCandidate({
             departure,
             speedMps,
@@ -2874,26 +3093,42 @@
           });
         } catch (fusionError) {
           experimentalFusion = { candidate: null, status: { available: false, reason: fusionError?.message || String(fusionError) } };
-          console.warn("[Haidian dev31 fusion] automatic comparison unavailable", fusionError);
+          console.warn("[Haidian dev32 fusion] automatic comparison unavailable", fusionError);
         } finally {
           perf.fusionMs = nowMs() - fusionStarted;
         }
       }
       if (serial !== analysisSerial) return;
-      const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, exploratoryCandidates));
-      if (manualMatch?.matched && manualMatch.candidate) candidates.push(manualMatch.candidate);
-      if (experimentalFusion?.candidate) candidates.push(experimentalFusion.candidate);
+      const candidateAudit = {
+        version: VERSION,
+        generated: providerCandidates.concat(graphCandidates, exploratoryCandidates).filter((c) => c?.points?.length).map((c) => { const x=withCandidateIdentity(c); return { candidateId:x.id, kind:x.kind || 'provider', stableCandidateId:x.stableCandidateId, geometryHash:x.geometryHash, source:'auto' }; }),
+        graphLifecycle: Array.isArray(graphResult?.diagnostics?.candidateLifecycle) ? graphResult.diagnostics.candidateLifecycle.slice() : [],
+        dedupe: [], quality: [], detour: [], scored: [], displayed: []
+      };
+      const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, exploratoryCandidates), candidateAudit);
+      if (manualMatch?.matched && manualMatch.candidate) {
+        const manualCandidate = withCandidateIdentity(manualMatch.candidate); candidates.push(manualCandidate);
+        candidateAudit.generated.push({ candidateId:manualCandidate.id, kind:manualCandidate.kind, stableCandidateId:manualCandidate.stableCandidateId, geometryHash:manualCandidate.geometryHash, source:'manual' });
+        candidateAudit.dedupe.push({ stage:'dedupe', status:'kept', candidateId:manualCandidate.id, stableCandidateId:manualCandidate.stableCandidateId, geometryHash:manualCandidate.geometryHash, reason:'protected-manual' });
+      }
+      if (experimentalFusion?.candidate) {
+        const fusionCandidate = withCandidateIdentity(experimentalFusion.candidate); candidates.push(fusionCandidate);
+        candidateAudit.generated.push({ candidateId:fusionCandidate.id, kind:fusionCandidate.kind, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, source:'verified-fusion' });
+        candidateAudit.dedupe.push({ stage:'dedupe', status:'kept', candidateId:fusionCandidate.id, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, reason:'protected-verified-fusion' });
+      }
       lastCandidates = candidates;
 
-      setStatus(`正在用同一套 dense ShadeMap 重新精算 ${candidates.length} 條候選的曝曬…`, "loading");
+      setStatus(`dev32：candidate lifecycle 已保留 ${candidates.length} 條；正在用同一套 dense ShadeMap 精算曝曬…`, "loading");
       const scoreStarted = nowMs();
       const bundle = await scoreCandidates(candidates, {
         serial,
         departure,
         sampleSpacingM: spacingFromPanel(),
         speedMps,
-        detourPct
+        detourPct,
+        candidateAudit
       });
+      bundle.candidateAudit = candidateAudit;
       perf.denseScoreMs = nowMs() - scoreStarted;
       if (serial !== analysisSerial) return;
       bundle.manualMatch = manualMatch;
@@ -2930,8 +3165,8 @@
       }
 
       if (bundle.comparisonValid) {
-        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev31 全臺 HGR2 micrograph 直接搜尋結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev31 全臺 HGR1 直接搜尋結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
-        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev31 verified official-fusion 候選" : "";
+        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev32 全臺 HGR2 micrograph 直接搜尋結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev32 全臺 HGR1 直接搜尋結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
+        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev32 verified official-fusion 候選" : "";
         setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}。耗時 ${(perf.totalMs/1000).toFixed(1)} 秒。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
@@ -2968,7 +3203,10 @@
         at: item.at.toISOString ? item.at.toISOString() : String(item.at),
         segment: item.segment,
         model: item.model
-      }))
+      })),
+      dev32CandidateAudit: lastCandidateBundle?.candidateAudit || null,
+      dev32GraphDiagnostics: lastCandidateBundle?.graphDiagnostics || null,
+      dev32TemporalVsOnDemandAudit: lastCandidateCorrectnessAudit || null
     });
     downloadBlob(`haidian-route-exposure-${VERSION}.json`, JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }
@@ -3240,6 +3478,8 @@
       if (graphToggle) { toggleGraphDiagnostics(); return; }
       const graphDiagnose = event.target?.closest?.("[data-re-graph-diagnose]");
       if (graphDiagnose) { void diagnoseSavedManualRoute(); return; }
+      const candidateAudit = event.target?.closest?.("[data-re-candidate-correctness-audit]");
+      if (candidateAudit) { void runCandidateCorrectnessAuditLive(); return; }
       const sourceGapLive = event.target?.closest?.("[data-re-source-gap-live]");
       if (sourceGapLive) { void runSourceGapCounterfactualLive(); return; }
       const multiLoad = event.target?.closest?.("[data-re-multisource-load]");
@@ -3416,6 +3656,7 @@
     get lastCandidates() { return lastCandidates.slice(); },
     get lastSelectedCandidate() { return lastSelectedCandidate; },
     get lastCandidateBundle() { return lastCandidateBundle; },
+    get lastCandidateCorrectnessAudit() { return lastCandidateCorrectnessAudit; },
     get savedDrawnRoute() { return savedDrawnRoute.slice(); },
     get graphDiagnostics() { return window.HaidianPedestrianGraph?.lastDiagnostics || null; },
     get lastGraphFailure() { return lastGraphFailure; },
@@ -3428,6 +3669,10 @@
       buildManualCandidate,
       buildManualCandidateFromRoute,
       dedupeCandidates,
+      candidateGeometryHash,
+      withCandidateIdentity,
+      geometryDuplicateEvidence,
+      finalizeCandidateAudit,
       fetchExploratoryCandidates,
       evaluateRouteQuality,
       applyRouteQuality,

@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev31 Temporal Shade Table
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev32 Candidate Correctness Audit
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev31";
+  const VERSION = "v9.0.0-dev32";
 
   const DEFAULTS = {
     enabled: true,
@@ -78,11 +78,16 @@
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
-    // dev31: deterministic temporal shade table on the pruned graph.
+    // dev32: deterministic temporal shade table on the pruned graph.
     temporalShadeTableEnabled: true,
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
+    // dev32: replay the temporal winner at exact edge-midpoint times and expose
+    // a bounded A/B correctness audit without changing production selection.
+    candidateCorrectnessExactReplayEnabled: true,
+    candidateCorrectnessExactReplayToleranceSec: 45,
+    candidateCorrectnessAuditEnabled: true,
     // Fallback misses may still evaluate independent outgoing edges concurrently.
     shadeEdgeBatchConcurrency: 4,
     canopyTimeoutMs: 4200,
@@ -1050,7 +1055,7 @@
     tasks.sort((a,b)=>Math.abs(a.bucket - shadeBucketForMs(departureMs,bucketSec))-Math.abs(b.bucket-shadeBucketForMs(departureMs,bucketSec)) || String(a.edge.id).localeCompare(String(b.edge.id)));
     const scheduled = tasks.slice(0, maxEvaluations);
     let evaluated = 0, errors = 0, maxActive = 0, active = 0;
-    options.onProgress?.({ stage:'temporal-shade-table', message:`dev31：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
+    options.onProgress?.({ stage:'temporal-shade-table', message:`dev32：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
     await runPoolNoYield(scheduled, concurrency, async (task) => {
       if (options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
       if (shadeCache.has(task.key)) { skippedExisting += 1; return; }
@@ -1272,6 +1277,138 @@
     if (pts.length < 2) return "";
     const sampleIdx = [0, Math.floor((pts.length - 1) * 0.25), Math.floor((pts.length - 1) * 0.5), Math.floor((pts.length - 1) * 0.75), pts.length - 1];
     return sampleIdx.map((i) => `${pts[i].lat.toFixed(4)},${pts[i].lng.toFixed(4)}`).join("|");
+  }
+
+
+  // dev32: routeSignature() is retained for old diagnostics, but it is too
+  // coarse to prove two candidates are identical. Five samples rounded to four
+  // decimals can collide for nearby parallel paths. Suppression now requires
+  // exact ordered edge identity whenever graph edge IDs are available.
+  function geometryHash(points) {
+    const pts = (points || []).map(asLatLng).filter(Boolean);
+    if (!pts.length) return "geom-empty";
+    let h = 2166136261 >>> 0;
+    const payload = pts.map((p) => `${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`).join("|");
+    for (let i = 0; i < payload.length; i += 1) {
+      h ^= payload.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return `g${h.toString(16).padStart(8, "0")}`;
+  }
+
+  function canonicalGeometryKey(points) {
+    const pts = (points || []).map(asLatLng).filter(Boolean);
+    if (!pts.length) return "";
+    return pts.map((p) => `${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`).join("|");
+  }
+
+  function sameGraphPathGeometry(a, b) {
+    const ae = (a?.edgeIds || []).map(String), be = (b?.edgeIds || []).map(String);
+    // Edge identity is the strongest proof. If only one side has edge IDs, do
+    // not downgrade to a geometry hash and risk silently suppressing a route.
+    if (ae.length || be.length) {
+      if (!(ae.length && be.length) || ae.length !== be.length) return false;
+      for (let i = 0; i < ae.length; i += 1) if (ae[i] !== be[i]) return false;
+      return true;
+    }
+    // A hash is useful as a stable label, but hash equality is not duplicate
+    // proof. Compare the complete quantized coordinate sequence instead.
+    const ak = canonicalGeometryKey(a?.points || []), bk = canonicalGeometryKey(b?.points || []);
+    return Boolean(ak && bk && ak === bk);
+  }
+
+  function makeGraphCandidate(kind, path, extra = {}) {
+    const id = kind === 'graph-fastest' ? 'graph-fastest' : 'graph-min-sun';
+    const hash = geometryHash(path?.points || []);
+    return Object.assign({
+      id,
+      stableCandidateId: `${id}:${hash}`,
+      geometryHash: hash,
+      kind,
+      distanceM: Number(path?.distanceM || 0),
+      durationS: Number(path?.walkSeconds || extra.durationS || 0),
+      points: path?.points || []
+    }, extra);
+  }
+
+  function pruningCorrectnessCertificate(graph, keptEdgeIds, fromA, toB, speedMps, detourLimitS, options = {}) {
+    const keep = keptEdgeIds instanceof Set ? keptEdgeIds : new Set(keptEdgeIds || []);
+    const distA = fromA?.dist || fromA || new Map();
+    const distB = toB?.dist || toB || new Map();
+    const limitS = Number(detourLimitS);
+    const slackS = Math.max(0, Number(options.externalGraphPruneSlackSec ?? config.externalGraphPruneSlackSec ?? 3));
+    let omittedEdges = 0, minimumOmittedLowerBoundS = Infinity;
+    const violations = [];
+    for (const [id, edge] of graph?.edges || []) {
+      const key = String(id);
+      if (keep.has(key)) continue;
+      omittedEdges += 1;
+      const a = String(edge.a), b = String(edge.b);
+      const edgeS = Number(edge.distanceM || 0) / Math.max(0.1, Number(speedMps) || 1.25);
+      const ab = Number(distA.get(a)) + edgeS + Number(distB.get(b));
+      const ba = Number(distA.get(b)) + edgeS + Number(distB.get(a));
+      const lowerBoundS = Math.min(Number.isFinite(ab) ? ab : Infinity, Number.isFinite(ba) ? ba : Infinity);
+      minimumOmittedLowerBoundS = Math.min(minimumOmittedLowerBoundS, lowerBoundS);
+      if (Number.isFinite(lowerBoundS) && lowerBoundS <= limitS + 1e-9) {
+        if (violations.length < 20) violations.push({ edgeId:key, lowerBoundS, detourLimitS:limitS });
+      }
+    }
+    return {
+      valid: violations.length === 0,
+      proof: 'shortest(A→edge) + edge + shortest(edge→B) lower-bound',
+      detourLimitS: limitS,
+      pruneSlackS: slackS,
+      keptEdges: keep.size,
+      omittedEdges,
+      minimumOmittedLowerBoundS: Number.isFinite(minimumOmittedLowerBoundS) ? minimumOmittedLowerBoundS : null,
+      violationCount: violations.length,
+      violations
+    };
+  }
+
+  async function exactReplayPathShade(graph, path, startId, options = {}) {
+    if (!graph?.edges || !path?.edgeIds?.length) return { available:false, reason:'missing-path' };
+    const provider = options.edgeSunProvider || defaultEdgeSunProvider;
+    const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
+    const speedMps = Math.max(0.1, Number(options.speedMps) || 1.25);
+    let current = String(startId), walkS = 0, directSunSeconds = 0, evaluations = 0;
+    const rows = [];
+    for (const edgeId of path.edgeIds) {
+      const edge = graph.edges.get(String(edgeId));
+      if (!edge) return { available:false, reason:'missing-edge', edgeId:String(edgeId), evaluations };
+      const a = String(edge.a), b = String(edge.b);
+      if (current !== a && current !== b) return { available:false, reason:'broken-edge-order', edgeId:String(edgeId), current, evaluations };
+      const from = current, to = current === a ? b : a;
+      const edgeTimeS = Number(edge.distanceM || 0) / speedMps;
+      const atMs = departure.getTime() + (walkS + edgeTimeS / 2) * 1000;
+      const result = await provider(edge, from, new Date(atMs), {
+        shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
+        shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
+        shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
+        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+      });
+      const sunFraction = clamp(result?.directSunFraction, 0, 1, 0);
+      directSunSeconds += edgeTimeS * sunFraction;
+      rows.push({ edgeId:String(edgeId), at:new Date(atMs).toISOString(), directSunFraction:sunFraction, edgeTimeS });
+      evaluations += 1;
+      walkS += edgeTimeS;
+      current = to;
+      if (options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
+    }
+    const estimated = Number(path.directSunSeconds);
+    const errorSeconds = Number.isFinite(estimated) ? directSunSeconds - estimated : null;
+    const toleranceSec = Math.max(0, Number(options.candidateCorrectnessExactReplayToleranceSec ?? config.candidateCorrectnessExactReplayToleranceSec ?? 45));
+    return {
+      available:true,
+      evaluations,
+      directSunSeconds,
+      estimatedDirectSunSeconds:Number.isFinite(estimated) ? estimated : null,
+      errorSeconds,
+      absoluteErrorSeconds:Number.isFinite(errorSeconds) ? Math.abs(errorSeconds) : null,
+      toleranceSec,
+      withinTolerance:Number.isFinite(errorSeconds) ? Math.abs(errorSeconds) <= toleranceSec + 1e-9 : null,
+      rows
+    };
   }
 
 
@@ -4801,7 +4938,7 @@
     const speedMps=clamp(options.speedMps,0.5,2.5,1.25), detourPct=clamp(options.detourPct,0,80,30);
     const departure=options.departure instanceof Date?options.departure:new Date(options.departure||Date.now());
     if(Number.isNaN(departure.getTime())) throw new Error('出發時間不正確。');
-    // dev31: temporal prewarm and the subsequent search must always share one
+    // dev32: temporal prewarm and the subsequent search must always share one
     // analysis-local cache, even when callers do not explicitly provide one.
     const sharedShadeCache = options.sharedShadeCache && typeof options.sharedShadeCache.has === 'function' ? options.sharedShadeCache : new Map();
     const perf={hgr2Direct:true}; let t=nowMs();
@@ -4810,7 +4947,7 @@
     const snapMaxM=Number(options.snapMaxM||config.snapMaxM||120);
     t=nowMs(); const snapA=snapPointIntoFineGraph(full,A,'A',snapMaxM), snapB=snapPointIntoFineGraph(full,B,'B',snapMaxM); perf.snapMs=nowMs()-t;
     if(!snapA||!snapB) return {available:false,reason:'hgr2-endpoint-snap-failed',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',performance:perf}};
-    options.onProgress?.({stage:'fastest-hgr2',message:'dev31：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
+    options.onProgress?.({stage:'fastest-hgr2',message:'dev32：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
     t=nowMs(); const fromA=await dijkstraTimesResponsive(full,snapA.id,speedMps,false,options); const toB=await dijkstraTimesResponsive(full,snapB.id,speedMps,true,options); perf.distanceBoundsMs=nowMs()-t;
     const fastestTime=fromA.dist.get(String(snapB.id));
     if(!Number.isFinite(fastestTime)) return {available:false,reason:'hgr2-graph-disconnected',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',snapA,snapB,performance:perf}};
@@ -4824,18 +4961,36 @@
     const prodSnapA=Object.assign({},snapA,{node:graph.nodes.get(String(snapA.id))}), prodSnapB=Object.assign({},snapB,{node:graph.nodes.get(String(snapB.id))});
     lastShadeDebug.clear(); lastRouteEdges={fastest:new Set(),minSun:new Set()};
     lastGraphDebug={graph,raw:null,contracted:null,snapA:prodSnapA,snapB:prodSnapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
-    options.onProgress?.({stage:'shade-search',message:`dev31：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
+    options.onProgress?.({stage:'shade-search',message:`dev32：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
     t=nowMs();
     const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
     perf.temporalShadeTableMs=nowMs()-t; perf.temporalShade=temporalShade;
-    options.onProgress?.({stage:'shade-search',message:`dev31：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
+    options.onProgress?.({stage:'shade-search',message:`dev32：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
     t=nowMs();
     const minSun=await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,departure,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
     lastRouteEdges.fastest=new Set(fastestPath.edgeIds||[]); lastRouteEdges.minSun=new Set(minSun.path?.edgeIds||[]);
-    const candidates=[{id:'graph-fastest',kind:'graph-fastest',distanceM:fastestPath.distanceM,durationS:fastestTime,points:fastestPath.points,graphMeta:{edgeIds:fastestPath.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}}];
-    if(minSun.path?.points?.length&&routeSignature(minSun.path.points)!==routeSignature(fastestPath.points)) candidates.push({id:'graph-min-sun',kind:'graph-shade',distanceM:minSun.path.distanceM,durationS:minSun.path.walkSeconds,points:minSun.path.points,graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds,graphMeta:{edgeIds:minSun.path.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
-    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
+    const candidateLifecycle=[];
+    const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:{edgeIds:fastestPath.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
+    candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
+    const candidates=[fastestCandidate];
+    if(minSun.path?.points?.length){
+      const minCandidate=makeGraphCandidate('graph-shade',minSun.path,{graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds,graphMeta:{edgeIds:minSun.path.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
+      const same=sameGraphPathGeometry(minSun.path,fastestPath);
+      candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
+      if(!same) candidates.push(minCandidate);
+    } else {
+      candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
+    }
+    const pruningCertificate=pruningCorrectnessCertificate(full,keptEdgeIds,fromA,toB,speedMps,detourLimitS,options);
+    let exactReplay=null;
+    if(options.candidateCorrectnessExactReplayEnabled!==false && config.candidateCorrectnessExactReplayEnabled!==false && minSun.path?.edgeIds?.length){
+      options.onProgress?.({stage:'candidate-correctness-replay',message:'dev32：正在 exact replay temporal winner，檢查時間 bucket 誤差…'});
+      const replayStarted=nowMs();
+      exactReplay=await exactReplayPathShade(graph,minSun.path,prodSnapA.id,Object.assign({},options,{speedMps,departure}));
+      perf.exactReplayMs=nowMs()-replayStarted;
+    }
+    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,exactReplay,pruningCertificate,candidateLifecycle,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
     return {available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false};
   }
 
@@ -4901,7 +5056,7 @@
       experimentalBaseGraph:coarseGraph, experimentalSnapA:coarseSnapA, experimentalSnapB:coarseSnapB
     };
 
-    options.onProgress?.({ stage:'fastest', message:'正在 dev30 pruned fine graph 計算最快路線…' });
+    options.onProgress?.({ stage:'fastest', message:'正在 pruned fine graph 計算最快路線…' });
     t = nowMs();
     const fromA = await dijkstraTimesResponsive(graph, snapA.id, speedMps, false, options);
     const toB = await dijkstraTimesResponsive(graph, snapB.id, speedMps, true, options);
@@ -4913,7 +5068,7 @@
     fastestPath.walkSeconds = fastestTime;
     const detourLimitS = fastestTime * (1 + detourPct / 100);
 
-    options.onProgress?.({ stage:'shade-search', message:`dev31：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
+    options.onProgress?.({ stage:'shade-search', message:`dev32：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
     t = nowMs();
     const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
       speedMps, detourLimitS, fastestToEnd:toB, departure,
@@ -4930,9 +5085,17 @@
 
     lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
     lastRouteEdges.minSun = new Set(minSun.path?.edgeIds || []);
-    const candidates = [{ id:'graph-fastest', kind:'graph-fastest', distanceM:fastestPath.distanceM, durationS:fastestTime, points:fastestPath.points, graphMeta:{ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } }];
-    if (minSun.path?.points?.length && routeSignature(minSun.path.points) !== routeSignature(fastestPath.points)) {
-      candidates.push({ id:'graph-min-sun', kind:'graph-shade', distanceM:minSun.path.distanceM, durationS:minSun.path.walkSeconds, points:minSun.path.points, graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:{ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } });
+    const candidateLifecycle = [];
+    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:{ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } });
+    candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
+    const candidates = [fastestCandidate];
+    if (minSun.path?.points?.length) {
+      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:{ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } });
+      const same = sameGraphPathGeometry(minSun.path, fastestPath);
+      candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
+      if (!same) candidates.push(minCandidate);
+    } else {
+      candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
     }
     lastDiagnostics = {
       version:VERSION, graphBackend:'nationwide-hgr1', overpassEndpoint:null, bbox:options.bbox || null,
@@ -4949,6 +5112,7 @@
       detourPct, detourLimitSeconds:detourLimitS,
       searchExpandedStates:minSun.expanded, shadeEdgeEvaluations:minSun.shadeEvals, shadeCacheHits:minSun.shadeCacheHits||0, shadeCacheSize:minSun.shadeCacheSize||0,
       dominanceRejected:minSun.dominanceRejected || 0, dominanceRemoved:minSun.dominanceRemoved || 0,
+      pruningCertificate:pruningCorrectnessCertificate(coarseGraph,keptEdgeIds,coarseFromA,coarseToB,speedMps,coarseDetourLimitS,options), candidateLifecycle,
       candidateCount:candidates.length, searchMode:'resource-constrained-history-safe-labels',
       labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap', responsiveScheduling:true,
       graphStats:graphStats(graph), performance:perf, productionGraphMutated:false
@@ -5069,27 +5233,17 @@
     lastRouteEdges.minSun = new Set(minSun.path?.edgeIds || []);
 
     const candidates = [];
-    candidates.push({
-      id: "graph-fastest",
-      kind: "graph-fastest",
-      distanceM: fastestPath.distanceM,
-      durationS: fastestTime,
-      points: fastestPath.points,
-      graphMeta: { edgeIds: fastestPath.edgeIds, snapA, snapB }
-    });
+    const candidateLifecycle = [];
+    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:{ edgeIds:fastestPath.edgeIds, snapA, snapB } });
+    candidates.push(fastestCandidate);
+    candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
     if (minSun.path?.points?.length) {
-      const same = routeSignature(minSun.path.points) === routeSignature(fastestPath.points);
-      if (!same) {
-        candidates.push({
-          id: "graph-min-sun",
-          kind: "graph-shade",
-          distanceM: minSun.path.distanceM,
-          durationS: minSun.path.walkSeconds,
-          points: minSun.path.points,
-          graphEstimatedDirectSunSeconds: minSun.path.directSunSeconds,
-          graphMeta: { edgeIds: minSun.path.edgeIds, snapA, snapB }
-        });
-      }
+      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:{ edgeIds:minSun.path.edgeIds, snapA, snapB } });
+      const same = sameGraphPathGeometry(minSun.path, fastestPath);
+      candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
+      if (!same) candidates.push(minCandidate);
+    } else {
+      candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
     }
 
     lastDiagnostics = {
@@ -5116,6 +5270,7 @@
       shadeEdgeEvaluations: minSun.shadeEvals,
       dominanceRejected: minSun.dominanceRejected || 0,
       dominanceRemoved: minSun.dominanceRemoved || 0,
+      candidateLifecycle,
       candidateCount: candidates.length,
       searchMode: "resource-constrained-history-safe-labels",
       labelPruningMode: "equal-arrival + visited-subset dominance; no arbitrary label cap",
@@ -5123,6 +5278,80 @@
       graphStats: graphStats(graph)
     };
     return { available: true, candidates, diagnostics: lastDiagnostics };
+  }
+
+  async function runCandidateCorrectnessAudit(a, b, externalGraph = null, options = {}) {
+    if (config.candidateCorrectnessAuditEnabled === false || options.candidateCorrectnessAuditEnabled === false) {
+      return { available:false, reason:'disabled' };
+    }
+    const source = externalGraph || lastGraphDebug?.experimentalBaseGraph || lastGraphDebug?.graph || null;
+    if (!source?.edges?.size) return { available:false, reason:'no-external-graph' };
+
+    // The audit is intentionally detached. Besides cloning the graph, preserve
+    // the normal-run debug globals so pressing the developer audit button cannot
+    // silently replace the production route/debug snapshot with an audit clone.
+    const savedDiagnostics = lastDiagnostics;
+    const savedGraphDebug = lastGraphDebug;
+    const savedRouteEdges = { fastest:new Set(lastRouteEdges.fastest || []), minSun:new Set(lastRouteEdges.minSun || []) };
+    const savedShadeDebug = new Map(lastShadeDebug);
+    try {
+      const baseOptions = Object.assign({}, options, {
+        candidateCorrectnessExactReplayEnabled:false,
+        candidateCorrectnessAuditEnabled:false,
+        sharedShadeCache:new Map()
+      });
+      const temporalGraph = cloneFineGraphForExperimentalUse(source);
+      const exactGraph = cloneFineGraphForExperimentalUse(source);
+      const temporal = await findRoutesOnExternalGraph(a,b,temporalGraph,Object.assign({},baseOptions,{temporalShadeTableEnabled:true,sharedShadeCache:new Map()}));
+      const exact = await findRoutesOnExternalGraph(a,b,exactGraph,Object.assign({},baseOptions,{temporalShadeTableEnabled:false,sharedShadeCache:new Map()}));
+      const summarize = (result) => (result?.candidates || []).map((c) => ({
+        id:c.id,
+        kind:c.kind,
+        stableCandidateId:c.stableCandidateId || `${c.id}:${geometryHash(c.points)}`,
+        geometryHash:c.geometryHash || geometryHash(c.points),
+        distanceM:Number(c.distanceM || 0),
+        estimatedDirectSunSeconds:Number.isFinite(Number(c.graphEstimatedDirectSunSeconds)) ? Number(c.graphEstimatedDirectSunSeconds) : null
+      }));
+      const temporalCandidates=summarize(temporal), onDemandCandidates=summarize(exact);
+      const pickFastest = (items) => items.find((c)=>c.kind==='graph-fastest') || null;
+      const pickMinSun = (items) => items.find((c)=>c.kind==='graph-shade') || pickFastest(items);
+      const temporalFastest=pickFastest(temporalCandidates), onDemandFastest=pickFastest(onDemandCandidates);
+      const temporalMin=pickMinSun(temporalCandidates), onDemandMin=pickMinSun(onDemandCandidates);
+      const sameFastestGeometry=Boolean(temporalFastest&&onDemandFastest&&temporalFastest.geometryHash===onDemandFastest.geometryHash);
+      const sameMinSunGeometry=Boolean(temporalMin&&onDemandMin&&temporalMin.geometryHash===onDemandMin.geometryHash);
+      const distanceDelta = (x,y) => x&&y&&Number.isFinite(x.distanceM)&&Number.isFinite(y.distanceM) ? x.distanceM-y.distanceM : null;
+      const sunDeltaSeconds=(temporalMin&&onDemandMin&&Number.isFinite(temporalMin.estimatedDirectSunSeconds)&&Number.isFinite(onDemandMin.estimatedDirectSunSeconds))
+        ? temporalMin.estimatedDirectSunSeconds-onDemandMin.estimatedDirectSunSeconds : null;
+      const onDemandSummary={candidateCount:onDemandCandidates.length,candidates:onDemandCandidates,diagnostics:exact?.diagnostics || null};
+      return {
+        available:true,
+        version:VERSION,
+        backend:temporal?.backend || exact?.backend || null,
+        temporal:{candidateCount:temporalCandidates.length,candidates:temporalCandidates,diagnostics:temporal?.diagnostics || null},
+        onDemand:onDemandSummary,
+        // Backward-compatible alias for early dev32 diagnostics. This side is
+        // on-demand bucket evaluation; only exactReplay is truly unbucketed.
+        exact:onDemandSummary,
+        comparison:{
+          sameCandidateCount:temporalCandidates.length===onDemandCandidates.length,
+          sameFastestGeometry,
+          sameMinSunGeometry,
+          sameWinnerGeometry:sameMinSunGeometry,
+          fastestDistanceDeltaM:distanceDelta(temporalFastest,onDemandFastest),
+          minSunDistanceDeltaM:distanceDelta(temporalMin,onDemandMin),
+          sunDeltaSeconds
+        },
+        pruningValid:Boolean(temporal?.diagnostics?.pruningCertificate?.valid !== false && exact?.diagnostics?.pruningCertificate?.valid !== false),
+        productionGraphMutated:false,
+        productionDebugStateMutated:false
+      };
+    } finally {
+      lastDiagnostics = savedDiagnostics;
+      lastGraphDebug = savedGraphDebug;
+      lastRouteEdges = savedRouteEdges;
+      lastShadeDebug.clear();
+      for (const [id, value] of savedShadeDebug) lastShadeDebug.set(id, value);
+    }
   }
 
   function clearCache() {
@@ -5141,6 +5370,7 @@
     buildGraphForAB,
     createExperimentalGraphClone,
     runExperimentalSearchOnClone,
+    runCandidateCorrectnessAudit,
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
     replayPolyline,
@@ -5170,6 +5400,13 @@
       shadeCacheKey,
       bboxForAB,
       routeDistanceM,
+      routeSignature,
+      geometryHash,
+      canonicalGeometryKey,
+      sameGraphPathGeometry,
+      makeGraphCandidate,
+      pruningCorrectnessCertificate,
+      exactReplayPathShade,
       pathFromEdgeSteps,
       edgeGeometryFor,
       nearestGraphEdge,
@@ -5185,6 +5422,7 @@
       cloneFineGraphForExperimentalUse,
       graphStructuralFingerprint,
       runExperimentalSearchOnClone,
+      runCandidateCorrectnessAudit,
       controlledSourceGapConnectorAudit,
       runSourceGapCounterfactualAudit,
       deferredSourceGapCounterfactual,
