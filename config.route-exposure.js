@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev33 Route-local Official Evidence Discovery */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34 Nationwide Regression Matrix */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -99,6 +99,19 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     maxCandidates: 12,
     allowKnownGapFallback: true,
     productionMutationEnabled: false
+  },
+  nationwideRegression: {
+    enabled: true,
+    // dev34: developer-only nationwide topology/evidence/fusion regression matrix.
+    // Never runs during normal A→B; explicitly triggered from diagnostics.
+    routeMarginM: 260,
+    evidenceMarginM: 220,
+    graphRing: 0,
+    evidenceRing: 0,
+    maxGraphTiles: 48,
+    maxEvidenceTiles: 32,
+    snapToleranceM: 140,
+    requestTimeoutMs: 18000
   },
   multisourceFusion: {
     enabled: true,
