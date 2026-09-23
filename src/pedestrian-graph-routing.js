@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev32 Candidate Correctness Audit
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev33 (dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev32";
+  const VERSION = "v9.0.0-dev33";
 
   const DEFAULTS = {
     enabled: true,
@@ -1055,7 +1055,7 @@
     tasks.sort((a,b)=>Math.abs(a.bucket - shadeBucketForMs(departureMs,bucketSec))-Math.abs(b.bucket-shadeBucketForMs(departureMs,bucketSec)) || String(a.edge.id).localeCompare(String(b.edge.id)));
     const scheduled = tasks.slice(0, maxEvaluations);
     let evaluated = 0, errors = 0, maxActive = 0, active = 0;
-    options.onProgress?.({ stage:'temporal-shade-table', message:`dev32：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
+    options.onProgress?.({ stage:'temporal-shade-table', message:`dev33：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
     await runPoolNoYield(scheduled, concurrency, async (task) => {
       if (options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
       if (shadeCache.has(task.key)) { skippedExisting += 1; return; }
@@ -4947,7 +4947,7 @@
     const snapMaxM=Number(options.snapMaxM||config.snapMaxM||120);
     t=nowMs(); const snapA=snapPointIntoFineGraph(full,A,'A',snapMaxM), snapB=snapPointIntoFineGraph(full,B,'B',snapMaxM); perf.snapMs=nowMs()-t;
     if(!snapA||!snapB) return {available:false,reason:'hgr2-endpoint-snap-failed',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',performance:perf}};
-    options.onProgress?.({stage:'fastest-hgr2',message:'dev32：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
+    options.onProgress?.({stage:'fastest-hgr2',message:'dev33：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
     t=nowMs(); const fromA=await dijkstraTimesResponsive(full,snapA.id,speedMps,false,options); const toB=await dijkstraTimesResponsive(full,snapB.id,speedMps,true,options); perf.distanceBoundsMs=nowMs()-t;
     const fastestTime=fromA.dist.get(String(snapB.id));
     if(!Number.isFinite(fastestTime)) return {available:false,reason:'hgr2-graph-disconnected',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',snapA,snapB,performance:perf}};
@@ -4961,11 +4961,11 @@
     const prodSnapA=Object.assign({},snapA,{node:graph.nodes.get(String(snapA.id))}), prodSnapB=Object.assign({},snapB,{node:graph.nodes.get(String(snapB.id))});
     lastShadeDebug.clear(); lastRouteEdges={fastest:new Set(),minSun:new Set()};
     lastGraphDebug={graph,raw:null,contracted:null,snapA:prodSnapA,snapB:prodSnapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
-    options.onProgress?.({stage:'shade-search',message:`dev32：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
+    options.onProgress?.({stage:'shade-search',message:`dev33：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
     t=nowMs();
     const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
     perf.temporalShadeTableMs=nowMs()-t; perf.temporalShade=temporalShade;
-    options.onProgress?.({stage:'shade-search',message:`dev32：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
+    options.onProgress?.({stage:'shade-search',message:`dev33：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
     t=nowMs();
     const minSun=await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,departure,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
@@ -4985,7 +4985,7 @@
     const pruningCertificate=pruningCorrectnessCertificate(full,keptEdgeIds,fromA,toB,speedMps,detourLimitS,options);
     let exactReplay=null;
     if(options.candidateCorrectnessExactReplayEnabled!==false && config.candidateCorrectnessExactReplayEnabled!==false && minSun.path?.edgeIds?.length){
-      options.onProgress?.({stage:'candidate-correctness-replay',message:'dev32：正在 exact replay temporal winner，檢查時間 bucket 誤差…'});
+      options.onProgress?.({stage:'candidate-correctness-replay',message:'dev32 correctness：正在 exact replay temporal winner，檢查時間 bucket 誤差…'});
       const replayStarted=nowMs();
       exactReplay=await exactReplayPathShade(graph,minSun.path,prodSnapA.id,Object.assign({},options,{speedMps,departure}));
       perf.exactReplayMs=nowMs()-replayStarted;
@@ -5068,7 +5068,7 @@
     fastestPath.walkSeconds = fastestTime;
     const detourLimitS = fastestTime * (1 + detourPct / 100);
 
-    options.onProgress?.({ stage:'shade-search', message:`dev32：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
+    options.onProgress?.({ stage:'shade-search', message:`dev33：在裁剪後 graph 搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
     t = nowMs();
     const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
       speedMps, detourLimitS, fastestToEnd:toB, departure,

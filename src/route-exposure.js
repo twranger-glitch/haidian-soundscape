@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev32 Candidate Correctness Audit
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev33 Route-local Official Evidence Discovery
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev32";
+  const VERSION = "v9.0.0-dev33";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -81,6 +81,7 @@
   let lastGraphFailure = null;
   let lastNationwideTileLoad = null;
   let lastNationwideGraphLoad = null;
+  let lastOfficialDiscovery = null;
 
   const icon = {
     route: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.2"></circle><circle cx="19" cy="6" r="2.2"></circle><path d="M7.1 17.4c4.7-1 2.1-8.1 6.5-8.7l3.2-.4"></path></svg>',
@@ -1491,27 +1492,137 @@
     };
   }
 
+  function routeNearKnownEvidenceIndex(index, routePolylines, maxM = 700) {
+    const lines = (Array.isArray(routePolylines) ? routePolylines : []).filter((line) => Array.isArray(line) && line.length >= 2);
+    if (!lines.length) return false;
+    const gaps = Array.isArray(index?.gaps) ? index.gaps : [];
+    for (const gap of gaps) {
+      const p = asLatLng(gap?.location || (Array.isArray(gap?.geometry) ? gap.geometry[Math.floor(gap.geometry.length / 2)] : null));
+      if (!p) continue;
+      for (const line of lines) {
+        if ((nearestPointOnRoute(line, p)?.distanceM ?? Infinity) <= maxM) return true;
+      }
+    }
+    return false;
+  }
+
   async function buildAutomaticExperimentalFusionCandidate(options = {}) {
     if (config.autoCompareVerifiedFusion === false) return { candidate: null, status: { available: false, reason: "disabled" } };
     const evidenceApi = window.HaidianMultiSourceEvidence;
     const fusionApi = window.HaidianExperimentalFusionRouter;
+    const discoveryApi = window.HaidianOfficialEvidenceDiscovery;
     if (!evidenceApi || !fusionApi) return { candidate: null, status: { available: false, reason: "fusion-modules-unavailable" } };
+
+    const routePolylines = (Array.isArray(options.routePolylines) ? options.routePolylines : [])
+      .filter((line) => Array.isArray(line) && line.length >= 2);
+    let runtimeEvidence = options.runtimeEvidence || null;
+    let discovery = null;
+    let selectedEvidenceIndex = null;
+    let evidenceMode = "none";
+    const discoveryEnabled = config.officialEvidenceDiscovery?.enabled !== false && options.autoDiscoverOfficialEvidence !== false;
+
+    if (discoveryEnabled && discoveryApi && routePolylines.length) {
+      if (!runtimeEvidence?.available) {
+        runtimeEvidence = await prefetchNationwideEvidence(routePolylines[0], {
+          marginM: config.officialEvidenceDiscovery?.routeCorridorM ?? config.nationwideTiles?.routeBufferM,
+          attach: true
+        });
+      }
+      if (runtimeEvidence?.available && runtimeEvidence?.bySource) {
+        discovery = await discoveryApi.discoverRouteLocalEvidence({
+          routePolylines,
+          sourceGroups: runtimeEvidence.bySource,
+          routeCorridorM: config.officialEvidenceDiscovery?.routeCorridorM,
+          sampleSpacingM: config.officialEvidenceDiscovery?.sampleSpacingM,
+          graphCoverageM: config.officialEvidenceDiscovery?.graphCoverageM,
+          sourceAttachMaxM: config.officialEvidenceDiscovery?.sourceAttachMaxM,
+          minWitnessM: config.officialEvidenceDiscovery?.minWitnessM,
+          maxWitnessM: config.officialEvidenceDiscovery?.maxWitnessM,
+          equivalentGraphRatio: config.officialEvidenceDiscovery?.equivalentGraphRatio,
+          equivalentGraphSlackM: config.officialEvidenceDiscovery?.equivalentGraphSlackM,
+          minGraphDetourRatio: config.officialEvidenceDiscovery?.minGraphDetourRatio,
+          minGraphDetourM: config.officialEvidenceDiscovery?.minGraphDetourM,
+          maxAnchorHeadingDiffDeg: config.officialEvidenceDiscovery?.maxAnchorHeadingDiffDeg,
+          graphProbeMaxM: config.officialEvidenceDiscovery?.graphProbeMaxM,
+          clusterRadiusM: config.officialEvidenceDiscovery?.clusterRadiusM,
+          maxFeatureCount: config.officialEvidenceDiscovery?.maxFeatureCount,
+          maxCandidates: config.officialEvidenceDiscovery?.maxCandidates
+        });
+        lastOfficialDiscovery = discovery;
+        if (Number(discovery?.verifiedGapCount || 0) > 0) {
+          selectedEvidenceIndex = discovery.evidenceIndex;
+          evidenceMode = "route-local-auto-discovery";
+        }
+      }
+    }
+
+    // Conservative regression fallback: the bundled Haidian audited gap index may
+    // be reused only when the active route is geographically close to that index.
+    // It is never treated as nationwide evidence elsewhere in Taiwan.
     let evidenceState = evidenceApi.getState?.();
-    if (evidenceState?.status !== "ready") evidenceState = await evidenceApi.loadEvidence?.();
-    if (evidenceState?.status !== "ready") {
-      return { candidate: null, status: { available: false, reason: evidenceState?.error || "evidence-not-ready" } };
+    if (config.officialEvidenceDiscovery?.allowKnownGapFallback !== false) {
+      if (evidenceState?.status !== "ready") evidenceState = await evidenceApi.loadEvidence?.();
+      const knownIndex = evidenceState?.evidenceIndex || null;
+      if (knownIndex && routeNearKnownEvidenceIndex(knownIndex, routePolylines, 700)) {
+        // Haidian is the locked dev25–dev32 regression benchmark. Keep its two
+        // manually audited official witnesses authoritative while dev33 auto
+        // discovery runs in shadow-audit mode beside them. Elsewhere in Taiwan,
+        // only the route-local dynamic index is eligible.
+        selectedEvidenceIndex = knownIndex;
+        evidenceMode = "known-audited-gap-regression-lock";
+      }
     }
-    if (!Number(evidenceState?.fusionPlan?.routableWitnessCount || 0)) {
-      return { candidate: null, status: { available: false, reason: "no-routable-verified-witness" } };
+
+    if (!selectedEvidenceIndex) {
+      return {
+        candidate: null,
+        discovery,
+        runtimeEvidence,
+        status: {
+          available: false,
+          reason: discovery?.available ? "no-route-local-verified-witness" : (discovery?.reason || "evidence-not-ready"),
+          evidenceMode,
+          discoveredGapCount: Number(discovery?.verifiedGapCount || 0),
+          productionGraphMutated: false
+        }
+      };
     }
-    const result = await fusionApi.runFromLastProductionGraph(Object.assign({}, options, { renderOnMap: false }));
+
+    const fusionPlan = evidenceApi.buildExperimentalFusionPlan?.(selectedEvidenceIndex);
+    if (!Number(fusionPlan?.routableWitnessCount || 0)) {
+      return {
+        candidate: null,
+        discovery,
+        runtimeEvidence,
+        evidenceIndex: selectedEvidenceIndex,
+        status: {
+          available: false,
+          reason: "no-routable-verified-witness",
+          evidenceMode,
+          discoveredGapCount: Number(discovery?.verifiedGapCount || 0),
+          productionGraphMutated: false
+        }
+      };
+    }
+
+    const result = await fusionApi.runFromLastProductionGraph(Object.assign({}, options, {
+      evidenceIndex: selectedEvidenceIndex,
+      renderOnMap: false
+    }));
     const candidate = experimentalFusionCandidateFromRun(result, options.speedMps);
     return {
       candidate,
       result,
+      discovery,
+      runtimeEvidence,
+      evidenceIndex: selectedEvidenceIndex,
       status: {
         available: Boolean(candidate),
         reason: candidate ? null : (result?.reason || result?.search?.reason || "experimental-fusion-unavailable"),
+        evidenceMode,
+        discoveredGapCount: Number(discovery?.verifiedGapCount || 0),
+        rawDiscoveryCandidateCount: Number(discovery?.rawCandidateCount || 0),
+        autoDiscoveryShadowOnly: evidenceMode === "known-audited-gap-regression-lock" && Number(discovery?.verifiedGapCount || 0) > 0,
         connectorCount: Number(result?.overlay?.connectorCount || 0),
         productionGraphMutated: result?.productionGraphMutated === true
       }
@@ -2421,7 +2532,7 @@
     } catch (error) {
       lastNationwideTileLoad = { available: false, error: String(error?.message || error) };
       refreshMultiSourcePanel();
-      console.warn('[Haidian dev32 nationwide tiles] prefetch unavailable; continuing with local routing.', error);
+      console.warn('[Haidian dev33 nationwide tiles] prefetch unavailable; continuing with local routing.', error);
       return null;
     }
   }
@@ -2442,7 +2553,7 @@
     } catch (error) {
       lastNationwideGraphLoad = { available: false, error: String(error?.message || error), loadStage: overrides.stage || null, productionGraphMutated: false };
       refreshMultiSourcePanel();
-      console.warn('[Haidian dev32 nationwide graph] lazy-load unavailable; may fall back to Overpass.', error);
+      console.warn('[Haidian dev33 nationwide graph] lazy-load unavailable; may fall back to Overpass.', error);
       return null;
     }
   }
@@ -2513,14 +2624,25 @@
       fusionResult = `最近一次 experimental run 未成立：${lastRun.reason}；production graph 未修改。`;
     }
     const fusionButton = fusionApi
-      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev32 experimental fused graph (${routable})`}</button>`
+      ? `<button type="button" data-re-multisource-fusion-run ${routable > 0 && !fusionBusy ? '' : 'disabled'}>${fusionBusy ? 'Experimental routing…' : `執行 dev33 detached fused graph (${routable})`}</button>`
       : '';
     const witnessNotes = (st.evidenceIndex?.gaps || []).map((gap) => {
       const w = gap.preferredFusionWitness;
       if (!w) return '';
       return `<p class="re-fusion-note"><strong>${escapeHtml(gap.id || 'gap')} pedestrian witness：</strong>${escapeHtml(w.source || 'unknown')} · ${escapeHtml(w.evidenceType || 'unknown')} · pedestrianAllowed=${w.pedestrianAllowed === true ? 'true' : 'false'} · productionAllowed=false</p>`;
     }).join('');
-    return `<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p>${nationwideTilesStatusHtml()}</div>`;
+    const auto = lastOfficialDiscovery || window.HaidianOfficialEvidenceDiscovery?.getState?.()?.lastDiscovery || null;
+    const autoSources = (auto?.inspectedSources || []).map((x) => `${x.sourceKey} ${Number(x.inspectedFeatures || 0)}/${Number(x.availableFeatures || 0)}`).join('、');
+    const autoMode = lastCandidateBundle?.experimentalFusionStatus?.evidenceMode || null;
+    const autoModeText = autoMode === 'known-audited-gap-regression-lock'
+      ? '海佃 regression lock：本次 fusion 沿用 dev32 已驗證 gap；auto discovery 僅 shadow audit'
+      : autoMode === 'route-local-auto-discovery'
+        ? '本次 fusion 使用 route-local auto discovery'
+        : '';
+    const autoDiscoveryNote = auto
+      ? `<p class="re-fusion-note"><strong>dev33 Route-local official discovery：</strong>${Number(auto.verifiedGapCount || 0)} verified gap（raw ${Number(auto.rawCandidateCount || 0)}）；${autoSources ? `掃描 ${escapeHtml(autoSources)}；` : ''}${autoModeText ? `${escapeHtml(autoModeText)}；` : ''}source-following only；productionGraphMutated=false。</p>`
+      : `<p class="re-fusion-note"><strong>dev33 Route-local official discovery：</strong>尚未執行；A→B 分析時會先載入路線附近 official evidence tiles，再自動稽核 witness。</p>`;
+    return `<div class="re-multisource-note" data-re-multisource><b>Multi-source Evidence + Experimental Fusion</b><span>目前 gap ${Number(summary.gapCount || 0)}：verified ${Number(summary.verified || 0)}、manual-review ${Number(summary.manualReview || 0)}、unbound ${Number(summary.unbound || 0)}、pedestrian-routable ${routable}。<strong>未下載/未綁定只代表未知，不代表來源沒有設施。</strong></span><div class="re-multisource-actions">${sourceButtons}<button type="button" data-re-multisource-load>重新載入 index</button>${fusionButton}</div>${gaps}${witnessNotes}${autoDiscoveryNote}<p class="re-fusion-note">Experimental fusion plan：${Number(fusion.verifiedCandidateCount || 0)} 個 verified candidate；只有 independent + pedestrianAllowed=true 的 source-following witness 可進 detached clone。<strong>productionGraphMutated=false</strong>。</p><p class="re-fusion-note">${escapeHtml(fusionResult)}</p>${nationwideTilesStatusHtml()}</div>`;
   }
 
   function refreshMultiSourcePanel() {
@@ -2561,7 +2683,7 @@
     const evidenceApi = window.HaidianMultiSourceEvidence;
     const fusionApi = window.HaidianExperimentalFusionRouter;
     if (!evidenceApi || !fusionApi) {
-      setStatus('dev32 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
+      setStatus('dev33 experimental fusion 模組未完整載入；production graph 未修改。', 'warning');
       return;
     }
     let evidenceState = evidenceApi.getState?.();
@@ -2582,7 +2704,7 @@
     if (button) button.disabled = true;
     try {
       await ensureShadeReady();
-      setStatus('dev32：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
+      setStatus('dev33：正在 detached production-graph clone 上插入 verified pedestrian witness 並重跑 min-sun；正式 graph 完全不修改…', 'loading');
       let lastUiAt = 0;
       const result = await fusionApi.runFromLastProductionGraph({
         renderOnMap: true,
@@ -2599,22 +2721,22 @@
           const now = Date.now();
           if (now - lastUiAt < 180) return;
           lastUiAt = now;
-          if (info?.message) setStatus(`dev32 experimental：${info.message}`, 'loading');
+          if (info?.message) setStatus(`dev33 experimental：${info.message}`, 'loading');
         }
       });
       refreshMultiSourcePanel();
       if (!result?.available) {
         const reason = result?.reason || result?.search?.reason || 'experimental-fusion-unavailable';
-        setStatus(`dev32 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
+        setStatus(`dev33 experimental fused graph 未產生可用路徑：${reason}。production graph 未修改。`, 'warning');
         return;
       }
       const connectorCount = Number(result.overlay?.connectorCount || 0);
       const minSun = result.search?.minSun;
       const sunS = Number(minSun?.directSunSeconds);
-      setStatus(`dev32 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
+      setStatus(`dev33 experimental fused graph 完成：使用 ${connectorCount} 個 verified pedestrian witness；${Number.isFinite(sunS) ? `min-sun 直接日照 ${formatMinutes(sunS)}；` : ''}productionGraphMutated=false。`, 'ok');
     } catch (error) {
       refreshMultiSourcePanel();
-      setStatus(`dev32 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev33 experimental fusion 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     } finally {
       const b = panel?.querySelector('[data-re-multisource-fusion-run]');
       if (b) b.disabled = false;
@@ -2736,7 +2858,7 @@
       const hgr2Backend = graphDiag.graphBackend === 'nationwide-hgr2';
       const hgr1Backend = graphDiag.graphBackend === 'nationwide-hgr1';
       const nationwideBackend = hgr2Backend || hgr1Backend;
-      const graphLabel = hgr2Backend ? 'dev32 全臺 HGR2 Micrograph' : (hgr1Backend ? 'dev32 全臺 HGR1 Graph' : 'OSM Pedestrian Graph');
+      const graphLabel = hgr2Backend ? 'dev33 全臺 HGR2 Micrograph' : (hgr1Backend ? 'dev33 全臺 HGR1 Graph' : 'OSM Pedestrian Graph');
       const rawCount = Math.round(graphDiag.rawNodes || graphDiag.contractedNodes || 0);
       const rawEdges = Math.round(graphDiag.rawSegments || graphDiag.contractedEdges || 0);
       const pruned = Math.round(graphDiag.prunedSourceEdges ?? rawEdges);
@@ -2754,7 +2876,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 candidate correctness runtime</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 official discovery runtime</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -2762,7 +2884,7 @@
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${graphNote}${candidateCorrectnessSummaryHtml(bundle)}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
-      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev32 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
+      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev33 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -2952,14 +3074,15 @@
       const detourPct = detourCapFromPanel();
       lastManualGraphDiagnosis = null;
       lastCandidateCorrectnessAudit = null;
+      lastOfficialDiscovery = null;
 
-      setStatus("正在準備 A→B 候選；dev32 優先載核心全臺 HGR2 microtiles，並追蹤每條 candidate lifecycle…", "loading");
+      setStatus("正在準備 A→B 候選；dev33 優先載核心全臺 HGR2 microtiles，並保留 dev32 correctness audit…", "loading");
       // Provider is comparison-only. Start it in parallel instead of blocking our
       // nationwide graph search. The nationwide seed intentionally uses only A/B
       // so a provider detour cannot expand the first tile request.
       const providerStarted = nowMs();
       const providerPromise = fetchRouteCandidates(aPoint, bPoint).catch((providerError) => {
-        console.warn("[Haidian dev32 provider] comparison route unavailable; continuing with nationwide HGR2/HGR1.", providerError);
+        console.warn("[Haidian dev33 provider] comparison route unavailable; continuing with nationwide HGR2/HGR1.", providerError);
         return [];
       }).then((items) => { perf.providerMs = nowMs() - providerStarted; return items || []; });
       const nationwideSeed = [aPoint, bPoint];
@@ -2984,7 +3107,7 @@
           for (const stage of nationwideGraphLoadStages()) {
             if (serial !== analysisSerial) return;
             try {
-              setStatus(`dev32：載入全臺 HGR2/HGR1 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
+              setStatus(`dev33：載入全臺 HGR2/HGR1 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
               const loaded = await prefetchNationwideGraph(nationwideSeed, stage);
               const attempt = {
                 stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
@@ -3032,7 +3155,7 @@
               }
             } catch (nationwideError) {
               if (nationwideError?.message === "ROUTE_ANALYSIS_CANCELLED") throw nationwideError;
-              console.warn(`[Haidian dev32 nationwide graph] stage ${stage.stage} unavailable; expanding if another stage exists.`, nationwideError);
+              console.warn(`[Haidian dev33 nationwide graph] stage ${stage.stage} unavailable; expanding if another stage exists.`, nationwideError);
               lastGraphFailure = nationwideError?.message || String(nationwideError);
               graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, error: lastGraphFailure, routed: false });
             }
@@ -3073,14 +3196,25 @@
 
       const manualMatch = buildManualCandidate(aPoint, bPoint, speedMps);
       let experimentalFusion = { candidate: null, status: { available: false, reason: "not-run" } };
+      let fusionEvidenceLoad = null;
       if (graphResult?.available !== false && graphCandidates.length && config.autoCompareVerifiedFusion !== false) {
         const fusionStarted = nowMs();
         try {
-          setStatus("dev32：在 detached local graph 產生 verified official-fusion min-sun 候選…", "loading");
+          const graphRoutePolylines = graphCandidates.filter((c) => Array.isArray(c?.points) && c.points.length >= 2).map((c) => c.points);
+          const primaryEvidenceSeed = (graphCandidates.find((c) => c.kind === "graph-shade") || graphCandidates[0])?.points || nationwideSeed;
+          setStatus("dev33：載入 A→B corridor 官方 evidence tiles，並自動稽核 source-following witness…", "loading");
+          fusionEvidenceLoad = await prefetchNationwideEvidence(primaryEvidenceSeed, {
+            marginM: config.officialEvidenceDiscovery?.routeCorridorM ?? config.nationwideTiles?.routeBufferM,
+            attach: true
+          });
+          if (serial !== analysisSerial) return;
+          setStatus("dev33：在 detached local graph 產生 route-local verified official-fusion min-sun 候選…", "loading");
           experimentalFusion = await buildAutomaticExperimentalFusionCandidate({
             departure,
             speedMps,
             detourPct,
+            routePolylines: graphRoutePolylines,
+            runtimeEvidence: fusionEvidenceLoad,
             shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
             shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
             sharedShadeCache: sharedGraphShadeCache,
@@ -3092,8 +3226,8 @@
             shouldCancel: () => serial !== analysisSerial
           });
         } catch (fusionError) {
-          experimentalFusion = { candidate: null, status: { available: false, reason: fusionError?.message || String(fusionError) } };
-          console.warn("[Haidian dev32 fusion] automatic comparison unavailable", fusionError);
+          experimentalFusion = { candidate: null, status: { available: false, reason: fusionError?.message || String(fusionError), productionGraphMutated: false } };
+          console.warn("[Haidian dev33 fusion] automatic route-local comparison unavailable", fusionError);
         } finally {
           perf.fusionMs = nowMs() - fusionStarted;
         }
@@ -3118,7 +3252,7 @@
       }
       lastCandidates = candidates;
 
-      setStatus(`dev32：candidate lifecycle 已保留 ${candidates.length} 條；正在用同一套 dense ShadeMap 精算曝曬…`, "loading");
+      setStatus(`dev33：candidate lifecycle 已保留 ${candidates.length} 條；正在用同一套 dense ShadeMap 精算曝曬…`, "loading");
       const scoreStarted = nowMs();
       const bundle = await scoreCandidates(candidates, {
         serial,
@@ -3135,6 +3269,7 @@
       bundle.manualEligible = bundle.scored.some((candidate) => candidate.id === "manual-drawn" && candidate.eligible !== false);
       bundle.experimentalFusion = experimentalFusion;
       bundle.experimentalFusionStatus = experimentalFusion?.status || null;
+      bundle.officialEvidenceDiscovery = experimentalFusion?.discovery || lastOfficialDiscovery || null;
       bundle.fusionManualComparison = buildFusionManualComparison(bundle);
       bundle.graphDiagnostics = graphResult?.diagnostics || null;
       bundle.graphError = graphResult?.error || null;
@@ -3157,16 +3292,18 @@
       // Evidence is useful for overlays/provenance but is not required to find the
       // primary route. Load it after the result is already visible so it cannot
       // compete with graph fetch/decode/search on the critical path.
-      if (config.nationwideTiles?.deferEvidenceUntilRouteReady !== false) {
-        const evidenceSeed = bundle.best?.points?.length ? bundle.best.points : nationwideSeed;
-        void prefetchNationwideEvidence(evidenceSeed).then(() => { if (serial === analysisSerial && lastCandidateBundle === bundle) renderCandidateBundle(bundle, { fit:false }); });
-      } else {
-        void prefetchNationwideEvidence(nationwideSeed);
+      if (!fusionEvidenceLoad?.available) {
+        if (config.nationwideTiles?.deferEvidenceUntilRouteReady !== false) {
+          const evidenceSeed = bundle.best?.points?.length ? bundle.best.points : nationwideSeed;
+          void prefetchNationwideEvidence(evidenceSeed).then(() => { if (serial === analysisSerial && lastCandidateBundle === bundle) renderCandidateBundle(bundle, { fit:false }); });
+        } else {
+          void prefetchNationwideEvidence(nationwideSeed);
+        }
       }
 
       if (bundle.comparisonValid) {
-        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev32 全臺 HGR2 micrograph 直接搜尋結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev32 全臺 HGR1 直接搜尋結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
-        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev32 verified official-fusion 候選" : "";
+        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev33 全臺 HGR2 micrograph 直接搜尋結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev33 全臺 HGR1 直接搜尋結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
+        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev33 route-local verified official-fusion 候選" : "";
         setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}。耗時 ${(perf.totalMs/1000).toFixed(1)} 秒。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
@@ -3206,7 +3343,8 @@
       })),
       dev32CandidateAudit: lastCandidateBundle?.candidateAudit || null,
       dev32GraphDiagnostics: lastCandidateBundle?.graphDiagnostics || null,
-      dev32TemporalVsOnDemandAudit: lastCandidateCorrectnessAudit || null
+      dev32TemporalVsOnDemandAudit: lastCandidateCorrectnessAudit || null,
+      dev33OfficialEvidenceDiscovery: lastCandidateBundle?.officialEvidenceDiscovery || lastOfficialDiscovery || null
     });
     downloadBlob(`haidian-route-exposure-${VERSION}.json`, JSON.stringify(clean, null, 2), "application/json;charset=utf-8");
   }

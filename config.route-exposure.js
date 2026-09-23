@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev32 Candidate Correctness Audit */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev33 Route-local Official Evidence Discovery */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -31,7 +31,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // v9.0.0-dev32: candidate correctness audit + exact replay on top of dev32 temporal shade runtime; preserves production graph isolation
+  // v9.0.0-dev33: route-local official evidence discovery + detached fusion on top of the locked dev32 correctness runtime; preserves production graph isolation
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
   // dev22–dev27: preprocessed multi-source evidence; dev27 adds nationwide lazy-loaded tiles. Browser never downloads national archives.
@@ -76,6 +76,29 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     sourceMetadataUrl: "./data/multisource/source-metadata.json",
     productionMutationEnabled: false,
     autoLoad: false
+  },
+  officialEvidenceDiscovery: {
+    enabled: true,
+    // dev33: route-local automatic official-evidence discovery. Only source-following
+    // official pedestrian geometry can become a detached fusion witness.
+    sourceKeys: ["nlma-sidewalk", "nlma-bikeway"],
+    routeCorridorM: 220,
+    sampleSpacingM: 4,
+    graphCoverageM: 7,
+    sourceAttachMaxM: 18,
+    minWitnessM: 6,
+    maxWitnessM: 90,
+    equivalentGraphRatio: 1.35,
+    equivalentGraphSlackM: 12,
+    minGraphDetourRatio: 1.5,
+    minGraphDetourM: 12,
+    maxAnchorHeadingDiffDeg: 65,
+    graphProbeMaxM: 260,
+    clusterRadiusM: 15,
+    maxFeatureCount: 220,
+    maxCandidates: 12,
+    allowKnownGapFallback: true,
+    productionMutationEnabled: false
   },
   multisourceFusion: {
     enabled: true,
