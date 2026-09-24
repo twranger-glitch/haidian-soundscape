@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev33 HGR2 Microtile Runtime
+ * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev34.2 HGR2 Fetch Fallback Runtime
  *
  * Loads only the official GIS tiles needed near the active route.  Full national
  * archives stay on the dataset host (recommended: Hugging Face Dataset); the
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev33";
+  const VERSION = "v9.0.0-dev34.2";
   const DEFAULTS = {
     enabled: true,
     // Set huggingFaceRepo (e.g. "owner/taiwan-route-tiles") after publishing.
@@ -356,10 +356,15 @@
     const path=graph2PathFor(tileIdValue,manifest);
     if(!path) return null;
     const url=resolveUrl(path,options.datasetBaseUrl || state.baseUrl || effectiveDatasetBaseUrl(options));
-    const decoded=decodeHgr2(await fetchArrayBuffer(url,options));
-    decoded.metadata=Object.assign({},decoded.metadata,{tileId:tileIdValue,url});
-    if(config.cacheTiles!==false) state.graph2TileCache.set(tileIdValue,decoded);
-    return decoded;
+    try {
+      const decoded=decodeHgr2(await fetchArrayBuffer(url,options));
+      decoded.metadata=Object.assign({},decoded.metadata,{tileId:tileIdValue,url});
+      if(config.cacheTiles!==false) state.graph2TileCache.set(tileIdValue,decoded);
+      return decoded;
+    } catch (error) {
+      const detail=String(error?.message || error);
+      throw new Error(`HGR2 tile ${tileIdValue} fetch/decode failed: ${detail} @ ${url}`);
+    }
   }
 
   function mergeGraph2Tiles(tiles) {
@@ -408,10 +413,15 @@
     const path = graphPathFor(tileIdValue, manifest);
     if (!path) return null;
     const url = resolveUrl(path, options.datasetBaseUrl || state.baseUrl || effectiveDatasetBaseUrl(options));
-    const decoded = decodeHgr(await fetchArrayBuffer(url, options));
-    decoded.metadata = Object.assign({}, decoded.metadata, { tileId: tileIdValue, url });
-    if (config.cacheTiles !== false) state.graphTileCache.set(tileIdValue, decoded);
-    return decoded;
+    try {
+      const decoded = decodeHgr(await fetchArrayBuffer(url, options));
+      decoded.metadata = Object.assign({}, decoded.metadata, { tileId: tileIdValue, url });
+      if (config.cacheTiles !== false) state.graphTileCache.set(tileIdValue, decoded);
+      return decoded;
+    } catch (error) {
+      const detail = String(error?.message || error);
+      throw new Error(`HGR1 tile ${tileIdValue} fetch/decode failed: ${detail} @ ${url}`);
+    }
   }
 
   function mergeGraphTiles(tiles) {
@@ -433,9 +443,15 @@
 
   async function loadGraphForBBox(bbox, options = {}) {
     const manifest = state.manifest || await loadManifest(options);
+    let hgr2Error = null;
     if ((options.preferHgr2 ?? config.preferHgr2) !== false && hasGraph2(manifest)) {
-      const h2 = await loadGraph2ForBBox(bbox, options);
-      if (h2?.available) return h2;
+      try {
+        const h2 = await loadGraph2ForBBox(bbox, options);
+        if (h2?.available) return h2;
+      } catch (error) {
+        hgr2Error = String(error?.message || error);
+        console.warn('[Haidian dev34.2 nationwide graph] HGR2 load failed; trying HGR1 for the same bbox.', error);
+      }
     }
     const started = nowMs();
     let t = nowMs();
@@ -444,14 +460,19 @@
     const ids = allIds.filter((id) => Boolean(graphPathFor(id, manifest)));
     const maxTiles = Math.max(1, Number(options.maxTiles ?? config.maxTilesPerRequest) || 96);
     if (ids.length > maxTiles) throw new Error(`nationwide graph request too broad: ${ids.length} > ${maxTiles}`);
-    t = nowMs();
-    const graphTiles = (await Promise.all(ids.map((id) => loadGraphTile(id, options)))).filter(Boolean);
-    const tileFetchMs = nowMs() - t;
-    t = nowMs();
-    const graph = mergeGraphTiles(graphTiles);
-    const mergeMs = nowMs() - t;
-    state.lastGraphLoad = { bbox: safeArray(bbox).map(Number), requestedTileCount:allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, nodeCount: graph.nodes.size, edgeCount: graph.edges.size, performance:{ manifestMs, tileFetchMs, mergeMs, totalMs:nowMs()-started }, productionGraphMutated: false };
-    return { available: ids.length > 0, graph, ...state.lastGraphLoad };
+    try {
+      t = nowMs();
+      const graphTiles = (await Promise.all(ids.map((id) => loadGraphTile(id, options)))).filter(Boolean);
+      const tileFetchMs = nowMs() - t;
+      t = nowMs();
+      const graph = mergeGraphTiles(graphTiles);
+      const mergeMs = nowMs() - t;
+      state.lastGraphLoad = { backend:'nationwide-hgr1', bbox: safeArray(bbox).map(Number), requestedTileCount:allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, nodeCount: graph.nodes.size, edgeCount: graph.edges.size, hgr2Fallback:Boolean(hgr2Error), hgr2Error, performance:{ manifestMs, tileFetchMs, mergeMs, totalMs:nowMs()-started }, productionGraphMutated: false };
+      return { available: ids.length > 0, graph, ...state.lastGraphLoad };
+    } catch (error) {
+      if (hgr2Error) throw new Error(`HGR2 failed (${hgr2Error}); HGR1 fallback failed (${String(error?.message || error)})`);
+      throw error;
+    }
   }
 
   async function loadGraphForPolyline(points, options = {}) {

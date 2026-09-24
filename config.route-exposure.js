@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.1 Staged Nationwide Regression Matrix */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.2 HGR2 Fetch Fallback */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,

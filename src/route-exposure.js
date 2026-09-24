@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev34.1 Staged Nationwide Regression Matrix
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev34.2 HGR2 Fetch Fallback
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.1";
+  const VERSION = "v9.0.0-dev34.2";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -2789,7 +2789,7 @@
     } else if (run?.reason || st.error) {
       body = `<span>最近一次未完成：${escapeHtml(run?.error || run?.reason || st.error || 'unknown')}。</span>`;
     }
-    return `<div class="re-method-note" data-re-dev34-regression><b>dev34.1 Staged Nationwide Regression Matrix：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
+    return `<div class="re-method-note" data-re-dev34-regression><b>dev34.2 Nationwide Regression + HGR2→HGR1 Fetch Fallback：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
   }
 
   function refreshNationwideRegressionPanel() {
@@ -2804,11 +2804,11 @@
   async function runNationwideRegressionLive() {
     const api = window.HaidianNationwideRegression;
     if (!api?.runMatrix) {
-      setStatus('dev34.1 nationwide regression 模組未載入。', 'warning');
+      setStatus('dev34.2 nationwide regression 模組未載入。', 'warning');
       return;
     }
     refreshNationwideRegressionPanel();
-    setStatus('dev34.1：開始執行全臺 regression matrix；這不會修改目前 production graph，也不會改變目前候選路線。', 'loading');
+    setStatus('dev34.2：開始執行全臺 regression matrix；這不會修改目前 production graph，也不會改變目前候選路線。', 'loading');
     try {
       const result = await api.runMatrix({
         onProgress: (info) => {
@@ -2818,13 +2818,13 @@
       });
       refreshNationwideRegressionPanel();
       if (!result?.available) {
-        setStatus(`dev34.1 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
+        setStatus(`dev34.2 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
         return;
       }
-      setStatus(`dev34.1 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
+      setStatus(`dev34.2 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
     } catch (error) {
       refreshNationwideRegressionPanel();
-      setStatus(`dev34.1 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev34.2 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     }
   }
 
@@ -2937,7 +2937,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.1 staged nationwide regression</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.2 HGR2 fetch fallback regression</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }

@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.1
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.2
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.1";
+  const VERSION = "v9.0.0-dev34.2";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
@@ -88,29 +88,50 @@
     const bbox = tileApi.routeBBox(points, options.marginM ?? config.routeMarginM);
     if (!bbox) return { available: false, reason: "empty-bbox", productionGraphMutated: false };
     const preferHgr2 = options.preferHgr2 !== false;
+    let hgr2Error = null;
     if (preferHgr2 && manifest?.graph2 && tileApi?._internals?.graph2Grid && tileApi?._internals?.tileIdsForBBoxGrid) {
-      const grid = tileApi._internals.graph2Grid(manifest);
-      const allIds = tileApi._internals.tileIdsForBBoxGrid(bbox, grid, options.ring ?? config.graphRing);
-      const ids = allIds.filter((id) => Boolean(tileApi._internals.graph2PathFor?.(id, manifest)));
-      if (ids.length > Number(options.maxTiles ?? config.maxGraphTiles)) throw new Error(`HGR2 regression request too broad: ${ids.length}`);
-      const tiles = [];
-      for (const id of ids) {
-        const path = tileApi._internals.graph2PathFor(id, manifest);
-        const buf = await fetchBuffer(path, baseUrl, tileApi, options.requestTimeoutMs ?? config.requestTimeoutMs);
-        tiles.push(tileApi.decodeHgr2(buf));
+      try {
+        const grid = tileApi._internals.graph2Grid(manifest);
+        const allIds = tileApi._internals.tileIdsForBBoxGrid(bbox, grid, options.ring ?? config.graphRing);
+        const ids = allIds.filter((id) => Boolean(tileApi._internals.graph2PathFor?.(id, manifest)));
+        if (ids.length > Number(options.maxTiles ?? config.maxGraphTiles)) throw new Error(`HGR2 regression request too broad: ${ids.length}`);
+        const tiles = [];
+        for (const id of ids) {
+          const path = tileApi._internals.graph2PathFor(id, manifest);
+          const url = tileApi?._internals?.resolveUrl ? tileApi._internals.resolveUrl(path, baseUrl) : new URL(path, baseUrl).href;
+          try {
+            const buf = await fetchBuffer(path, baseUrl, tileApi, options.requestTimeoutMs ?? config.requestTimeoutMs);
+            tiles.push(tileApi.decodeHgr2(buf));
+          } catch (error) {
+            throw new Error(`HGR2 tile ${id} fetch/decode failed: ${String(error?.message || error)} @ ${url}`);
+          }
+        }
+        if (tiles.length) return { available: true, backend: "nationwide-hgr2", bbox, requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, graph: tileApi.mergeGraph2Tiles(tiles), hgr2Fallback: false, hgr2Error: null, productionGraphMutated: false };
+      } catch (error) {
+        hgr2Error = String(error?.message || error);
+        if (options.fallbackToHgr1OnHgr2Error === false) throw error;
       }
-      if (tiles.length) return { available: true, backend: "nationwide-hgr2", bbox, requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, graph: tileApi.mergeGraph2Tiles(tiles), productionGraphMutated: false };
     }
     const allIds = tileApi.tileIdsForBBox(bbox, { ring: options.ring ?? config.graphRing, manifest });
     const ids = allIds.filter((id) => Boolean(tileApi._internals.graphPathFor?.(id, manifest)));
     if (ids.length > Number(options.maxTiles ?? config.maxGraphTiles)) throw new Error(`HGR1 regression request too broad: ${ids.length}`);
     const tiles = [];
-    for (const id of ids) {
-      const path = tileApi._internals.graphPathFor(id, manifest);
-      const buf = await fetchBuffer(path, baseUrl, tileApi, options.requestTimeoutMs ?? config.requestTimeoutMs);
-      tiles.push(tileApi.decodeHgr(buf));
+    try {
+      for (const id of ids) {
+        const path = tileApi._internals.graphPathFor(id, manifest);
+        const url = tileApi?._internals?.resolveUrl ? tileApi._internals.resolveUrl(path, baseUrl) : new URL(path, baseUrl).href;
+        try {
+          const buf = await fetchBuffer(path, baseUrl, tileApi, options.requestTimeoutMs ?? config.requestTimeoutMs);
+          tiles.push(tileApi.decodeHgr(buf));
+        } catch (error) {
+          throw new Error(`HGR1 tile ${id} fetch/decode failed: ${String(error?.message || error)} @ ${url}`);
+        }
+      }
+    } catch (error) {
+      if (hgr2Error) throw new Error(`HGR2 failed (${hgr2Error}); HGR1 fallback failed (${String(error?.message || error)})`);
+      throw error;
     }
-    return { available: tiles.length > 0, backend: "nationwide-hgr1", bbox, requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, graph: tileApi.mergeGraphTiles(tiles), productionGraphMutated: false };
+    return { available: tiles.length > 0, backend: "nationwide-hgr1", bbox, requestedTileCount: allIds.length, loadedTileIds: ids, loadedTileCount: ids.length, graph: tileApi.mergeGraphTiles(tiles), hgr2Fallback: Boolean(hgr2Error), hgr2Error, productionGraphMutated: false };
   }
   async function loadEvidenceIndependent(points, env, options = {}) {
     const { tileApi, manifest, baseUrl } = env;
@@ -205,6 +226,8 @@
       attempts.push({
         stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
         backend: load?.backend || null,
+        hgr2Fallback: Boolean(load?.hgr2Fallback),
+        hgr2Error: load?.hgr2Error || null,
         available: Boolean(load?.available),
         loadedTileCount: Number(load?.loadedTileCount || 0),
         nodeCount: Number(load?.graph?.nodes?.size || 0),
@@ -228,7 +251,11 @@
     const staged = await loadGraphStaged(a, b, env, options);
     const graphLoad = staged.graphLoad;
     const path = staged.path || { available: false, reason: staged.reason || "disconnected" };
-    const attemptText = safeArray(staged.attempts).map((x) => `S${x.stage}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e ${x.connected ? "connected" : (x.reason || "no-route")}`).join(" | ");
+    const attemptText = safeArray(staged.attempts).map((x) => {
+      const backend = x.backend ? `/${x.backend.replace('nationwide-', '')}` : '';
+      const fallback = x.hgr2Fallback ? ` fallback(${x.hgr2Error || 'HGR2 error'})` : '';
+      return `S${x.stage}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${fallback}`;
+    }).join(" | ");
     if (!graphLoad?.available) {
       checks.push(assert("graph-availability", !required || testCase.scopeProbe, attemptText || staged.reason || "no graph", required ? "required" : "informational"));
       return { id: testCase.id, label: testCase.label, region: testCase.region, required, pass: checks.every((x) => x.severity !== "required" || x.pass), checks, graph: { available: false, attempts: staged.attempts }, elapsedMs: nowMs() - started };
@@ -272,7 +299,7 @@
     return {
       id: testCase.id, label: testCase.label, region: testCase.region, required,
       pass: checks.every((x) => x.severity !== "required" || x.pass), checks,
-      graph: { backend: graphLoad.backend, loadedTileCount: graphLoad.loadedTileCount, nodes: graphLoad.graph.nodes.size, edges: graphLoad.graph.edges.size, stage: staged.stage?.stage || null, marginM: staged.stage?.marginM ?? null, ring: staged.stage?.ring ?? null, attempts: staged.attempts },
+      graph: { backend: graphLoad.backend, hgr2Fallback:Boolean(graphLoad.hgr2Fallback), hgr2Error:graphLoad.hgr2Error || null, loadedTileCount: graphLoad.loadedTileCount, nodes: graphLoad.graph.nodes.size, edges: graphLoad.graph.edges.size, stage: staged.stage?.stage || null, marginM: staged.stage?.marginM ?? null, ring: staged.stage?.ring ?? null, attempts: staged.attempts },
       evidence: { loadedTileCount: evidence.loadedTileCount, featureCount: evidence.collection?.features?.length || 0 },
       discovery: { rawCandidateCount: discovery.rawCandidateCount || 0, verifiedGapCount: discovery.verifiedGapCount || 0, connectorCount: overlay.connectorCount || 0 },
       elapsedMs: nowMs() - started
