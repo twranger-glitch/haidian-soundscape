@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.4 Production-parity Topology Probe */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.5 Connectivity-aware Endpoint Snap */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -62,7 +62,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     graphLoadStages: [
       { marginM: 220, ring: 0 },
       { marginM: 520, ring: 0 },
-      // dev34.4: expand the core bbox before adding a one-tile moat.
+      // dev34.5: expand the core bbox before adding a one-tile moat.
       // This avoids making a peripheral ring tile a hard dependency for the first 850 m probe.
       { marginM: 850, ring: 0 },
       { marginM: 850, ring: 1 }
@@ -133,6 +133,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     bboxMarginM: 420,
     maxBboxSideM: 2800,
     snapMaxM: 120,
+    // dev34.5: only when the globally-nearest A/B edges belong to different
+    // disconnected components, choose the nearest component reachable from both
+    // endpoints within snapMaxM.  Normal connected snaps are unchanged.
+    connectivitySnapFallbackEnabled: true,
     snapEndpointToleranceM: 1.5,
     pedestrianSnapSlackM: 12,
     manualReplayCorridorM: 16,

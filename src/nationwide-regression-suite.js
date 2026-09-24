@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.4
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.5 — Connectivity-aware Endpoint Snap
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.4";
+  const VERSION = "v9.0.0-dev34.5";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
@@ -197,6 +197,7 @@
     const reconstructDijkstra = internals.reconstructDijkstra;
     const subsetExistingFineGraph = internals.subsetExistingFineGraph;
     const externalGraphToFineGraph = internals.externalGraphToFineGraph;
+    const graphForConnectedEndpointSnap = internals.graphForConnectedEndpointSnap;
     if (typeof snapPointIntoFineGraph !== 'function' || typeof dijkstraTimes !== 'function') {
       return Object.assign({}, legacy, {
         probeMode: 'legacy-node-fallback',
@@ -223,11 +224,29 @@
         };
       }
       const snapMaxM = Math.max(1, Number(rootConfig.graphRouting?.snapMaxM ?? 120) || 120);
+      let endpointSnapPlan = null;
+      if (typeof graphForConnectedEndpointSnap === 'function') {
+        const selection = graphForConnectedEndpointSnap(working, a, b, snapMaxM, { connectivitySnapFallbackEnabled:true });
+        endpointSnapPlan = selection?.plan || null;
+        if (endpointSnapPlan && endpointSnapPlan.available === false) {
+          return {
+            available:false, reason:endpointSnapPlan.reason || 'no-common-snap-component', probeMode:'production-parity-edge',
+            snapA:Number.isFinite(Number(endpointSnapPlan.nearestA)) ? Number(endpointSnapPlan.nearestA) : null,
+            snapB:Number.isFinite(Number(endpointSnapPlan.nearestB)) ? Number(endpointSnapPlan.nearestB) : null,
+            connectivitySnapPlan:endpointSnapPlan,
+            legacyNodeConnected:Boolean(legacy?.available),
+            legacySnapA:Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+            legacySnapB:Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+          };
+        }
+        if (selection?.graph?.edges?.size) working = selection.graph;
+      }
       const snapA = snapPointIntoFineGraph(working, a, 'regression-A', snapMaxM);
       const snapB = snapPointIntoFineGraph(working, b, 'regression-B', snapMaxM);
       if (!snapA || !snapB) {
         return {
           available: false, reason: 'parity-edge-snap-failed', probeMode: 'production-parity-edge',
+          connectivitySnapPlan:endpointSnapPlan,
           snapA: snapA?.distanceM ?? null, snapB: snapB?.distanceM ?? null,
           snapTypeA: snapA?.snapType || null, snapTypeB: snapB?.snapType || null,
           legacyNodeConnected: Boolean(legacy?.available),
@@ -241,6 +260,7 @@
       if (!Number.isFinite(seconds)) {
         return {
           available: false, reason: 'disconnected', probeMode: 'production-parity-edge',
+          connectivitySnapPlan:endpointSnapPlan,
           snapA: Number(snapA.distanceM || 0), snapB: Number(snapB.distanceM || 0),
           snapTypeA: snapA.snapType || null, snapTypeB: snapB.snapType || null,
           reachableNodes: Number(d?.dist?.size || 0),
@@ -252,6 +272,7 @@
       const route = typeof reconstructDijkstra === 'function' ? reconstructDijkstra(working, d.prev, snapA.id, snapB.id) : null;
       return {
         available: true, reason: null, probeMode: 'production-parity-edge',
+        connectivitySnapPlan:endpointSnapPlan,
         distanceM: Number(route?.distanceM ?? (seconds * speedMps)),
         snapA: Number(snapA.distanceM || 0), snapB: Number(snapB.distanceM || 0),
         snapTypeA: snapA.snapType || null, snapTypeB: snapB.snapType || null,
@@ -297,7 +318,7 @@
       try {
         load = await loadGraphIndependent([a, b], env, {
           preferHgr2,
-          // dev34.4: if this is the explicit connectivity fallback, do not let the
+          // dev34.5: if this is the explicit connectivity fallback, do not let the
           // HGR1 probe bounce back into HGR2. The first probe still keeps the
           // dev34.2 fetch/decode -> HGR1 failover behavior.
           fallbackToHgr1OnHgr2Error: preferHgr2,
@@ -331,6 +352,13 @@
         snapTypeB: path?.snapTypeB || null,
         probeMode: path?.probeMode || null,
         reachableNodes: Number.isFinite(Number(path?.reachableNodes)) ? Number(path.reachableNodes) : null,
+        connectivitySnapFallbackUsed: path?.connectivitySnapPlan?.fallbackUsed === true,
+        connectivitySnapNearestA: Number.isFinite(Number(path?.connectivitySnapPlan?.nearestA)) ? Number(path.connectivitySnapPlan.nearestA) : null,
+        connectivitySnapNearestB: Number.isFinite(Number(path?.connectivitySnapPlan?.nearestB)) ? Number(path.connectivitySnapPlan.nearestB) : null,
+        connectivitySnapSelectedA: Number.isFinite(Number(path?.connectivitySnapPlan?.selectedA)) ? Number(path.connectivitySnapPlan.selectedA) : null,
+        connectivitySnapSelectedB: Number.isFinite(Number(path?.connectivitySnapPlan?.selectedB)) ? Number(path.connectivitySnapPlan.selectedB) : null,
+        connectivitySnapComponentEdges: Number.isFinite(Number(path?.connectivitySnapPlan?.componentEdgeCount)) ? Number(path.connectivitySnapPlan.componentEdgeCount) : null,
+        connectivitySnapComponentNodes: Number.isFinite(Number(path?.connectivitySnapPlan?.componentNodeCount)) ? Number(path.connectivitySnapPlan.componentNodeCount) : null,
         legacyNodeConnected: path?.legacyNodeConnected === true,
         legacySnapA: Number.isFinite(Number(path?.legacySnapA)) ? Number(path.legacySnapA) : null,
         legacySnapB: Number.isFinite(Number(path?.legacySnapB)) ? Number(path.legacySnapB) : null,
@@ -345,7 +373,7 @@
       const primary = await probe(stage, true, false);
       if (primary.connected) return { available: true, graphLoad: primary.load, path: primary.path, stage, attempts, productionGraphMutated: false };
 
-      // dev34.4: HGR2 being fetchable is not the same as HGR2 being connected
+      // dev34.5: HGR2 being fetchable is not the same as HGR2 being connected
       // for the current core window. Before widening the window, try the mature
       // HGR1 graph over the exact same bbox. This is a backend fallback only;
       // it does not change costs, detour limits, evidence, or production graph.
@@ -371,7 +399,10 @@
       const snaps = Number.isFinite(Number(x.snapA)) || Number.isFinite(Number(x.snapB)) ? ` snap ${Number(x.snapA || 0).toFixed(1)}/${Number(x.snapB || 0).toFixed(1)}m${x.snapTypeA || x.snapTypeB ? `(${x.snapTypeA || '?'}→${x.snapTypeB || '?'})` : ''}` : '';
       const legacy = x.probeMode === 'production-parity-edge' ? ` legacy-node=${x.legacyNodeConnected ? 'connected' : 'disconnected'}` : '';
       const reach = Number.isFinite(Number(x.reachableNodes)) ? ` reach=${Math.round(Number(x.reachableNodes))}` : '';
-      return `S${x.stage}${requested}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${snaps}${reach}${legacy}${fallback}${connectivity}`;
+      const snapFallback = x.connectivitySnapFallbackUsed
+        ? ` snap-rescue ${Number(x.connectivitySnapNearestA || 0).toFixed(1)}/${Number(x.connectivitySnapNearestB || 0).toFixed(1)}→${Number(x.connectivitySnapSelectedA || 0).toFixed(1)}/${Number(x.connectivitySnapSelectedB || 0).toFixed(1)}m c=${Math.round(Number(x.connectivitySnapComponentNodes || 0))}n/${Math.round(Number(x.connectivitySnapComponentEdges || 0))}e`
+        : '';
+      return `S${x.stage}${requested}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${snaps}${snapFallback}${reach}${legacy}${fallback}${connectivity}`;
     }).join(" | ");
     if (!graphLoad?.available) {
       checks.push(assert("graph-availability", !required || testCase.scopeProbe, attemptText || staged.reason || "no graph", required ? "required" : "informational"));
