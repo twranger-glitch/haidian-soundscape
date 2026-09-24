@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.3 (local/interior noding + OSM×Overture corridor rescue + controlled-access fallback; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.0 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev36.3";
+  const VERSION = "v9.0.0-dev37.0";
 
   const DEFAULTS = {
     enabled: true,
@@ -89,6 +89,14 @@
     autoLocalNodingReviewMaxM: 8,
     autoLocalNodingCorridorM: 120,
     autoLocalNodingMaxCandidates: 48,
+    // dev37.0 visibility-mesh controls.  Corridor Steiner nodes keep long open
+    // realms connected without permitting very long synthetic chords; obstacle
+    // boundary anchors let the mesh route around lakes/buildings instead of only
+    // rejecting the direct segment.
+    pedestrianRealmCorridorVisibilitySampleM: 58,
+    pedestrianRealmMaxCorridorVisibilityNodes: 10,
+    pedestrianRealmObstacleBoundarySampleM: 28,
+    pedestrianRealmMaxObstacleVisibilityNodes: 20,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -4040,6 +4048,557 @@
     return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
   }
 
+  // dev37.0: Pedestrian Realm Graph rescue.
+  //
+  // dev36.0-dev36.3 proved that an extreme local detour can survive larger HGR
+  // windows, strict/conditional OSM, Valhalla, endpoint noding, interior noding,
+  // and OSM×Overture near-touch stitching.  That failure mode is broader than a
+  // missing line connector: real pedestrians can enter public parks, squares and
+  // other mapped *areas* even when the source does not contain a complete linear
+  // highway=footway/path skeleton.  This layer therefore builds a detached,
+  // obstacle-aware visibility graph inside carefully whitelisted public pedestrian
+  // realms.  It never mutates the production graph and every synthetic realm
+  // segment stays explicitly labelled for UI/research review.
+
+  function pedestrianRealmOverpassQuery(bbox) {
+    const bb = `${bbox.south.toFixed(6)},${bbox.west.toFixed(6)},${bbox.north.toFixed(6)},${bbox.east.toFixed(6)}`;
+    return `[out:json][timeout:20];\n(\n` +
+      `  way["highway"](${bb});\n` +
+      `  way["leisure"="park"](${bb});\n` +
+      `  relation["leisure"="park"](${bb});\n` +
+      `  way["highway"="pedestrian"]["area"="yes"](${bb});\n` +
+      `  relation["highway"="pedestrian"]["area"="yes"](${bb});\n` +
+      `  way["area:highway"](${bb});\n` +
+      `  relation["area:highway"](${bb});\n` +
+      `  way["place"="square"](${bb});\n` +
+      `  relation["place"="square"](${bb});\n` +
+      `  way["amenity"="marketplace"](${bb});\n` +
+      `  relation["amenity"="marketplace"](${bb});\n` +
+      `  way["amenity"~"^(school|college|university|hospital)$"](${bb});\n` +
+      `  relation["amenity"~"^(school|college|university|hospital)$"](${bb});\n` +
+      `  way["tourism"~"^(zoo|theme_park)$"](${bb});\n` +
+      `  relation["tourism"~"^(zoo|theme_park)$"](${bb});\n` +
+      `  way["natural"="water"](${bb});\n` +
+      `  relation["natural"="water"](${bb});\n` +
+      `  way["water"](${bb});\n` +
+      `  relation["water"](${bb});\n` +
+      `  way["waterway"="riverbank"](${bb});\n` +
+      `  relation["waterway"="riverbank"](${bb});\n` +
+      `  way["landuse"="reservoir"](${bb});\n` +
+      `  relation["landuse"="reservoir"](${bb});\n` +
+      `  way["leisure"="swimming_pool"](${bb});\n` +
+      `  relation["leisure"="swimming_pool"](${bb});\n` +
+      `  way["building"](${bb});\n` +
+      `  relation["building"](${bb});\n` +
+      `  way["barrier"~"^(fence|wall|hedge|retaining_wall)$"](${bb});\n` +
+      `  node["entrance"](${bb});\n` +
+      `  node["barrier"~"^(gate|lift_gate|swing_gate|kissing_gate)$"](${bb});\n` +
+      `);\n(._;>;);\nout body;`;
+  }
+
+  async function fetchPedestrianRealmOverpass(bbox, options = {}) {
+    const endpoints = Array.isArray(options.endpoints) && options.endpoints.length ? options.endpoints : config.overpassEndpoints;
+    const query = pedestrianRealmOverpassQuery(bbox);
+    let lastError = null;
+    for (const endpoint of endpoints) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), Number(options.timeoutMs || config.overpassTimeoutMs));
+      try {
+        options.onProgress?.({ stage:'pedestrian-realm-overpass', message:'dev37：讀取 OSM 公園／廣場／入口／障礙物行人空間…', endpoint });
+        const response = await fetch(endpoint, {
+          method:'POST', mode:'cors', credentials:'omit', cache:'no-store',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', Accept:'application/json' },
+          body:`data=${encodeURIComponent(query)}`, signal:controller.signal
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload || !Array.isArray(payload.elements)) throw new Error(`Overpass HTTP ${response.status}`);
+        return { payload, endpoint, query };
+      } catch (error) {
+        lastError = error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    if (lastError?.name === 'AbortError') throw new Error('Pedestrian Realm OSM 查詢逾時。');
+    throw new Error(`Pedestrian Realm OSM 暫時無法取得：${lastError?.message || 'unknown error'}`);
+  }
+
+  function realmAccessBlocked(tags = {}) {
+    const access = normalizedTag(tags.access), foot = normalizedTag(tags.foot);
+    if (['no','private'].includes(foot)) return true;
+    if (['no','private'].includes(access) && !['yes','designated','permissive'].includes(foot)) return true;
+    return false;
+  }
+
+  function classifyPedestrianRealm(tags = {}) {
+    const highway = normalizedTag(tags.highway), area = normalizedTag(tags.area);
+    const areaHighway = normalizedTag(tags['area:highway']), leisure = normalizedTag(tags.leisure);
+    const place = normalizedTag(tags.place), amenity = normalizedTag(tags.amenity), tourism = normalizedTag(tags.tourism);
+    if (realmAccessBlocked(tags)) return null;
+    if (highway === 'pedestrian' && area === 'yes') return { kind:'pedestrian-area', autoEligible:true, confidence:'high', openBoundaryAllowed:true };
+    if (['pedestrian','footway','path'].includes(areaHighway)) return { kind:`area-highway-${areaHighway}`, autoEligible:true, confidence:'high', openBoundaryAllowed:true };
+    if (place === 'square') return { kind:'public-square', autoEligible:true, confidence:'high', openBoundaryAllowed:true };
+    if (amenity === 'marketplace') return { kind:'marketplace', autoEligible:true, confidence:'medium', openBoundaryAllowed:true };
+    if (leisure === 'park') return { kind:'public-park', autoEligible:true, confidence:'medium', openBoundaryAllowed:true };
+    if (['school','college','university','hospital'].includes(amenity)) return { kind:`facility-${amenity}`, autoEligible:false, confidence:'review-only', openBoundaryAllowed:false };
+    if (['zoo','theme_park'].includes(tourism)) return { kind:`facility-${tourism}`, autoEligible:false, confidence:'review-only', openBoundaryAllowed:false };
+    return null;
+  }
+
+  function classifyRealmObstacle(tags = {}) {
+    if (normalizedTag(tags.building)) return 'building';
+    if (normalizedTag(tags.natural) === 'water') return 'water';
+    if (normalizedTag(tags.water)) return 'water';
+    if (normalizedTag(tags.waterway) === 'riverbank') return 'water';
+    if (normalizedTag(tags.landuse) === 'reservoir') return 'water';
+    if (normalizedTag(tags.leisure) === 'swimming_pool') return 'water';
+    return null;
+  }
+
+  function classifyRealmBarrier(tags = {}) {
+    const barrier = normalizedTag(tags.barrier);
+    return ['fence','wall','hedge','retaining_wall'].includes(barrier) ? barrier : null;
+  }
+
+  function isRealmPortalNode(tags = {}) {
+    const entrance = normalizedTag(tags.entrance), barrier = normalizedTag(tags.barrier);
+    if (realmAccessBlocked(tags)) return false;
+    if (entrance && entrance !== 'no') return true;
+    return ['gate','lift_gate','swing_gate','kissing_gate'].includes(barrier);
+  }
+
+  function normalizeClosedRing(points) {
+    const pts = (points || []).map(asLatLng).filter(Boolean).map((p) => ({lat:p.lat,lng:p.lng}));
+    if (pts.length < 3) return [];
+    if (haversineM(pts[0], pts[pts.length - 1]) > 0.25) pts.push({lat:pts[0].lat,lng:pts[0].lng});
+    return pts.length >= 4 ? pts : [];
+  }
+
+  function wayRingFromNodeIds(nodeIds, nodes) {
+    const pts = (nodeIds || []).map((id) => nodes.get(String(id))).filter(Boolean);
+    if (pts.length < 4 || String(nodeIds?.[0]) !== String(nodeIds?.[nodeIds.length - 1])) return [];
+    return normalizeClosedRing(pts);
+  }
+
+  function stitchRelationRings(memberRefs, wayById, nodes) {
+    const segments = [];
+    for (const ref of memberRefs || []) {
+      const way = wayById.get(String(ref));
+      if (!way || !Array.isArray(way.nodes) || way.nodes.length < 2) continue;
+      segments.push(way.nodes.map(String));
+    }
+    const rings = [];
+    const unused = segments.slice();
+    while (unused.length) {
+      let chain = unused.shift().slice();
+      let guard = 0;
+      while (chain.length >= 2 && chain[0] !== chain[chain.length - 1] && unused.length && guard++ < 10000) {
+        const end = chain[chain.length - 1];
+        let idx = -1, rev = false;
+        for (let i=0; i<unused.length; i += 1) {
+          const s = unused[i];
+          if (s[0] === end) { idx = i; break; }
+          if (s[s.length - 1] === end) { idx = i; rev = true; break; }
+        }
+        if (idx < 0) break;
+        let next = unused.splice(idx,1)[0];
+        if (rev) next = next.slice().reverse();
+        chain = chain.concat(next.slice(1));
+      }
+      const ring = wayRingFromNodeIds(chain, nodes);
+      if (ring.length) rings.push(ring);
+    }
+    return rings;
+  }
+
+  function parsePedestrianRealm(payload) {
+    const nodes = new Map(), wayById = new Map(), relationElements = [];
+    for (const element of payload?.elements || []) {
+      if (element.type === 'node' && Number.isFinite(Number(element.lat)) && Number.isFinite(Number(element.lon))) {
+        nodes.set(String(element.id), { id:String(element.id), lat:Number(element.lat), lng:Number(element.lon), tags:Object.assign({}, element.tags || {}) });
+      } else if (element.type === 'way' && Array.isArray(element.nodes)) {
+        wayById.set(String(element.id), { id:String(element.id), nodes:element.nodes.map(String), tags:Object.assign({}, element.tags || {}) });
+      } else if (element.type === 'relation' && Array.isArray(element.members)) {
+        relationElements.push(element);
+      }
+    }
+    const areas = [], obstacles = [], barriers = [], portals = [];
+    const seenArea = new Set(), seenObstacle = new Set();
+
+    for (const way of wayById.values()) {
+      const ring = wayRingFromNodeIds(way.nodes, nodes);
+      const realm = classifyPedestrianRealm(way.tags);
+      if (realm && ring.length) {
+        const key=`way:${way.id}`; seenArea.add(key);
+        areas.push(Object.assign({ id:key, sourceType:'way', sourceId:way.id, polygon:ring, holes:[], tags:Object.assign({},way.tags) }, realm));
+      }
+      const obstacleKind = classifyRealmObstacle(way.tags);
+      if (obstacleKind && ring.length) {
+        const key=`way:${way.id}`; seenObstacle.add(key);
+        obstacles.push({ id:key, kind:obstacleKind, sourceType:'way', sourceId:way.id, polygon:ring, tags:Object.assign({},way.tags) });
+      }
+      const barrierKind = classifyRealmBarrier(way.tags);
+      if (barrierKind) {
+        const geom=(way.nodes||[]).map((id)=>nodes.get(String(id))).filter(Boolean).map((p)=>({lat:p.lat,lng:p.lng}));
+        if (geom.length>=2) barriers.push({id:`way:${way.id}`,kind:barrierKind,geometry:geom,tags:Object.assign({},way.tags)});
+      }
+    }
+
+    for (const rel of relationElements) {
+      const outerIds=[], innerIds=[];
+      for (const m of rel.members || []) {
+        if (m.type !== 'way') continue;
+        if (String(m.role || '').toLowerCase() === 'inner') innerIds.push(String(m.ref));
+        else outerIds.push(String(m.ref));
+      }
+      const outers=stitchRelationRings(outerIds,wayById,nodes), inners=stitchRelationRings(innerIds,wayById,nodes);
+      const realm=classifyPedestrianRealm(rel.tags || {});
+      if (realm) {
+        for (let i=0;i<outers.length;i+=1) {
+          const key=`relation:${rel.id}:outer:${i}`;
+          if (seenArea.has(key)) continue;
+          areas.push(Object.assign({id:key,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],holes:inners.map((x)=>x.slice()),tags:Object.assign({},rel.tags||{})},realm));
+        }
+      }
+      const obstacleKind=classifyRealmObstacle(rel.tags || {});
+      if (obstacleKind) {
+        for (let i=0;i<outers.length;i+=1) obstacles.push({id:`relation:${rel.id}:outer:${i}`,kind:obstacleKind,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],tags:Object.assign({},rel.tags||{})});
+      }
+      // A hole in a public realm is never assumed walkable free-space merely
+      // because its member way lacks its own tags.  Treat it as a conservative
+      // obstacle until source geometry says otherwise.
+      if (realm) for (let i=0;i<inners.length;i+=1) obstacles.push({id:`relation:${rel.id}:inner:${i}`,kind:'realm-hole',sourceType:'relation-inner',sourceId:String(rel.id),polygon:inners[i],tags:{}});
+    }
+
+    for (const node of nodes.values()) {
+      if (isRealmPortalNode(node.tags || {})) portals.push({ id:`node:${node.id}`, nodeId:node.id, lat:node.lat, lng:node.lng, tags:Object.assign({},node.tags||{}), explicit:true });
+    }
+
+    const reviewOnlyAreas=areas.filter((a)=>a.autoEligible!==true);
+    const autoAreas=areas.filter((a)=>a.autoEligible===true);
+    return { nodes, wayById, areas, autoAreas, reviewOnlyAreas, obstacles, barriers, portals };
+  }
+
+  function pointInRingStrict(point, ring) {
+    const P=asLatLng(point), pts=(ring||[]).map(asLatLng).filter(Boolean);
+    if(!P||pts.length<4) return false;
+    let inside=false;
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+      const xi=pts[i].lng, yi=pts[i].lat, xj=pts[j].lng, yj=pts[j].lat;
+      const intersect=((yi>P.lat)!==(yj>P.lat)) && (P.lng < (xj-xi)*(P.lat-yi)/((yj-yi)||1e-15)+xi);
+      if(intersect) inside=!inside;
+    }
+    return inside;
+  }
+
+  function pointInRingInclusive(point, ring, toleranceM = 1.5) {
+    const P=asLatLng(point); if(!P) return false;
+    const hit=nearestPointOnGeometry(P, ring);
+    if(hit && Number(hit.distanceM)<=Math.max(0,Number(toleranceM)||0)+1e-9) return true;
+    return pointInRingStrict(P, ring);
+  }
+
+  function pointInRealmArea(point, area, toleranceM = 1.5) {
+    if(!area?.polygon?.length || !pointInRingInclusive(point,area.polygon,toleranceM)) return false;
+    for(const hole of area.holes || []) if(pointInRingStrict(point,hole)) return false;
+    return true;
+  }
+
+  function realmAreaRelevant(area, a, b, corridorM) {
+    const A=asLatLng(a),B=asLatLng(b); if(!A||!B||!area?.polygon?.length) return false;
+    if(pointInRealmArea(A,area,2)||pointInRealmArea(B,area,2)) return true;
+    const samples=samplePolyline(area.polygon,Math.max(18,Number(corridorM||160)/3));
+    return samples.some((p)=>localNodingCorridorDistanceM(p,A,B)<=Number(corridorM||160)+1e-9);
+  }
+
+  function segmentIntersectionInclusive(a0,b0,c0,d0) {
+    const a=asLatLng(a0),b=asLatLng(b0),c=asLatLng(c0),d=asLatLng(d0); if(!a||!b||!c||!d) return null;
+    const lat0=((a.lat+b.lat+c.lat+d.lat)/4)*Math.PI/180, mx=111320*Math.max(.2,Math.cos(lat0)), my=110540;
+    const ax=a.lng*mx,ay=a.lat*my,bx=b.lng*mx,by=b.lat*my,cx=c.lng*mx,cy=c.lat*my,dx=d.lng*mx,dy=d.lat*my;
+    const rx=bx-ax,ry=by-ay,sx=dx-cx,sy=dy-cy,cross=(x1,y1,x2,y2)=>x1*y2-y1*x2,den=cross(rx,ry,sx,sy);
+    if(Math.abs(den)<1e-8) return null;
+    const qx=cx-ax,qy=cy-ay,t=cross(qx,qy,sx,sy)/den,u=cross(qx,qy,rx,ry)/den,eps=1e-7;
+    if(t<-eps||t>1+eps||u<-eps||u>1+eps) return null;
+    return {point:{lat:a.lat+(b.lat-a.lat)*Math.max(0,Math.min(1,t)),lng:a.lng+(b.lng-a.lng)*Math.max(0,Math.min(1,t))},t,u};
+  }
+
+  function nearestPortalDistanceM(point, portals = []) {
+    let best=Infinity;
+    for(const p of portals||[]) best=Math.min(best,haversineM(point,p));
+    return best;
+  }
+
+  function barrierDistanceM(point, barriers = []) {
+    let best=Infinity;
+    for(const b of barriers||[]) {
+      const hit=nearestPointOnGeometry(point,b.geometry||[]);
+      if(hit) best=Math.min(best,Number(hit.distanceM||Infinity));
+    }
+    return best;
+  }
+
+  function segmentClearOfRealmObstacles(a,b,area,realm,options={}) {
+    const A=asLatLng(a),B=asLatLng(b); if(!A||!B) return false;
+    const spacing=Math.max(2,Number(options.visibilitySampleM||4));
+    for(const p of samplePolyline([A,B],spacing)) {
+      if(!pointInRealmArea(p,area,1.8)) return false;
+      for(const obstacle of realm?.obstacles||[]) if(pointInRingStrict(p,obstacle.polygon)) return false;
+    }
+    for(const obstacle of realm?.obstacles||[]) {
+      const poly=obstacle.polygon||[];
+      for(let i=1;i<poly.length;i+=1) if(segmentIntersectionPoint(A,B,poly[i-1],poly[i],1e-6)) return false;
+    }
+    const gateTol=Math.max(1.5,Number(options.gateToleranceM||3));
+    for(const barrier of realm?.barriers||[]) {
+      const g=barrier.geometry||[];
+      for(let i=1;i<g.length;i+=1){
+        const hit=segmentIntersectionPoint(A,B,g[i-1],g[i],1e-6);
+        if(hit && nearestPortalDistanceM(hit.point,realm?.portals||[])>gateTol) return false;
+      }
+    }
+    return true;
+  }
+
+  function addRealmNode(graph, point, id, meta = {}) {
+    const P=asLatLng(point); if(!P) return null;
+    let key=String(id), serial=1; while(graph.nodes.has(key)) key=`${id}:${++serial}`;
+    graph.nodes.set(key,Object.assign({id:key,lat:P.lat,lng:P.lng,realmSyntheticNode:true},meta));
+    if(!graph.adjacency.has(key)) graph.adjacency.set(key,[]);
+    return key;
+  }
+
+  function addRealmEdge(graph,aId,bId,geometry,meta={}) {
+    const a=String(aId),b=String(bId); if(a===b||!graph.nodes.has(a)||!graph.nodes.has(b)) return null;
+    const g=(geometry||[]).map(asLatLng).filter(Boolean); if(g.length<2) return null;
+    const distanceM=routeDistanceM(g); if(!(distanceM>0.05)) return null;
+    let id=`dev37-realm:${meta.serial||1}`,serial=1; while(graph.edges.has(id)) id=`dev37-realm:${meta.serial||1}:${++serial}`;
+    const edge={id,a,b,distanceM,geometry:g.map((p)=>({lat:p.lat,lng:p.lng})),wayIds:[],tagsSummary:{highway:['pedestrian'],foot:['yes'],diagnostic:['dev37-pedestrian-realm'],realm:[String(meta.realmKind||'public-realm')]},realmSynthetic:true,realmAreaId:meta.realmAreaId||null,realmKind:meta.realmKind||null,realmConfidence:meta.realmConfidence||'medium',realmPortalConnector:meta.portalConnector===true,realmOpenBoundaryPortal:meta.openBoundaryPortal===true,productionGraphMutated:false};
+    graph.edges.set(id,edge); if(!graph.adjacency.has(a))graph.adjacency.set(a,[]);if(!graph.adjacency.has(b))graph.adjacency.set(b,[]);
+    graph.adjacency.get(a).push({edgeId:id,to:b});graph.adjacency.get(b).push({edgeId:id,to:a});
+    return edge;
+  }
+
+  function attachRealmPortalToBaseGraph(graph, point, area, realm, options = {}, meta = {}) {
+    const P=asLatLng(point); if(!P||!graph?.edges?.size) return null;
+    const hit=nearestGraphEdge(graph,P),maxM=Math.max(1,Number(meta.explicit?options.portalSnapMaxM:options.openBoundaryAttachMaxM)|| (meta.explicit?14:7));
+    if(!hit||Number(hit.distanceM)>maxM+1e-9) return null;
+    if(!meta.explicit && barrierDistanceM(P,realm?.barriers||[])<=Math.max(1,Number(options.openBoundaryBarrierClearanceM||2.5))) return null;
+    const split=splitSpecificFineEdgeAtPoint(graph,String(hit.edge.id),hit.point,`realm-portal-${meta.serial||1}`); if(!split?.id) return null;
+    const splitNode=graph.nodes.get(String(split.id)); if(!splitNode) return null;
+    const gap=haversineM(P,splitNode);
+    let anchorId=String(split.id), connector=null;
+    if(gap>0.35){
+      anchorId=addRealmNode(graph,P,`dev37-portal:${area.id}:${meta.serial||1}`,{realmAreaId:area.id,realmPortal:true,realmPortalType:meta.explicit?'explicit':'open-boundary'});
+      connector=addRealmEdge(graph,String(split.id),anchorId,[splitNode,P],{serial:`portal-${meta.serial||1}`,realmAreaId:area.id,realmKind:area.kind,realmConfidence:area.confidence,portalConnector:true,openBoundaryPortal:!meta.explicit});
+    }
+    return {id:anchorId,point:P,gapM:Number(hit.distanceM||gap),explicit:meta.explicit===true,connector,baseNodeId:String(split.id)};
+  }
+
+  function dedupeRealmPoints(points, radiusM=10, maxCount=20) {
+    const out=[];
+    for(const item of points||[]){
+      const P=asLatLng(item.point||item); if(!P) continue;
+      if(out.some((x)=>haversineM(P,x.point)<=radiusM)) continue;
+      out.push(Object.assign({},item,{point:P})); if(out.length>=maxCount) break;
+    }
+    return out;
+  }
+
+  function collectRealmBoundaryPortals(graph, area, realm, a, b, options = {}) {
+    if(area.openBoundaryAllowed!==true || !graph?.edges?.size) return [];
+    const A=asLatLng(a),B=asLatLng(b),corridorM=Math.max(30,Number(options.corridorM||180));
+    const samples=samplePolyline(area.polygon,Math.max(10,Number(options.boundarySampleM||24)));
+    const ranked=[];
+    for(const p of samples){
+      const cd=localNodingCorridorDistanceM(p,A,B); if(cd>corridorM+1e-9) continue;
+      const hit=nearestGraphEdge(graph,p); if(!hit) continue;
+      const gap=Number(hit.distanceM||Infinity),maxM=Math.max(1,Number(options.openBoundaryAttachMaxM||7)); if(gap>maxM+1e-9) continue;
+      if(barrierDistanceM(p,realm?.barriers||[])<=Math.max(1,Number(options.openBoundaryBarrierClearanceM||2.5))) continue;
+      ranked.push({point:p,gapM:gap,corridorDistanceM:cd,score:gap*8+cd});
+    }
+    ranked.sort((x,y)=>x.score-y.score);
+    return dedupeRealmPoints(ranked,Math.max(8,Number(options.portalDedupeM||12)),Math.max(1,Number(options.maxOpenBoundaryPortals||8)));
+  }
+
+  function collectRealmBaseNodes(graph, area, a, b, options={}) {
+    const A=asLatLng(a),B=asLatLng(b),corridorM=Math.max(30,Number(options.corridorM||180)),rows=[];
+    for(const [id,node] of graph?.nodes||[]){
+      if(!pointInRealmArea(node,area,1.5)) continue;
+      const cd=localNodingCorridorDistanceM(node,A,B); if(cd>corridorM+1e-9) continue;
+      rows.push({id:String(id),point:{lat:Number(node.lat),lng:Number(node.lng)},role:'base-inside',score:cd});
+    }
+    rows.sort((x,y)=>x.score-y.score); return dedupeRealmPoints(rows,5,Math.max(4,Number(options.maxBaseNodesPerArea||18)));
+  }
+
+  function collectRealmBoundaryVisibilityNodes(area, a, b, options={}) {
+    const A=asLatLng(a),B=asLatLng(b),corridorM=Math.max(30,Number(options.corridorM||180));
+    const samples=samplePolyline(area.polygon,Math.max(18,Number(options.visibilityBoundarySampleM||34))),rows=[];
+    for(const p of samples){const cd=localNodingCorridorDistanceM(p,A,B);if(cd<=corridorM+1e-9)rows.push({point:p,role:'boundary-visibility',score:cd});}
+    rows.sort((x,y)=>x.score-y.score);return dedupeRealmPoints(rows,10,Math.max(6,Number(options.maxBoundaryVisibilityNodes||14)));
+  }
+
+  // A boundary-only visibility graph can disconnect a perfectly open 250–400 m
+  // park when maxVisibilityM is deliberately conservative.  Add a small number
+  // of A→B corridor Steiner points inside the same realm.  They are not routes by
+  // themselves: every edge still has to pass the obstacle/barrier visibility test.
+  function collectRealmCorridorVisibilityNodes(area, realm, a, b, options={}) {
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return [];
+    const spacing=Math.max(30,Number(options.corridorVisibilitySampleM||config.pedestrianRealmCorridorVisibilitySampleM||58));
+    const rows=[];
+    for(const p of samplePolyline([A,B],spacing)){
+      if(haversineM(p,A)<spacing*0.35||haversineM(p,B)<spacing*0.35)continue;
+      if(!pointInRealmArea(p,area,1.5))continue;
+      let blocked=false;for(const obstacle of realm?.obstacles||[]){if(pointInRingStrict(p,obstacle.polygon)){blocked=true;break;}}
+      if(blocked)continue;
+      if(barrierDistanceM(p,realm?.barriers||[])<=1.5)continue;
+      rows.push({point:p,role:'corridor-visibility',score:haversineM(p,A)});
+    }
+    return dedupeRealmPoints(rows,Math.max(12,spacing*0.55),Math.max(2,Number(options.maxCorridorVisibilityNodes||config.pedestrianRealmMaxCorridorVisibilityNodes||10)));
+  }
+
+  // Direct visibility correctly rejects a lake/building, but without free-space
+  // anchors near the obstacle boundary the graph may have no way to go around it.
+  // Sample source obstacle boundaries as candidate visibility nodes.  Crossing an
+  // obstacle remains forbidden by segmentClearOfRealmObstacles.
+  function collectRealmObstacleVisibilityNodes(area, realm, a, b, options={}) {
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return [];
+    const corridorM=Math.max(30,Number(options.corridorM||180));
+    const spacing=Math.max(18,Number(options.obstacleBoundarySampleM||config.pedestrianRealmObstacleBoundarySampleM||28));
+    const rows=[];
+    for(const obstacle of realm?.obstacles||[]){
+      if(!Array.isArray(obstacle?.polygon)||obstacle.polygon.length<4)continue;
+      for(const p of samplePolyline(obstacle.polygon,spacing)){
+        if(!pointInRealmArea(p,area,2.0))continue;
+        const cd=localNodingCorridorDistanceM(p,A,B);if(cd>corridorM+1e-9)continue;
+        rows.push({point:p,role:'obstacle-visibility',score:cd,obstacleId:obstacle.id||null});
+      }
+    }
+    rows.sort((x,y)=>x.score-y.score);
+    return dedupeRealmPoints(rows,Math.max(8,spacing*0.45),Math.max(4,Number(options.maxObstacleVisibilityNodes||config.pedestrianRealmMaxObstacleVisibilityNodes||20)));
+  }
+
+  function addRealmVisibilityForArea(graph, area, realm, endpointRows, a, b, options = {}, counters = {}) {
+    const rows=[];
+    for(const row of endpointRows||[]) if(row?.id&&graph.nodes.has(String(row.id))) rows.push(Object.assign({},row,{id:String(row.id),point:asLatLng(graph.nodes.get(String(row.id)))||row.point}));
+    for(const row of collectRealmBaseNodes(graph,area,a,b,options)) rows.push(row);
+    let serialBase=Number(counters.nodeSerial||0);
+    for(const row of collectRealmBoundaryVisibilityNodes(area,a,b,options)) {
+      const id=addRealmNode(graph,row.point,`dev37-boundary:${area.id}:${++serialBase}`,{realmAreaId:area.id,realmVisibilityNode:true,realmVisibilityRole:'boundary'});
+      if(id) rows.push(Object.assign({},row,{id}));
+    }
+    for(const row of collectRealmCorridorVisibilityNodes(area,realm,a,b,options)) {
+      const id=addRealmNode(graph,row.point,`dev37-corridor:${area.id}:${++serialBase}`,{realmAreaId:area.id,realmVisibilityNode:true,realmVisibilityRole:'corridor'});
+      if(id) rows.push(Object.assign({},row,{id}));
+    }
+    for(const row of collectRealmObstacleVisibilityNodes(area,realm,a,b,options)) {
+      const id=addRealmNode(graph,row.point,`dev37-obstacle:${area.id}:${++serialBase}`,{realmAreaId:area.id,realmVisibilityNode:true,realmVisibilityRole:'obstacle-boundary',realmObstacleId:row.obstacleId||null});
+      if(id) rows.push(Object.assign({},row,{id}));
+    }
+    counters.nodeSerial=serialBase;
+    const unique=[]; const seenIds=new Set();
+    for(const row of rows){if(!row?.id||seenIds.has(String(row.id)))continue;seenIds.add(String(row.id));unique.push(row);}
+    const maxVisibilityM=Math.max(30,Number(options.maxVisibilityM||220)), neighborLimit=Math.max(2,Number(options.visibilityNeighborLimit||8)), maxEdges=Math.max(12,Number(options.maxVisibilityEdgesPerArea||220));
+    const pairRows=[];
+    for(let i=0;i<unique.length;i+=1){
+      for(let j=i+1;j<unique.length;j+=1){
+        const p=asLatLng(graph.nodes.get(String(unique[i].id))),q=asLatLng(graph.nodes.get(String(unique[j].id)));if(!p||!q)continue;
+        const d=haversineM(p,q);if(!(d>0.2&&d<=maxVisibilityM+1e-9))continue;
+        if(!segmentClearOfRealmObstacles(p,q,area,realm,options))continue;
+        const priority=(unique[i].role==='endpoint'||unique[j].role==='endpoint')?0:(String(unique[i].role||'').includes('portal')||String(unique[j].role||'').includes('portal'))?1:2;
+        pairRows.push({i,j,d,priority});
+      }
+    }
+    pairRows.sort((x,y)=>x.priority-y.priority||x.d-y.d);
+    const degree=new Array(unique.length).fill(0);let added=0;
+    for(const row of pairRows){
+      if(added>=maxEdges)break;
+      const important=row.priority<=1;
+      if(!important && degree[row.i]>=neighborLimit && degree[row.j]>=neighborLimit)continue;
+      const aRow=unique[row.i],bRow=unique[row.j],pa=graph.nodes.get(String(aRow.id)),pb=graph.nodes.get(String(bRow.id));
+      const edge=addRealmEdge(graph,aRow.id,bRow.id,[pa,pb],{serial:`vis-${area.id}-${++counters.edgeSerial}`,realmAreaId:area.id,realmKind:area.kind,realmConfidence:area.confidence});
+      if(edge){degree[row.i]+=1;degree[row.j]+=1;added+=1;}
+    }
+    return {nodeCount:unique.length,visibilityEdgesAdded:added,rows:unique};
+  }
+
+  function realmPathStats(graph, edgeIds = []) {
+    let totalM=0,syntheticM=0,portalM=0;const areaIds=new Set(),kinds=new Set();
+    for(const id of edgeIds||[]){const e=graph?.edges?.get?.(String(id));if(!e)continue;const d=Number(e.distanceM||0);totalM+=d;if(e.realmSynthetic){syntheticM+=d;if(e.realmPortalConnector)portalM+=d;if(e.realmAreaId)areaIds.add(String(e.realmAreaId));if(e.realmKind)kinds.add(String(e.realmKind));}}
+    return {totalM,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds)};
+  }
+
+  function makePedestrianRealmCandidate(kind,path,meta={}) {
+    const shade=kind==='pedestrian-realm-shade',id=shade?'graph-pedestrian-realm-min-sun':'graph-pedestrian-realm-fastest',hash=geometryHash(path?.points||[]);
+    return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,graphMeta:Object.assign({backend:'osm-pedestrian-realm',pedestrianRealmRescue:true,productionGraphMutated:false,requiresOnSitePathConfirmation:true},meta)};
+  }
+
+  function buildPedestrianRealmRescueGraph(payload,a,b,options={}) {
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',productionGraphMutated:false};
+    const realm=parsePedestrianRealm(payload),corridorM=Math.max(40,Number(options.corridorM||180));
+    const relevant=realm.autoAreas.filter((area)=>realmAreaRelevant(area,A,B,corridorM));
+    if(!relevant.length)return {available:true,accepted:false,reason:'no-auto-eligible-realm',realm,areaCount:realm.areas.length,autoAreaCount:0,reviewAreaCount:realm.reviewOnlyAreas.length,productionGraphMutated:false};
+
+    const linear=parseOverpass(payload,{allowPrivateFootAccess:false});
+    linear.ways=(linear.ways||[]).filter((way)=>{
+      const areaTag=normalizedTag(way.tags?.area),areaHighway=normalizedTag(way.tags?.['area:highway']);
+      if(areaTag==='yes'||areaHighway)return false; // area geometry belongs to the realm mesh, not a fake perimeter footway
+      return true;
+    });
+    const raw=buildRawGraph(linear),contracted=contractGraph(raw,[]),base=refineGraph(contracted,options);
+    const graph=cloneFineGraphForExperimentalUse(base)||{nodes:new Map(),edges:new Map(),adjacency:new Map(),experimentalClone:true,productionGraphMutated:false};
+    graph.pedestrianRealmGraph=true;graph.productionGraphMutated=false;
+    const snapMaxM=Math.max(20,Number(options.snapMaxM||config.snapMaxM||120));
+    const areaForA=relevant.find((x)=>pointInRealmArea(A,x,2)),areaForB=relevant.find((x)=>pointInRealmArea(B,x,2));
+    let snapA=null,snapB=null,startId=null,endId=null;
+    if(areaForA){startId=addRealmNode(graph,A,'dev37-terminal:A',{realmAreaId:areaForA.id,realmEndpoint:'A'});snapA={id:startId,node:graph.nodes.get(startId),distanceM:0,snapType:'pedestrian-realm-terminal'};}
+    else if(graph.edges.size){snapA=snapPointIntoFineGraph(graph,A,'realm-A',snapMaxM);startId=snapA?.id||null;}
+    if(areaForB){endId=addRealmNode(graph,B,'dev37-terminal:B',{realmAreaId:areaForB.id,realmEndpoint:'B'});snapB={id:endId,node:graph.nodes.get(endId),distanceM:0,snapType:'pedestrian-realm-terminal'};}
+    else if(graph.edges.size){snapB=snapPointIntoFineGraph(graph,B,'realm-B',snapMaxM);endId=snapB?.id||null;}
+    if(!startId||!endId)return {available:false,reason:'realm-endpoint-attachment-failed',realm,areaCount:realm.areas.length,autoAreaCount:relevant.length,reviewAreaCount:realm.reviewOnlyAreas.length,productionGraphMutated:false};
+
+    const counters={nodeSerial:0,edgeSerial:0},portalRowsByArea=new Map();let explicitPortalCount=0,openBoundaryPortalCount=0,visibilityEdgeCount=0,realmNodeCount=0;
+    for(const area of relevant){
+      const rows=[];
+      if(areaForA?.id===area.id)rows.push({id:startId,point:A,role:'endpoint'});
+      if(areaForB?.id===area.id)rows.push({id:endId,point:B,role:'endpoint'});
+      const explicit=(realm.portals||[]).filter((p)=>pointInRealmArea(p,area,3)&&localNodingCorridorDistanceM(p,A,B)<=corridorM+1e-9).slice(0,Math.max(1,Number(options.maxExplicitPortalsPerArea||10)));
+      let pSerial=0;
+      for(const p of explicit){const attached=attachRealmPortalToBaseGraph(graph,p,area,realm,options,{explicit:true,serial:++pSerial});if(attached){rows.push({id:attached.id,point:attached.point,role:'explicit-portal'});explicitPortalCount+=1;}}
+      const openRows=collectRealmBoundaryPortals(graph,area,realm,A,B,options);let oSerial=0;
+      for(const p of openRows){const attached=attachRealmPortalToBaseGraph(graph,p.point,area,realm,options,{explicit:false,serial:1000+(++oSerial)});if(attached){rows.push({id:attached.id,point:attached.point,role:'open-boundary-portal'});openBoundaryPortalCount+=1;}}
+      portalRowsByArea.set(area.id,rows);
+      const vis=addRealmVisibilityForArea(graph,area,realm,rows,A,B,options,counters);visibilityEdgeCount+=Number(vis.visibilityEdgesAdded||0);realmNodeCount+=Number(vis.nodeCount||0);
+    }
+    return {available:true,accepted:false,graph,startId,endId,snapA,snapB,realm,relevantAreas:relevant,areaCount:realm.areas.length,autoAreaCount:relevant.length,reviewAreaCount:realm.reviewOnlyAreas.length,obstacleCount:realm.obstacles.length,barrierCount:realm.barriers.length,explicitPortalCount,openBoundaryPortalCount,portalCount:explicitPortalCount+openBoundaryPortalCount,visibilityEdgeCount,realmNodeCount,productionGraphMutated:false};
+  }
+
+  function pedestrianRealmRescueFromPayload(payload,a,b,options={}) {
+    const built=buildPedestrianRealmRescueGraph(payload,a,b,options);if(!built?.graph||!built?.startId||!built?.endId)return Object.assign({candidates:[]},built||{available:false},{productionGraphMutated:false});
+    const A=asLatLng(a),B=asLatLng(b),speedMps=clamp(options.speedMps,0.5,2.5,1.25),straightM=haversineM(A,B);
+    const route=dijkstraTimes(built.graph,built.startId,speedMps,false),timeS=Number(route.dist.get(String(built.endId)));
+    if(!Number.isFinite(timeS))return Object.assign({},built,{accepted:false,reason:'realm-graph-disconnected',candidates:[],straightM,productionGraphMutated:false});
+    const path=reconstructDijkstra(built.graph,route.prev,built.startId,built.endId);if(!path?.points?.length)return Object.assign({},built,{accepted:false,reason:'realm-path-reconstruct-failed',candidates:[],straightM,productionGraphMutated:false});
+    path.walkSeconds=timeS;const distanceM=Number(path.distanceM||timeS*speedMps),baselineM=Number(options.baselineDistanceM),minImprovementM=Math.max(20,Number(options.minImprovementM||120)),improvementM=Number.isFinite(baselineM)?baselineM-distanceM:Infinity;
+    const stats=realmPathStats(built.graph,path.edgeIds||[]),maxSyntheticM=Math.max(60,Number(options.maxSyntheticDistanceM||480)),maxRatio=Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2));
+    const accepted=stats.syntheticM>1 && distanceM+0.5>=straightM*0.92 && distanceM<=straightM*maxRatio+1e-9 && stats.syntheticM<=maxSyntheticM+1e-9 && (!Number.isFinite(baselineM)||improvementM>=minImprovementM);
+    return Object.assign({},built,{accepted,best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
+  }
+
+  async function runPedestrianRealmRescue(a,b,options={}) {
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',candidates:[],productionGraphMutated:false};
+    const bbox=bboxForAB(A,B,Math.max(120,Number(options.marginM||260)));
+    const fetched=options.realmPayload?{payload:options.realmPayload,endpoint:'synthetic/test'}:await fetchPedestrianRealmOverpass(bbox,options);
+    const topo=pedestrianRealmRescueFromPayload(fetched.payload,A,B,options);
+    topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;
+    if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
+    const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
+    if(options.fastestOnly===true)return Object.assign({},topo,{candidates:[makePedestrianRealmCandidate('pedestrian-realm-fastest',topo.best.path,commonMeta)],productionGraphMutated:false});
+    const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,options);
+    if(!searched?.available)return Object.assign({},topo,{candidates:[makePedestrianRealmCandidate('pedestrian-realm-fastest',topo.best.path,commonMeta)],searchReason:searched?.reason||null,productionGraphMutated:false});
+    const candidates=[];if(searched.fastest?.points?.length)candidates.push(makePedestrianRealmCandidate('pedestrian-realm-fastest',searched.fastest,commonMeta));if(searched.minSun?.points?.length&&!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(makePedestrianRealmCandidate('pedestrian-realm-shade',searched.minSun,commonMeta));
+    return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+  }
+
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
   // source-gap connectors already justified by dev16 route-support transitions
   // and dev17 raw-OSM evidence. The production graph is never mutated.
@@ -6419,6 +6978,7 @@
     runAutoLocalNodingRescue,
     runInteriorNodingRescue,
     runCrossSourceCorridorRescue,
+    runPedestrianRealmRescue,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -6508,6 +7068,21 @@
       addCrossSourceConnector,
       crossSourceCorridorRescueOnGraphs,
       runCrossSourceCorridorRescue,
+      pedestrianRealmOverpassQuery,
+      classifyPedestrianRealm,
+      classifyRealmObstacle,
+      parsePedestrianRealm,
+      pointInRingStrict,
+      pointInRingInclusive,
+      pointInRealmArea,
+      segmentClearOfRealmObstacles,
+      collectRealmBoundaryVisibilityNodes,
+      collectRealmCorridorVisibilityNodes,
+      collectRealmObstacleVisibilityNodes,
+      buildPedestrianRealmRescueGraph,
+      pedestrianRealmRescueFromPayload,
+      runPedestrianRealmRescue,
+      realmPathStats,
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,

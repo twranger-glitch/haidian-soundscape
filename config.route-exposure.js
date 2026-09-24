@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.3 Interior + Cross-Source Corridor Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.0 Pedestrian Realm Graph Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -70,6 +70,33 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     crossSourceMaxCandidates: 48,
     crossSourcePairPool: 10,
     crossSourceMaxTests: 64,
+    // dev37.0: when every line-graph rescue still detours, inspect whitelisted
+    // public pedestrian *areas* (parks, pedestrian plazas, squares) in a detached
+    // obstacle-aware visibility graph. Synthetic realm segments are always
+    // labelled and never mutate production routing data.
+    pedestrianRealmRescue: true,
+    pedestrianRealmMarginM: 280,
+    pedestrianRealmCorridorM: 200,
+    pedestrianRealmMinImprovementM: 120,
+    pedestrianRealmPortalSnapMaxM: 14,
+    pedestrianRealmOpenBoundaryAttachMaxM: 7,
+    pedestrianRealmOpenBoundaryBarrierClearanceM: 2.5,
+    pedestrianRealmBoundarySampleM: 24,
+    pedestrianRealmVisibilityBoundarySampleM: 34,
+    pedestrianRealmMaxExplicitPortalsPerArea: 10,
+    pedestrianRealmMaxOpenBoundaryPortals: 8,
+    pedestrianRealmMaxBaseNodesPerArea: 18,
+    pedestrianRealmMaxBoundaryVisibilityNodes: 14,
+    pedestrianRealmCorridorVisibilitySampleM: 58,
+    pedestrianRealmMaxCorridorVisibilityNodes: 10,
+    pedestrianRealmObstacleBoundarySampleM: 28,
+    pedestrianRealmMaxObstacleVisibilityNodes: 20,
+    pedestrianRealmMaxVisibilityM: 220,
+    pedestrianRealmVisibilityNeighborLimit: 8,
+    pedestrianRealmMaxVisibilityEdgesPerArea: 260,
+    pedestrianRealmVisibilitySampleM: 4,
+    pedestrianRealmMaxSyntheticDistanceM: 480,
+    pedestrianRealmMaxRouteToStraightRatio: 3.2,
     conditionalPrivateAccessProbe: true,
     conditionalPrivateAccessMinImprovementM: 120,
     conditionalPrivateTerminalBufferM: 350,
