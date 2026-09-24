@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.2 (local-noding rescue + controlled-access fallback + cheap topology probes; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.3 (local/interior noding + OSM×Overture corridor rescue + controlled-access fallback; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev36.2";
+  const VERSION = "v9.0.0-dev36.3";
 
   const DEFAULTS = {
     enabled: true,
@@ -3795,6 +3795,251 @@
     });
   }
 
+
+  // dev36.3: two bounded topology-rescue layers for extreme local stretch that
+  // survived dev36.2 endpoint-to-edge noding.
+  //
+  // (A) Interior noding: two strict live-OSM walkable edges geometrically cross
+  //     at the same grade but do not share a graph node. The crossing is noded
+  //     only in a detached clone and accepted only if it materially shortens A→B.
+  // (B) OSM×Overture corridor union: strict live OSM and the already-loaded HGR2
+  //     (Overture) graph are copied into a detached union. Only tiny cross-source
+  //     endpoint-to-edge stitches are tested. This can recover a corridor where
+  //     each source is individually incomplete but their geometries complement
+  //     each other. No source or production graph is mutated.
+  function segmentIntersectionPoint(a0, b0, c0, d0, interiorEps = 1e-4) {
+    const a=asLatLng(a0), b=asLatLng(b0), c=asLatLng(c0), d=asLatLng(d0);
+    if(!a||!b||!c||!d) return null;
+    const lat0=((a.lat+b.lat+c.lat+d.lat)/4)*Math.PI/180;
+    const mx=111320*Math.max(0.2,Math.cos(lat0)), my=110540;
+    const ax=a.lng*mx, ay=a.lat*my, bx=b.lng*mx, by=b.lat*my;
+    const cx=c.lng*mx, cy=c.lat*my, dx=d.lng*mx, dy=d.lat*my;
+    const rx=bx-ax, ry=by-ay, sx=dx-cx, sy=dy-cy;
+    const cross=(x1,y1,x2,y2)=>x1*y2-y1*x2;
+    const den=cross(rx,ry,sx,sy);
+    if(Math.abs(den)<1e-7) return null;
+    const qx=cx-ax, qy=cy-ay;
+    const t=cross(qx,qy,sx,sy)/den, u=cross(qx,qy,rx,ry)/den;
+    const eps=Math.max(1e-6,Number(interiorEps)||1e-4);
+    if(t<=eps||t>=1-eps||u<=eps||u>=1-eps) return null;
+    return { point:{lat:a.lat+(b.lat-a.lat)*t,lng:a.lng+(b.lng-a.lng)*t}, t, u };
+  }
+
+  function discoverInteriorNodingCandidates(graph, a, b, options = {}) {
+    const A=asLatLng(a), B=asLatLng(b);
+    if(!graph?.edges?.size||!A||!B) return [];
+    const corridorM=Math.max(20,Number(options.corridorM ?? config.autoLocalNodingCorridorM ?? 120));
+    const maxCandidates=Math.max(4,Number(options.maxCandidates ?? 36));
+    const endpointBufferM=Math.max(0.75,Number(options.endpointBufferM ?? 1.75));
+    const edges=Array.from(graph.edges.values()).filter((edge)=>{
+      const pts=(edge?.geometry||[]).map(asLatLng).filter(Boolean);
+      return pts.some((p)=>localNodingCorridorDistanceM(p,A,B)<=corridorM+Number(edge?.distanceM||0)/2+1e-9);
+    });
+    const out=[];
+    for(let i=0;i<edges.length;i+=1){
+      const e1=edges[i], p1=(e1.geometry||[]).map(asLatLng).filter(Boolean);
+      if(p1.length<2) continue;
+      for(let j=i+1;j<edges.length;j+=1){
+        const e2=edges[j], p2=(e2.geometry||[]).map(asLatLng).filter(Boolean);
+        if(p2.length<2) continue;
+        if(String(e1.a)===String(e2.a)||String(e1.a)===String(e2.b)||String(e1.b)===String(e2.a)||String(e1.b)===String(e2.b)) continue;
+        const w1=new Set((e1.wayIds||[]).map(String)), sameWay=(e2.wayIds||[]).some((x)=>w1.has(String(x)));
+        if(sameWay) continue;
+        if(!localNodingGradeCompatible(e1,e2)) continue;
+        let found=null;
+        for(let s1=0;s1+1<p1.length&&!found;s1+=1){
+          for(let s2=0;s2+1<p2.length;s2+=1){
+            const hit=segmentIntersectionPoint(p1[s1],p1[s1+1],p2[s2],p2[s2+1]);
+            if(!hit?.point) continue;
+            const cd=localNodingCorridorDistanceM(hit.point,A,B);
+            if(cd>corridorM+1e-9) continue;
+            const e1End=Math.min(haversineM(hit.point,graph.nodes.get(String(e1.a))||p1[0]),haversineM(hit.point,graph.nodes.get(String(e1.b))||p1[p1.length-1]));
+            const e2End=Math.min(haversineM(hit.point,graph.nodes.get(String(e2.a))||p2[0]),haversineM(hit.point,graph.nodes.get(String(e2.b))||p2[p2.length-1]));
+            if(e1End<endpointBufferM||e2End<endpointBufferM) continue; // dev36.2 owns endpoint touches
+            found={
+              edgeAId:String(e1.id),edgeBId:String(e2.id),point:{lat:Number(hit.point.lat),lng:Number(hit.point.lng)},
+              corridorDistanceM:cd,classification:'interior-geometric-crossing',
+              fromHighway:primaryHighway(e1),toHighway:primaryHighway(e2),
+              fromWayIds:(e1.wayIds||[]).map(String).slice(0,6),toWayIds:(e2.wayIds||[]).map(String).slice(0,6),
+              score:cd
+            };
+            break;
+          }
+        }
+        if(found) out.push(found);
+      }
+    }
+    out.sort((x,y)=>x.score-y.score);
+    return out.slice(0,maxCandidates);
+  }
+
+  function addInteriorNodingConnector(graph, spec, serial = 1) {
+    if(!graph?.edges?.has?.(String(spec?.edgeAId))||!graph?.edges?.has?.(String(spec?.edgeBId))) return null;
+    const a=splitSpecificFineEdgeAtPoint(graph,spec.edgeAId,spec.point,`interior-a:${serial}`);
+    const b=splitSpecificFineEdgeAtPoint(graph,spec.edgeBId,spec.point,`interior-b:${serial}`);
+    if(!a?.id||!b?.id) return null;
+    if(String(a.id)===String(b.id)) return {edgeId:null,fromId:String(a.id),toId:String(b.id),distanceM:0};
+    const pa=graph.nodes.get(String(a.id)), pb=graph.nodes.get(String(b.id));
+    if(!pa||!pb) return null;
+    const distanceM=Math.max(0.05,haversineM(pa,pb));
+    const id=`dev36.3-interior-noding:${serial}`;
+    const edge={id,a:String(a.id),b:String(b.id),distanceM,geometry:[{lat:Number(pa.lat),lng:Number(pa.lng)},{lat:Number(pb.lat),lng:Number(pb.lng)}],wayIds:[],tagsSummary:{highway:['path'],foot:['yes'],diagnostic:['dev36.3-interior-noding']},topologyRepairConnector:true,productionGraphMutated:false,repairClassification:'interior-geometric-crossing',repairGapM:distanceM};
+    graph.edges.set(id,edge);
+    if(!graph.adjacency.has(String(a.id))) graph.adjacency.set(String(a.id),[]);
+    if(!graph.adjacency.has(String(b.id))) graph.adjacency.set(String(b.id),[]);
+    graph.adjacency.get(String(a.id)).push({edgeId:id,to:String(b.id)});
+    graph.adjacency.get(String(b.id)).push({edgeId:id,to:String(a.id)});
+    return {edgeId:id,fromId:String(a.id),toId:String(b.id),distanceM};
+  }
+
+  function interiorNodingRescueOnGraph(baseGraph,startId,endId,a,b,options={}){
+    const A=asLatLng(a),B=asLatLng(b);
+    if(!baseGraph?.nodes?.has?.(String(startId))||!baseGraph?.nodes?.has?.(String(endId))||!A||!B) return {available:false,reason:'missing-graph-or-endpoints',productionGraphMutated:false};
+    const speedMps=clamp(options.speedMps,0.5,2.5,1.25), straightM=haversineM(A,B);
+    const baseline=dijkstraTimes(baseGraph,String(startId),speedMps,false), baselineTimeS=Number(baseline.dist.get(String(endId)));
+    if(!Number.isFinite(baselineTimeS)) return {available:false,reason:'baseline-disconnected',productionGraphMutated:false};
+    const baselineM=baselineTimeS*speedMps, specs=discoverInteriorNodingCandidates(baseGraph,A,B,options), minImprovementM=Math.max(20,Number(options.minImprovementM||120));
+    let best=null,tested=0;
+    for(let i=0;i<specs.length;i+=1){
+      const graph=cloneFineGraphForExperimentalUse(baseGraph); if(!graph) continue;
+      const connector=addInteriorNodingConnector(graph,specs[i],i+1); if(!connector) continue;
+      tested+=1;
+      const route=dijkstraTimes(graph,String(startId),speedMps,false), timeS=Number(route.dist.get(String(endId)));
+      if(!Number.isFinite(timeS)) continue;
+      const path=reconstructDijkstra(graph,route.prev,String(startId),String(endId)); if(!path?.points?.length) continue;
+      path.walkSeconds=timeS; const distanceM=Number(path.distanceM||timeS*speedMps), improvementM=baselineM-distanceM, ratio=straightM>0?distanceM/straightM:Infinity;
+      if(distanceM+0.5<straightM*0.95||improvementM<minImprovementM) continue;
+      const row={graph,spec:specs[i],connector,path,distanceM,improvementM,ratio}; if(!best||row.distanceM<best.distanceM) best=row;
+    }
+    return {available:true,accepted:Boolean(best),baselineDistanceM:baselineM,straightM,candidateCount:specs.length,testedCount:tested,best,productionGraphMutated:false};
+  }
+
+  function makeInteriorNodingCandidate(kind,path,meta={}){
+    const isShade=kind==='interior-repair-shade', id=isShade?'graph-interior-repair-min-sun':'graph-interior-repair-fastest', hash=geometryHash(path?.points||[]);
+    return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,graphMeta:Object.assign({backend:'osm-interior-noding-repair',topologyRepair:true,productionGraphMutated:false},meta)};
+  }
+
+  async function runInteriorNodingRescue(a,b,options={}){
+    const state=lastGraphDebug;
+    if(!state?.graph||!state?.snapA?.id||!state?.snapB?.id) return {available:false,reason:'no-live-osm-graph',candidates:[],productionGraphMutated:false};
+    if(state.endpoint==='nationwide-hgr2'||state.nationwide===true) return {available:false,reason:'live-osm-required',candidates:[],productionGraphMutated:false};
+    const topo=interiorNodingRescueOnGraph(state.graph,state.snapA.id,state.snapB.id,a,b,options);
+    if(!topo?.accepted||!topo.best) return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
+    const meta={connectorGapM:Number(topo.best.connector?.distanceM||0),connectorClassification:topo.best.spec?.classification||'interior-geometric-crossing',connectorFromHighway:topo.best.spec?.fromHighway||null,connectorToHighway:topo.best.spec?.toHighway||null,baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'high-exact-intersection',productionGraphMutated:false};
+    if(options.fastestOnly===true) return Object.assign({},topo,{candidates:[makeInteriorNodingCandidate('interior-repair-fastest',topo.best.path,meta)],productionGraphMutated:false});
+    const searched=await runExperimentalSearchOnClone(topo.best.graph,state.snapA.id,state.snapB.id,options);
+    if(!searched?.available) return Object.assign({},topo,{candidates:[makeInteriorNodingCandidate('interior-repair-fastest',topo.best.path,meta)],searchReason:searched?.reason||null,productionGraphMutated:false});
+    const candidates=[];
+    if(searched.fastest?.points?.length) candidates.push(makeInteriorNodingCandidate('interior-repair-fastest',searched.fastest,meta));
+    if(searched.minSun?.points?.length&&!sameGraphPathGeometry(searched.minSun,searched.fastest)) candidates.push(makeInteriorNodingCandidate('interior-repair-shade',searched.minSun,meta));
+    return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+  }
+
+  function copyGraphIntoRescueUnion(union,graph,prefix,source){
+    const nodeMap=new Map();
+    for(const [id0,node] of graph?.nodes||[]){const id=`${prefix}${String(id0)}`;nodeMap.set(String(id0),id);union.nodes.set(id,Object.assign({},node,{id,rescueSource:source,sourceNodeId:String(id0)}));union.adjacency.set(id,[]);}
+    for(const [eid0,e0] of graph?.edges||[]){const a=nodeMap.get(String(e0.a)),b=nodeMap.get(String(e0.b));if(!a||!b) continue;const id=`${prefix}e:${String(eid0)}`;const e=Object.assign({},e0,{id,a,b,geometry:(e0.geometry||[]).map((q)=>({lat:Number(q.lat),lng:Number(q.lng)})),wayIds:(e0.wayIds||[]).slice(),tagsSummary:e0.tagsSummary?JSON.parse(JSON.stringify(e0.tagsSummary)):{},rescueSource:source,sourceEdgeIdOriginal:String(eid0),productionGraphMutated:false});union.edges.set(id,e);union.adjacency.get(a).push({edgeId:id,to:b});union.adjacency.get(b).push({edgeId:id,to:a});}
+    return nodeMap;
+  }
+
+  function addRescueEndpoint(union,id,point,nodeIds){
+    const P=asLatLng(point); if(!P) return null;
+    union.nodes.set(id,{id,lat:P.lat,lng:P.lng,virtual:true,rescueSuperEndpoint:true});union.adjacency.set(id,[]);
+    let k=0;
+    for(const targetId of nodeIds){const n=union.nodes.get(String(targetId));if(!n) continue;const eid=`${id}:attach:${++k}`,distanceM=0.05;const e={id:eid,a:id,b:String(targetId),distanceM,geometry:[{lat:P.lat,lng:P.lng},{lat:Number(n.lat),lng:Number(n.lng)}],wayIds:[],tagsSummary:{highway:['path'],foot:['yes'],diagnostic:['dev36.3-source-endpoint']},rescueSource:'super',productionGraphMutated:false};union.edges.set(eid,e);union.adjacency.get(id).push({edgeId:eid,to:String(targetId)});union.adjacency.get(String(targetId)).push({edgeId:eid,to:id});}
+    return id;
+  }
+
+  function discoverCrossSourceEndpointCandidates(union,a,b,options={}){
+    const A=asLatLng(a),B=asLatLng(b); if(!A||!B) return [];
+    const touchMaxM=Math.max(0.5,Number(options.touchMaxM??3.5)),reviewMaxM=Math.max(touchMaxM,Number(options.reviewMaxM??8)),corridorM=Math.max(20,Number(options.corridorM??150)),maxCandidates=Math.max(4,Number(options.maxCandidates??48));
+    const edges=Array.from(union.edges.values()).filter((e)=>e.rescueSource==='osm'||e.rescueSource==='overture');
+    const out=[];
+    for(const [nodeId,node] of union.nodes){
+      const source=node?.rescueSource; if(source!=='osm'&&source!=='overture') continue;
+      if(localNodingCorridorDistanceM(node,A,B)>corridorM+1e-9) continue;
+      const ownRefs=(union.adjacency.get(nodeId)||[]).filter((r)=>union.edges.get(String(r.edgeId))?.rescueSource===source);
+      if(ownRefs.length!==1) continue;
+      const incident=union.edges.get(String(ownRefs[0].edgeId)); if(!incident) continue;
+      const targetSource=source==='osm'?'overture':'osm';
+      for(const target of edges){
+        if(target.rescueSource!==targetSource) continue;
+        const hit=nearestPointOnGeometry(node,target.geometry),gapM=Number(hit?.distanceM??Infinity);
+        if(!Number.isFinite(gapM)||gapM>reviewMaxM+1e-9||!hit?.point) continue;
+        const cd=Math.max(localNodingCorridorDistanceM(node,A,B),localNodingCorridorDistanceM(hit.point,A,B)); if(cd>corridorM+1e-9) continue;
+        if(!localNodingGradeCompatible(incident,target)) continue;
+        out.push({nodeId:String(nodeId),source,targetSource,targetEdgeId:String(target.id),targetPoint:{lat:Number(hit.point.lat),lng:Number(hit.point.lng)},gapM,corridorDistanceM:cd,autoEligible:gapM<=touchMaxM+1e-9,classification:gapM<=touchMaxM+1e-9?'cross-source-near-touch':'cross-source-gap-review',fromHighway:primaryHighway(incident),toHighway:primaryHighway(target),score:gapM*20+cd});
+      }
+    }
+    out.sort((x,y)=>x.score-y.score||x.gapM-y.gapM);
+    const seen=new Set(),rows=[];
+    for(const r of out){const key=`${r.nodeId}|${r.targetEdgeId}`;if(seen.has(key)) continue;seen.add(key);rows.push(r);if(rows.length>=maxCandidates) break;}
+    return rows;
+  }
+
+  function addCrossSourceConnector(graph,spec,serial=1){
+    const fromId=String(spec?.nodeId||''),from=graph.nodes.get(fromId); if(!from) return null;
+    let targetId=String(spec?.targetEdgeId||'');
+    if(!graph.edges.has(targetId)){
+      let best=null;
+      for(const e of graph.edges.values()){
+        if(e.rescueSource!==spec.targetSource) continue;
+        const hit=nearestPointOnGeometry(spec.targetPoint,e.geometry); if(!hit?.point) continue;
+        if(!best||hit.distanceM<best.distanceM) best={edge:e,hit,distanceM:hit.distanceM};
+      }
+      if(!best||best.distanceM>2.5) return null;
+      targetId=String(best.edge.id);
+    }
+    const target=splitSpecificFineEdgeAtPoint(graph,targetId,spec.targetPoint,`xsrc:${serial}`); if(!target?.id||String(target.id)===fromId) return null;
+    const to=graph.nodes.get(String(target.id)); if(!to) return null;
+    const distanceM=Math.max(0.05,haversineM(from,to)),id=`dev36.3-xsrc:${serial}`;
+    const edge={id,a:fromId,b:String(target.id),distanceM,geometry:[{lat:Number(from.lat),lng:Number(from.lng)},{lat:Number(to.lat),lng:Number(to.lng)}],wayIds:[],tagsSummary:{highway:['path'],foot:['yes'],diagnostic:['dev36.3-cross-source']},rescueSource:'cross-source',crossSourceConnector:true,productionGraphMutated:false,repairClassification:spec.classification,repairGapM:Number(spec.gapM||distanceM)};
+    graph.edges.set(id,edge);if(!graph.adjacency.has(fromId))graph.adjacency.set(fromId,[]);if(!graph.adjacency.has(String(target.id)))graph.adjacency.set(String(target.id),[]);graph.adjacency.get(fromId).push({edgeId:id,to:String(target.id)});graph.adjacency.get(String(target.id)).push({edgeId:id,to:fromId});
+    return {edgeId:id,fromId,toId:String(target.id),distanceM,source:spec.source,targetSource:spec.targetSource};
+  }
+
+  function crossSourceCorridorRescueOnGraphs(primaryGraph,primarySnapA,primarySnapB,secondaryGraph,a,b,options={}){
+    const A=asLatLng(a),B=asLatLng(b); if(!primaryGraph?.edges?.size||!secondaryGraph?.edges?.size||!primarySnapA?.id||!primarySnapB?.id||!A||!B) return {available:false,reason:'missing-cross-source-input',productionGraphMutated:false};
+    const secondary=cloneFineGraphForExperimentalUse(secondaryGraph); if(!secondary) return {available:false,reason:'secondary-clone-failed',productionGraphMutated:false};
+    const snapMaxM=Math.max(20,Number(options.snapMaxM||config.snapMaxM||120));
+    const secondarySnapA=snapPointIntoFineGraph(secondary,A,'xsrc-A',snapMaxM),secondarySnapB=snapPointIntoFineGraph(secondary,B,'xsrc-B',snapMaxM);
+    if(!secondarySnapA||!secondarySnapB) return {available:false,reason:'secondary-snap-failed',productionGraphMutated:false};
+    const union={nodes:new Map(),edges:new Map(),adjacency:new Map(),experimentalClone:true,productionGraphMutated:false,crossSourceUnion:true};
+    const pMap=copyGraphIntoRescueUnion(union,primaryGraph,'osm:','osm'),sMap=copyGraphIntoRescueUnion(union,secondary,'ov:','overture');
+    const specs=discoverCrossSourceEndpointCandidates(union,A,B,options),auto=specs.filter((x)=>x.autoEligible===true);
+    const startId='dev36.3-super:A',endId='dev36.3-super:B';
+    addRescueEndpoint(union,startId,A,[pMap.get(String(primarySnapA.id)),sMap.get(String(secondarySnapA.id))].filter(Boolean));
+    addRescueEndpoint(union,endId,B,[pMap.get(String(primarySnapB.id)),sMap.get(String(secondarySnapB.id))].filter(Boolean));
+    const speedMps=clamp(options.speedMps,0.5,2.5,1.25),straightM=haversineM(A,B),baseline=dijkstraTimes(union,startId,speedMps,false),baselineTimeS=Number(baseline.dist.get(endId));
+    if(!Number.isFinite(baselineTimeS)) return {available:false,reason:'union-baseline-disconnected',candidateCount:specs.length,autoEligibleCount:auto.length,productionGraphMutated:false};
+    const baselineM=baselineTimeS*speedMps,minImprovementM=Math.max(20,Number(options.minImprovementM||120)),pairPool=Math.min(auto.length,Math.max(2,Number(options.pairPool||10))),maxTests=Math.max(4,Number(options.maxTests||64));
+    const combos=[];for(let i=0;i<auto.length&&combos.length<maxTests;i+=1) combos.push([auto[i]]);
+    for(let i=0;i<pairPool&&combos.length<maxTests;i+=1) for(let j=i+1;j<pairPool&&combos.length<maxTests;j+=1) combos.push([auto[i],auto[j]]);
+    let best=null,tested=0;
+    for(let ci=0;ci<combos.length;ci+=1){const graph=cloneFineGraphForExperimentalUse(union);if(!graph)continue;const connectors=[];let ok=true;for(let k=0;k<combos[ci].length;k+=1){const c=addCrossSourceConnector(graph,combos[ci][k],ci*3+k+1);if(!c){ok=false;break;}connectors.push(c);}if(!ok)continue;tested+=1;const route=dijkstraTimes(graph,startId,speedMps,false),timeS=Number(route.dist.get(endId));if(!Number.isFinite(timeS))continue;const path=reconstructDijkstra(graph,route.prev,startId,endId);if(!path?.points?.length)continue;path.walkSeconds=timeS;const distanceM=Number(path.distanceM||timeS*speedMps),improvementM=baselineM-distanceM,ratio=straightM>0?distanceM/straightM:Infinity;if(distanceM+0.5<straightM*0.95||improvementM<minImprovementM)continue;const row={graph,specs:combos[ci],connectors,path,distanceM,improvementM,ratio};if(!best||row.distanceM<best.distanceM)best=row;}
+    return {available:true,accepted:Boolean(best),baselineDistanceM:baselineM,straightM,candidateCount:specs.length,autoEligibleCount:auto.length,reviewOnlyCount:specs.length-auto.length,testedCount:tested,startId,endId,secondarySnapA,secondarySnapB,best,productionGraphMutated:false};
+  }
+
+  function makeCrossSourceCandidate(kind,path,meta={}){
+    const isShade=kind==='cross-source-shade',id=isShade?'graph-cross-source-min-sun':'graph-cross-source-fastest',hash=geometryHash(path?.points||[]);
+    return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,graphMeta:Object.assign({backend:'osm-overture-cross-source',crossSourceRescue:true,productionGraphMutated:false},meta)};
+  }
+
+  async function runCrossSourceCorridorRescue(a,b,secondaryGraph,options={}){
+    const state=lastGraphDebug;
+    if(!state?.graph||!state?.snapA?.id||!state?.snapB?.id) return {available:false,reason:'no-live-osm-graph',candidates:[],productionGraphMutated:false};
+    if(state.endpoint==='nationwide-hgr2'||state.nationwide===true) return {available:false,reason:'live-osm-required',candidates:[],productionGraphMutated:false};
+    const topo=crossSourceCorridorRescueOnGraphs(state.graph,state.snapA,state.snapB,secondaryGraph,a,b,options);
+    if(!topo?.accepted||!topo.best) return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
+    const gaps=(topo.best.specs||[]).map((x)=>Number(x.gapM||0));
+    const meta={connectorCount:Number(topo.best.connectors?.length||0),connectorGapMaxM:gaps.length?Math.max(...gaps):0,connectorGapMeanM:gaps.length?gaps.reduce((a0,x)=>a0+x,0)/gaps.length:0,connectorClassification:'osm-overture-near-touch',baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'independent-source-near-touch',productionGraphMutated:false};
+    if(options.fastestOnly===true) return Object.assign({},topo,{candidates:[makeCrossSourceCandidate('cross-source-fastest',topo.best.path,meta)],productionGraphMutated:false});
+    const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,options);
+    if(!searched?.available) return Object.assign({},topo,{candidates:[makeCrossSourceCandidate('cross-source-fastest',topo.best.path,meta)],searchReason:searched?.reason||null,productionGraphMutated:false});
+    const candidates=[];if(searched.fastest?.points?.length)candidates.push(makeCrossSourceCandidate('cross-source-fastest',searched.fastest,meta));if(searched.minSun?.points?.length&&!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(makeCrossSourceCandidate('cross-source-shade',searched.minSun,meta));
+    return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+  }
+
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
   // source-gap connectors already justified by dev16 route-support transitions
   // and dev17 raw-OSM evidence. The production graph is never mutated.
@@ -6172,6 +6417,8 @@
     runMatureEngineBenchmark,
     fetchValhallaPedestrianRoute,
     runAutoLocalNodingRescue,
+    runInteriorNodingRescue,
+    runCrossSourceCorridorRescue,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -6252,6 +6499,15 @@
       addAutoLocalNodingConnector,
       localNodingRescueOnGraph,
       runAutoLocalNodingRescue,
+      segmentIntersectionPoint,
+      discoverInteriorNodingCandidates,
+      addInteriorNodingConnector,
+      interiorNodingRescueOnGraph,
+      runInteriorNodingRescue,
+      discoverCrossSourceEndpointCandidates,
+      addCrossSourceConnector,
+      crossSourceCorridorRescueOnGraphs,
+      runCrossSourceCorridorRescue,
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,

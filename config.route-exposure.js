@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.2 Local-Noding Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.3 Interior + Cross-Source Corridor Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -57,6 +57,19 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     autoLocalNodingCorridorM: 120,
     autoLocalNodingMinImprovementM: 120,
     autoLocalNodingMaxCandidates: 48,
+    // dev36.3: next bounded rescue layers after endpoint-to-edge noding fails.
+    interiorNodingRescue: true,
+    interiorNodingCorridorM: 140,
+    interiorNodingMinImprovementM: 120,
+    interiorNodingMaxCandidates: 36,
+    crossSourceCorridorRescue: true,
+    crossSourceTouchMaxM: 3.5,
+    crossSourceReviewMaxM: 8,
+    crossSourceCorridorM: 160,
+    crossSourceMinImprovementM: 120,
+    crossSourceMaxCandidates: 48,
+    crossSourcePairPool: 10,
+    crossSourceMaxTests: 64,
     conditionalPrivateAccessProbe: true,
     conditionalPrivateAccessMinImprovementM: 120,
     conditionalPrivateTerminalBufferM: 350,
