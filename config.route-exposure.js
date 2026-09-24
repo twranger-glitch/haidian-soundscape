@@ -1,8 +1,10 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.2 Stable Semantic Shade Cache */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.3 Bounded Parallel Dense Scoring */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
   shadeConcurrency: 3,
+  // dev35.3: score at most two final candidates in parallel; each retains the existing 3-way sample pool.
+  denseCandidateConcurrency: 2,
   canopyTimeoutMs: 4200,
   heatNearNowMinutes: 90,
   routingBase: "https://routing.openstreetmap.de/routed-foot/route/v1/driving",
