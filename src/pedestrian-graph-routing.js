@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.0 (dev32 correctness + dev34.5 connectivity locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.1 (dev32 correctness + dev34.5 connectivity locked + session shade warm cache)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev35.0";
+  const VERSION = "v9.0.0-dev35.1";
 
   const DEFAULTS = {
     enabled: true,
@@ -83,6 +83,13 @@
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
+    // dev35.1: safe cross-analysis warm reuse. Entries are namespaced by the
+    // current ShadeMap route-model token + edge-sampling semantics, retained
+    // only for reliable (non-partial) shade results, and bounded in-session.
+    sessionShadeWarmCacheEnabled: true,
+    sessionShadeWarmCacheTtlMs: 30 * 60 * 1000,
+    sessionShadeWarmCacheMaxEntries: 5000,
+    sessionShadeWarmCacheMaxNamespaces: 4,
     // dev32: replay the temporal winner at exact edge-midpoint times and expose
     // a bounded A/B correctness audit without changing production selection.
     candidateCorrectnessExactReplayEnabled: true,
@@ -109,6 +116,10 @@
   let lastRouteEdges = { fastest: new Set(), minSun: new Set() };
   const lastShadeDebug = new Map();
   const graphCache = new Map();
+  // dev35.1: browser-session shade cache. Production searches still receive a
+  // per-analysis Map; this store only seeds/commits reliable resolved values so
+  // a transient canopy/building partial result can never poison a later query.
+  const sessionShadeWarmCaches = new Map();
   let lastOrderedMapMatchFailure = null;
 
   function nowMs() {
@@ -804,14 +815,18 @@
     const models = await runPool(samples, context.shadeConcurrency, async (p) => {
       return window.HaidianShade.analyzeShadeModelAt(p.lat, p.lng, at, { canopyTimeoutMs: context.canopyTimeoutMs });
     });
-    let sun = 0, shade = 0, night = 0;
+    let sun = 0, shade = 0, night = 0, partial = 0;
     for (const model of models) {
       if (model?.state === "night") night += 1;
       else if (model?.shaded === true) shade += 1;
       else sun += 1;
+      if (model?.reliability === "partial") partial += 1;
     }
     const total = models.length || 1;
-    return { directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, samples: total };
+    return {
+      directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, samples: total,
+      partialSamples: partial, cacheSafe: partial === 0
+    };
   }
 
   function denseShadeSegmentsForPath(graph, steps, spacingM) {
@@ -983,6 +998,110 @@
     // Shade fraction is a property of the physical edge geometry + time bucket.
     // Traversal direction only reverses sample order and must not duplicate work.
     return `${String(edge?.id)}|${Number(bucket)}`;
+  }
+
+  function sessionShadeWarmCacheNamespace(context = {}) {
+    if (context.enabled === false || config.sessionShadeWarmCacheEnabled === false) return null;
+    const modelToken = String(context.modelToken || "").trim();
+    if (!modelToken || context.modelReady === false) return null;
+    const bucketSec = Math.max(30, Number(context.shadeTimeBucketSec || config.shadeTimeBucketSec || 60));
+    const spacingM = Math.max(1, Number(context.shadeSampleSpacingM || config.shadeSampleSpacingM || 18));
+    const maxSamples = Math.max(1, Number(context.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge || 5));
+    return JSON.stringify({
+      revision: "dev35.1-edge-sun-v1",
+      modelToken,
+      bucketSec,
+      spacingM,
+      maxSamples
+    });
+  }
+
+  function pruneSessionShadeWarmCaches(now = Date.now(), options = {}) {
+    const ttlMs = Math.max(1000, Number(options.ttlMs || config.sessionShadeWarmCacheTtlMs || 30 * 60 * 1000));
+    const maxNamespaces = Math.max(1, Number(options.maxNamespaces || config.sessionShadeWarmCacheMaxNamespaces || 4));
+    for (const [namespace, record] of Array.from(sessionShadeWarmCaches.entries())) {
+      if (!record || now - Number(record.lastUsedAt || record.createdAt || 0) > ttlMs) sessionShadeWarmCaches.delete(namespace);
+    }
+    if (sessionShadeWarmCaches.size > maxNamespaces) {
+      const ordered = Array.from(sessionShadeWarmCaches.entries()).sort((a,b)=>Number(a[1]?.lastUsedAt||0)-Number(b[1]?.lastUsedAt||0));
+      while (ordered.length && sessionShadeWarmCaches.size > maxNamespaces) sessionShadeWarmCaches.delete(ordered.shift()[0]);
+    }
+  }
+
+  function acquireSessionShadeWarmCache(context = {}) {
+    const namespace = sessionShadeWarmCacheNamespace(context);
+    const localCache = new Map();
+    if (!namespace) {
+      return { enabled:false, reason: context.modelReady === false ? 'model-not-ready' : 'disabled-or-no-model-token', namespace:null, cache:localCache, seeded:0, namespaceEntriesBefore:0 };
+    }
+    const now = Date.now();
+    const ttlMs = Math.max(1000, Number(context.ttlMs || config.sessionShadeWarmCacheTtlMs || 30 * 60 * 1000));
+    const maxEntries = Math.max(100, Number(context.maxEntries || config.sessionShadeWarmCacheMaxEntries || 5000));
+    const maxNamespaces = Math.max(1, Number(context.maxNamespaces || config.sessionShadeWarmCacheMaxNamespaces || 4));
+    pruneSessionShadeWarmCaches(now, { ttlMs, maxNamespaces });
+    let record = sessionShadeWarmCaches.get(namespace);
+    if (!record) {
+      record = { entries:new Map(), createdAt:now, lastUsedAt:now };
+      sessionShadeWarmCaches.set(namespace, record);
+    }
+    let seeded = 0, expired = 0;
+    for (const [key, row] of Array.from(record.entries.entries())) {
+      if (!row || now - Number(row.savedAt || 0) > ttlMs) { record.entries.delete(key); expired += 1; continue; }
+      localCache.set(key, Promise.resolve(row.value));
+      seeded += 1;
+    }
+    record.lastUsedAt = now;
+    return { enabled:true, reason:null, namespace, cache:localCache, seeded, expired, namespaceEntriesBefore:record.entries.size, ttlMs, maxEntries, maxNamespaces };
+  }
+
+  function shadeResultSafeForWarmCache(value) {
+    return Boolean(value && typeof value === 'object' && value.cacheSafe !== false && Number.isFinite(Number(value.directSunFraction)) && Number.isFinite(Number(value.shadedFraction)));
+  }
+
+  async function commitSessionShadeWarmCache(handle, localCache) {
+    if (!handle?.enabled || !handle.namespace || !localCache || typeof localCache.entries !== 'function') {
+      return { enabled:false, persisted:0, rejected:0, errors:0, namespaceEntriesAfter:0, reason:handle?.reason || 'disabled' };
+    }
+    const now = Date.now();
+    const ttlMs = Math.max(1000, Number(handle.ttlMs || config.sessionShadeWarmCacheTtlMs || 30 * 60 * 1000));
+    const maxEntries = Math.max(100, Number(handle.maxEntries || config.sessionShadeWarmCacheMaxEntries || 5000));
+    const maxNamespaces = Math.max(1, Number(handle.maxNamespaces || config.sessionShadeWarmCacheMaxNamespaces || 4));
+    pruneSessionShadeWarmCaches(now, { ttlMs, maxNamespaces });
+    let record = sessionShadeWarmCaches.get(handle.namespace);
+    if (!record) {
+      record = { entries:new Map(), createdAt:now, lastUsedAt:now };
+      sessionShadeWarmCaches.set(handle.namespace, record);
+    }
+    let persisted = 0, rejected = 0, errors = 0;
+    for (const [key, raw] of localCache.entries()) {
+      let value;
+      try { value = await Promise.resolve(raw); }
+      catch (_) { errors += 1; continue; }
+      if (!shadeResultSafeForWarmCache(value)) { rejected += 1; continue; }
+      record.entries.delete(key);
+      record.entries.set(key, { value, savedAt:now });
+      persisted += 1;
+    }
+    while (record.entries.size > maxEntries) record.entries.delete(record.entries.keys().next().value);
+    record.lastUsedAt = now;
+    pruneSessionShadeWarmCaches(now, { ttlMs, maxNamespaces });
+    return { enabled:true, persisted, rejected, errors, namespaceEntriesAfter:record.entries.size, namespaceCount:sessionShadeWarmCaches.size };
+  }
+
+  function getSessionShadeWarmCacheStats() {
+    let entries = 0;
+    const namespaces = [];
+    for (const [namespace, record] of sessionShadeWarmCaches.entries()) {
+      const size = Number(record?.entries?.size || 0); entries += size;
+      namespaces.push({ namespace, entries:size, lastUsedAt:Number(record?.lastUsedAt || 0) });
+    }
+    return { enabled:config.sessionShadeWarmCacheEnabled !== false, namespaceCount:sessionShadeWarmCaches.size, entries, namespaces };
+  }
+
+  function clearSessionShadeWarmCache() {
+    const entries = getSessionShadeWarmCacheStats().entries;
+    sessionShadeWarmCaches.clear();
+    return { clearedEntries:entries, namespaceCount:0 };
   }
 
   function temporalBucketsForEdge(edge, fromStart, toEnd, speedMps, detourLimitS, departureMs, bucketSec, maxBucketsPerEdge) {
@@ -5521,6 +5640,7 @@
 
   function clearCache() {
     graphCache.clear();
+    clearSessionShadeWarmCache();
     lastDiagnostics = null;
     lastGraphDebug = null;
     lastRouteEdges = { fastest: new Set(), minSun: new Set() };
@@ -5536,6 +5656,10 @@
     createExperimentalGraphClone,
     runExperimentalSearchOnClone,
     runCandidateCorrectnessAudit,
+    acquireSessionShadeWarmCache,
+    commitSessionShadeWarmCache,
+    getSessionShadeWarmCacheStats,
+    clearSessionShadeWarmCache,
     getDebugSnapshot: debugSnapshot,
     diagnosePolyline,
     replayPolyline,
@@ -5563,6 +5687,12 @@
       buildTemporalShadeTable,
       temporalBucketsForEdge,
       shadeCacheKey,
+      sessionShadeWarmCacheNamespace,
+      acquireSessionShadeWarmCache,
+      commitSessionShadeWarmCache,
+      getSessionShadeWarmCacheStats,
+      clearSessionShadeWarmCache,
+      shadeResultSafeForWarmCache,
       bboxForAB,
       routeDistanceM,
       routeSignature,

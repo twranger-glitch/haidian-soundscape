@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.0 Bounds Yield De-throttle */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.1 Session Shade Warm Cache */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -199,6 +199,11 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
+    // dev35.1: session-only, model-token-scoped warm reuse of reliable edge/time shade cells.
+    sessionShadeWarmCacheEnabled: true,
+    sessionShadeWarmCacheTtlMs: 1800000,
+    sessionShadeWarmCacheMaxEntries: 5000,
+    sessionShadeWarmCacheMaxNamespaces: 4,
     // dev32 correctness gates. Exact replay checks the temporal winner at true
     // traversal timestamps; full temporal-vs-on-demand A/B audit remains opt-in.
     candidateCorrectnessExactReplayEnabled: true,

@@ -7344,6 +7344,46 @@
     return false;
   }
 
+  function getRouteShadeCacheContext() {
+    const buildingMode = effectiveBuildingMode();
+    const modelReady = routeBuildingModelReady();
+    const pipeline = lastBuildingPipelineStatus || {};
+    const pipelineComplete = buildingMode !== 'pipeline' || (
+      pipeline.fetchComplete !== false && pipeline.coverageComplete !== false && !pipeline.error
+    );
+    const cacheable = Boolean(modelReady && pipelineComplete);
+    const workerDataVersion = buildingManifestCache && buildingManifestCache.__workerDataVersion || '';
+    const token = JSON.stringify({
+      revision: 'dev35.1-route-shade-model-v1',
+      mode: String(state.mode || ''),
+      buildingMode: String(buildingMode || ''),
+      buildingDataVersion: String(config.buildingDataVersion || ''),
+      workerDataVersion: String(workerDataVersion || ''),
+      buildingCoverageKey: String(lastBuildingCoverageKey || ''),
+      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+      pipelineMode: String(pipeline.mode || ''),
+      metaMode: String(config.metaMode || ''),
+      metaCogBaseUrl: String(config.metaCogBaseUrl || ''),
+      queryZoom: Number(config.queryZoom || 17),
+      queryCanopyFromCog: config.queryCanopyFromCog !== false,
+      sourceMaxDistanceM: Number(config.queryShadeSourceMaxDistanceM || 0),
+      sourceRayWidthM: Number(config.queryShadeSourceRayWidthM || 0),
+      sourceRayStepM: Number(config.queryShadeSourceRayStepM || 0),
+      sourceMinAltitudeDeg: Number(config.queryShadeSourceMinAltitudeDeg || 0)
+    });
+    return {
+      cacheable,
+      modelReady,
+      pipelineComplete,
+      token,
+      mode: String(state.mode || ''),
+      buildingMode: String(buildingMode || ''),
+      coverageKey: lastBuildingCoverageKey || null,
+      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+      workerDataVersion: String(workerDataVersion || '')
+    };
+  }
+
   function routePerfFinish(startedAt, result, error) {
     const endedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
     const elapsed = Math.max(0, endedAt - startedAt);
@@ -7559,6 +7599,7 @@
     analyzeShadeModelAt,
     getRouteDiagnostics,
     resetRouteDiagnostics,
+    getRouteShadeCacheContext,
     get state() {
       return Object.assign({}, state);
     },
