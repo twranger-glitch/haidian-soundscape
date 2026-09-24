@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev34.2 HGR2 Fetch Fallback
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev34.3 Core-first + Connectivity Fallback
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.2";
+  const VERSION = "v9.0.0-dev34.3";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -2544,7 +2544,8 @@
       const result = await api.loadGraphForPolyline(points, {
         marginM: overrides.marginM ?? config.nationwideTiles?.graphRouteBufferM ?? config.nationwideTiles?.routeBufferM,
         ring: overrides.ring ?? config.nationwideTiles?.graphNeighborRing ?? config.nationwideTiles?.neighborRing,
-        maxTiles: overrides.maxTiles ?? config.nationwideTiles?.maxGraphTilesPerRequest ?? config.nationwideTiles?.maxTilesPerRequest
+        maxTiles: overrides.maxTiles ?? config.nationwideTiles?.maxGraphTilesPerRequest ?? config.nationwideTiles?.maxTilesPerRequest,
+        preferHgr2: overrides.preferHgr2
       });
       result.loadStage = overrides.stage || null;
       lastNationwideGraphLoad = result;
@@ -2789,7 +2790,7 @@
     } else if (run?.reason || st.error) {
       body = `<span>最近一次未完成：${escapeHtml(run?.error || run?.reason || st.error || 'unknown')}。</span>`;
     }
-    return `<div class="re-method-note" data-re-dev34-regression><b>dev34.2 Nationwide Regression + HGR2→HGR1 Fetch Fallback：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
+    return `<div class="re-method-note" data-re-dev34-regression><b>dev34.3 Nationwide Regression · core-first + HGR1 connectivity fallback：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
   }
 
   function refreshNationwideRegressionPanel() {
@@ -2804,11 +2805,11 @@
   async function runNationwideRegressionLive() {
     const api = window.HaidianNationwideRegression;
     if (!api?.runMatrix) {
-      setStatus('dev34.2 nationwide regression 模組未載入。', 'warning');
+      setStatus('dev34.3 nationwide regression 模組未載入。', 'warning');
       return;
     }
     refreshNationwideRegressionPanel();
-    setStatus('dev34.2：開始執行全臺 regression matrix；這不會修改目前 production graph，也不會改變目前候選路線。', 'loading');
+    setStatus('dev34.3：開始執行全臺 regression matrix；這不會修改目前 production graph，也不會改變目前候選路線。', 'loading');
     try {
       const result = await api.runMatrix({
         onProgress: (info) => {
@@ -2818,13 +2819,13 @@
       });
       refreshNationwideRegressionPanel();
       if (!result?.available) {
-        setStatus(`dev34.2 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
+        setStatus(`dev34.3 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
         return;
       }
-      setStatus(`dev34.2 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
+      setStatus(`dev34.3 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
     } catch (error) {
       refreshNationwideRegressionPanel();
-      setStatus(`dev34.2 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev34.3 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     }
   }
 
@@ -2937,7 +2938,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.2 HGR2 fetch fallback regression</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.3 core-first + connectivity fallback regression</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -3165,62 +3166,103 @@
 
         if (config.nationwideTiles?.enabled !== false && config.nationwideTiles?.preferGraphRouting !== false && window.HaidianPedestrianGraph?.findRoutesOnExternalGraph) {
           const graphStarted = nowMs();
+          const routeLoadedNationwideStage = async (loaded, attempt, stage) => {
+            if (!loaded?.available || !loaded?.graph?.edges?.size) return [];
+            graphResult = await window.HaidianPedestrianGraph.findRoutesOnExternalGraph(aPoint, bPoint, loaded.graph, {
+              departure, speedMps, detourPct,
+              bbox: loaded.bbox,
+              snapMaxM: config.graphRouting?.snapMaxM,
+              maxFineEdgeM: config.graphRouting?.maxFineEdgeM,
+              pathMaxFineEdgeM: config.graphRouting?.pathMaxFineEdgeM,
+              externalGraphDetourPrune: config.graphRouting?.externalGraphDetourPrune,
+              externalGraphPruneSlackSec: config.graphRouting?.externalGraphPruneSlackSec,
+              shadeConcurrency: config.graphRouting?.shadeConcurrency,
+              shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
+              temporalShadeTableEnabled: config.graphRouting?.temporalShadeTableEnabled,
+              temporalShadeTableConcurrency: config.graphRouting?.temporalShadeTableConcurrency,
+              temporalShadeTableMaxBucketsPerEdge: config.graphRouting?.temporalShadeTableMaxBucketsPerEdge,
+              temporalShadeTableMaxEvaluations: config.graphRouting?.temporalShadeTableMaxEvaluations,
+              candidateCorrectnessExactReplayEnabled: config.graphRouting?.candidateCorrectnessExactReplayEnabled,
+              candidateCorrectnessExactReplayToleranceSec: config.graphRouting?.candidateCorrectnessExactReplayToleranceSec,
+              sharedShadeCache: sharedGraphShadeCache,
+              canopyTimeoutMs: config.canopyTimeoutMs,
+              maxExpandedStates: config.graphRouting?.maxExpandedStates,
+              maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
+              cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
+              yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded,
+              shouldCancel: () => serial !== analysisSerial,
+              onProgress: graphProgress
+            });
+            const candidates = Array.isArray(graphResult?.candidates) ? graphResult.candidates : [];
+            attempt.routed = candidates.length > 0;
+            attempt.routeReason = graphResult?.reason || null;
+            if (graphResult?.diagnostics) {
+              graphResult.diagnostics.nationwideLoadStage = stage.stage;
+              graphResult.diagnostics.nationwideLoadMarginM = stage.marginM;
+              graphResult.diagnostics.nationwideLoadRing = stage.ring;
+              graphResult.diagnostics.nationwideLoadedTileCount = attempt.loadedTileCount;
+              graphResult.diagnostics.nationwideTilePerformance = loaded?.performance || null;
+              graphResult.diagnostics.nationwideRequestedBackend = attempt.requestedBackend || null;
+              graphResult.diagnostics.nationwideConnectivityFallback = Boolean(attempt.connectivityFallback);
+            }
+            return candidates;
+          };
+
           for (const stage of nationwideGraphLoadStages()) {
             if (serial !== analysisSerial) return;
+            let primaryLoaded = null;
             try {
-              setStatus(`dev33：載入全臺 HGR2/HGR1 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
-              const loaded = await prefetchNationwideGraph(nationwideSeed, stage);
+              setStatus(`dev34.3：載入全臺 HGR2 核心路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
+              const loaded = await prefetchNationwideGraph(nationwideSeed, { ...stage, preferHgr2: true });
+              primaryLoaded = loaded;
               const attempt = {
                 stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
+                requestedBackend: 'hgr2', backend: loaded?.backend || null,
+                hgr2Fallback: Boolean(loaded?.hgr2Fallback), hgr2Error: loaded?.hgr2Error || null,
+                connectivityFallback: false,
                 loadedTileCount: Number(loaded?.loadedTileCount || 0),
                 nodeCount: Number(loaded?.nodeCount || 0), edgeCount: Number(loaded?.edgeCount || 0),
                 performance: loaded?.performance || null, routed: false
               };
               graphLoadAttempts.push(attempt);
-              if (loaded?.available && loaded?.graph?.edges?.size) {
-                graphResult = await window.HaidianPedestrianGraph.findRoutesOnExternalGraph(aPoint, bPoint, loaded.graph, {
-                  departure, speedMps, detourPct,
-                  bbox: loaded.bbox,
-                  snapMaxM: config.graphRouting?.snapMaxM,
-                  maxFineEdgeM: config.graphRouting?.maxFineEdgeM,
-                  pathMaxFineEdgeM: config.graphRouting?.pathMaxFineEdgeM,
-                  externalGraphDetourPrune: config.graphRouting?.externalGraphDetourPrune,
-                  externalGraphPruneSlackSec: config.graphRouting?.externalGraphPruneSlackSec,
-                  shadeConcurrency: config.graphRouting?.shadeConcurrency,
-                  shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
-                  temporalShadeTableEnabled: config.graphRouting?.temporalShadeTableEnabled,
-                  temporalShadeTableConcurrency: config.graphRouting?.temporalShadeTableConcurrency,
-                  temporalShadeTableMaxBucketsPerEdge: config.graphRouting?.temporalShadeTableMaxBucketsPerEdge,
-                  temporalShadeTableMaxEvaluations: config.graphRouting?.temporalShadeTableMaxEvaluations,
-                  candidateCorrectnessExactReplayEnabled: config.graphRouting?.candidateCorrectnessExactReplayEnabled,
-                  candidateCorrectnessExactReplayToleranceSec: config.graphRouting?.candidateCorrectnessExactReplayToleranceSec,
-                  sharedShadeCache: sharedGraphShadeCache,
-                  canopyTimeoutMs: config.canopyTimeoutMs,
-                  maxExpandedStates: config.graphRouting?.maxExpandedStates,
-                  maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
-                  cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
-                  yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded,
-                  shouldCancel: () => serial !== analysisSerial,
-                  onProgress: graphProgress
-                });
-                graphCandidates = Array.isArray(graphResult?.candidates) ? graphResult.candidates : [];
-                attempt.routed = graphCandidates.length > 0;
-                if (graphResult?.diagnostics) {
-                  graphResult.diagnostics.nationwideLoadStage = stage.stage;
-                  graphResult.diagnostics.nationwideLoadMarginM = stage.marginM;
-                  graphResult.diagnostics.nationwideLoadRing = stage.ring;
-                  graphResult.diagnostics.nationwideLoadedTileCount = attempt.loadedTileCount;
-                  graphResult.diagnostics.nationwideTilePerformance = loaded?.performance || null;
-                }
-                if (graphCandidates.length) break;
-              }
+              graphCandidates = await routeLoadedNationwideStage(loaded, attempt, stage);
+              if (graphCandidates.length) break;
             } catch (nationwideError) {
               if (nationwideError?.message === "ROUTE_ANALYSIS_CANCELLED") throw nationwideError;
-              console.warn(`[Haidian dev33 nationwide graph] stage ${stage.stage} unavailable; expanding if another stage exists.`, nationwideError);
+              console.warn(`[Haidian dev34.3 nationwide graph] HGR2 stage ${stage.stage} unavailable; checking fallback/next stage.`, nationwideError);
               lastGraphFailure = nationwideError?.message || String(nationwideError);
-              graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, error: lastGraphFailure, routed: false });
+              graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, requestedBackend:'hgr2', error: lastGraphFailure, routed: false });
+            }
+            if (graphCandidates.length) break;
+
+            // dev34.3: a successfully fetched HGR2 window may still be topologically
+            // disconnected. Probe mature HGR1 over the exact same bbox before
+            // widening the request. If the primary load already fell back to HGR1
+            // because HGR2 fetch/decode failed, do not duplicate that work.
+            if (primaryLoaded?.backend === 'nationwide-hgr2') {
+              try {
+                setStatus(`dev34.3：HGR2 stage ${stage.stage} 尚未連通；以同一範圍檢查 HGR1 fallback…`, "loading");
+                const loaded = await prefetchNationwideGraph(nationwideSeed, { ...stage, preferHgr2: false });
+                const attempt = {
+                  stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
+                  requestedBackend: 'hgr1', backend: loaded?.backend || null,
+                  connectivityFallback: true,
+                  loadedTileCount: Number(loaded?.loadedTileCount || 0),
+                  nodeCount: Number(loaded?.nodeCount || 0), edgeCount: Number(loaded?.edgeCount || 0),
+                  performance: loaded?.performance || null, routed: false
+                };
+                graphLoadAttempts.push(attempt);
+                graphCandidates = await routeLoadedNationwideStage(loaded, attempt, stage);
+                if (graphCandidates.length) break;
+              } catch (hgr1Error) {
+                if (hgr1Error?.message === "ROUTE_ANALYSIS_CANCELLED") throw hgr1Error;
+                console.warn(`[Haidian dev34.3 nationwide graph] HGR1 connectivity fallback stage ${stage.stage} unavailable; expanding if another stage exists.`, hgr1Error);
+                lastGraphFailure = hgr1Error?.message || String(hgr1Error);
+                graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, requestedBackend:'hgr1', connectivityFallback:true, error: lastGraphFailure, routed: false });
+              }
             }
           }
+
           perf.graphMs = nowMs() - graphStarted;
         }
 

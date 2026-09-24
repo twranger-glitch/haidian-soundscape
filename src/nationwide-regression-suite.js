@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.2
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.3
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.2";
+  const VERSION = "v9.0.0-dev34.3";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
@@ -197,7 +197,7 @@
 
   function normalizedGraphLoadStages(options = {}) {
     const raw = safeArray(options.graphLoadStages || config.graphLoadStages || rootConfig.nationwideTiles?.graphLoadStages);
-    const fallback = [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 1 }];
+    const fallback = [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 0 }, { marginM: 850, ring: 1 }];
     return (raw.length ? raw : fallback).map((stage, index) => ({
       stage: index + 1,
       marginM: Math.max(0, Number(stage?.marginM ?? 220) || 0),
@@ -208,11 +208,16 @@
   async function loadGraphStaged(a, b, env, options = {}) {
     const attempts = [];
     let lastLoad = null, lastPath = null;
-    for (const stage of normalizedGraphLoadStages(options)) {
+
+    async function probe(stage, preferHgr2, connectivityFallback = false) {
       let load = null, path = null, error = null;
       try {
         load = await loadGraphIndependent([a, b], env, {
-          preferHgr2: true,
+          preferHgr2,
+          // dev34.3: if this is the explicit connectivity fallback, do not let the
+          // HGR1 probe bounce back into HGR2. The first probe still keeps the
+          // dev34.2 fetch/decode -> HGR1 failover behavior.
+          fallbackToHgr1OnHgr2Error: preferHgr2,
           marginM: stage.marginM,
           ring: stage.ring,
           maxTiles: options.maxGraphTiles ?? config.maxGraphTiles,
@@ -223,8 +228,11 @@
         error = String(e?.message || e);
       }
       const connected = Boolean(path?.available) && Number(path?.snapA) <= Number(config.snapToleranceM) && Number(path?.snapB) <= Number(config.snapToleranceM);
+      const requestedBackend = preferHgr2 ? 'hgr2' : 'hgr1';
       attempts.push({
         stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
+        requestedBackend,
+        connectivityFallback: Boolean(connectivityFallback),
         backend: load?.backend || null,
         hgr2Fallback: Boolean(load?.hgr2Fallback),
         hgr2Error: load?.hgr2Error || null,
@@ -240,7 +248,21 @@
       });
       if (load) lastLoad = load;
       if (path) lastPath = path;
-      if (connected) return { available: true, graphLoad: load, path, stage, attempts, productionGraphMutated: false };
+      return { load, path, connected, error };
+    }
+
+    for (const stage of normalizedGraphLoadStages(options)) {
+      const primary = await probe(stage, true, false);
+      if (primary.connected) return { available: true, graphLoad: primary.load, path: primary.path, stage, attempts, productionGraphMutated: false };
+
+      // dev34.3: HGR2 being fetchable is not the same as HGR2 being connected
+      // for the current core window. Before widening the window, try the mature
+      // HGR1 graph over the exact same bbox. This is a backend fallback only;
+      // it does not change costs, detour limits, evidence, or production graph.
+      if (primary.load?.backend === 'nationwide-hgr2') {
+        const hgr1 = await probe(stage, false, true);
+        if (hgr1.connected) return { available: true, graphLoad: hgr1.load, path: hgr1.path, stage, attempts, productionGraphMutated: false };
+      }
     }
     return { available: false, graphLoad: lastLoad, path: lastPath, attempts, reason: lastPath?.reason || lastLoad?.reason || 'staged-graph-connectivity-failed', productionGraphMutated: false };
   }
@@ -252,9 +274,11 @@
     const graphLoad = staged.graphLoad;
     const path = staged.path || { available: false, reason: staged.reason || "disconnected" };
     const attemptText = safeArray(staged.attempts).map((x) => {
+      const requested = x.requestedBackend ? `-${String(x.requestedBackend).toUpperCase()}` : '';
       const backend = x.backend ? `/${x.backend.replace('nationwide-', '')}` : '';
-      const fallback = x.hgr2Fallback ? ` fallback(${x.hgr2Error || 'HGR2 error'})` : '';
-      return `S${x.stage}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${fallback}`;
+      const fallback = x.hgr2Fallback ? ` fetch-fallback(${x.hgr2Error || 'HGR2 error'})` : '';
+      const connectivity = x.connectivityFallback ? ' connectivity-fallback' : '';
+      return `S${x.stage}${requested}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${fallback}${connectivity}`;
     }).join(" | ");
     if (!graphLoad?.available) {
       checks.push(assert("graph-availability", !required || testCase.scopeProbe, attemptText || staged.reason || "no graph", required ? "required" : "informational"));
