@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.3 Bounded Parallel Dense Scoring */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.4 Late-ready Warm-cache Capture */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
