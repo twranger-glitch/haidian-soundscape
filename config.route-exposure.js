@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.4 Late-ready Warm-cache Capture */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.0 Route Stretch Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -33,6 +33,21 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
+  // dev36.0: do not accept an implausibly stretched first connected route as
+  // the local shortest-path truth.  Cross-check wider static stages, HGR1,
+  // live OSM, then probe the short A→B official-evidence corridor.
+  routeStretchRescue: {
+    enabled: true,
+    ratioThreshold: 2.4,
+    minExcessM: 250,
+    minStraightM: 60,
+    maxStraightM: 3000,
+    expandNationwideStages: true,
+    hgr1SameWindowCrossCheck: true,
+    overpassCrossCheck: true,
+    directEvidenceProbe: true,
+    directEvidenceMarginM: 260
+  },
   // v9.0.0-dev33: route-local official evidence discovery + detached fusion on top of the locked dev32 correctness runtime; preserves production graph isolation
   // connectors diagnostic/manual-review only, and can cross-check the same benchmark
   // against mature pedestrian routing engines. No connector is written into production.
