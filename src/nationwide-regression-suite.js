@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.1
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34";
+  const VERSION = "v9.0.0-dev34.1";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
@@ -26,6 +26,9 @@
     maxEvidenceTiles: 32,
     snapToleranceM: 140,
     requestTimeoutMs: 18000,
+    graphLoadStages: Array.isArray(rootConfig.nationwideTiles?.graphLoadStages) && rootConfig.nationwideTiles.graphLoadStages.length
+      ? rootConfig.nationwideTiles.graphLoadStages
+      : [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 1 }],
     cases: DEFAULT_CASES
   };
   const config = Object.assign({}, DEFAULTS, rootConfig.nationwideRegression || {});
@@ -171,20 +174,78 @@
     return { type: "Feature", id: "dev34-existing-edge", geometry: { type: "LineString", coordinates: edge.geometry.map((p) => [Number(p.lng), Number(p.lat)]) }, properties: { source: "nlma-sidewalk", sourceKey: "nlma-sidewalk", sourceFeatureId: "dev34-existing-edge", pedestrianAllowed: true, officialInventory: true } };
   }
 
+  function normalizedGraphLoadStages(options = {}) {
+    const raw = safeArray(options.graphLoadStages || config.graphLoadStages || rootConfig.nationwideTiles?.graphLoadStages);
+    const fallback = [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 1 }];
+    return (raw.length ? raw : fallback).map((stage, index) => ({
+      stage: index + 1,
+      marginM: Math.max(0, Number(stage?.marginM ?? 220) || 0),
+      ring: Math.max(0, Number(stage?.ring ?? 0) || 0)
+    }));
+  }
+
+  async function loadGraphStaged(a, b, env, options = {}) {
+    const attempts = [];
+    let lastLoad = null, lastPath = null;
+    for (const stage of normalizedGraphLoadStages(options)) {
+      let load = null, path = null, error = null;
+      try {
+        load = await loadGraphIndependent([a, b], env, {
+          preferHgr2: true,
+          marginM: stage.marginM,
+          ring: stage.ring,
+          maxTiles: options.maxGraphTiles ?? config.maxGraphTiles,
+          requestTimeoutMs: options.requestTimeoutMs ?? config.requestTimeoutMs
+        });
+        if (load?.available && load?.graph?.edges?.size) path = shortestPath(load.graph, a, b);
+      } catch (e) {
+        error = String(e?.message || e);
+      }
+      const connected = Boolean(path?.available) && Number(path?.snapA) <= Number(config.snapToleranceM) && Number(path?.snapB) <= Number(config.snapToleranceM);
+      attempts.push({
+        stage: stage.stage, marginM: stage.marginM, ring: stage.ring,
+        backend: load?.backend || null,
+        available: Boolean(load?.available),
+        loadedTileCount: Number(load?.loadedTileCount || 0),
+        nodeCount: Number(load?.graph?.nodes?.size || 0),
+        edgeCount: Number(load?.graph?.edges?.size || 0),
+        connected,
+        routeDistanceM: Number.isFinite(Number(path?.distanceM)) ? Number(path.distanceM) : null,
+        snapA: Number.isFinite(Number(path?.snapA)) ? Number(path.snapA) : null,
+        snapB: Number.isFinite(Number(path?.snapB)) ? Number(path.snapB) : null,
+        reason: error || path?.reason || (!load?.available ? load?.reason || 'graph-unavailable' : null)
+      });
+      if (load) lastLoad = load;
+      if (path) lastPath = path;
+      if (connected) return { available: true, graphLoad: load, path, stage, attempts, productionGraphMutated: false };
+    }
+    return { available: false, graphLoad: lastLoad, path: lastPath, attempts, reason: lastPath?.reason || lastLoad?.reason || 'staged-graph-connectivity-failed', productionGraphMutated: false };
+  }
+
   async function runCase(testCase, env, options = {}) {
     const started = nowMs(), checks = [], a = asPoint(testCase.a), b = asPoint(testCase.b);
     const required = testCase.required !== false;
-    const graphLoad = await loadGraphIndependent([a, b], env, { preferHgr2: true, requestTimeoutMs: options.requestTimeoutMs });
-    if (!graphLoad.available) {
-      checks.push(assert("graph-availability", !required || testCase.scopeProbe, graphLoad.reason || "no graph", required ? "required" : "informational"));
-      return { id: testCase.id, label: testCase.label, region: testCase.region, required, pass: checks.every((x) => x.severity !== "required" || x.pass), checks, graph: { available: false }, elapsedMs: nowMs() - started };
+    const staged = await loadGraphStaged(a, b, env, options);
+    const graphLoad = staged.graphLoad;
+    const path = staged.path || { available: false, reason: staged.reason || "disconnected" };
+    const attemptText = safeArray(staged.attempts).map((x) => `S${x.stage}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e ${x.connected ? "connected" : (x.reason || "no-route")}`).join(" | ");
+    if (!graphLoad?.available) {
+      checks.push(assert("graph-availability", !required || testCase.scopeProbe, attemptText || staged.reason || "no graph", required ? "required" : "informational"));
+      return { id: testCase.id, label: testCase.label, region: testCase.region, required, pass: checks.every((x) => x.severity !== "required" || x.pass), checks, graph: { available: false, attempts: staged.attempts }, elapsedMs: nowMs() - started };
     }
     const fpBefore = graphFingerprint(graphLoad.graph);
-    checks.push(assert("graph-availability", true, `${graphLoad.backend} ${graphLoad.loadedTileCount} tiles`));
+    checks.push(assert("graph-availability", true, `${graphLoad.backend} ${graphLoad.loadedTileCount} tiles; ${attemptText}`));
     checks.push(assert("graph-production-lock", graphLoad.graph?.productionGraphMutated !== true, "productionGraphMutated=false"));
-    const path = shortestPath(graphLoad.graph, a, b);
-    checks.push(assert("graph-connectivity", path.available && path.snapA <= config.snapToleranceM && path.snapB <= config.snapToleranceM, path.available ? `${Math.round(path.distanceM)}m; snap ${path.snapA.toFixed(1)}/${path.snapB.toFixed(1)}m` : path.reason));
-    const corridor = path.available && path.points.length >= 2 ? path.points : [a, b];
+    checks.push(assert("graph-connectivity", staged.available, staged.available ? `stage ${staged.stage.stage}; ${Math.round(path.distanceM)}m; snap ${path.snapA.toFixed(1)}/${path.snapB.toFixed(1)}m` : attemptText || path.reason));
+    if (!staged.available) {
+      return {
+        id: testCase.id, label: testCase.label, region: testCase.region, required,
+        pass: checks.every((x) => x.severity !== "required" || x.pass), checks,
+        graph: { available: true, backend: graphLoad.backend, loadedTileCount: graphLoad.loadedTileCount, nodes: graphLoad.graph.nodes.size, edges: graphLoad.graph.edges.size, attempts: staged.attempts },
+        elapsedMs: nowMs() - started
+      };
+    }
+    const corridor = path.points.length >= 2 ? path.points : [a, b];
     const evidence = await loadEvidenceIndependent(corridor, env, { requestTimeoutMs: options.requestTimeoutMs });
     checks.push(assert("evidence-load", evidence.available, `${evidence.loadedTileCount} tiles / ${evidence.collection?.features?.length || 0} features`));
     const discoveryApi = window.HaidianOfficialEvidenceDiscovery;
@@ -211,7 +272,7 @@
     return {
       id: testCase.id, label: testCase.label, region: testCase.region, required,
       pass: checks.every((x) => x.severity !== "required" || x.pass), checks,
-      graph: { backend: graphLoad.backend, loadedTileCount: graphLoad.loadedTileCount, nodes: graphLoad.graph.nodes.size, edges: graphLoad.graph.edges.size },
+      graph: { backend: graphLoad.backend, loadedTileCount: graphLoad.loadedTileCount, nodes: graphLoad.graph.nodes.size, edges: graphLoad.graph.edges.size, stage: staged.stage?.stage || null, marginM: staged.stage?.marginM ?? null, ring: staged.stage?.ring ?? null, attempts: staged.attempts },
       evidence: { loadedTileCount: evidence.loadedTileCount, featureCount: evidence.collection?.features?.length || 0 },
       discovery: { rawCandidateCount: discovery.rawCandidateCount || 0, verifiedGapCount: discovery.verifiedGapCount || 0, connectorCount: overlay.connectorCount || 0 },
       elapsedMs: nowMs() - started
@@ -257,5 +318,5 @@
   }
 
   function getState() { return { version: VERSION, status: state.status, error: state.error, lastRun: clone(state.lastRun), enabled: config.enabled !== false }; }
-  window.HaidianNationwideRegression = { version: VERSION, get config() { return Object.assign({}, config); }, runMatrix, getState, _internals: { graphFingerprint, shortestPath, loadGraphIndependent, loadEvidenceIndependent, syntheticExistingEdgeFeature, runCase } };
+  window.HaidianNationwideRegression = { version: VERSION, get config() { return Object.assign({}, config); }, runMatrix, getState, _internals: { graphFingerprint, shortestPath, loadGraphIndependent, loadEvidenceIndependent, syntheticExistingEdgeFeature, normalizedGraphLoadStages, loadGraphStaged, runCase } };
 })();
