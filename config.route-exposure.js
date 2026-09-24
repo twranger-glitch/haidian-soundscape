@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.0 Route Stretch Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.1 Controlled-Access Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -33,9 +33,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   routeQualityRepeatedCorridorMinSeparationM: 40,
   routeQualityMaxRepeatedCorridorM: 32,
   routeQualityOppositeHeadingDeg: 155,
-  // dev36.0: do not accept an implausibly stretched first connected route as
-  // the local shortest-path truth.  Cross-check wider static stages, HGR1,
-  // live OSM, then probe the short A→B official-evidence corridor.
+  // dev36.1: extreme route stretch is first diagnosed with cheap topology-only
+  // probes. If the strict public graph still detours, a detached live-OSM rescue
+  // may expose access=private ways only as conditional visitor access; it never
+  // allows foot=no/private and never accepts a private mid-route shortcut.
   routeStretchRescue: {
     enabled: true,
     ratioThreshold: 2.4,
@@ -44,7 +45,15 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     maxStraightM: 3000,
     expandNationwideStages: true,
     hgr1SameWindowCrossCheck: true,
+    topologyProbeFastestOnly: true,
+    earlyLiveProbeRatioThreshold: 4.0,
+    earlyLiveProbeMaxStraightM: 900,
     overpassCrossCheck: true,
+    conditionalPrivateAccessProbe: true,
+    conditionalPrivateAccessMinImprovementM: 120,
+    conditionalPrivateTerminalBufferM: 350,
+    matureValhallaProbe: true,
+    matureRescueMinImprovementM: 120,
     directEvidenceProbe: true,
     directEvidenceMarginM: 260
   },
@@ -207,6 +216,8 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     valhallaMinIntervalMs: 1100, // FOSSGIS public demo: keep at <= 1 request/sec
     graphHopperBenchmarkEndpoint: "https://graphhopper.com/api/1",
     graphHopperApiKey: "", // optional; leave blank to run Valhalla only
+    allowPrivateFootAccess: false,
+    conditionalPrivateTerminalBufferM: 350,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,

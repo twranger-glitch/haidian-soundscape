@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.4 (dev32 correctness + dev34.5 connectivity locked + stable semantic shade warm cache)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.1 (controlled-access rescue + cheap topology probes; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev35.4";
+  const VERSION = "v9.0.0-dev36.1";
 
   const DEFAULTS = {
     enabled: true,
@@ -75,6 +75,14 @@
     valhallaMinIntervalMs: 1100, // public FOSSGIS demo fair-use: <= 1 request/sec
     graphHopperBenchmarkEndpoint: "https://graphhopper.com/api/1",
     graphHopperApiKey: "",
+    // dev36.1: route-stretch rescue may build a detached live-OSM graph that
+    // includes access=private ways only when foot is not explicitly blocked.
+    // This is never the default production graph and every resulting route is
+    // labelled conditional-access in the UI. A rescue route is accepted only
+    // when private segments stay near A or B, so private land is not used as a
+    // mid-route shortcut.
+    allowPrivateFootAccess: false,
+    conditionalPrivateTerminalBufferM: 350,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -302,6 +310,70 @@
     return "road";
   }
 
+  function pathAccessStats(graph, edgeIds = [], options = {}) {
+    let privateAccessDistanceM = 0;
+    let privateAccessEdgeCount = 0;
+    let totalDistanceM = 0;
+    const privateWayIds = new Set();
+    const ordered = [];
+    for (const edgeId of edgeIds || []) {
+      const edge = graph?.edges?.get?.(String(edgeId));
+      if (!edge) continue;
+      const distanceM = Math.max(0, Number(edge.distanceM || 0));
+      const accessValues = (edge.tagsSummary?.access || []).map(normalizedTag);
+      const footValues = (edge.tagsSummary?.foot || []).map(normalizedTag);
+      const explicitFootPublic = footValues.some((v) => ["yes", "designated", "permissive", "destination"].includes(v));
+      const isConditionalPrivate = accessValues.includes("private") && !explicitFootPublic;
+      ordered.push({ edgeId:String(edgeId), distanceM, isConditionalPrivate });
+      totalDistanceM += distanceM;
+      if (isConditionalPrivate) {
+        privateAccessDistanceM += distanceM;
+        privateAccessEdgeCount += 1;
+        for (const wayId of edge.wayIds || []) privateWayIds.add(String(wayId));
+      }
+    }
+    const terminalBufferM = Math.max(80, Number(options.terminalBufferM || 350));
+    // Avoid making a fixed 350 m terminal buffer vacuous on a 200–500 m route.
+    // We classify *contiguous private runs*: a run is terminal-safe only when it
+    // starts near A or ends near B. An isolated private shortcut in the middle
+    // therefore remains rejected even when the whole candidate is short.
+    const effectiveTerminalBufferM = Math.min(terminalBufferM, Math.max(60, totalDistanceM * 0.20));
+    const privateRuns = [];
+    let cursorM = 0;
+    let activeRun = null;
+    for (const item of ordered) {
+      const startM = cursorM;
+      const endM = cursorM + item.distanceM;
+      if (item.isConditionalPrivate) {
+        if (!activeRun) activeRun = { startM, endM, distanceM:item.distanceM, edgeCount:1 };
+        else { activeRun.endM = endM; activeRun.distanceM += item.distanceM; activeRun.edgeCount += 1; }
+      } else if (activeRun) {
+        privateRuns.push(activeRun); activeRun = null;
+      }
+      cursorM = endM;
+    }
+    if (activeRun) privateRuns.push(activeRun);
+    let privateAccessInteriorDistanceM = 0;
+    for (const run of privateRuns) {
+      const nearA = run.startM <= effectiveTerminalBufferM + 0.5;
+      const nearB = (totalDistanceM - run.endM) <= effectiveTerminalBufferM + 0.5;
+      run.terminalSafe = nearA || nearB;
+      if (!run.terminalSafe) privateAccessInteriorDistanceM += run.distanceM;
+    }
+    return {
+      usesConditionalPrivateAccess: privateAccessEdgeCount > 0,
+      privateAccessDistanceM,
+      privateAccessEdgeCount,
+      privateWayIds: Array.from(privateWayIds).slice(0, 24),
+      privateAccessTerminalBufferM: terminalBufferM,
+      privateAccessEffectiveTerminalBufferM: effectiveTerminalBufferM,
+      privateAccessRuns: privateRuns.slice(0, 12),
+      privateAccessInteriorDistanceM,
+      privateAccessTerminalOnly: privateAccessEdgeCount > 0 && privateAccessInteriorDistanceM <= 0.5,
+      totalPathDistanceM: totalDistanceM
+    };
+  }
+
   // v9.0.0-dev8+: terminal snapping is walking-first, not motor-road-first.
   // Distance remains a hard local constraint: pedestrian preference only breaks
   // ties among edges within a small slack of the geometrically nearest edge.
@@ -328,14 +400,21 @@
     return `${h} · 一般道路`;
   }
 
-  function isPedestrianWay(tags = {}) {
+  function isPedestrianWay(tags = {}, options = {}) {
     const highway = normalizedTag(tags.highway);
     if (!highway || highway === "construction" || highway === "proposed" || highway === "raceway") return false;
 
     const access = normalizedTag(tags.access);
     const foot = normalizedTag(tags.foot);
+    const allowPrivateFootAccess = options.allowPrivateFootAccess === true;
+    // Explicit pedestrian prohibition always wins, including rescue mode.
     if (["no", "private"].includes(foot)) return false;
-    if (["no", "private"].includes(access) && !["yes", "designated", "permissive", "destination"].includes(foot)) return false;
+    if (access === "no" && !["yes", "designated", "permissive", "destination"].includes(foot)) return false;
+    // Production/default semantics remain strict.  dev36.1 rescue may inspect a
+    // second, detached graph that includes access=private roads when OSM does
+    // not also say foot=no/private.  That route is surfaced as conditional
+    // (ticket/permission may be required), never silently promoted to public.
+    if (access === "private" && !["yes", "designated", "permissive", "destination"].includes(foot) && !allowPrivateFootAccess) return false;
 
     const blocked = new Set(["motorway", "motorway_link", "trunk", "trunk_link"]);
     if (blocked.has(highway) && !["yes", "designated", "permissive"].includes(foot)) return false;
@@ -348,13 +427,13 @@
     return allowed.has(highway) || ["yes", "designated", "permissive"].includes(foot);
   }
 
-  function parseOverpass(payload) {
+  function parseOverpass(payload, options = {}) {
     const nodes = new Map();
     const ways = [];
     for (const element of payload?.elements || []) {
       if (element.type === "node" && Number.isFinite(Number(element.lat)) && Number.isFinite(Number(element.lon))) {
         nodes.set(String(element.id), { id: String(element.id), lat: Number(element.lat), lng: Number(element.lon) });
-      } else if (element.type === "way" && Array.isArray(element.nodes) && element.nodes.length >= 2 && isPedestrianWay(element.tags || {})) {
+      } else if (element.type === "way" && Array.isArray(element.nodes) && element.nodes.length >= 2 && isPedestrianWay(element.tags || {}, options)) {
         ways.push({ id: String(element.id), nodes: element.nodes.map(String), tags: element.tags || {} });
       }
     }
@@ -3956,6 +4035,43 @@
     return result;
   }
 
+  // dev36.1: generic A→B mature-engine rescue. Unlike the forensic benchmark
+  // above, this does not require a hand-drawn reference shape. It is called only
+  // after the local/static/live OSM graph remains implausibly stretched.
+  async function fetchValhallaPedestrianRoute(a, b, options = {}) {
+    const A = asLatLng(a), B = asLatLng(b);
+    if (!A || !B) return { available:false, reason:'missing-endpoints' };
+    const endpoint = String(options.valhallaEndpoint || config.valhallaBenchmarkEndpoint || '').replace(/\/$/, '');
+    if (!endpoint) return { available:false, reason:'endpoint-missing' };
+    const timeoutMs = Number(options.timeoutMs || config.matureEngineTimeoutMs || 15000);
+    const headers = { 'Content-Type':'application/json', Accept:'application/json' };
+    const clientId = String(options.valhallaClientId || config.valhallaClientId || '').trim();
+    if (clientId) headers['X-Client-Id'] = clientId;
+    const request = {
+      locations:[{lat:A.lat,lon:A.lng},{lat:B.lat,lon:B.lng}],
+      costing:'pedestrian', shape_format:'geojson', directions_type:'none', units:'kilometers'
+    };
+    try {
+      const payload = await fetchJsonWithTimeout(`${endpoint}/route`, { method:'POST', mode:'cors', credentials:'omit', headers, body:JSON.stringify(request) }, timeoutMs, options.fetchImpl || null);
+      const points = extractValhallaPoints(payload);
+      if (points.length < 2) return { available:false, reason:'empty-route', endpoint };
+      const distanceM = routeDistanceM(points);
+      const summaryTime = Number(payload?.trip?.summary?.time);
+      const speedMps = Math.max(0.4, Number(options.speedMps) || 1.25);
+      return {
+        available:true, endpoint,
+        candidate:{
+          id:'valhalla-rescue', kind:'mature-rescue', label:'Valhalla 步行交叉驗證',
+          providerIndex:null, distanceM, durationS:Number.isFinite(summaryTime) && summaryTime > 0 ? summaryTime : distanceM / speedMps,
+          points, raw:null, matureEngine:{engine:'valhalla',endpoint,productionGraphMutated:false}
+        },
+        summary:{distanceM,durationS:Number.isFinite(summaryTime) ? summaryTime : null}
+      };
+    } catch (error) {
+      return { available:false, reason:error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)), endpoint };
+    }
+  }
+
   function engineBenchmarkManifest(route, startPoint, endPoint, sourceGapAudit, counterfactualAudit) {
     const shape = (route || []).map(asLatLng).filter(Boolean).map((p) => ({ lat: Number(p.lat), lon: Number(p.lng) }));
     const A = asLatLng(startPoint), B = asLatLng(endPoint);
@@ -5239,6 +5355,16 @@
     const fastestPath=reconstructDijkstra(full,fromA.prev,snapA.id,snapB.id);
     if(!fastestPath?.points?.length) return {available:false,reason:'hgr2-fastest-reconstruction-failed',candidates:[]};
     fastestPath.walkSeconds=fastestTime; const detourLimitS=fastestTime*(1+detourPct/100);
+    if(options.fastestOnly===true){
+      const accessStats=pathAccessStats(full,fastestPath.edgeIds||[], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      perf.totalMs=nowMs()-totalStarted;
+      lastShadeDebug.clear(); lastRouteEdges={fastest:new Set(fastestPath.edgeIds||[]),minSun:new Set()};
+      lastGraphDebug={graph:full,raw:null,contracted:null,snapA,snapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
+      const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:Object.assign({edgeIds:fastestPath.edgeIds,snapA,snapB,backend:'nationwide-hgr2',topologyOnly:true},accessStats)});
+      const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
+      lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:Number(externalGraph?.edges?.size||0),prunedEdgeRatio:1,fineNodes:full.nodes.size,fineEdges:full.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType,highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null},snapB:{distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType,highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:null,minSunDistanceM:null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:0,shadeEdgeEvaluations:0,shadeCacheHits:0,shadeCacheSize:0,temporalShadeTable:null,exactReplay:null,pruningCertificate:null,candidateLifecycle,candidateCount:1,searchMode:'topology-only-fastest',topologyOnly:true,labelPruningMode:'not-run',responsiveScheduling:true,hgr2PreRefined:true,accessStats,graphStats:graphStats(full),performance:perf,productionGraphMutated:false};
+      return {available:true,candidates:[fastestCandidate],diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false,topologyOnly:true};
+    }
     t=nowMs(); const keptEdgeIds=detourEligibleEdgeIds(full,fromA,toB,speedMps,detourLimitS,options); perf.pruneMs=nowMs()-t;
     if(!keptEdgeIds.size) return {available:false,reason:'hgr2-prune-empty',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',performance:perf}};
     t=nowMs(); const graph=subsetExistingFineGraph(full,keptEdgeIds); perf.subsetMs=nowMs()-t;
@@ -5256,11 +5382,13 @@
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
     lastRouteEdges.fastest=new Set(fastestPath.edgeIds||[]); lastRouteEdges.minSun=new Set(minSun.path?.edgeIds||[]);
     const candidateLifecycle=[];
-    const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:{edgeIds:fastestPath.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
+    const fastestAccessStats=pathAccessStats(graph,fastestPath.edgeIds||[], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+    const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:Object.assign({edgeIds:fastestPath.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'},fastestAccessStats)});
     candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
     const candidates=[fastestCandidate];
     if(minSun.path?.points?.length){
-      const minCandidate=makeGraphCandidate('graph-shade',minSun.path,{graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds,graphMeta:{edgeIds:minSun.path.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'}});
+      const minAccessStats=pathAccessStats(graph,minSun.path.edgeIds||[], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      const minCandidate=makeGraphCandidate('graph-shade',minSun.path,{graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds,graphMeta:Object.assign({edgeIds:minSun.path.edgeIds,snapA:prodSnapA,snapB:prodSnapB,backend:'nationwide-hgr2'},minAccessStats)});
       const same=sameGraphPathGeometry(minSun.path,fastestPath);
       candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
       if(!same) candidates.push(minCandidate);
@@ -5322,6 +5450,20 @@
     const coarseFastestTime = coarseFromA.dist.get(String(coarseSnapB.id));
     if (!Number.isFinite(coarseFastestTime)) return { available:false, reason:'nationwide-graph-disconnected', candidates:[], diagnostics:{graphBackend:'nationwide-hgr1', snapA:coarseSnapA, snapB:coarseSnapB, connectivitySnapPlan:endpointSnapPlan, performance:perf, productionGraphMutated:false} };
     const coarseDetourLimitS = coarseFastestTime * (1 + detourPct / 100);
+    if (options.fastestOnly === true) {
+      const fastestPath = reconstructDijkstra(coarseGraph, coarseFromA.prev, coarseSnapA.id, coarseSnapB.id);
+      if (!fastestPath?.points?.length) return { available:false, reason:'nationwide-coarse-fastest-reconstruction-failed', candidates:[] };
+      fastestPath.walkSeconds = coarseFastestTime;
+      const accessStats = pathAccessStats(coarseGraph, fastestPath.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      perf.totalMs = nowMs() - totalStarted;
+      lastShadeDebug.clear();
+      lastRouteEdges = { fastest:new Set(fastestPath.edgeIds || []), minSun:new Set() };
+      lastGraphDebug = { graph:coarseGraph, raw:null, contracted:null, snapA:coarseSnapA, snapB:coarseSnapB, bbox:options.bbox || null, endpoint:'nationwide-hgr1-topology', builtAt:Date.now(), nationwide:true, experimentalBaseGraph:coarseGraph, experimentalSnapA:coarseSnapA, experimentalSnapB:coarseSnapB };
+      const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:coarseFastestTime }), { durationS:coarseFastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA:coarseSnapA, snapB:coarseSnapB, backend:'nationwide-hgr1', topologyOnly:true }, accessStats) });
+      const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
+      lastDiagnostics = { version:VERSION, graphBackend:'nationwide-hgr1', overpassEndpoint:null, bbox:options.bbox || null, connectivitySnapPlan:endpointSnapPlan, rawNodes:Number(externalGraph?.nodes?.size || 0), rawSegments:Number(externalGraph?.edges?.size || 0), coarseNodes:coarseGraph.nodes.size, coarseEdges:coarseGraph.edges.size, prunedSourceEdges:coarseGraph.edges.size, prunedEdgeRatio:1, fineNodes:coarseGraph.nodes.size, fineEdges:coarseGraph.edges.size, maxFineEdgeM:null, pathMaxFineEdgeM:null, snapA:{ distanceM:coarseSnapA.distanceM,nodeId:coarseSnapA.id,snapType:coarseSnapA.snapType,highway:coarseSnapA.sourceHighway||null,wayId:coarseSnapA.sourceWayId||null }, snapB:{ distanceM:coarseSnapB.distanceM,nodeId:coarseSnapB.id,snapType:coarseSnapB.snapType,highway:coarseSnapB.sourceHighway||null,wayId:coarseSnapB.sourceWayId||null }, fastestSeconds:coarseFastestTime, fastestDistanceM:fastestPath.distanceM, minSunEstimatedDirectSunSeconds:null, minSunDistanceM:null, detourPct, detourLimitSeconds:coarseDetourLimitS, searchExpandedStates:0, shadeEdgeEvaluations:0, shadeCacheHits:0, shadeCacheSize:0, candidateLifecycle, candidateCount:1, searchMode:'topology-only-fastest', topologyOnly:true, labelPruningMode:'not-run', responsiveScheduling:true, accessStats, graphStats:graphStats(coarseGraph), performance:perf, productionGraphMutated:false };
+      return { available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'nationwide-hgr1', productionGraphMutated:false, topologyOnly:true };
+    }
 
     t = nowMs();
     const keptEdgeIds = detourEligibleEdgeIds(coarseGraph, coarseFromA, coarseToB, speedMps, coarseDetourLimitS, options);
@@ -5380,11 +5522,13 @@
     lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
     lastRouteEdges.minSun = new Set(minSun.path?.edgeIds || []);
     const candidateLifecycle = [];
-    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:{ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } });
+    const fastestAccessStats = pathAccessStats(graph, fastestPath.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'nationwide-hgr1' }, fastestAccessStats) });
     candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
     const candidates = [fastestCandidate];
     if (minSun.path?.points?.length) {
-      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:{ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'nationwide-hgr1' } });
+      const minAccessStats = pathAccessStats(graph, minSun.path.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:Object.assign({ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'nationwide-hgr1' }, minAccessStats) });
       const same = sameGraphPathGeometry(minSun.path, fastestPath);
       candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
       if (!same) candidates.push(minCandidate);
@@ -5418,14 +5562,15 @@
   async function buildGraphForAB(a, b, options = {}) {
     const cooperativeYield = makeCooperativeYielder(options);
     const bbox = bboxForAB(a, b, options.bboxMarginM || config.bboxMarginM);
-    const key = bboxKey(bbox);
+    const allowPrivateFootAccess = options.allowPrivateFootAccess === true;
+    const key = `${bboxKey(bbox)}|private:${allowPrivateFootAccess ? 1 : 0}`;
     let cached = graphCache.get(key);
     if (!cached) {
       const { payload, endpoint } = await fetchOverpass(bbox, options);
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
       options.onProgress?.({ stage: "graph-parse", message: "正在整理 OSM 步行資料…" });
       await cooperativeYield(true);
-      const parsed = parseOverpass(payload);
+      const parsed = parseOverpass(payload, { allowPrivateFootAccess });
       if (parsed.nodes.size > Number(config.maxRawNodes || 18000)) throw new Error(`OSM 範圍含 ${parsed.nodes.size} 個節點，超過瀏覽器安全上限。`);
       await cooperativeYield(true);
       const raw = buildRawGraph(parsed);
@@ -5483,6 +5628,7 @@
       snapMaxM: options.snapMaxM,
       endpoints: options.overpassEndpoints,
       timeoutMs: options.overpassTimeoutMs,
+      allowPrivateFootAccess: options.allowPrivateFootAccess === true,
       onProgress: options.onProgress,
       shouldCancel: options.shouldCancel
     });
@@ -5503,6 +5649,15 @@
     fastestPath.walkSeconds = fastestTime;
 
     const detourLimitS = fastestTime * (1 + detourPct / 100);
+    if (options.fastestOnly === true) {
+      const accessStats = pathAccessStats(graph, fastestPath.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
+      lastRouteEdges.minSun = new Set();
+      const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'overpass-live', topologyOnly:true }, accessStats) });
+      const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
+      lastDiagnostics = { version:VERSION, graphBackend:'overpass-live', overpassEndpoint:built.endpoint, bbox:built.bbox, rawNodes:graph.rawNodeCount, rawSegments:graph.rawSegmentCount, contractedNodes:graph.contractedNodeCount || graph.nodes.size, contractedEdges:graph.contractedEdgeCount || graph.edges.size, fineNodes:graph.nodes.size, fineEdges:graph.edges.size, maxFineEdgeM:graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM, pathMaxFineEdgeM:graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM, snapA:{ distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType||"node",highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null,pedestrianRank:snapA.pedestrianRank??null,pedestrianLabel:snapA.pedestrianLabel||null }, snapB:{ distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType||"node",highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null,pedestrianRank:snapB.pedestrianRank??null,pedestrianLabel:snapB.pedestrianLabel||null }, fastestSeconds:fastestTime, fastestDistanceM:fastestPath.distanceM, minSunEstimatedDirectSunSeconds:null, minSunDistanceM:null, detourPct, detourLimitSeconds:detourLimitS, searchExpandedStates:0, shadeEdgeEvaluations:0, candidateLifecycle, candidateCount:1, searchMode:'topology-only-fastest', topologyOnly:true, labelPruningMode:'not-run', responsiveScheduling:true, accessStats, graphStats:graphStats(graph), productionGraphMutated:false };
+      return { available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'overpass-live', productionGraphMutated:false, topologyOnly:true };
+    }
     options.onProgress?.({ stage: "shade-search", message: `正在 graph 內搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
     const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
       speedMps,
@@ -5529,11 +5684,13 @@
 
     const candidates = [];
     const candidateLifecycle = [];
-    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:{ edgeIds:fastestPath.edgeIds, snapA, snapB } });
+    const fastestAccessStats = pathAccessStats(graph, fastestPath.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+    const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'overpass-live', conditionalAccessProbe: options.allowPrivateFootAccess === true }, fastestAccessStats) });
     candidates.push(fastestCandidate);
     candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
     if (minSun.path?.points?.length) {
-      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:{ edgeIds:minSun.path.edgeIds, snapA, snapB } });
+      const minAccessStats = pathAccessStats(graph, minSun.path.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+      const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:Object.assign({ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'overpass-live', conditionalAccessProbe: options.allowPrivateFootAccess === true }, minAccessStats) });
       const same = sameGraphPathGeometry(minSun.path, fastestPath);
       candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
       if (!same) candidates.push(minCandidate);
@@ -5570,9 +5727,11 @@
       searchMode: "resource-constrained-history-safe-labels",
       labelPruningMode: "equal-arrival + visited-subset dominance; no arbitrary label cap",
       responsiveScheduling: true,
+      accessStats: fastestAccessStats,
+      conditionalAccessProbe: options.allowPrivateFootAccess === true,
       graphStats: graphStats(graph)
     };
-    return { available: true, candidates, diagnostics: lastDiagnostics };
+    return { available: true, candidates, diagnostics: lastDiagnostics, backend:'overpass-live', productionGraphMutated:false };
   }
 
   async function runCandidateCorrectnessAudit(a, b, externalGraph = null, options = {}) {
@@ -5676,6 +5835,7 @@
     replayPolyline,
     runSourceGapCounterfactualAudit,
     runMatureEngineBenchmark,
+    fetchValhallaPedestrianRoute,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -5738,6 +5898,7 @@
       sourceGapConnectorSafetyPolicy,
       engineBenchmarkManifest,
       runMatureEngineBenchmark,
+      fetchValhallaPedestrianRoute,
       extractValhallaPoints,
       extractGraphHopperPoints,
       benchmarkPathAnalysis,
@@ -5747,6 +5908,7 @@
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,
       highwayFamily,
+      pathAccessStats,
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,
