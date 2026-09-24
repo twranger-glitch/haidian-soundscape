@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev35.1 Session Shade Warm Cache
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev35.2 Stable Semantic Shade Cache
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev35.1";
+  const VERSION = "v9.0.0-dev35.2";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -2809,7 +2809,7 @@
     } else if (run?.reason || st.error) {
       body = `<span>最近一次未完成：${escapeHtml(run?.error || run?.reason || st.error || 'unknown')}。</span>`;
     }
-    return `<div class="re-method-note" data-re-dev34-regression><b>dev35.1 Nationwide Regression · dev34.5 connectivity snap locked：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
+    return `<div class="re-method-note" data-re-dev34-regression><b>dev35.2 Nationwide Regression · dev34.5 connectivity snap locked：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
   }
 
   function refreshNationwideRegressionPanel() {
@@ -2824,11 +2824,11 @@
   async function runNationwideRegressionLive() {
     const api = window.HaidianNationwideRegression;
     if (!api?.runMatrix) {
-      setStatus('dev35.1 nationwide regression 模組未載入。', 'warning');
+      setStatus('dev35.2 nationwide regression 模組未載入。', 'warning');
       return;
     }
     refreshNationwideRegressionPanel();
-    setStatus('dev35.1：開始執行全臺 regression matrix；dev34.5 connectivity snap 鎖定，不修改目前 production graph。', 'loading');
+    setStatus('dev35.2：開始執行全臺 regression matrix；dev34.5 connectivity snap 鎖定，不修改目前 production graph。', 'loading');
     try {
       const result = await api.runMatrix({
         onProgress: (info) => {
@@ -2838,13 +2838,13 @@
       });
       refreshNationwideRegressionPanel();
       if (!result?.available) {
-        setStatus(`dev35.1 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
+        setStatus(`dev35.2 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
         return;
       }
-      setStatus(`dev35.1 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
+      setStatus(`dev35.2 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
     } catch (error) {
       refreshNationwideRegressionPanel();
-      setStatus(`dev35.1 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev35.2 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     }
   }
 
@@ -2963,7 +2963,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity snap locked · dev35.1 session shade warm cache</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table 新算 ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)}／warm hit ${Math.round(graphDiag.temporalShadeTable?.cacheHits || 0)}／需求 ${Math.round(graphDiag.temporalShadeTable?.potentialTasks || 0)} cells；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity snap locked · dev35.2 stable semantic shade cache</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table 新算 ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)}／warm hit ${Math.round(graphDiag.temporalShadeTable?.cacheHits || 0)}／需求 ${Math.round(graphDiag.temporalShadeTable?.potentialTasks || 0)} cells；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -2971,7 +2971,7 @@
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${graphNote}${candidateCorrectnessSummaryHtml(bundle)}${nationwideRegressionSummaryHtml()}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
-      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev35.1 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：新算 ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))}；warm/table hits ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.cacheHits||0))}；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}${bundle.performance.shadeWarmCache ? `<br>Session shade warm cache：${bundle.performance.shadeWarmCache.enabled ? 'ON' : 'OFF'}；seed ${Math.round(Number(bundle.performance.shadeWarmCache.seeded||0))}；persist ${Math.round(Number(bundle.performance.shadeWarmCache.persisted||0))}；session ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceEntriesAfter||bundle.performance.sharedGraphShadeCacheSize||0))}${bundle.performance.shadeWarmCache.commitSkipped ? '；context changed / 未寫回' : ''}。` : ''}</div>`; })() : ''}
+      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev35.2 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：新算 ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))}；warm/table hits ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.cacheHits||0))}；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}${bundle.performance.shadeWarmCache ? `<br>Session shade warm cache：${bundle.performance.shadeWarmCache.enabled ? 'ON' : 'OFF'}；seed ${Math.round(Number(bundle.performance.shadeWarmCache.seeded||0))}；persist ${Math.round(Number(bundle.performance.shadeWarmCache.persisted||0))}；reject ${Math.round(Number(bundle.performance.shadeWarmCache.rejected||0))}；session ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceEntriesAfter||bundle.performance.shadeWarmCache.namespaceEntriesBefore||bundle.performance.sharedGraphShadeCacheSize||0))}；ns ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceCount||0))} / total ${Math.round(Number(bundle.performance.shadeWarmCache.totalEntries||0))}${bundle.performance.shadeWarmCache.commitSkipped ? '；semantic context changed / 未寫回' : ''}。` : ''}</div>`; })() : ''}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -3151,7 +3151,7 @@
     setBusy(true);
     const perfStart = nowMs();
     const perf = { providerMs: 0, graphMs: 0, fusionMs: 0, denseScoreMs: 0, totalMs: 0 };
-    // dev35.1: each analysis still receives its own working Map, but reliable
+    // dev35.2: each analysis still receives its own working Map, while reliable
     // resolved edge/time cells may be safely seeded from a model-token-scoped
     // session cache after ShadeMap readiness is confirmed.
     let sharedGraphShadeCache = new Map();
@@ -3195,11 +3195,14 @@
               seeded: Number(shadeWarmCacheHandle?.seeded || 0),
               expired: Number(shadeWarmCacheHandle?.expired || 0),
               namespaceEntriesBefore: Number(shadeWarmCacheHandle?.namespaceEntriesBefore || 0),
-              modelContext: warmContext.modelContext || null
+              namespaceCount: Number(shadeWarmCacheHandle?.namespaceCount || 0),
+              totalEntries: Number(shadeWarmCacheHandle?.totalEntries || 0),
+              modelContext: warmContext.modelContext || null,
+              coverageToken: String(warmContext.modelContext?.coverageToken || '')
             };
           }
         } catch (warmError) {
-          console.warn("[Haidian dev35.1 warm shade cache] acquire failed; using analysis-local cache only.", warmError);
+          console.warn("[Haidian dev35.2 warm shade cache] acquire failed; using analysis-local cache only.", warmError);
           shadeWarmCacheHandle = null;
           sharedGraphShadeCache = new Map();
           perf.shadeWarmCache = { enabled:false, reason:warmError?.message || String(warmError), seeded:0 };
@@ -3445,7 +3448,7 @@
             perf.shadeWarmCache = Object.assign({}, perf.shadeWarmCache || {}, { contextStable:false, commitSkipped:true, commitReason:'shade-model-context-changed' });
           }
         } catch (warmCommitError) {
-          console.warn("[Haidian dev35.1 warm shade cache] commit failed; result remains valid.", warmCommitError);
+          console.warn("[Haidian dev35.2 warm shade cache] commit failed; result remains valid.", warmCommitError);
           perf.shadeWarmCache = Object.assign({}, perf.shadeWarmCache || {}, { commitError:warmCommitError?.message || String(warmCommitError) });
         }
       }

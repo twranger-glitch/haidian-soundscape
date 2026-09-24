@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.1 (dev32 correctness + dev34.5 connectivity locked + session shade warm cache)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.2 (dev32 correctness + dev34.5 connectivity locked + stable semantic shade warm cache)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev35.1";
+  const VERSION = "v9.0.0-dev35.2";
 
   const DEFAULTS = {
     enabled: true,
@@ -83,7 +83,7 @@
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
-    // dev35.1: safe cross-analysis warm reuse. Entries are namespaced by the
+    // dev35.2: safe cross-analysis warm reuse. Entries are namespaced by the
     // current ShadeMap route-model token + edge-sampling semantics, retained
     // only for reliable (non-partial) shade results, and bounded in-session.
     sessionShadeWarmCacheEnabled: true,
@@ -116,7 +116,7 @@
   let lastRouteEdges = { fastest: new Set(), minSun: new Set() };
   const lastShadeDebug = new Map();
   const graphCache = new Map();
-  // dev35.1: browser-session shade cache. Production searches still receive a
+  // dev35.2: browser-session shade cache. Production searches still receive a
   // per-analysis Map; this store only seeds/commits reliable resolved values so
   // a transient canopy/building partial result can never poison a later query.
   const sessionShadeWarmCaches = new Map();
@@ -815,17 +815,18 @@
     const models = await runPool(samples, context.shadeConcurrency, async (p) => {
       return window.HaidianShade.analyzeShadeModelAt(p.lat, p.lng, at, { canopyTimeoutMs: context.canopyTimeoutMs });
     });
-    let sun = 0, shade = 0, night = 0, partial = 0;
+    let sun = 0, shade = 0, night = 0, partial = 0, cacheUnsafe = 0;
     for (const model of models) {
       if (model?.state === "night") night += 1;
       else if (model?.shaded === true) shade += 1;
       else sun += 1;
       if (model?.reliability === "partial") partial += 1;
+      if (model?.routeCacheSafe === false) cacheUnsafe += 1;
     }
     const total = models.length || 1;
     return {
       directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, samples: total,
-      partialSamples: partial, cacheSafe: partial === 0
+      partialSamples: partial, cacheUnsafeSamples: cacheUnsafe, cacheSafe: partial === 0 && cacheUnsafe === 0
     };
   }
 
@@ -1008,7 +1009,7 @@
     const spacingM = Math.max(1, Number(context.shadeSampleSpacingM || config.shadeSampleSpacingM || 18));
     const maxSamples = Math.max(1, Number(context.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge || 5));
     return JSON.stringify({
-      revision: "dev35.1-edge-sun-v1",
+      revision: "dev35.2-edge-sun-v2",
       modelToken,
       bucketSec,
       spacingM,
@@ -1043,6 +1044,8 @@
     if (!record) {
       record = { entries:new Map(), createdAt:now, lastUsedAt:now };
       sessionShadeWarmCaches.set(namespace, record);
+      pruneSessionShadeWarmCaches(now, { ttlMs, maxNamespaces });
+      record = sessionShadeWarmCaches.get(namespace) || record;
     }
     let seeded = 0, expired = 0;
     for (const [key, row] of Array.from(record.entries.entries())) {
@@ -1051,7 +1054,13 @@
       seeded += 1;
     }
     record.lastUsedAt = now;
-    return { enabled:true, reason:null, namespace, cache:localCache, seeded, expired, namespaceEntriesBefore:record.entries.size, ttlMs, maxEntries, maxNamespaces };
+    let totalEntries = 0;
+    for (const r of sessionShadeWarmCaches.values()) totalEntries += Number(r?.entries?.size || 0);
+    return {
+      enabled:true, reason:null, namespace, cache:localCache, seeded, expired,
+      namespaceEntriesBefore:record.entries.size, namespaceCount:sessionShadeWarmCaches.size, totalEntries,
+      ttlMs, maxEntries, maxNamespaces
+    };
   }
 
   function shadeResultSafeForWarmCache(value) {
@@ -1085,7 +1094,9 @@
     while (record.entries.size > maxEntries) record.entries.delete(record.entries.keys().next().value);
     record.lastUsedAt = now;
     pruneSessionShadeWarmCaches(now, { ttlMs, maxNamespaces });
-    return { enabled:true, persisted, rejected, errors, namespaceEntriesAfter:record.entries.size, namespaceCount:sessionShadeWarmCaches.size };
+    let totalEntries = 0;
+    for (const r of sessionShadeWarmCaches.values()) totalEntries += Number(r?.entries?.size || 0);
+    return { enabled:true, persisted, rejected, errors, namespaceEntriesAfter:record.entries.size, namespaceCount:sessionShadeWarmCaches.size, totalEntries };
   }
 
   function getSessionShadeWarmCacheStats() {

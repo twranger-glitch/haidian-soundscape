@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.1 Session Shade Warm Cache */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.2 Stable Semantic Shade Cache */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -199,7 +199,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     temporalShadeTableConcurrency: 8,
     temporalShadeTableMaxBucketsPerEdge: 8,
     temporalShadeTableMaxEvaluations: 1800,
-    // dev35.1: session-only, model-token-scoped warm reuse of reliable edge/time shade cells.
+    // dev35.2: session-only, semantic-model-scoped warm reuse of locally coverage-proven edge/time shade cells.
     sessionShadeWarmCacheEnabled: true,
     sessionShadeWarmCacheTtlMs: 1800000,
     sessionShadeWarmCacheMaxEntries: 5000,

@@ -461,6 +461,12 @@
   let lastBuildingPipelineStatus = { mode: "idle", sourceCounts: {}, tileCount: 0, error: null };
   let lastBuildingFeatures = [];
   let lastBuildingCoverageKey = null;
+  // dev35.2: exact geographic coverage of the currently loaded building model.
+  // This is diagnostic/safety state only; it is intentionally excluded from the
+  // cross-analysis semantic cache namespace because viewport tile churn is not a
+  // model-version change. Individual shade samples still need a local coverage
+  // proof before their result may enter the session warm cache.
+  let lastBuildingLoadedBounds = null;
   // dev30: exact broad-phase spatial index for route shade queries.  The grid
   // only removes buildings whose geographic bbox cannot possibly intersect the
   // configured source-ray search square; the existing polygon/ray test remains
@@ -5799,6 +5805,30 @@
     };
   }
 
+  // dev35.2: a cached route shade cell is reusable across viewport changes only
+  // when the original sample was evaluated far enough inside a complete building
+  // fetch window that every building the route-ray model is allowed to inspect
+  // was already present. This converts viewport-dependent feature collections
+  // into a point-local coverage proof instead of putting the whole viewport in
+  // the semantic cache token.
+  function routeBuildingCoverageSafetyRadiusM() {
+    return Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240)
+      + Math.max(0, Number(config.queryShadeSourceRayWidthM) || 9)
+      + 4;
+  }
+
+  function routeBuildingCoverageSafeAt(latlng) {
+    if (state.mode === "trees" || effectiveBuildingMode() === "none") return true;
+    const b = lastBuildingLoadedBounds;
+    const lat = Number(latlng?.lat), lng = Number(latlng?.lng);
+    if (!b || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    const safetyM = routeBuildingCoverageSafetyRadiusM();
+    const latPad = safetyM / 110540;
+    const lngPad = safetyM / (111320 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+    return lat >= Number(b.south) + latPad && lat <= Number(b.north) - latPad
+      && lng >= Number(b.west) + lngPad && lng <= Number(b.east) - lngPad;
+  }
+
 
   function normalizeBuildingCoverageRegion(raw, fallbackId = "coverage") {
     let values = null;
@@ -6372,6 +6402,7 @@
     calibrateLowConfidenceBuildingHeights(features, contextFeatures);
     lastBuildingFeatures = features;
     lastBuildingCoverageKey = `pipeline:${z}:${tiles.map((t) => `${t.x}/${t.y}`).join("|")}`;
+    lastBuildingLoadedBounds = { south:padded.south, west:padded.west, north:padded.north, east:padded.east };
     lastBuildingFetchError = null;
     lastBuildingPipelineStatus = {
       mode: errors.length ? "pipeline-partial" : (features.length ? "pipeline" : "pipeline-empty"),
@@ -6451,6 +6482,7 @@
       return overpassCache.get(key).then((features) => {
         lastBuildingFeatures = Array.isArray(features) ? features : [];
         lastBuildingCoverageKey = key;
+        lastBuildingLoadedBounds = { south:padded.south, west:padded.west, north:padded.north, east:padded.east };
         updateBuildingRuntimeStatus();
         syncBuildingDebugOverlay();
         return lastBuildingFeatures;
@@ -6518,6 +6550,7 @@
         calibrateLowConfidenceBuildingHeights(features, features);
         lastBuildingFeatures = features;
         lastBuildingCoverageKey = key;
+        lastBuildingLoadedBounds = { south:padded.south, west:padded.west, north:padded.north, east:padded.east };
         lastBuildingFetchError = null;
         updateBuildingRuntimeStatus();
         syncBuildingDebugOverlay();
@@ -6615,6 +6648,7 @@
         );
         lastBuildingFeatures = merged;
         lastBuildingCoverageKey = `hybrid:${lastBuildingCoverageKey || "partial"}`;
+        lastBuildingLoadedBounds = null;
         const counts = {};
         for (const feature of merged) {
           const source = feature && feature.properties && feature.properties.building_source || "unknown";
@@ -7351,36 +7385,73 @@
     const pipelineComplete = buildingMode !== 'pipeline' || (
       pipeline.fetchComplete !== false && pipeline.coverageComplete !== false && !pipeline.error
     );
-    const cacheable = Boolean(modelReady && pipelineComplete);
+
+    // dev35.2 owner-live diagnosis: dev35.1 put transient viewport state
+    // (coverage tile key + feature count) into the namespace token. The same A→B
+    // rerun therefore created a fresh namespace when a later building warm-load
+    // expanded 1250 → 3719 features. The semantic token below contains only
+    // source/version + algorithm parameters. Per-cell routeCacheSafe provides the
+    // local coverage proof, so viewport churn can no longer invalidate a valid
+    // warm cell or make an incompletely covered cell persist.
     const workerDataVersion = buildingManifestCache && buildingManifestCache.__workerDataVersion || '';
+    const manifestBuiltAtUtc = buildingManifestCache && buildingManifestCache.built_at_utc || pipeline.manifestBuiltAtUtc || '';
+    const manifestFeatureCount = Number(buildingManifestCache && buildingManifestCache.feature_count || pipeline.manifestFeatureCount || 0);
+    const sourceIdentityAvailable = state.mode === 'trees' || buildingMode === 'none' || (buildingMode === 'pipeline' && Boolean(
+      String(config.buildingDataVersion || '').trim() || String(workerDataVersion || '').trim() || String(manifestBuiltAtUtc || '').trim()
+    ));
+    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable);
     const token = JSON.stringify({
-      revision: 'dev35.1-route-shade-model-v1',
+      revision: 'dev35.2-route-shade-model-v2',
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
       buildingDataVersion: String(config.buildingDataVersion || ''),
       workerDataVersion: String(workerDataVersion || ''),
-      buildingCoverageKey: String(lastBuildingCoverageKey || ''),
-      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
-      pipelineMode: String(pipeline.mode || ''),
+      manifestBuiltAtUtc: String(manifestBuiltAtUtc || ''),
+      manifestFeatureCount,
+      buildingTileUrl: String(config.buildingTileUrl || ''),
+      buildingManifestUrl: String(config.buildingManifestUrl || ''),
       metaMode: String(config.metaMode || ''),
       metaCogBaseUrl: String(config.metaCogBaseUrl || ''),
       queryZoom: Number(config.queryZoom || 17),
       queryCanopyFromCog: config.queryCanopyFromCog !== false,
       sourceMaxDistanceM: Number(config.queryShadeSourceMaxDistanceM || 0),
+      sourceSampleStepM: Number(config.queryShadeSourceSampleStepM || 0),
+      sourceRayClearanceM: Number(config.queryShadeSourceRayClearanceM || 0),
       sourceRayWidthM: Number(config.queryShadeSourceRayWidthM || 0),
       sourceRayStepM: Number(config.queryShadeSourceRayStepM || 0),
-      sourceMinAltitudeDeg: Number(config.queryShadeSourceMinAltitudeDeg || 0)
+      sourceCorridorMinHits: Number(config.queryShadeSourceCorridorMinHits || 0),
+      sourceRayBaseToleranceM: Number(config.queryShadeSourceRayBaseToleranceM || 0),
+      sourceRayAngularToleranceDeg: Number(config.queryShadeSourceRayAngularToleranceDeg || 0),
+      sourceUnknownBuildingMaxHeightM: Number(config.queryShadeSourceUnknownBuildingMaxHeightM || 0),
+      sourceMixedDistanceToleranceM: Number(config.queryShadeSourceMixedDistanceToleranceM || 0),
+      sourceMinAltitudeDeg: Number(config.queryShadeSourceMinAltitudeDeg || 0),
+      fetchPaddingFloorM: Number(config.buildingShadowFetchPaddingM || 0),
+      fetchDynamicPadding: config.buildingShadowDynamicPaddingEnabled !== false,
+      fetchMaxCasterHeightM: Number(config.buildingShadowMaxCasterHeightM || 0),
+      fetchPaddingMaxM: Number(config.buildingShadowFetchPaddingMaxM || 0)
+    });
+    const coverageToken = JSON.stringify({
+      coverageKey: String(lastBuildingCoverageKey || ''),
+      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
+      loadedBounds: lastBuildingLoadedBounds || null,
+      pipelineMode: String(pipeline.mode || '')
     });
     return {
       cacheable,
       modelReady,
       pipelineComplete,
+      sourceIdentityAvailable,
       token,
+      coverageToken,
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
       coverageKey: lastBuildingCoverageKey || null,
       buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
-      workerDataVersion: String(workerDataVersion || '')
+      loadedBounds: lastBuildingLoadedBounds ? Object.assign({}, lastBuildingLoadedBounds) : null,
+      coverageSafetyRadiusM: routeBuildingCoverageSafetyRadiusM(),
+      workerDataVersion: String(workerDataVersion || ''),
+      manifestBuiltAtUtc: String(manifestBuiltAtUtc || ''),
+      manifestFeatureCount
     };
   }
 
@@ -7445,6 +7516,7 @@
       }
 
       const buildingReady = routeBuildingModelReady();
+      const buildingCoverageSafe = routeBuildingCoverageSafeAt(latlng);
       let building = null;
       let tree = null;
       let canopyQueryFailed = false;
@@ -7518,6 +7590,9 @@
         reliability,
         model: "route-ray-v1",
         buildingModelReady: buildingReady,
+        // dev35.2: route scoring is unchanged, but cross-analysis cache write-back
+        // is permitted only for samples backed by complete local building coverage.
+        routeCacheSafe: buildingCoverageSafe && reliability !== "partial",
         caveat: caveats.join(" ").trim()
       };
       routePerfFinish(startedAt, result, null);
@@ -7673,6 +7748,8 @@
         heightQualityCounts,
         overpassEndpoints,
         coverageKey: lastBuildingCoverageKey,
+        loadedBounds: lastBuildingLoadedBounds ? Object.assign({}, lastBuildingLoadedBounds) : null,
+        routeCacheSafetyRadiusM: routeBuildingCoverageSafetyRadiusM(),
         lastPipelineStatus: Object.assign({}, lastBuildingPipelineStatus),
         lastOverpassError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError))
       };

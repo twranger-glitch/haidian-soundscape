@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev35.1 — Connectivity Snap Locked / Performance Phase
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev35.2 — Connectivity Snap Locked / Performance Phase
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev35.1";
+  const VERSION = "v9.0.0-dev35.2";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
