@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.1 Controlled-Access Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev36.2 Local-Noding Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -49,6 +49,14 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     earlyLiveProbeRatioThreshold: 4.0,
     earlyLiveProbeMaxStraightM: 900,
     overpassCrossCheck: true,
+    // dev36.2: detached high-confidence OSM noding repair for an endpoint that
+    // geometrically touches a walkable way but lacks a shared graph node.
+    autoLocalNodingRescue: true,
+    autoLocalNodingTouchMaxM: 2.75,
+    autoLocalNodingReviewMaxM: 8,
+    autoLocalNodingCorridorM: 120,
+    autoLocalNodingMinImprovementM: 120,
+    autoLocalNodingMaxCandidates: 48,
     conditionalPrivateAccessProbe: true,
     conditionalPrivateAccessMinImprovementM: 120,
     conditionalPrivateTerminalBufferM: 350,
@@ -218,6 +226,10 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     graphHopperApiKey: "", // optional; leave blank to run Valhalla only
     allowPrivateFootAccess: false,
     conditionalPrivateTerminalBufferM: 350,
+    autoLocalNodingTouchMaxM: 2.75,
+    autoLocalNodingReviewMaxM: 8,
+    autoLocalNodingCorridorM: 120,
+    autoLocalNodingMaxCandidates: 48,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 2,

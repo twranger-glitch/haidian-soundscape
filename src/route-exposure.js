@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev36.1 Controlled-Access Rescue
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev36.2 Local-Noding Rescue
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev36.1";
+  const VERSION = "v9.0.0-dev36.2";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -66,6 +66,15 @@
       earlyLiveProbeRatioThreshold: 4.0,
       earlyLiveProbeMaxStraightM: 900,
       overpassCrossCheck: true,
+      // dev36.2: before assuming access restrictions, inspect the strict live-OSM
+      // fine graph for a high-confidence non-noded T-junction / endpoint touch.
+      // The repair exists only in a detached clone and never mutates production.
+      autoLocalNodingRescue: true,
+      autoLocalNodingTouchMaxM: 2.75,
+      autoLocalNodingReviewMaxM: 8,
+      autoLocalNodingCorridorM: 120,
+      autoLocalNodingMinImprovementM: 120,
+      autoLocalNodingMaxCandidates: 48,
       conditionalPrivateAccessProbe: true,
       conditionalPrivateAccessMinImprovementM: 120,
       conditionalPrivateTerminalBufferM: 350,
@@ -246,6 +255,7 @@
       enabled: true, ratioThreshold: 2.4, minExcessM: 250, minStraightM: 60, maxStraightM: 3000,
       expandNationwideStages: true, hgr1SameWindowCrossCheck: true, topologyProbeFastestOnly: true,
       earlyLiveProbeRatioThreshold: 4.0, earlyLiveProbeMaxStraightM: 900, overpassCrossCheck: true,
+      autoLocalNodingRescue: true, autoLocalNodingTouchMaxM: 2.75, autoLocalNodingReviewMaxM: 8, autoLocalNodingCorridorM: 120, autoLocalNodingMinImprovementM: 120, autoLocalNodingMaxCandidates: 48,
       conditionalPrivateAccessProbe: true, conditionalPrivateAccessMinImprovementM: 120, conditionalPrivateTerminalBufferM: 350,
       matureValhallaProbe: true, matureRescueMinImprovementM: 120,
       directEvidenceProbe: true, directEvidenceMarginM: 260
@@ -1511,6 +1521,8 @@
   function candidateName(candidate, bundle) {
     if (candidate?.kind === "experimental-fused") return "官方資料融合最不曬";
     if (candidate?.kind === "mature-rescue") return "獨立步行引擎救援候選";
+    if (candidate?.kind === "topology-repair-fastest") return "OSM 拓樸修復最快候選";
+    if (candidate?.kind === "topology-repair-shade") return "OSM 拓樸修復最不曬候選";
     if (candidate?.kind === "graph-shade") {
       if (candidate?.graphMeta?.usesConditionalPrivateAccess) return "條件式園區最不曬候選";
       return candidate?.graphMeta?.backend === "nationwide-hgr2" ? "全臺步行路網最不曬候選" : (candidate?.graphMeta?.backend === "nationwide-hgr1" ? "全臺圖資 Graph 最不曬候選" : "OSM Graph 最不曬候選");
@@ -3025,16 +3037,17 @@
       if (c.kind === 'manual') badges.push('<em class="manual">手繪</em>');
       if (c.kind === 'experimental-fused') badges.push('<em class="fusion">官方融合</em>');
       if (c.kind === 'mature-rescue') badges.push('<em class="graph">Valhalla cross-check</em>');
+      if (c.kind === 'topology-repair-fastest' || c.kind === 'topology-repair-shade') badges.push('<em class="graph">OSM 拓樸修復</em>');
       if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
       if (c.kind === 'graph-shade' || c.kind === 'graph-fastest') badges.push(`<em class="graph">${c?.graphMeta?.backend === 'nationwide-hgr2' ? '全臺 HGR2' : (c?.graphMeta?.backend === 'nationwide-hgr1' ? '全臺 HGR1' : 'OSM Graph')}</em>`);
-      if (c?.graphMeta?.usesConditionalPrivateAccess) badges.push('<em class="over">需門票／許可</em>');
+      if (c?.graphMeta?.usesConditionalPrivateAccess) badges.push('<em class="over">OSM private・需確認</em>');
       if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">最不曬</em>');
       if (c.eligible === false) badges.push('<em class="over">超過上限</em>');
       if (c.id === activeId) badges.push('<em class="viewing">目前顯示</em>');
       return `<button type="button" class="re-candidate${c.id === activeId ? " is-selected" : ""}" data-re-candidate-id="${escapeHtml(c.id)}" aria-pressed="${c.id === activeId ? "true" : "false"}">
         <div class="re-candidate-title"><b>${escapeHtml(candidateName(c, bundle))}</b><span>${badges.join('')}</span></div>
         <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>${s.daylightDistanceM <= 0.01 && s.nightDistanceM > 0 ? "夜間 100%" : `遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}`}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
-        <small>${c.kind === "experimental-fused" ? `${Number(c.experimentalFusion?.connectorCount || 0)} 個 verified witness · productionGraphMutated=${c.experimentalFusion?.productionGraphMutated === true ? "true" : "false"} · ` : ""}${c.kind === "mature-rescue" ? '獨立 pedestrian engine cross-check · ' : ''}${c?.graphMeta?.usesConditionalPrivateAccess ? `含約 ${Math.round(Number(c.graphMeta.privateAccessDistanceM || 0))}m OSM private 路段，需依現場門票／許可 · ` : ''}${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
+        <small>${c.kind === "experimental-fused" ? `${Number(c.experimentalFusion?.connectorCount || 0)} 個 verified witness · productionGraphMutated=${c.experimentalFusion?.productionGraphMutated === true ? "true" : "false"} · ` : ""}${c.kind === "mature-rescue" ? '獨立 pedestrian engine cross-check · ' : ''}${(c.kind === 'topology-repair-fastest' || c.kind === 'topology-repair-shade') ? `detached local noding repair · gap ${Number(c?.graphMeta?.connectorGapM || 0).toFixed(1)}m · productionGraphMutated=false · ` : ''}${c?.graphMeta?.usesConditionalPrivateAccess ? `含約 ${Math.round(Number(c.graphMeta.privateAccessDistanceM || 0))}m OSM access=private 路段，請依現場入口／開放規則確認 · ` : ''}${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
       </button>`;
     }).join('');
 
@@ -3061,8 +3074,11 @@
       : "";
 
     const stretchState = bundle.performance?.routeStretchRescue || null;
+    const unresolvedStretchText = stretchState?.earlyLiveProbe
+      ? ' 系統已因「短距離但極端繞遠」停止大範圍 HGR2 擴張，改用 focused live OSM、條件式 access 與獨立 pedestrian engine 交叉檢查，並掃描短 A→B corridor；若仍只有長繞路，應視為「資料尚未證實短連通」，而不是可靠的最短步行答案。'
+      : ' 系統已擴大靜態 graph 並交叉檢查 HGR1 / live OSM，再掃描短 A→B corridor；若仍只有長繞路，應視為「資料尚未證實短連通」，而不是可靠的最短步行答案。';
     const routeStretchWarning = stretchState?.triggered
-      ? `<div class="re-candidate-success" style="border-color:#f59e0b;background:#fffbeb;color:#78350f"><b>Route Stretch Rescue 已觸發</b><span>A、B 的已知 graph 最快路線曾達 ${Math.round(Number(stretchState.initialRouteM||0))} m，而直線約 ${Math.round(Number(stretchState.initialStraightM||0))} m（${Number(stretchState.initialRatio||0).toFixed(1)}×）。${stretchState.conditionalAccessAccepted ? ` 已找到一條明顯較短的「條件式通行」路線：其中約 ${Math.round(Number(stretchState.conditionalAccessPrivateDistanceM||0))}m 在 OSM 標記為 private，但 private 段只出現在 A/B 終點附近；系統會顯示它供比較，但不把它冒充成無條件公共道路，實際仍需門票／許可並依現場開放。` : (stretchState.valhallaAccepted ? ' 獨立 Valhalla pedestrian engine 找到明顯較短的交叉驗證候選；它會以獨立候選顯示，不會修改 production graph。' : (bundle.experimentalFusionStatus?.available ? ' 已找到可比較的 verified official-fusion rescue 候選。' : ' 系統已擴大 HGR2、交叉檢查 HGR1 / live OSM，並掃描短 A→B corridor；若仍只有長繞路，應視為「資料尚未證實短連通」，而不是可靠的最短步行答案。'))}</span></div>`
+      ? `<div class="re-candidate-success" style="border-color:#f59e0b;background:#fffbeb;color:#78350f"><b>Route Stretch Rescue 已觸發</b><span>A、B 的已知 graph 最快路線曾達 ${Math.round(Number(stretchState.initialRouteM||0))} m，而直線約 ${Math.round(Number(stretchState.initialStraightM||0))} m（${Number(stretchState.initialRatio||0).toFixed(1)}×）。${stretchState.localNodingAccepted ? ` strict live OSM 裡找到高可信度的「幾何相接但沒有 shared node」斷點（gap 約 ${Number(stretchState.localNodingGapM||0).toFixed(1)}m）；系統只在 detached clone 補上這個局部 noding，已產生較短候選供比較，production graph 與 OSM 原始資料都沒有被修改。` : (stretchState.conditionalAccessAccepted ? ` 已找到一條明顯較短的「條件式通行」路線：其中約 ${Math.round(Number(stretchState.conditionalAccessPrivateDistanceM||0))}m 在 OSM 標記為 access=private，但 private 段只出現在 A/B 終點附近；系統會顯示它供比較，但不把它冒充成無條件公共道路。請依現場入口、開放時間或許可規則確認是否可通行。` : (stretchState.valhallaAccepted ? ' 獨立 Valhalla pedestrian engine 找到明顯較短的交叉驗證候選；它會以獨立候選顯示，不會修改 production graph。' : (bundle.experimentalFusionStatus?.available ? ' 已找到可比較的 verified official-fusion rescue 候選。' : unresolvedStretchText)))}</span></div>`
       : '';
 
     const graphDiag = bundle.graphDiagnostics;
@@ -3097,7 +3113,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity snap locked · dev35.2 semantic shade cache locked · dev35.3 dense scoring locked · dev35.4 late-ready cache capture · dev36.1 controlled-access rescue</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table 新算 ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)}／warm hit ${Math.round(graphDiag.temporalShadeTable?.cacheHits || 0)}／需求 ${Math.round(graphDiag.temporalShadeTable?.potentialTasks || 0)} cells；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? (bundle.performance?.routeStretchRescue?.overpassAttempted ? ' 已因 Route Stretch Rescue 交叉檢查 live Overpass。' : ' 未呼叫 Overpass。') : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity snap locked · dev35.2 semantic shade cache locked · dev35.3 dense scoring locked · dev35.4 late-ready cache capture · dev36.2 local-noding rescue</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table 新算 ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)}／warm hit ${Math.round(graphDiag.temporalShadeTable?.cacheHits || 0)}／需求 ${Math.round(graphDiag.temporalShadeTable?.potentialTasks || 0)} cells；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? (bundle.performance?.routeStretchRescue?.overpassAttempted ? ' 已因 Route Stretch Rescue 交叉檢查 live Overpass。' : ' 未呼叫 Overpass。') : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -3105,7 +3121,7 @@
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${routeStretchWarning}${graphNote}${candidateCorrectnessSummaryHtml(bundle)}${nationwideRegressionSummaryHtml()}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
-      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev36.1 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。${bundle.denseScoring ? `<br>Dense pool：candidate ${Math.round(Number(bundle.denseScoring.candidateConcurrency||1))} × shade ${Math.round(Number(bundle.denseScoring.perCandidateShadeConcurrency||1))}；上限 ${Math.round(Number(bundle.denseScoring.theoreticalMaxShadeConcurrency||1))} concurrent samples；${Math.round(Number(bundle.denseScoring.sampleCount||0))} samples。` : ''}<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：新算 ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))}；warm/table hits ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.cacheHits||0))}；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}${bundle.performance.shadeWarmCache ? `<br>Session shade warm cache：${bundle.performance.shadeWarmCache.lateAcquired ? 'LATE-CAPTURE' : (bundle.performance.shadeWarmCache.enabled ? 'ON' : 'OFF')}；seed ${Math.round(Number(bundle.performance.shadeWarmCache.seeded||0))}；persist ${Math.round(Number(bundle.performance.shadeWarmCache.persisted||0))}；reject ${Math.round(Number(bundle.performance.shadeWarmCache.rejected||0))}；session ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceEntriesAfter||bundle.performance.shadeWarmCache.namespaceEntriesBefore||bundle.performance.sharedGraphShadeCacheSize||0))}；ns ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceCount||0))} / total ${Math.round(Number(bundle.performance.shadeWarmCache.totalEntries||0))}${bundle.performance.shadeWarmCache.lateAcquired ? '；本次搜尋起始未 seed，結束時已安全寫回供下一次重用' : ''}${bundle.performance.shadeWarmCache.commitSkipped ? `；未寫回（${escapeHtml(bundle.performance.shadeWarmCache.commitReason||'context changed')}）` : ''}。` : ''}${bundle.performance.routeStretchRescue?.triggered ? `<br>Route Stretch Rescue：initial ${Math.round(Number(bundle.performance.routeStretchRescue.initialRouteM||0))}m / straight ${Math.round(Number(bundle.performance.routeStretchRescue.initialStraightM||0))}m（${Number(bundle.performance.routeStretchRescue.initialRatio||0).toFixed(1)}×）；stage-expand ${bundle.performance.routeStretchRescue.nationwideStageExpansion?'yes':'no'}；Overpass ${bundle.performance.routeStretchRescue.overpassAttempted?(bundle.performance.routeStretchRescue.overpassAccepted?'accepted':'checked'):'no'}；conditional ${bundle.performance.routeStretchRescue.conditionalAccessAttempted?(bundle.performance.routeStretchRescue.conditionalAccessAccepted?'accepted':'checked'):'no'}${bundle.performance.routeStretchRescue.conditionalAccessAttempted?`/${Math.round(Number(bundle.performance.routeStretchRescue.conditionalAccessDistanceM||0))}m`:''}；Valhalla ${bundle.performance.routeStretchRescue.valhallaAttempted?(bundle.performance.routeStretchRescue.valhallaAccepted?'accepted':'checked'):'no'}${bundle.performance.routeStretchRescue.valhallaAttempted&&Number.isFinite(Number(bundle.performance.routeStretchRescue.valhallaDistanceM))?`/${Math.round(Number(bundle.performance.routeStretchRescue.valhallaDistanceM))}m`:''}；direct evidence ${bundle.performance.routeStretchRescue.directEvidenceProbe?'yes':'no'}；final ${Math.round(Number(bundle.performance.routeStretchRescue.finalRouteM||bundle.performance.routeStretchRescue.initialRouteM||0))}m（${Number(bundle.performance.routeStretchRescue.finalRatio||bundle.performance.routeStretchRescue.initialRatio||0).toFixed(1)}×）。` : ''}</div>`; })() : ''}
+      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev36.2 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。${bundle.denseScoring ? `<br>Dense pool：candidate ${Math.round(Number(bundle.denseScoring.candidateConcurrency||1))} × shade ${Math.round(Number(bundle.denseScoring.perCandidateShadeConcurrency||1))}；上限 ${Math.round(Number(bundle.denseScoring.theoreticalMaxShadeConcurrency||1))} concurrent samples；${Math.round(Number(bundle.denseScoring.sampleCount||0))} samples。` : ''}<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：新算 ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))}；warm/table hits ${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.cacheHits||0))}；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}${bundle.performance.shadeWarmCache ? `<br>Session shade warm cache：${bundle.performance.shadeWarmCache.lateAcquired ? 'LATE-CAPTURE' : (bundle.performance.shadeWarmCache.enabled ? 'ON' : 'OFF')}；seed ${Math.round(Number(bundle.performance.shadeWarmCache.seeded||0))}；persist ${Math.round(Number(bundle.performance.shadeWarmCache.persisted||0))}；reject ${Math.round(Number(bundle.performance.shadeWarmCache.rejected||0))}；session ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceEntriesAfter||bundle.performance.shadeWarmCache.namespaceEntriesBefore||bundle.performance.sharedGraphShadeCacheSize||0))}；ns ${Math.round(Number(bundle.performance.shadeWarmCache.namespaceCount||0))} / total ${Math.round(Number(bundle.performance.shadeWarmCache.totalEntries||0))}${bundle.performance.shadeWarmCache.lateAcquired ? '；本次搜尋起始未 seed，結束時已安全寫回供下一次重用' : ''}${bundle.performance.shadeWarmCache.commitSkipped ? `；未寫回（${escapeHtml(bundle.performance.shadeWarmCache.commitReason||'context changed')}）` : ''}。` : ''}${bundle.performance.routeStretchRescue?.triggered ? `<br>Route Stretch Rescue：initial ${Math.round(Number(bundle.performance.routeStretchRescue.initialRouteM||0))}m / straight ${Math.round(Number(bundle.performance.routeStretchRescue.initialStraightM||0))}m（${Number(bundle.performance.routeStretchRescue.initialRatio||0).toFixed(1)}×）；stage-expand ${bundle.performance.routeStretchRescue.nationwideStageExpansion?'yes':'no'}；Overpass ${bundle.performance.routeStretchRescue.overpassAttempted?(bundle.performance.routeStretchRescue.overpassAccepted?'accepted':'checked'):'no'}；local-noding ${bundle.performance.routeStretchRescue.localNodingAttempted?(bundle.performance.routeStretchRescue.localNodingAccepted?'accepted':'checked'):'no'}${bundle.performance.routeStretchRescue.localNodingAttempted&&Number.isFinite(Number(bundle.performance.routeStretchRescue.localNodingDistanceM))?`/${Math.round(Number(bundle.performance.routeStretchRescue.localNodingDistanceM))}m`:''}${bundle.performance.routeStretchRescue.localNodingAttempted?` gap ${Number(bundle.performance.routeStretchRescue.localNodingGapM||0).toFixed(1)}m`:''}；conditional ${bundle.performance.routeStretchRescue.conditionalAccessAttempted?(bundle.performance.routeStretchRescue.conditionalAccessAccepted?'accepted':'checked'):'no'}${bundle.performance.routeStretchRescue.conditionalAccessAttempted?`/${Math.round(Number(bundle.performance.routeStretchRescue.conditionalAccessDistanceM||0))}m`:''}；Valhalla ${bundle.performance.routeStretchRescue.valhallaAttempted?(bundle.performance.routeStretchRescue.valhallaAccepted?'accepted':'checked'):'no'}${bundle.performance.routeStretchRescue.valhallaAttempted&&Number.isFinite(Number(bundle.performance.routeStretchRescue.valhallaDistanceM))?`/${Math.round(Number(bundle.performance.routeStretchRescue.valhallaDistanceM))}m`:''}；direct evidence ${bundle.performance.routeStretchRescue.directEvidenceProbe?'yes':'no'}；final ${Math.round(Number(bundle.performance.routeStretchRescue.finalRouteM||bundle.performance.routeStretchRescue.initialRouteM||0))}m（${Number(bundle.performance.routeStretchRescue.finalRatio||bundle.performance.routeStretchRescue.initialRatio||0).toFixed(1)}×）。` : ''}</div>`; })() : ''}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }
@@ -3399,7 +3415,7 @@
       lastCandidateCorrectnessAudit = null;
       lastOfficialDiscovery = null;
 
-      setStatus("正在準備 A→B 候選；dev36.1 已啟用 Route Stretch + Controlled-Access Rescue，仍沿用 dev32 correctness / dev33 official discovery / dev34.5 connectivity locks…", "loading");
+      setStatus("正在準備 A→B 候選；dev36.1 已啟用 Route Stretch + Local-Noding Rescue，仍沿用 dev32 correctness / dev33 official discovery / dev34.5 connectivity locks…", "loading");
       // Provider is comparison-only. Start it in parallel instead of blocking our
       // nationwide graph search. The nationwide seed intentionally uses only A/B
       // so a provider detour cannot expand the first tile request.
@@ -3538,7 +3554,7 @@
             let primaryLoaded = null;
             let primarySuspicious = false;
             try {
-              setStatus(`dev36.1：載入全臺 HGR2 路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
+              setStatus(`dev36.2：載入全臺 HGR2 路網（stage ${stage.stage}，buffer ${Math.round(stage.marginM)}m / ring ${stage.ring}）…`, "loading");
               const loaded = await prefetchNationwideGraph(nationwideSeed, { ...stage, preferHgr2: true });
               primaryLoaded = loaded;
               const attempt = {
@@ -3556,7 +3572,7 @@
               primarySuspicious = verdict.suspicious;
               if (verdict.accept) {
                 if (topologyProbeFastestOnly) {
-                  setStatus(`dev36.1：stage ${stage.stage} topology 合理；只在選定 graph 上執行一次完整 min-sun / temporal shade search…`, "loading");
+                  setStatus(`dev36.2：stage ${stage.stage} topology 合理；只在選定 graph 上執行一次完整 min-sun / temporal shade search…`, "loading");
                   graphCandidates = await routeLoadedNationwideStage(loaded, attempt, stage, false);
                 }
                 acceptedNationwide = true;
@@ -3571,14 +3587,14 @@
                     nationwideExpansionDeferred:true,
                     earlyLiveProbeStage:stage.stage
                   });
-                  setStatus(`dev36.1 Route Stretch Rescue：${Math.round(verdict.audit.straightM)}m 的短 A→B 卻繞到 ${Math.round(verdict.audit.routeM)}m（${verdict.audit.ratio.toFixed(1)}×）；先停止大範圍 HGR2 擴張，直接查 focused live OSM / 條件式通行，避免再抓 25 tiles。`, "loading");
+                  setStatus(`dev36.2 Route Stretch Rescue：${Math.round(verdict.audit.straightM)}m 的短 A→B 卻繞到 ${Math.round(verdict.audit.routeM)}m（${verdict.audit.ratio.toFixed(1)}×）；先停止大範圍 HGR2 擴張，直接查 focused live OSM / 條件式通行，避免再抓 25 tiles。`, "loading");
                   break;
                 }
-                setStatus(`dev36.1 Route Stretch Rescue：目前最快 ${Math.round(verdict.audit.routeM)}m，是直線距離的 ${verdict.audit.ratio.toFixed(1)}×；不把第一條可達路徑當成最短答案，繼續擴大路網檢查…`, "loading");
+                setStatus(`dev36.2 Route Stretch Rescue：目前最快 ${Math.round(verdict.audit.routeM)}m，是直線距離的 ${verdict.audit.ratio.toFixed(1)}×；不把第一條可達路徑當成最短答案，繼續擴大路網檢查…`, "loading");
               }
             } catch (nationwideError) {
               if (nationwideError?.message === "ROUTE_ANALYSIS_CANCELLED") throw nationwideError;
-              console.warn(`[Haidian dev36.1 nationwide graph] HGR2 stage ${stage.stage} unavailable; checking fallback/next stage.`, nationwideError);
+              console.warn(`[Haidian dev36.2 nationwide graph] HGR2 stage ${stage.stage} unavailable; checking fallback/next stage.`, nationwideError);
               lastGraphFailure = nationwideError?.message || String(nationwideError);
               graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, requestedBackend:'hgr2', error: lastGraphFailure, routed: false });
             }
@@ -3593,7 +3609,7 @@
             if (shouldCrossCheckHgr1) {
               try {
                 setStatus(primarySuspicious
-                  ? `dev36.1：HGR2 stage ${stage.stage} 路線異常繞遠；以同一範圍檢查 HGR1 topology…`
+                  ? `dev36.2：HGR2 stage ${stage.stage} 路線異常繞遠；以同一範圍檢查 HGR1 topology…`
                   : `dev34.5：HGR2 stage ${stage.stage} 尚未連通；以同一範圍檢查 HGR1 fallback…`, "loading");
                 const loaded = await prefetchNationwideGraph(nationwideSeed, { ...stage, preferHgr2: false });
                 const attempt = {
@@ -3610,7 +3626,7 @@
                 const verdict = rememberStageRoute(graphCandidates, graphResult, attempt, loaded, stage);
                 if (verdict.accept) {
                   if (topologyProbeFastestOnly) {
-                    setStatus(`dev36.1：HGR1 stage ${stage.stage} topology 合理；只在選定 graph 上執行一次完整 shade search…`, "loading");
+                    setStatus(`dev36.2：HGR1 stage ${stage.stage} topology 合理；只在選定 graph 上執行一次完整 shade search…`, "loading");
                     graphCandidates = await routeLoadedNationwideStage(loaded, attempt, stage, false);
                   }
                   acceptedNationwide = true;
@@ -3618,7 +3634,7 @@
                 }
               } catch (hgr1Error) {
                 if (hgr1Error?.message === "ROUTE_ANALYSIS_CANCELLED") throw hgr1Error;
-                console.warn(`[Haidian dev36.1 nationwide graph] HGR1 cross-check stage ${stage.stage} unavailable; expanding if another stage exists.`, hgr1Error);
+                console.warn(`[Haidian dev36.2 nationwide graph] HGR1 cross-check stage ${stage.stage} unavailable; expanding if another stage exists.`, hgr1Error);
                 lastGraphFailure = hgr1Error?.message || String(hgr1Error);
                 graphLoadAttempts.push({ stage: stage.stage, marginM: stage.marginM, ring: stage.ring, requestedBackend:'hgr1', connectivityFallback:true, error: lastGraphFailure, routed: false });
               }
@@ -3651,7 +3667,7 @@
             // rescue runs first; static full scoring is retained only as a last
             // fallback if all short-route rescue layers fail.
             if (topologyProbeFastestOnly && !earlyLiveStretchRescue) {
-              setStatus(`dev36.1：靜態 topology probes 完成；只對目前最短的 ${Math.round(bestStretchedNationwide.distanceM)}m graph 執行一次完整 shade search…`, "loading");
+              setStatus(`dev36.2：靜態 topology probes 完成；只對目前最短的 ${Math.round(bestStretchedNationwide.distanceM)}m graph 執行一次完整 shade search…`, "loading");
               await runSelectedNationwideFullSearch();
             } else if (earlyLiveStretchRescue) {
               perf.routeStretchRescue = Object.assign({}, perf.routeStretchRescue || {}, { staticFullSearchDeferred:true });
@@ -3685,7 +3701,7 @@
           const savedDistanceM = graphFastestDistanceM(savedGraphCandidates);
           try {
             setStatus(needsOverpassRescue
-              ? `dev36.1 Route Stretch Rescue：靜態路網最快仍 ${Math.round(preOverpassStretch.routeM)}m（${preOverpassStretch.ratio.toFixed(1)}× 直線）；先用 live OSM 做 topology-only 交叉檢查…`
+              ? `dev36.2 Route Stretch Rescue：靜態路網最快仍 ${Math.round(preOverpassStretch.routeM)}m（${preOverpassStretch.ratio.toFixed(1)}× 直線）；先用 live OSM 做 topology-only 交叉檢查…`
               : "v9 fallback：正在讀取 OSM Overpass 步行路網…", "loading");
             const overpassStarted = nowMs();
             const overpassResult = await window.HaidianPedestrianGraph.findRoutes(
@@ -3728,7 +3744,7 @@
                 overpassAccepted:false,
                 overpassError:graphError?.message || String(graphError)
               });
-              console.warn("[Haidian dev36.1 graph] live Overpass stretch cross-check unavailable; retaining current route.", graphError);
+              console.warn("[Haidian dev36.2 graph] live Overpass stretch cross-check unavailable; retaining current route.", graphError);
             } else {
               graphResult = { available: false, error: graphError?.message || String(graphError) };
               lastGraphFailure = graphResult.error;
@@ -3738,19 +3754,87 @@
           }
         }
 
-        // dev36.1 controlled-access rescue. Ticketed parks, campuses and similar
+
+        // dev36.2 local noding rescue. A rendered OSM footway can visually meet a
+        // road/path while the source ways do not share a node. HGR2, raw Overpass
+        // routing and Valhalla will all then agree on the same absurd detour. Before
+        // blaming access tags, inspect the already-fetched strict live-OSM graph for
+        // one high-confidence dangling-endpoint -> edge near-touch. The repair is
+        // evaluated only in a detached clone and is never written to production.
+        let postStrictStretch = routeStretchAudit(aPoint, bPoint, graphCandidates);
+        if (graphCandidates.length && postStrictStretch.triggered && stretchOpts.autoLocalNodingRescue !== false &&
+            typeof window.HaidianPedestrianGraph?.runAutoLocalNodingRescue === 'function') {
+          try {
+            setStatus(`dev36.2：公開 OSM 仍需 ${Math.round(postStrictStretch.routeM)}m；檢查 A→B corridor 內「幾何相接但沒有 shared node」的局部 noding 斷點…`, "loading");
+            const repairStarted = nowMs();
+            const repaired = await window.HaidianPedestrianGraph.runAutoLocalNodingRescue(aPoint, bPoint, {
+              departure, speedMps, detourPct,
+              touchMaxM: stretchOpts.autoLocalNodingTouchMaxM,
+              reviewMaxM: stretchOpts.autoLocalNodingReviewMaxM,
+              corridorM: stretchOpts.autoLocalNodingCorridorM,
+              minImprovementM: stretchOpts.autoLocalNodingMinImprovementM,
+              maxCandidates: stretchOpts.autoLocalNodingMaxCandidates,
+              sharedShadeCache: sharedGraphShadeCache,
+              shadeConcurrency: config.graphRouting?.shadeConcurrency,
+              shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
+              shadeTimeBucketSec: config.graphRouting?.shadeTimeBucketSec,
+              shadeSampleSpacingM: config.graphRouting?.shadeSampleSpacingM,
+              shadeMaxSamplesPerEdge: config.graphRouting?.shadeMaxSamplesPerEdge,
+              canopyTimeoutMs: config.canopyTimeoutMs,
+              maxExpandedStates: config.graphRouting?.maxExpandedStates,
+              maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
+              cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
+              yieldEveryExpanded: config.graphRouting?.yieldEveryExpanded,
+              shouldCancel: () => serial !== analysisSerial,
+              onProgress: graphProgress
+            });
+            perf.graphMs = Number(perf.graphMs || 0) + (nowMs() - repairStarted);
+            const repairCandidates = Array.isArray(repaired?.candidates) ? repaired.candidates : [];
+            const repairedDistanceM = repairCandidates.length ? Math.min(...repairCandidates.map((c)=>Number(c.distanceM||Infinity))) : Number(repaired?.best?.distanceM);
+            const accepted = Boolean(repaired?.accepted && repairCandidates.length && Number.isFinite(repairedDistanceM));
+            perf.routeStretchRescue = Object.assign({}, perf.routeStretchRescue || {}, {
+              triggered:true,
+              localNodingAttempted:true,
+              localNodingAccepted:accepted,
+              localNodingCandidateCount:Number(repaired?.candidateCount || 0),
+              localNodingAutoEligibleCount:Number(repaired?.autoEligibleCount || 0),
+              localNodingReviewOnlyCount:Number(repaired?.reviewOnlyCount || 0),
+              localNodingTestedCount:Number(repaired?.testedCount || 0),
+              localNodingGapM:Number(repaired?.best?.spec?.gapM ?? 0),
+              localNodingDistanceM:Number.isFinite(repairedDistanceM) ? repairedDistanceM : null,
+              localNodingImprovementM:Number(repaired?.best?.improvementM ?? 0),
+              localNodingClassification:repaired?.best?.spec?.classification || null,
+              localNodingProductionGraphMutated:false
+            });
+            if (accepted) {
+              for (const c of repairCandidates) stretchRescueCandidates.push(c);
+              setStatus(`dev36.2：已在 detached clone 找到高可信度 local noding 修復；${Math.round(Number(repaired.baselineDistanceM||0))}m → ${Math.round(repairedDistanceM)}m，production graph 未修改。`, "ok");
+            }
+          } catch (repairError) {
+            perf.routeStretchRescue = Object.assign({}, perf.routeStretchRescue || {}, {
+              triggered:true,
+              localNodingAttempted:true,
+              localNodingAccepted:false,
+              localNodingError:repairError?.message || String(repairError),
+              localNodingProductionGraphMutated:false
+            });
+            console.warn("[Haidian dev36.2 graph] local noding rescue unavailable; continuing with controlled-access/mature fallback.", repairError);
+          }
+        }
+
+        // dev36.2 local-noding rescue. Ticketed parks, campuses and similar
         // destinations are sometimes mapped access=private even though a visitor
         // may legally enter with admission/permission. Never change the default
         // public graph. Build a separate live-OSM graph, keep foot=no/private
         // blocked, and accept only material improvements whose private segment is
         // near A or B rather than a mid-route shortcut through private land.
-        let postStrictStretch = routeStretchAudit(aPoint, bPoint, graphCandidates);
-        if (graphCandidates.length && postStrictStretch.triggered && stretchOpts.conditionalPrivateAccessProbe !== false) {
+        postStrictStretch = routeStretchAudit(aPoint, bPoint, graphCandidates);
+        if (stretchRescueCandidates.length === 0 && graphCandidates.length && postStrictStretch.triggered && stretchOpts.conditionalPrivateAccessProbe !== false) {
           const beforePrivateCandidates = graphCandidates.slice();
           const beforePrivateResult = graphResult;
           const beforePrivateDistanceM = graphFastestDistanceM(beforePrivateCandidates);
           try {
-            setStatus(`dev36.1：公開步行路網仍需 ${Math.round(postStrictStretch.routeM)}m；檢查「需門票／許可」的終點型 access=private 路段，不允許私人地中途抄近路…`, "loading");
+            setStatus(`dev36.2：公開步行路網仍需 ${Math.round(postStrictStretch.routeM)}m；檢查終點附近的 OSM access=private 路段（可能是園區入口／管制標註），不允許私人地中途抄近路…`, "loading");
             const privateStarted = nowMs();
             const privateProbe = await window.HaidianPedestrianGraph.findRoutes(
               aPoint,
@@ -3798,7 +3882,7 @@
               conditionalAccessAccepted:false,
               conditionalAccessError:privateError?.message || String(privateError)
             });
-            console.warn("[Haidian dev36.1 graph] conditional private-access probe unavailable; retaining strict route.", privateError);
+            console.warn("[Haidian dev36.2 graph] conditional private-access probe unavailable; retaining strict route.", privateError);
           }
         }
 
@@ -3807,10 +3891,10 @@
         // useful when OSM topology/access interpretation differs from our browser
         // graph builder.
         const postPrivateStretch = routeStretchAudit(aPoint, bPoint, graphCandidates);
-        if (graphCandidates.length && postPrivateStretch.triggered && stretchOpts.matureValhallaProbe !== false && typeof window.HaidianPedestrianGraph?.fetchValhallaPedestrianRoute === "function") {
+        if (stretchRescueCandidates.length === 0 && graphCandidates.length && postPrivateStretch.triggered && stretchOpts.matureValhallaProbe !== false && typeof window.HaidianPedestrianGraph?.fetchValhallaPedestrianRoute === "function") {
           const currentDistanceM = graphFastestDistanceM(graphCandidates);
           try {
-            setStatus(`dev36.1：本地 graph 仍異常繞遠；用獨立 Valhalla pedestrian engine 做最後的 A→B 路徑交叉驗證…`, "loading");
+            setStatus(`dev36.2：本地 graph 仍異常繞遠；用獨立 Valhalla pedestrian engine 做最後的 A→B 路徑交叉驗證…`, "loading");
             const matureStarted = nowMs();
             const mature = await window.HaidianPedestrianGraph.fetchValhallaPedestrianRoute(aPoint, bPoint, {
               timeoutMs: config.graphRouting?.matureEngineTimeoutMs,
@@ -3845,7 +3929,7 @@
               valhallaAccepted:false,
               valhallaError:matureError?.message || String(matureError)
             });
-            console.warn("[Haidian dev36.1 graph] Valhalla rescue unavailable; retaining local graph candidates.", matureError);
+            console.warn("[Haidian dev36.2 graph] Valhalla rescue unavailable; retaining local graph candidates.", matureError);
           }
         }
 
@@ -3856,8 +3940,8 @@
           const probeResult = graphResult;
           try {
             setStatus(selectedOverpassAllowPrivate
-              ? "dev36.1：條件式園區通行 topology 已救回短路徑；現在只對這張 graph 執行一次完整 min-sun 搜尋…"
-              : "dev36.1：live OSM topology 已選定；現在只執行一次完整 min-sun 搜尋…", "loading");
+              ? "dev36.2：條件式園區通行 topology 已救回短路徑；現在只對這張 graph 執行一次完整 min-sun 搜尋…"
+              : "dev36.2：live OSM topology 已選定；現在只執行一次完整 min-sun 搜尋…", "loading");
             const fullStarted = nowMs();
             const fullOverpass = await window.HaidianPedestrianGraph.findRoutes(
               aPoint,
@@ -3880,7 +3964,7 @@
             perf.routeStretchRescue = Object.assign({}, perf.routeStretchRescue || {}, {
               selectedOverpassFullSearchError:fullError?.message || String(fullError)
             });
-            console.warn("[Haidian dev36.1 graph] final live-OSM min-sun search failed; retaining proven topology route for dense scoring.", fullError);
+            console.warn("[Haidian dev36.2 graph] final live-OSM min-sun search failed; retaining proven topology route for dense scoring.", fullError);
           }
         }
 
@@ -3891,7 +3975,7 @@
         if (earlyLiveStretchRescue && selectedOverpassAllowPrivate === null && stretchRescueCandidates.length === 0 &&
             (graphResult?.topologyOnly === true || graphResult?.diagnostics?.topologyOnly === true) && typeof runSelectedNationwideFullSearch === 'function') {
           try {
-            setStatus("dev36.1：focused rescue 未找到更短且可驗證的路徑；回退到單次靜態 HGR2/HGR1 完整 min-sun 搜尋…", "loading");
+            setStatus("dev36.2：focused rescue 未找到更短且可驗證的路徑；回退到單次靜態 HGR2/HGR1 完整 min-sun 搜尋…", "loading");
             const fallbackStarted = nowMs();
             const ok = await runSelectedNationwideFullSearch();
             perf.graphMs = Number(perf.graphMs || 0) + (nowMs() - fallbackStarted);
@@ -3907,7 +3991,7 @@
               staticFullSearchFallbackAvailable:false,
               staticFullSearchFallbackError:fallbackError?.message || String(fallbackError)
             });
-            console.warn("[Haidian dev36.1 graph] deferred static full search failed; retaining topology-only route for dense scoring.", fallbackError);
+            console.warn("[Haidian dev36.2 graph] deferred static full search failed; retaining topology-only route for dense scoring.", fallbackError);
           }
         }
       }
@@ -3951,7 +4035,7 @@
             directEvidenceProbe
           });
           setStatus(directEvidenceProbe
-            ? `dev36.1 Route Stretch Rescue：自動路線仍異常繞遠；改掃 A→B 直接 corridor 的官方步行 evidence，不再只沿繞路搜尋…`
+            ? `dev36.2 Route Stretch Rescue：自動路線仍異常繞遠；改掃 A→B 直接 corridor 的官方步行 evidence，不再只沿繞路搜尋…`
             : "dev33：載入 A→B corridor 官方 evidence tiles，並自動稽核 source-following witness…", "loading");
           fusionEvidenceLoad = await prefetchNationwideEvidence(primaryEvidenceSeed, {
             marginM: evidenceMarginM,
@@ -3959,7 +4043,7 @@
           });
           if (serial !== analysisSerial) return;
           setStatus(directEvidenceProbe
-            ? "dev36.1：在 detached local graph 嘗試 direct-corridor verified official-fusion rescue…"
+            ? "dev36.2：在 detached local graph 嘗試 direct-corridor verified official-fusion rescue…"
             : "dev33：在 detached local graph 產生 route-local verified official-fusion min-sun 候選…", "loading");
           experimentalFusion = await buildAutomaticExperimentalFusionCandidate({
             departure,
@@ -4055,8 +4139,8 @@
       }
 
       if (bundle.comparisonValid) {
-        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev36.1 全臺 HGR2 micrograph 路線結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev36.1 全臺 HGR1 路線結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
-        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev36.1 verified official-fusion 候選" : "";
+        const graphText = bundle.graphDiagnostics ? (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr2' ? "；已加入 dev36.2 全臺 HGR2 micrograph 路線結果" : (bundle.graphDiagnostics.graphBackend === 'nationwide-hgr1' ? "；已加入 dev36.2 全臺 HGR1 路線結果" : "；已加入 v9 OSM Graph 直接搜尋結果")) : "";
+        const fusionText = bundle.experimentalFusionStatus?.available ? "；已加入 dev36.2 verified official-fusion 候選" : "";
         setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}。耗時 ${(perf.totalMs/1000).toFixed(1)} 秒。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";

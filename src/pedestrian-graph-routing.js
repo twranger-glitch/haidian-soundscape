@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.1 (controlled-access rescue + cheap topology probes; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev36.2 (local-noding rescue + controlled-access fallback + cheap topology probes; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev36.1";
+  const VERSION = "v9.0.0-dev36.2";
 
   const DEFAULTS = {
     enabled: true,
@@ -83,6 +83,12 @@
     // mid-route shortcut.
     allowPrivateFootAccess: false,
     conditionalPrivateTerminalBufferM: 350,
+    // dev36.2: strict live-OSM local noding rescue. Only high-confidence
+    // near-touch candidates are auto-accepted; wider gaps remain diagnostic.
+    autoLocalNodingTouchMaxM: 2.75,
+    autoLocalNodingReviewMaxM: 8,
+    autoLocalNodingCorridorM: 120,
+    autoLocalNodingMaxCandidates: 48,
     diagnosticMatchThresholdM: 16,
     diagnosticSampleSpacingM: 18,
     shadeConcurrency: 3,
@@ -372,6 +378,12 @@
       privateAccessTerminalOnly: privateAccessEdgeCount > 0 && privateAccessInteriorDistanceM <= 0.5,
       totalPathDistanceM: totalDistanceM
     };
+  }
+
+  function conditionalPrivateCandidateSafe(accessStats = {}, options = {}) {
+    if (options.allowPrivateFootAccess !== true) return true;
+    if (accessStats?.usesConditionalPrivateAccess !== true) return true;
+    return accessStats?.privateAccessTerminalOnly === true && Number(accessStats?.privateAccessInteriorDistanceM || 0) <= 0.5;
   }
 
   // v9.0.0-dev8+: terminal snapping is walking-first, not motor-road-first.
@@ -3466,6 +3478,323 @@
     }
   }
 
+
+  // dev36.2: automatic local noding rescue for extreme short-range stretch.
+  //
+  // This is deliberately *not* a generic proximity-join engine.  It searches the
+  // already-built strict live-OSM fine graph for a very specific data defect:
+  // a degree-1 pedestrian endpoint that geometrically touches (or nearly touches)
+  // another walkable edge without sharing a graph node.  Only a high-confidence
+  // near-touch (default <=2.75 m), compatible layer/bridge/tunnel semantics, a
+  // direct A->B corridor location, and a large demonstrable route improvement
+  // can become an automatic rescue candidate.  The connector exists only in a
+  // detached clone; production graph/source data are never mutated.
+  function summaryTagValue(edge, key) {
+    const raw = edge?.tagsSummary?.[key];
+    if (Array.isArray(raw)) return normalizedTag(raw[0] ?? '');
+    return normalizedTag(raw ?? '');
+  }
+
+  function structuralFlag(value) {
+    const v = normalizedTag(value);
+    return !['', 'no', '0', 'false', 'none'].includes(v);
+  }
+
+  function localNodingGradeCompatible(aEdge, bEdge) {
+    if (!aEdge || !bEdge) return false;
+    const aLayer = summaryTagValue(aEdge, 'layer') || '0';
+    const bLayer = summaryTagValue(bEdge, 'layer') || '0';
+    if (aLayer !== bLayer) return false;
+    const aBridge = structuralFlag(summaryTagValue(aEdge, 'bridge'));
+    const bBridge = structuralFlag(summaryTagValue(bEdge, 'bridge'));
+    const aTunnel = structuralFlag(summaryTagValue(aEdge, 'tunnel'));
+    const bTunnel = structuralFlag(summaryTagValue(bEdge, 'tunnel'));
+    if (aBridge !== bBridge || aTunnel !== bTunnel) return false;
+    return true;
+  }
+
+  function localNodingCorridorDistanceM(point, a, b) {
+    const hit = nearestPointOnGeometry(point, [a, b]);
+    return Number(hit?.distanceM ?? Infinity);
+  }
+
+  function localNodingTargetAtEndpoint(graph, edge, point, toleranceM = 2.0) {
+    const a = graph?.nodes?.get?.(String(edge?.a));
+    const b = graph?.nodes?.get?.(String(edge?.b));
+    const P = asLatLng(point);
+    if (!P || !a || !b) return false;
+    return Math.min(haversineM(P, a), haversineM(P, b)) <= Math.max(0.5, Number(toleranceM) || 2.0);
+  }
+
+  function discoverAutoLocalNodingCandidates(graph, a, b, options = {}) {
+    const A = asLatLng(a), B = asLatLng(b);
+    if (!graph?.nodes?.size || !graph?.edges?.size || !A || !B) return [];
+    const touchMaxM = Math.max(0.5, Number(options.touchMaxM ?? config.autoLocalNodingTouchMaxM ?? 2.75));
+    const reviewMaxM = Math.max(touchMaxM, Number(options.reviewMaxM ?? config.autoLocalNodingReviewMaxM ?? 8));
+    const corridorM = Math.max(20, Number(options.corridorM ?? config.autoLocalNodingCorridorM ?? 120));
+    const maxCandidates = Math.max(4, Number(options.maxCandidates ?? config.autoLocalNodingMaxCandidates ?? 48));
+    const excluded = new Set((options.excludeNodeIds || []).map(String));
+    const edges = Array.from(graph.edges.values());
+    const out = [];
+
+    for (const [nodeId0, node] of graph.nodes) {
+      const nodeId = String(nodeId0);
+      if (excluded.has(nodeId)) continue;
+      const refs = graph.adjacency.get(nodeId) || [];
+      if (refs.length !== 1) continue; // conservative: only true dangling endpoints
+      if (localNodingCorridorDistanceM(node, A, B) > corridorM + 1e-9) continue;
+      const incident = graph.edges.get(String(refs[0]?.edgeId));
+      if (!incident) continue;
+      const incidentFamily = highwayFamily(primaryHighway(incident));
+
+      for (const target of edges) {
+        if (!target || String(target.id) === String(incident.id)) continue;
+        if (String(target.a) === nodeId || String(target.b) === nodeId) continue;
+        const hit = nearestPointOnGeometry(node, target.geometry);
+        const gapM = Number(hit?.distanceM ?? Infinity);
+        if (!Number.isFinite(gapM) || gapM > reviewMaxM + 1e-9) continue;
+        if (!hit?.point || localNodingCorridorDistanceM(hit.point, A, B) > corridorM + 1e-9) continue;
+        if (!localNodingGradeCompatible(incident, target)) continue;
+
+        const targetFamily = highwayFamily(primaryHighway(target));
+        const targetAtEndpoint = localNodingTargetAtEndpoint(graph, target, hit.point, 2.0);
+        const highConfidence = gapM <= touchMaxM + 1e-9;
+        // Gaps wider than the near-touch threshold are diagnostic only.  Keep
+        // only plausible path/local-road endpoint pairs so telemetry is useful
+        // without turning the browser into a generic gap-bridger.
+        if (!highConfidence && !(targetAtEndpoint && incidentFamily !== 'road' && targetFamily !== 'road')) continue;
+
+        out.push({
+          nodeId,
+          incidentEdgeId: String(incident.id),
+          targetEdgeId: String(target.id),
+          targetPoint: { lat: Number(hit.point.lat), lng: Number(hit.point.lng) },
+          targetSegmentIndex: Number(hit.segmentIndex || 0),
+          gapM,
+          corridorDistanceM: Math.max(localNodingCorridorDistanceM(node, A, B), localNodingCorridorDistanceM(hit.point, A, B)),
+          targetAtEndpoint,
+          autoEligible: highConfidence,
+          classification: highConfidence ? 'non-noded-geometric-touch' : 'short-endpoint-gap-review',
+          fromHighway: primaryHighway(incident),
+          toHighway: primaryHighway(target),
+          fromWayIds: (incident.wayIds || []).map(String).slice(0, 6),
+          toWayIds: (target.wayIds || []).map(String).slice(0, 6),
+          score: gapM * 20 + Math.max(localNodingCorridorDistanceM(node, A, B), localNodingCorridorDistanceM(hit.point, A, B))
+        });
+      }
+    }
+    out.sort((x, y) => x.score - y.score || x.gapM - y.gapM);
+    const deduped = [];
+    const seen = new Set();
+    for (const row of out) {
+      const key = `${row.nodeId}|${row.targetEdgeId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+      if (deduped.length >= maxCandidates) break;
+    }
+    return deduped;
+  }
+
+  function splitSpecificFineEdgeAtPoint(graph, edgeId, point, label = 'repair') {
+    const edge = graph?.edges?.get?.(String(edgeId));
+    const P = asLatLng(point);
+    if (!edge || !P) return null;
+    const hit = nearestPointOnGeometry(P, edge.geometry);
+    if (!hit?.point) return null;
+    const split = splitGeometryAtHit(edge.geometry, hit);
+    if (!split) return null;
+    const endpointToleranceM = Math.max(0.5, Number(config.snapEndpointToleranceM || 1.5));
+    const aId = String(edge.a), bId = String(edge.b);
+    const aNode = graph.nodes.get(aId), bNode = graph.nodes.get(bId);
+    if (aNode && haversineM(split.point, aNode) <= endpointToleranceM) return { id:aId, node:aNode, split:false };
+    if (bNode && haversineM(split.point, bNode) <= endpointToleranceM) return { id:bId, node:bNode, split:false };
+
+    let nodeId = `auto-noding:${String(label)}`;
+    let serial = 1;
+    while (graph.nodes.has(nodeId)) nodeId = `auto-noding:${String(label)}:${++serial}`;
+    graph.nodes.set(nodeId, { id:nodeId, lat:split.point.lat, lng:split.point.lng, virtual:true, topologyRepairSplit:true });
+    graph.adjacency.set(nodeId, []);
+    removeFineEdge(graph, edge.id);
+    let part = 0;
+    const addPiece = (from, to, geometry) => {
+      const d = routeDistanceM(geometry);
+      if (!(d > 0.05)) return;
+      const id = `${edge.id}:auto-noding:${++part}`;
+      const copy = Object.assign({}, edge, {
+        id, a:String(from), b:String(to), distanceM:d,
+        geometry:(geometry || []).map((q)=>({lat:Number(q.lat),lng:Number(q.lng)})),
+        wayIds:(edge.wayIds || []).slice(),
+        tagsSummary:edge.tagsSummary ? JSON.parse(JSON.stringify(edge.tagsSummary)) : {}
+      });
+      graph.edges.set(id, copy);
+      if (!graph.adjacency.has(String(from))) graph.adjacency.set(String(from), []);
+      if (!graph.adjacency.has(String(to))) graph.adjacency.set(String(to), []);
+      graph.adjacency.get(String(from)).push({ edgeId:id, to:String(to) });
+      graph.adjacency.get(String(to)).push({ edgeId:id, to:String(from) });
+    };
+    addPiece(aId, nodeId, split.before);
+    addPiece(nodeId, bId, split.after);
+    return { id:nodeId, node:graph.nodes.get(nodeId), split:true };
+  }
+
+  function addAutoLocalNodingConnector(graph, spec, serial = 1) {
+    const fromId = String(spec?.nodeId || '');
+    const fromNode = graph?.nodes?.get?.(fromId);
+    if (!fromNode) return null;
+    const target = splitSpecificFineEdgeAtPoint(graph, spec.targetEdgeId, spec.targetPoint, `target:${serial}`);
+    if (!target?.id || String(target.id) === fromId) return null;
+    const toNode = graph.nodes.get(String(target.id));
+    if (!toNode) return null;
+    const gapM = haversineM(fromNode, toNode);
+    const distanceM = Math.max(0.05, gapM);
+    const id = `dev36.2-local-noding:${serial}`;
+    const edge = {
+      id, a:fromId, b:String(target.id), distanceM,
+      geometry:[{lat:Number(fromNode.lat),lng:Number(fromNode.lng)},{lat:Number(toNode.lat),lng:Number(toNode.lng)}],
+      wayIds:[],
+      tagsSummary:{highway:['path'],foot:['yes'],diagnostic:['dev36.2-local-noding-rescue']},
+      topologyRepairConnector:true,
+      productionGraphMutated:false,
+      repairClassification:spec.classification,
+      repairGapM:Number(spec.gapM || gapM)
+    };
+    graph.edges.set(id, edge);
+    if (!graph.adjacency.has(fromId)) graph.adjacency.set(fromId, []);
+    if (!graph.adjacency.has(String(target.id))) graph.adjacency.set(String(target.id), []);
+    graph.adjacency.get(fromId).push({edgeId:id,to:String(target.id)});
+    graph.adjacency.get(String(target.id)).push({edgeId:id,to:fromId});
+    return { edgeId:id, fromId, toId:String(target.id), distanceM, targetSplit:Boolean(target.split) };
+  }
+
+  function localNodingRescueOnGraph(baseGraph, startId, endId, a, b, options = {}) {
+    const A = asLatLng(a), B = asLatLng(b);
+    if (!baseGraph?.nodes?.has?.(String(startId)) || !baseGraph?.nodes?.has?.(String(endId)) || !A || !B) {
+      return { available:false, reason:'missing-graph-or-endpoints', productionGraphMutated:false };
+    }
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, 1.25);
+    const straightM = haversineM(A, B);
+    const baseline = dijkstraTimes(baseGraph, String(startId), speedMps, false);
+    const baselineTimeS = Number(baseline.dist.get(String(endId)));
+    if (!Number.isFinite(baselineTimeS)) return { available:false, reason:'baseline-disconnected', productionGraphMutated:false };
+    const baselineM = baselineTimeS * speedMps;
+    const specs = discoverAutoLocalNodingCandidates(baseGraph, A, B, {
+      touchMaxM: options.touchMaxM,
+      reviewMaxM: options.reviewMaxM,
+      corridorM: options.corridorM,
+      maxCandidates: options.maxCandidates,
+      excludeNodeIds:[String(startId), String(endId)]
+    });
+    const autoSpecs = specs.filter((x)=>x.autoEligible === true);
+    const minImprovementM = Math.max(20, Number(options.minImprovementM || 120));
+    let best = null;
+    let tested = 0;
+    for (let i=0; i<autoSpecs.length; i += 1) {
+      const spec = autoSpecs[i];
+      const graph = cloneFineGraphForExperimentalUse(baseGraph);
+      if (!graph) continue;
+      const connector = addAutoLocalNodingConnector(graph, spec, i + 1);
+      if (!connector) continue;
+      tested += 1;
+      const route = dijkstraTimes(graph, String(startId), speedMps, false);
+      const timeS = Number(route.dist.get(String(endId)));
+      if (!Number.isFinite(timeS)) continue;
+      const path = reconstructDijkstra(graph, route.prev, String(startId), String(endId));
+      if (!path?.points?.length) continue;
+      path.walkSeconds = timeS;
+      const distanceM = Number(path.distanceM || timeS * speedMps);
+      const improvementM = baselineM - distanceM;
+      const ratio = straightM > 0 ? distanceM / straightM : Infinity;
+      if (distanceM + 0.5 < straightM * 0.95) continue; // impossible/degenerate shortcut guard
+      if (improvementM < minImprovementM) continue;
+      const row = { graph, spec, connector, path, distanceM, improvementM, ratio };
+      if (!best || row.distanceM < best.distanceM) best = row;
+    }
+    return {
+      available:true,
+      accepted:Boolean(best),
+      baselineDistanceM:baselineM,
+      straightM,
+      candidateCount:specs.length,
+      autoEligibleCount:autoSpecs.length,
+      reviewOnlyCount:specs.length-autoSpecs.length,
+      testedCount:tested,
+      best,
+      productionGraphMutated:false
+    };
+  }
+
+  function makeLocalNodingCandidate(kind, path, meta = {}) {
+    const isShade = kind === 'topology-repair-shade';
+    const id = isShade ? 'graph-topology-repair-min-sun' : 'graph-topology-repair-fastest';
+    const hash = geometryHash(path?.points || []);
+    return {
+      id,
+      stableCandidateId:`${id}:${hash}`,
+      geometryHash:hash,
+      kind,
+      distanceM:Number(path?.distanceM || 0),
+      durationS:Number(path?.walkSeconds || path?.durationS || 0),
+      points:path?.points || [],
+      graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds)) ? Number(path.directSunSeconds) : null,
+      graphMeta:Object.assign({backend:'osm-local-noding-repair',topologyRepair:true,productionGraphMutated:false},meta)
+    };
+  }
+
+  async function runAutoLocalNodingRescue(a, b, options = {}) {
+    const state = lastGraphDebug;
+    if (!state?.graph || !state?.snapA?.id || !state?.snapB?.id) {
+      return { available:false, reason:'no-live-osm-graph', candidates:[], productionGraphMutated:false };
+    }
+    // The rescue is specifically based on strict live OSM.  Do not auto-repair a
+    // nationwide tile graph or a graph already built with private-access rescue.
+    if (state.endpoint === 'nationwide-hgr2' || state.nationwide === true) {
+      return { available:false, reason:'live-osm-required', candidates:[], productionGraphMutated:false };
+    }
+    const topo = localNodingRescueOnGraph(state.graph, state.snapA.id, state.snapB.id, a, b, options);
+    if (!topo?.accepted || !topo.best) {
+      return Object.assign({ candidates:[] }, topo || {available:false,reason:'not-accepted'}, { productionGraphMutated:false });
+    }
+    const meta = {
+      connectorGapM:Number(topo.best.spec?.gapM || topo.best.connector?.distanceM || 0),
+      connectorClassification:topo.best.spec?.classification || 'non-noded-geometric-touch',
+      connectorFromHighway:topo.best.spec?.fromHighway || null,
+      connectorToHighway:topo.best.spec?.toHighway || null,
+      connectorFromWayIds:topo.best.spec?.fromWayIds || [],
+      connectorToWayIds:topo.best.spec?.toWayIds || [],
+      baselineDistanceM:Number(topo.baselineDistanceM || 0),
+      repairedFastestDistanceM:Number(topo.best.distanceM || 0),
+      improvementM:Number(topo.best.improvementM || 0),
+      repairConfidence:'high-near-touch',
+      productionGraphMutated:false
+    };
+    if (options.fastestOnly === true) {
+      return Object.assign({}, topo, {
+        candidates:[makeLocalNodingCandidate('topology-repair-fastest', topo.best.path, meta)],
+        productionGraphMutated:false
+      });
+    }
+    const searched = await runExperimentalSearchOnClone(topo.best.graph, state.snapA.id, state.snapB.id, options);
+    if (!searched?.available) {
+      return Object.assign({}, topo, {
+        candidates:[makeLocalNodingCandidate('topology-repair-fastest', topo.best.path, meta)],
+        searchReason:searched?.reason || null,
+        productionGraphMutated:false
+      });
+    }
+    const candidates = [];
+    if (searched.fastest?.points?.length) candidates.push(makeLocalNodingCandidate('topology-repair-fastest', searched.fastest, meta));
+    if (searched.minSun?.points?.length && !sameGraphPathGeometry(searched.minSun, searched.fastest)) {
+      candidates.push(makeLocalNodingCandidate('topology-repair-shade', searched.minSun, meta));
+    }
+    return Object.assign({}, topo, {
+      candidates,
+      searchExpandedStates:Number(searched.searchExpandedStates || 0),
+      shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations || 0),
+      productionGraphMutated:false
+    });
+  }
+
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
   // source-gap connectors already justified by dev16 route-support transitions
   // and dev17 raw-OSM evidence. The production graph is never mutated.
@@ -5685,6 +6014,9 @@
     const candidates = [];
     const candidateLifecycle = [];
     const fastestAccessStats = pathAccessStats(graph, fastestPath.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
+    if (!conditionalPrivateCandidateSafe(fastestAccessStats, options)) {
+      throw new Error("CONDITIONAL_PRIVATE_INTERIOR_SHORTCUT");
+    }
     const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'overpass-live', conditionalAccessProbe: options.allowPrivateFootAccess === true }, fastestAccessStats) });
     candidates.push(fastestCandidate);
     candidateLifecycle.push({stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept'});
@@ -5692,8 +6024,11 @@
       const minAccessStats = pathAccessStats(graph, minSun.path.edgeIds || [], { terminalBufferM: options.conditionalPrivateTerminalBufferM || config.conditionalPrivateTerminalBufferM });
       const minCandidate = makeGraphCandidate('graph-shade', minSun.path, { graphEstimatedDirectSunSeconds:minSun.path.directSunSeconds, graphMeta:Object.assign({ edgeIds:minSun.path.edgeIds, snapA, snapB, backend:'overpass-live', conditionalAccessProbe: options.allowPrivateFootAccess === true }, minAccessStats) });
       const same = sameGraphPathGeometry(minSun.path, fastestPath);
-      candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:same?'suppressed':'kept',reason:same?'exact-same-edge-sequence-as-fastest':null,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
-      if (!same) candidates.push(minCandidate);
+      const conditionalSafe = conditionalPrivateCandidateSafe(minAccessStats, options);
+      const suppressed = same || !conditionalSafe;
+      const reason = same ? 'exact-same-edge-sequence-as-fastest' : (!conditionalSafe ? 'conditional-private-interior-suppressed' : null);
+      candidateLifecycle.push({stage:'generated',candidateId:minCandidate.id,stableCandidateId:minCandidate.stableCandidateId,geometryHash:minCandidate.geometryHash,status:suppressed?'suppressed':'kept',reason,legacyRouteSignatureCollision:!same&&routeSignature(minSun.path.points)===routeSignature(fastestPath.points)});
+      if (!suppressed) candidates.push(minCandidate);
     } else {
       candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
     }
@@ -5836,6 +6171,7 @@
     runSourceGapCounterfactualAudit,
     runMatureEngineBenchmark,
     fetchValhallaPedestrianRoute,
+    runAutoLocalNodingRescue,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -5909,6 +6245,13 @@
       primaryHighway,
       highwayFamily,
       pathAccessStats,
+      conditionalPrivateCandidateSafe,
+      discoverAutoLocalNodingCandidates,
+      localNodingGradeCompatible,
+      splitSpecificFineEdgeAtPoint,
+      addAutoLocalNodingConnector,
+      localNodingRescueOnGraph,
+      runAutoLocalNodingRescue,
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,
