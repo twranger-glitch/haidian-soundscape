@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev34.3 Core-first + Connectivity Fallback Runtime
+ * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev34.4 Production-parity Topology Probe Runtime
  *
  * Loads only the official GIS tiles needed near the active route.  Full national
  * archives stay on the dataset host (recommended: Hugging Face Dataset); the
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.3";
+  const VERSION = "v9.0.0-dev34.4";
   const DEFAULTS = {
     enabled: true,
     // Set huggingFaceRepo (e.g. "owner/taiwan-route-tiles") after publishing.
@@ -450,7 +450,7 @@
         if (h2?.available) return h2;
       } catch (error) {
         hgr2Error = String(error?.message || error);
-        console.warn('[Haidian dev34.3 nationwide graph] HGR2 load failed; trying HGR1 for the same bbox.', error);
+        console.warn('[Haidian dev34.4 nationwide graph] HGR2 load failed; trying HGR1 for the same bbox.', error);
       }
     }
     const started = nowMs();

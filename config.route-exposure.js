@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.3 Core-first + Connectivity Fallback */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.4 Production-parity Topology Probe */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -62,7 +62,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     graphLoadStages: [
       { marginM: 220, ring: 0 },
       { marginM: 520, ring: 0 },
-      // dev34.3: expand the core bbox before adding a one-tile moat.
+      // dev34.4: expand the core bbox before adding a one-tile moat.
       // This avoids making a peripheral ring tile a hard dependency for the first 850 m probe.
       { marginM: 850, ring: 0 },
       { marginM: 850, ring: 1 }

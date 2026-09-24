@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.3
+ * Haidian Soundscape — Nationwide Regression Matrix v9.0.0-dev34.4
  *
  * Developer-only regression harness. It never mutates the active production graph,
  * never changes the route winner, and never runs automatically during normal A→B.
@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.3";
+  const VERSION = "v9.0.0-dev34.4";
   const rootConfig = window.HAIDIAN_ROUTE_EXPOSURE_CONFIG || {};
   const DEFAULT_CASES = [
     { id: "north-taipei", region: "north", label: "北部・臺北", a: { lat: 25.0336, lng: 121.5437 }, b: { lat: 25.0402, lng: 121.5512 }, required: true },
@@ -28,7 +28,7 @@
     requestTimeoutMs: 18000,
     graphLoadStages: Array.isArray(rootConfig.nationwideTiles?.graphLoadStages) && rootConfig.nationwideTiles.graphLoadStages.length
       ? rootConfig.nationwideTiles.graphLoadStages
-      : [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 1 }],
+      : [{ marginM: 220, ring: 0 }, { marginM: 520, ring: 0 }, { marginM: 850, ring: 0 }, { marginM: 850, ring: 1 }],
     cases: DEFAULT_CASES
   };
   const config = Object.assign({}, DEFAULTS, rootConfig.nationwideRegression || {});
@@ -189,6 +189,89 @@
     const points = nodeIds.map((id) => graph.nodes.get(String(id))).filter(Boolean).map((p) => ({ lat: p.lat, lng: p.lng }));
     return { available: true, distanceM: dist.get(target), snapA: sa.distanceM, snapB: sb.distanceM, expanded, edgeIds, points };
   }
+  function productionParityTopologyPath(graph, a, b, backend = null) {
+    const legacy = shortestPath(graph, a, b);
+    const internals = window.HaidianPedestrianGraph?._internals || {};
+    const snapPointIntoFineGraph = internals.snapPointIntoFineGraph;
+    const dijkstraTimes = internals.dijkstraTimes;
+    const reconstructDijkstra = internals.reconstructDijkstra;
+    const subsetExistingFineGraph = internals.subsetExistingFineGraph;
+    const externalGraphToFineGraph = internals.externalGraphToFineGraph;
+    if (typeof snapPointIntoFineGraph !== 'function' || typeof dijkstraTimes !== 'function') {
+      return Object.assign({}, legacy, {
+        probeMode: 'legacy-node-fallback',
+        legacyNodeConnected: Boolean(legacy?.available),
+        legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+        legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null,
+        parityUnavailable: true
+      });
+    }
+    let working = null;
+    try {
+      const isHgr2 = graph?.preRefinedFineGraph === true || graph?.hgr2 === true || String(backend || '').includes('hgr2');
+      if (isHgr2 && typeof subsetExistingFineGraph === 'function') {
+        working = subsetExistingFineGraph(graph, new Set(graph?.edges?.keys?.() || []));
+      } else if (typeof externalGraphToFineGraph === 'function') {
+        working = externalGraphToFineGraph(graph, { skipRefinement: true });
+      }
+      if (!working?.edges?.size) {
+        return {
+          available: false, reason: 'parity-working-graph-empty', probeMode: 'production-parity-edge',
+          legacyNodeConnected: Boolean(legacy?.available),
+          legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+          legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+        };
+      }
+      const snapMaxM = Math.max(1, Number(rootConfig.graphRouting?.snapMaxM ?? 120) || 120);
+      const snapA = snapPointIntoFineGraph(working, a, 'regression-A', snapMaxM);
+      const snapB = snapPointIntoFineGraph(working, b, 'regression-B', snapMaxM);
+      if (!snapA || !snapB) {
+        return {
+          available: false, reason: 'parity-edge-snap-failed', probeMode: 'production-parity-edge',
+          snapA: snapA?.distanceM ?? null, snapB: snapB?.distanceM ?? null,
+          snapTypeA: snapA?.snapType || null, snapTypeB: snapB?.snapType || null,
+          legacyNodeConnected: Boolean(legacy?.available),
+          legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+          legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+        };
+      }
+      const speedMps = 1.25;
+      const d = dijkstraTimes(working, snapA.id, speedMps, false);
+      const seconds = Number(d?.dist?.get?.(String(snapB.id)));
+      if (!Number.isFinite(seconds)) {
+        return {
+          available: false, reason: 'disconnected', probeMode: 'production-parity-edge',
+          snapA: Number(snapA.distanceM || 0), snapB: Number(snapB.distanceM || 0),
+          snapTypeA: snapA.snapType || null, snapTypeB: snapB.snapType || null,
+          reachableNodes: Number(d?.dist?.size || 0),
+          legacyNodeConnected: Boolean(legacy?.available),
+          legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+          legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+        };
+      }
+      const route = typeof reconstructDijkstra === 'function' ? reconstructDijkstra(working, d.prev, snapA.id, snapB.id) : null;
+      return {
+        available: true, reason: null, probeMode: 'production-parity-edge',
+        distanceM: Number(route?.distanceM ?? (seconds * speedMps)),
+        snapA: Number(snapA.distanceM || 0), snapB: Number(snapB.distanceM || 0),
+        snapTypeA: snapA.snapType || null, snapTypeB: snapB.snapType || null,
+        reachableNodes: Number(d?.dist?.size || 0),
+        edgeIds: safeArray(route?.edgeIds),
+        points: safeArray(route?.points).length >= 2 ? route.points : [asPoint(a), asPoint(b)].filter(Boolean),
+        legacyNodeConnected: Boolean(legacy?.available),
+        legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+        legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+      };
+    } catch (error) {
+      return {
+        available: false, reason: `parity-probe-error: ${String(error?.message || error)}`, probeMode: 'production-parity-edge',
+        legacyNodeConnected: Boolean(legacy?.available),
+        legacySnapA: Number.isFinite(Number(legacy?.snapA)) ? Number(legacy.snapA) : null,
+        legacySnapB: Number.isFinite(Number(legacy?.snapB)) ? Number(legacy.snapB) : null
+      };
+    }
+  }
+
   function syntheticExistingEdgeFeature(graph) {
     const edge = Array.from(graph?.edges?.values?.() || []).find((e) => safeArray(e?.geometry).length >= 2);
     if (!edge) return null;
@@ -214,7 +297,7 @@
       try {
         load = await loadGraphIndependent([a, b], env, {
           preferHgr2,
-          // dev34.3: if this is the explicit connectivity fallback, do not let the
+          // dev34.4: if this is the explicit connectivity fallback, do not let the
           // HGR1 probe bounce back into HGR2. The first probe still keeps the
           // dev34.2 fetch/decode -> HGR1 failover behavior.
           fallbackToHgr1OnHgr2Error: preferHgr2,
@@ -223,7 +306,7 @@
           maxTiles: options.maxGraphTiles ?? config.maxGraphTiles,
           requestTimeoutMs: options.requestTimeoutMs ?? config.requestTimeoutMs
         });
-        if (load?.available && load?.graph?.edges?.size) path = shortestPath(load.graph, a, b);
+        if (load?.available && load?.graph?.edges?.size) path = productionParityTopologyPath(load.graph, a, b, load.backend);
       } catch (e) {
         error = String(e?.message || e);
       }
@@ -244,6 +327,13 @@
         routeDistanceM: Number.isFinite(Number(path?.distanceM)) ? Number(path.distanceM) : null,
         snapA: Number.isFinite(Number(path?.snapA)) ? Number(path.snapA) : null,
         snapB: Number.isFinite(Number(path?.snapB)) ? Number(path.snapB) : null,
+        snapTypeA: path?.snapTypeA || null,
+        snapTypeB: path?.snapTypeB || null,
+        probeMode: path?.probeMode || null,
+        reachableNodes: Number.isFinite(Number(path?.reachableNodes)) ? Number(path.reachableNodes) : null,
+        legacyNodeConnected: path?.legacyNodeConnected === true,
+        legacySnapA: Number.isFinite(Number(path?.legacySnapA)) ? Number(path.legacySnapA) : null,
+        legacySnapB: Number.isFinite(Number(path?.legacySnapB)) ? Number(path.legacySnapB) : null,
         reason: error || path?.reason || (!load?.available ? load?.reason || 'graph-unavailable' : null)
       });
       if (load) lastLoad = load;
@@ -255,7 +345,7 @@
       const primary = await probe(stage, true, false);
       if (primary.connected) return { available: true, graphLoad: primary.load, path: primary.path, stage, attempts, productionGraphMutated: false };
 
-      // dev34.3: HGR2 being fetchable is not the same as HGR2 being connected
+      // dev34.4: HGR2 being fetchable is not the same as HGR2 being connected
       // for the current core window. Before widening the window, try the mature
       // HGR1 graph over the exact same bbox. This is a backend fallback only;
       // it does not change costs, detour limits, evidence, or production graph.
@@ -278,7 +368,10 @@
       const backend = x.backend ? `/${x.backend.replace('nationwide-', '')}` : '';
       const fallback = x.hgr2Fallback ? ` fetch-fallback(${x.hgr2Error || 'HGR2 error'})` : '';
       const connectivity = x.connectivityFallback ? ' connectivity-fallback' : '';
-      return `S${x.stage}${requested}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${fallback}${connectivity}`;
+      const snaps = Number.isFinite(Number(x.snapA)) || Number.isFinite(Number(x.snapB)) ? ` snap ${Number(x.snapA || 0).toFixed(1)}/${Number(x.snapB || 0).toFixed(1)}m${x.snapTypeA || x.snapTypeB ? `(${x.snapTypeA || '?'}→${x.snapTypeB || '?'})` : ''}` : '';
+      const legacy = x.probeMode === 'production-parity-edge' ? ` legacy-node=${x.legacyNodeConnected ? 'connected' : 'disconnected'}` : '';
+      const reach = Number.isFinite(Number(x.reachableNodes)) ? ` reach=${Math.round(Number(x.reachableNodes))}` : '';
+      return `S${x.stage}${requested}:${x.loadedTileCount}t/${x.nodeCount}n/${x.edgeCount}e${backend} ${x.connected ? "connected" : (x.reason || "no-route")}${snaps}${reach}${legacy}${fallback}${connectivity}`;
     }).join(" | ");
     if (!graphLoad?.available) {
       checks.push(assert("graph-availability", !required || testCase.scopeProbe, attemptText || staged.reason || "no graph", required ? "required" : "informational"));
@@ -309,7 +402,7 @@
     if (testCase.crossTile) checks.push(assert("cross-hgr2-tile", graphLoad.backend === "nationwide-hgr2" && graphLoad.loadedTileCount >= 2, `${graphLoad.loadedTileCount} HGR2 tiles`));
     if (testCase.hgr1Fallback) {
       const hgr1 = await loadGraphIndependent([a, b], env, { preferHgr2: false, requestTimeoutMs: options.requestTimeoutMs });
-      const hgr1Path = hgr1.available ? shortestPath(hgr1.graph, a, b) : { available: false };
+      const hgr1Path = hgr1.available ? productionParityTopologyPath(hgr1.graph, a, b, hgr1.backend) : { available: false };
       checks.push(assert("hgr2-to-hgr1-fallback", hgr1.available && hgr1.backend === "nationwide-hgr1" && hgr1Path.available, hgr1.available ? `${hgr1.loadedTileCount} HGR1 tiles; route ${hgr1Path.available ? "connected" : "disconnected"}` : "HGR1 unavailable"));
     }
     const emptyDiscovery = discoveryApi?.discoverFromGraph ? discoveryApi.discoverFromGraph(graphLoad.graph, [corridor], {}, {}) : null;
@@ -369,5 +462,5 @@
   }
 
   function getState() { return { version: VERSION, status: state.status, error: state.error, lastRun: clone(state.lastRun), enabled: config.enabled !== false }; }
-  window.HaidianNationwideRegression = { version: VERSION, get config() { return Object.assign({}, config); }, runMatrix, getState, _internals: { graphFingerprint, shortestPath, loadGraphIndependent, loadEvidenceIndependent, syntheticExistingEdgeFeature, normalizedGraphLoadStages, loadGraphStaged, runCase } };
+  window.HaidianNationwideRegression = { version: VERSION, get config() { return Object.assign({}, config); }, runMatrix, getState, _internals: { graphFingerprint, shortestPath, productionParityTopologyPath, loadGraphIndependent, loadEvidenceIndependent, syntheticExistingEdgeFeature, normalizedGraphLoadStages, loadGraphStaged, runCase } };
 })();
