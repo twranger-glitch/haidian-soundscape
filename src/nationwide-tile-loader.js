@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev34.5 Connectivity-aware Endpoint Snap Runtime
+ * Haidian Soundscape — Taiwan Nationwide Tile Loader v9.0.0-dev35.0 Connectivity Snap Locked Runtime
  *
  * Loads only the official GIS tiles needed near the active route.  Full national
  * archives stay on the dataset host (recommended: Hugging Face Dataset); the
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.5";
+  const VERSION = "v9.0.0-dev35.0";
   const DEFAULTS = {
     enabled: true,
     // Set huggingFaceRepo (e.g. "owner/taiwan-route-tiles") after publishing.

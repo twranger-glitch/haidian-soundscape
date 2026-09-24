@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev34.5 (dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev35.0 (dev32 correctness + dev34.5 connectivity locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.5";
+  const VERSION = "v9.0.0-dev35.0";
 
   const DEFAULTS = {
     enabled: true,
@@ -663,7 +663,7 @@
     const heap = new MinHeap((a, b) => a.t - b.t);
     const cooperativeYield = makeCooperativeYielder(options);
     const every = Math.max(40, Number(options.yieldEveryDijkstra || config.yieldEveryDijkstra || 180));
-    let popped = 0;
+    let popped = 0, yieldChecks = 0, yieldCount = 0, yieldWaitMs = 0;
     heap.push({ node: String(startId), t: 0 });
     while (heap.size) {
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
@@ -672,7 +672,13 @@
       popped += 1;
       if (popped % every === 0) {
         options.onProgress?.({ stage: reverse ? "fastest-reverse" : "fastest", message: "正在整理最短路徑網路…", expanded: popped });
-        await cooperativeYield();
+        yieldChecks += 1;
+        const yieldStarted = nowMs();
+        const didYield = await cooperativeYield();
+        if (didYield) {
+          yieldCount += 1;
+          yieldWaitMs += Math.max(0, nowMs() - yieldStarted);
+        }
       }
       for (const ref of graph.adjacency.get(cur.node) || []) {
         const edge = graph.edges.get(ref.edgeId);
@@ -686,8 +692,12 @@
         }
       }
     }
-    await cooperativeYield(true);
-    return { dist, prev, reverse };
+    // dev35.0: do not force a compositor-frame yield after Dijkstra is already
+    // complete. Background/throttled tabs can delay requestAnimationFrame by
+    // many seconds; the old unconditional tail yield made two cheap HGR2 bound
+    // passes appear to take ~30–240 s. Long traversals still yield above when
+    // the CPU budget is exceeded, preserving progress/cancellation responsiveness.
+    return { dist, prev, reverse, scheduling: { popped, yieldChecks, yieldCount, yieldWaitMs } };
   }
 
   function edgeGeometryFor(edge, fromId) {
@@ -5093,6 +5103,7 @@
     if(!snapA||!snapB) return {available:false,reason:'hgr2-endpoint-snap-failed',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',connectivitySnapPlan:endpointSnapPlan,performance:perf,productionGraphMutated:false}};
     options.onProgress?.({stage:'fastest-hgr2',message:'dev33：HGR2 已預先細切；直接計算距離界線，不重建 source graph…'});
     t=nowMs(); const fromA=await dijkstraTimesResponsive(full,snapA.id,speedMps,false,options); const toB=await dijkstraTimesResponsive(full,snapB.id,speedMps,true,options); perf.distanceBoundsMs=nowMs()-t;
+    perf.distanceBoundsScheduling={fromA:fromA.scheduling||null,toB:toB.scheduling||null,totalYieldCount:Number(fromA.scheduling?.yieldCount||0)+Number(toB.scheduling?.yieldCount||0),totalYieldWaitMs:Number(fromA.scheduling?.yieldWaitMs||0)+Number(toB.scheduling?.yieldWaitMs||0)};
     const fastestTime=fromA.dist.get(String(snapB.id));
     if(!Number.isFinite(fastestTime)) return {available:false,reason:'hgr2-graph-disconnected',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',snapA,snapB,connectivitySnapPlan:endpointSnapPlan,performance:perf,productionGraphMutated:false}};
     const fastestPath=reconstructDijkstra(full,fromA.prev,snapA.id,snapB.id);
@@ -5177,6 +5188,7 @@
     const coarseFromA = await dijkstraTimesResponsive(coarseGraph, coarseSnapA.id, speedMps, false, options);
     const coarseToB = await dijkstraTimesResponsive(coarseGraph, coarseSnapB.id, speedMps, true, options);
     perf.coarseDijkstraMs = nowMs() - t;
+    perf.coarseDijkstraScheduling = { fromA:coarseFromA.scheduling||null, toB:coarseToB.scheduling||null, totalYieldCount:Number(coarseFromA.scheduling?.yieldCount||0)+Number(coarseToB.scheduling?.yieldCount||0), totalYieldWaitMs:Number(coarseFromA.scheduling?.yieldWaitMs||0)+Number(coarseToB.scheduling?.yieldWaitMs||0) };
     const coarseFastestTime = coarseFromA.dist.get(String(coarseSnapB.id));
     if (!Number.isFinite(coarseFastestTime)) return { available:false, reason:'nationwide-graph-disconnected', candidates:[], diagnostics:{graphBackend:'nationwide-hgr1', snapA:coarseSnapA, snapB:coarseSnapB, connectivitySnapPlan:endpointSnapPlan, performance:perf, productionGraphMutated:false} };
     const coarseDetourLimitS = coarseFastestTime * (1 + detourPct / 100);
@@ -5212,6 +5224,7 @@
     const fromA = await dijkstraTimesResponsive(graph, snapA.id, speedMps, false, options);
     const toB = await dijkstraTimesResponsive(graph, snapB.id, speedMps, true, options);
     perf.fineDijkstraMs = nowMs() - t;
+    perf.fineDijkstraScheduling = { fromA:fromA.scheduling||null, toB:toB.scheduling||null, totalYieldCount:Number(fromA.scheduling?.yieldCount||0)+Number(toB.scheduling?.yieldCount||0), totalYieldWaitMs:Number(fromA.scheduling?.yieldWaitMs||0)+Number(toB.scheduling?.yieldWaitMs||0) };
     const fastestTime = fromA.dist.get(String(snapB.id));
     if (!Number.isFinite(fastestTime)) return { available:false, reason:'nationwide-fine-graph-disconnected', candidates:[], diagnostics:{graphBackend:'nationwide-hgr1', snapA, snapB, connectivitySnapPlan:endpointSnapPlan, performance:perf, productionGraphMutated:false} };
     const fastestPath = reconstructDijkstra(graph, fromA.prev, snapA.id, snapB.id);

@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev34.5 Connectivity-aware Endpoint Snap
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev35.0 Bounds Yield De-throttle
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev34.5";
+  const VERSION = "v9.0.0-dev35.0";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -2790,7 +2790,7 @@
     } else if (run?.reason || st.error) {
       body = `<span>最近一次未完成：${escapeHtml(run?.error || run?.reason || st.error || 'unknown')}。</span>`;
     }
-    return `<div class="re-method-note" data-re-dev34-regression><b>dev34.5 Nationwide Regression · connectivity-aware endpoint snap：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
+    return `<div class="re-method-note" data-re-dev34-regression><b>dev35.0 Nationwide Regression · dev34.5 connectivity snap locked：</b>${body}<div class="re-graph-actions"><button type="button" data-re-dev34-regression-run ${busy ? 'disabled' : ''}>${busy ? 'Regression running…' : '執行全臺 regression matrix'}</button></div></div>`;
   }
 
   function refreshNationwideRegressionPanel() {
@@ -2805,11 +2805,11 @@
   async function runNationwideRegressionLive() {
     const api = window.HaidianNationwideRegression;
     if (!api?.runMatrix) {
-      setStatus('dev34.5 nationwide regression 模組未載入。', 'warning');
+      setStatus('dev35.0 nationwide regression 模組未載入。', 'warning');
       return;
     }
     refreshNationwideRegressionPanel();
-    setStatus('dev34.5：開始執行全臺 regression matrix；這不會修改目前 production graph，也不會改變目前候選路線。', 'loading');
+    setStatus('dev35.0：開始執行全臺 regression matrix；dev34.5 connectivity snap 鎖定，不修改目前 production graph。', 'loading');
     try {
       const result = await api.runMatrix({
         onProgress: (info) => {
@@ -2819,13 +2819,13 @@
       });
       refreshNationwideRegressionPanel();
       if (!result?.available) {
-        setStatus(`dev34.5 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
+        setStatus(`dev35.0 nationwide regression 未完成：${result?.error || result?.reason || 'unknown'}。production graph 未修改。`, 'warning');
         return;
       }
-      setStatus(`dev34.5 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
+      setStatus(`dev35.0 nationwide regression ${result.requiredPass ? 'PASS' : 'FAIL'}：${Number(result.passCount || 0)}/${Number(result.caseCount || 0)} cases pass；productionGraphMutated=false。`, result.requiredPass ? 'ok' : 'warning');
     } catch (error) {
       refreshNationwideRegressionPanel();
-      setStatus(`dev34.5 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
+      setStatus(`dev35.0 nationwide regression 失敗：${error?.message || error}。production graph 未修改。`, 'warning');
     }
   }
 
@@ -2928,8 +2928,10 @@
       const pruneText = prunePct >= 99.95 ? '>99.9' : prunePct.toFixed(1);
       const stageText = nationwideBackend && graphDiag.nationwideLoadStage ? `stage ${graphDiag.nationwideLoadStage}・${Math.round(graphDiag.nationwideLoadedTileCount || 0)} tiles` : '';
       const p = graphDiag.performance || {}, tp = graphDiag.nationwideTilePerformance || {};
+      const boundSched = p.distanceBoundsScheduling || {};
+      const boundYieldText = hgr2Backend ? `・bounds-yield ${Math.round(Number(boundSched.totalYieldCount||0))}x/${(Number(boundSched.totalYieldWaitMs||0)/1000).toFixed(1)}s` : '';
       const graphBreakdown = hgr2Backend
-        ? `・bounds ${(Number(p.distanceBoundsMs||0)/1000).toFixed(1)}s・prune ${(Number(p.pruneMs||0)/1000).toFixed(1)}s・shade-table ${(Number(p.temporalShadeTableMs||0)/1000).toFixed(1)}s・min-sun ${(Number(p.minSunMs||0)/1000).toFixed(1)}s`
+        ? `・bounds ${(Number(p.distanceBoundsMs||0)/1000).toFixed(1)}s${boundYieldText}・prune ${(Number(p.pruneMs||0)/1000).toFixed(1)}s・shade-table ${(Number(p.temporalShadeTableMs||0)/1000).toFixed(1)}s・min-sun ${(Number(p.minSunMs||0)/1000).toFixed(1)}s`
         : hgr1Backend
           ? `・coarse ${(Number(p.coarseDijkstraMs||0)/1000).toFixed(1)}s・refine ${(Number(p.fineRefineMs||0)/1000).toFixed(1)}s・min-sun ${(Number(p.minSunMs||0)/1000).toFixed(1)}s`
           : '';
@@ -2942,7 +2944,7 @@
       const graphShapeText = hgr2Backend
         ? `HGR2 已離線細切；microtile 合併後 ${rawCount} 節點／${rawEdges} fine edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%），不再執行 runtime fine-split。`
         : `${nationwideBackend ? '核心 tile 合併後' : '原始決策 graph'} ${rawCount} 節點／${rawEdges} source edge；detour-safe pruning 保留 ${pruned} edge（裁掉 ${pruneText}%）後才細切成 ${Math.round(graphDiag.fineNodes || graphDiag.contractedNodes || 0)} 節點／${Math.round(graphDiag.fineEdges || graphDiag.contractedEdges || 0)} edge。`;
-      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity-aware endpoint snap</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
+      graphNote = `<div class="re-graph-note"><b>${graphLabel} 已啟用 · dev32 correctness locked · dev33 discovery locked · dev34.5 connectivity snap locked · dev35.0 bounds yield de-throttle</b><span>${stageText ? `${stageText}；` : ''}${graphShapeText}${snapLabel}約 ${Math.round(graphDiag.snapA?.distanceM || 0)} m／${Math.round(graphDiag.snapB?.distanceM || 0)} m${snapRescueText}。</span><span>搜尋：history-safe min-sun；temporal table ${Math.round(graphDiag.temporalShadeTable?.evaluated || 0)} cells／${Math.round(graphDiag.temporalShadeTable?.tasks || 0)} tasks；搜尋階段新增評估 ${Math.round(graphDiag.shadeEdgeEvaluations || 0)} 條 edge 日照、cache hit ${Math.round(graphDiag.shadeCacheHits || 0)}；展開 ${Math.round(graphDiag.searchExpandedStates || 0)} 狀態；${perfText}。${nationwideBackend ? ' 未呼叫 Overpass。' : ''}</span><span>dev13–18 forensic 診斷維持按需執行；HGR2 不改 verified fusion／production lock。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>${graphDebugVisible ? "隱藏" : "顯示"} Graph</button><button type="button" data-re-graph-diagnose>執行進階 Graph 診斷</button></div><div data-re-graph-diagnosis>${lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : ""}</div></div>`;
     } else if (bundle.graphError || graphDebugAvailable) {
       graphNote = `<div class="re-graph-note is-error"><b>OSM Graph 路由沒有完成</b><span>${escapeHtml(bundle.graphError || lastGraphFailure || "graph search 未產生候選")}</span>${graphDebugAvailable ? '<span>但步行 graph 已成功建立，所以仍可直接顯示 graph、對照你的手繪河堤路線，判斷是拓樸/connector 還是搜尋成本問題。</span><div class="re-graph-actions"><button type="button" data-re-graph-toggle>顯示 OSM Graph</button><button type="button" data-re-graph-diagnose>驗證手繪 Graph 路徑</button></div><div data-re-graph-diagnosis>' + (lastManualGraphDiagnosis ? graphDiagnosisHtml(lastManualGraphDiagnosis) : '') + '</div>' : '<span>這次連 graph 都沒有建立成功；可直接再按一次「開始找最不曬」重試 Overpass。</span>'}</div>`;
     }
@@ -2950,7 +2952,7 @@
     return `<section class="re-candidates">
       <div class="re-candidate-head"><b>候選路線比較</b><span>最多繞路 ${Math.round(bundle.detourPct)}%</span></div>
       ${notice}${graphNote}${candidateCorrectnessSummaryHtml(bundle)}${nationwideRegressionSummaryHtml()}${multiSourcePanelHtml()}${fusionManualComparisonHtml(bundle)}${manualState}${qualityNote}${rows}
-      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev34 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
+      ${bundle.performance ? (() => { const sd=bundle.performance.shadeEngine||{}; const bi=sd.buildingSpatialIndex||{}; const red=Number.isFinite(Number(bi.reductionRatio)) ? `${(Number(bi.reductionRatio)*100).toFixed(1)}%` : '—'; return `<div class="re-method-note"><b>dev35 Performance：</b>總計 ${(Number(bundle.performance.totalMs||0)/1000).toFixed(1)}s；graph ${(Number(bundle.performance.graphMs||0)/1000).toFixed(1)}s；fusion ${(Number(bundle.performance.fusionMs||0)/1000).toFixed(1)}s；dense ${(Number(bundle.performance.denseScoreMs||0)/1000).toFixed(1)}s；provider ${(Number(bundle.performance.providerMs||0)/1000).toFixed(1)}s。<br>Shade engine：building ${(Number(sd.buildingEvalMs||0)/1000).toFixed(1)}s；canopy ${(Number(sd.canopyEvalMs||0)/1000).toFixed(1)}s；building broad-phase 裁掉 ${red}；平均候選 ${Number(bi.averageCandidates||0).toFixed(1)}/${Math.round(Number(sd.buildingFeatureCount||0))}；shared graph cache ${Math.round(Number(bundle.performance.sharedGraphShadeCacheSize||0))}。${bundle.graphDiagnostics?.temporalShadeTable ? `<br>Temporal table：${Math.round(Number(bundle.graphDiagnostics.temporalShadeTable.evaluated||0))} cells；prewarm ${(Number(bundle.graphDiagnostics.performance?.temporalShadeTableMs||0)/1000).toFixed(1)}s；search misses ${Math.round(Number(bundle.graphDiagnostics.shadeEdgeEvaluations||0))}；search cache hits ${Math.round(Number(bundle.graphDiagnostics.shadeCacheHits||0))}。` : ''}</div>`; })() : ''}
       <div class="re-method-note">評選以「距離上限內的直接日照時間最少」為核心，不以提高遮蔭百分比為目的。v9 細緻 graph 會保留多個時間／日照互不支配的合法狀態；走進無尾巷再原路走回仍不會成為最佳解。</div>
     </section>`;
   }

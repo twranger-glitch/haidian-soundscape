@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev34.5 Connectivity-aware Endpoint Snap */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev35.0 Bounds Yield De-throttle */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
