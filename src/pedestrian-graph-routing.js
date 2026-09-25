@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.0 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.1 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.0";
+  const VERSION = "v9.0.0-dev37.1";
 
   const DEFAULTS = {
     enabled: true,
@@ -89,7 +89,7 @@
     autoLocalNodingReviewMaxM: 8,
     autoLocalNodingCorridorM: 120,
     autoLocalNodingMaxCandidates: 48,
-    // dev37.0 visibility-mesh controls.  Corridor Steiner nodes keep long open
+    // dev37.1 visibility-mesh controls.  Corridor Steiner nodes keep long open
     // realms connected without permitting very long synthetic chords; obstacle
     // boundary anchors let the mesh route around lakes/buildings instead of only
     // rejecting the direct segment.
@@ -4048,7 +4048,7 @@
     return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
   }
 
-  // dev37.0: Pedestrian Realm Graph rescue.
+  // dev37.1: Pedestrian Realm Graph rescue.
   //
   // dev36.0-dev36.3 proved that an extreme local detour can survive larger HGR
   // windows, strict/conditional OSM, Valhalla, endpoint noding, interior noding,
@@ -4060,12 +4060,42 @@
   // realms.  It never mutates the production graph and every synthetic realm
   // segment stays explicitly labelled for UI/research review.
 
-  function pedestrianRealmOverpassQuery(bbox) {
+  function pedestrianRealmOverpassQuery(bbox, a, b) {
     const bb = `${bbox.south.toFixed(6)},${bbox.west.toFixed(6)},${bbox.north.toFixed(6)},${bbox.east.toFixed(6)}`;
-    return `[out:json][timeout:20];\n(\n` +
+    // A bbox selects ways by their nodes; a realm enclosing the whole bbox may
+    // have no node inside it. is_in + pivot recovers the source way/relation at
+    // either terminal, while the tag filters keep large admin areas out.
+    const containing = a && b ?
+      `is_in(${Number(a.lat).toFixed(7)},${Number(a.lng).toFixed(7)})->.realmA;\n` +
+      `is_in(${Number(b.lat).toFixed(7)},${Number(b.lng).toFixed(7)})->.realmB;\n` +
+      `(.realmA;.realmB;)->.realmContaining;\n` : '';
+    return `[out:json][timeout:12];\n${containing}(\n` +
       `  way["highway"](${bb});\n` +
       `  way["leisure"="park"](${bb});\n` +
       `  relation["leisure"="park"](${bb});\n` +
+      `  nwr["leisure"~"^(garden|recreation_ground)$"](${bb});\n` +
+      `  nwr["landuse"~"^(recreation_ground|village_green)$"](${bb});\n` +
+      (containing ?
+        `  way(pivot.realmContaining)["leisure"~"^(park|garden|recreation_ground)$"];\n` +
+        `  rel(pivot.realmContaining)["leisure"~"^(park|garden|recreation_ground)$"];\n` +
+        `  way(pivot.realmContaining)["landuse"~"^(recreation_ground|village_green)$"];\n` +
+        `  rel(pivot.realmContaining)["landuse"~"^(recreation_ground|village_green)$"];\n` +
+        `  way(pivot.realmContaining)["place"="square"];\n` +
+        `  rel(pivot.realmContaining)["place"="square"];\n` +
+        `  way(pivot.realmContaining)["highway"="pedestrian"]["area"="yes"];\n` +
+        `  rel(pivot.realmContaining)["highway"="pedestrian"]["area"="yes"];\n` +
+        `  way(pivot.realmContaining)["area:highway"];\n` +
+        `  rel(pivot.realmContaining)["area:highway"];\n` +
+        `  way(pivot.realmContaining)["amenity"~"^(marketplace|school|college|university|hospital)$"];\n` +
+        `  rel(pivot.realmContaining)["amenity"~"^(marketplace|school|college|university|hospital)$"];\n` +
+        `  way(pivot.realmContaining)["tourism"~"^(zoo|theme_park)$"];\n` +
+        `  rel(pivot.realmContaining)["tourism"~"^(zoo|theme_park)$"];\n` +
+        `  way(pivot.realmContaining)["natural"="water"];\n` +
+        `  rel(pivot.realmContaining)["natural"="water"];\n` +
+        `  way(pivot.realmContaining)["water"];\n` +
+        `  rel(pivot.realmContaining)["water"];\n` +
+        `  way(pivot.realmContaining)["building"];\n` +
+        `  rel(pivot.realmContaining)["building"];\n` : '') +
       `  way["highway"="pedestrian"]["area"="yes"](${bb});\n` +
       `  relation["highway"="pedestrian"]["area"="yes"](${bb});\n` +
       `  way["area:highway"](${bb});\n` +
@@ -4096,13 +4126,33 @@
       `);\n(._;>;);\nout body;`;
   }
 
+  async function readRealmResponseText(response, maxBytes) {
+    if(Number(response.headers?.get?.('content-length')||0)>maxBytes)throw new Error('Realm response exceeds byte limit');
+    if(!response.body?.getReader){
+      const value=await response.text();
+      if(value.length>maxBytes)throw new Error('Realm response exceeds byte limit');
+      return value;
+    }
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let bytes=0,text='';
+    try {
+      for(;;){
+        const part=await reader.read();if(part.done)break;
+        bytes+=part.value.byteLength;
+        if(bytes>maxBytes){await reader.cancel();throw new Error('Realm response exceeds byte limit');}
+        text+=decoder.decode(part.value,{stream:true});
+      }
+      return text+decoder.decode();
+    }finally{reader.releaseLock();}
+  }
+
   async function fetchPedestrianRealmOverpass(bbox, options = {}) {
     const endpoints = Array.isArray(options.endpoints) && options.endpoints.length ? options.endpoints : config.overpassEndpoints;
-    const query = pedestrianRealmOverpassQuery(bbox);
+    const query = pedestrianRealmOverpassQuery(bbox,options.a,options.b);
     let lastError = null;
     for (const endpoint of endpoints) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Number(options.timeoutMs || config.overpassTimeoutMs));
+      const timer = setTimeout(() => controller.abort(), Math.min(12000, Number(options.timeoutMs || 9000)));
       try {
         options.onProgress?.({ stage:'pedestrian-realm-overpass', message:'dev37：讀取 OSM 公園／廣場／入口／障礙物行人空間…', endpoint });
         const response = await fetch(endpoint, {
@@ -4110,8 +4160,9 @@
           headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', Accept:'application/json' },
           body:`data=${encodeURIComponent(query)}`, signal:controller.signal
         });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload || !Array.isArray(payload.elements)) throw new Error(`Overpass HTTP ${response.status}`);
+        if(!response.ok)throw new Error(`Overpass HTTP ${response.status}`);
+        const payload=JSON.parse(await readRealmResponseText(response,3500000));
+        if(!Array.isArray(payload?.elements)||payload.elements.length>15000)throw new Error('Overpass exceeds focused element limit or invalid payload');
         return { payload, endpoint, query };
       } catch (error) {
         lastError = error;
@@ -4121,6 +4172,71 @@
     }
     if (lastError?.name === 'AbortError') throw new Error('Pedestrian Realm OSM 查詢逾時。');
     throw new Error(`Pedestrian Realm OSM 暫時無法取得：${lastError?.message || 'unknown error'}`);
+  }
+
+  // A focused read from the primary OSM map API is useful when public
+  // Overpass instances are slow or reject the request. It includes every way
+  // with a node in the bbox, but relation members can be incomplete. Complete
+  // only relevant area/obstacle relations, with a strict request budget.
+  function parsePedestrianRealmOsmXml(xmlText) {
+    if (typeof DOMParser !== 'function') throw new Error('OSM XML parser unavailable');
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length || !doc.getElementsByTagName('osm').length) throw new Error('OSM XML invalid');
+    const elements=[];
+    for (const type of ['node','way','relation']) for (const el of doc.getElementsByTagName(type)) {
+      const id=Number(el.getAttribute('id'));
+      if (!Number.isSafeInteger(id)) continue;
+      const item={type,id},tags={};
+      if(type==='node') {
+        item.lat=Number(el.getAttribute('lat'));item.lon=Number(el.getAttribute('lon'));
+        if(!Number.isFinite(item.lat)||!Number.isFinite(item.lon))continue;
+      }
+      for(const child of el.children){
+        if(child.tagName==='tag') tags[child.getAttribute('k')]=child.getAttribute('v');
+        if(type==='way'&&child.tagName==='nd') (item.nodes ||= []).push(Number(child.getAttribute('ref')));
+        if(type==='relation'&&child.tagName==='member') (item.members ||= []).push({type:child.getAttribute('type'),ref:Number(child.getAttribute('ref')),role:child.getAttribute('role')||''});
+      }
+      if(Object.keys(tags).length)item.tags=tags;
+      elements.push(item);
+      if(elements.length>15000)throw new Error('OSM map exceeds focused rescue limit');
+    }
+    return {elements,osm3s:{source:'osm-api-map'}};
+  }
+
+  function relevantIncompleteRealmRelations(payload) {
+    const ways=new Set((payload?.elements||[]).filter((e)=>e.type==='way').map((e)=>String(e.id)));
+    return (payload?.elements||[]).filter((e)=>e.type==='relation'&&
+      (classifyPedestrianRealm(e.tags||{})||classifyRealmObstacle(e.tags||{}))&&
+      (e.members||[]).some((m)=>m.type==='way'&&!ways.has(String(m.ref))));
+  }
+
+  async function fetchPedestrianRealmOsmMap(bbox,options={}) {
+    const coords=[bbox.west,bbox.south,bbox.east,bbox.north].map((x)=>Number(x).toFixed(7));
+    const endpoint=`https://www.openstreetmap.org/api/0.6/map?bbox=${coords.join(',')}`;
+    const controller=new AbortController(),timeoutMs=Math.min(18000,Math.max(3000,Number(options.osmMapTimeoutMs||15000)));
+    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try {
+      options.onProgress?.({stage:'pedestrian-realm-osm-map',message:'讀取 OSM 原始公園／步道／水體資料…',endpoint:'OSM map API'});
+      const response=await fetch(endpoint,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/xml'}});
+      if(!response.ok)throw new Error(`OSM map HTTP ${response.status}`);
+      const xml=await readRealmResponseText(response,3500000);
+      if(xml.length>3500000)throw new Error('OSM map exceeds focused rescue byte limit');
+      let payload=parsePedestrianRealmOsmXml(xml);
+      const incomplete=relevantIncompleteRealmRelations(payload);
+      const relationCompletion={needed:incomplete.length,completed:0,skipped:Math.max(0,incomplete.length-3),errors:[]};
+      for(const rel of incomplete.slice(0,3)){
+        try{
+          const full=await fetch(`https://www.openstreetmap.org/api/0.6/relation/${rel.id}/full`,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/xml'}});
+          if(!full.ok)throw new Error(`HTTP ${full.status}`);
+          const fullXml=await readRealmResponseText(full,1800000);if(fullXml.length>1800000)throw new Error('relation exceeds byte limit');
+          const more=parsePedestrianRealmOsmXml(fullXml),byId=new Map(payload.elements.map((e)=>[`${e.type}:${e.id}`,e]));
+          for(const item of more.elements)byId.set(`${item.type}:${item.id}`,item);
+          if(byId.size>15000)throw new Error('merged OSM map exceeds focused rescue element limit');
+          payload={elements:[...byId.values()],osm3s:payload.osm3s};relationCompletion.completed+=1;
+        }catch(error){relationCompletion.errors.push(`${rel.id}: ${error?.message||error}`);}
+      }
+      return {payload,endpoint:'OSM map API',relationCompletion};
+    }finally{clearTimeout(timer);}
   }
 
   function realmAccessBlocked(tags = {}) {
@@ -4133,13 +4249,15 @@
   function classifyPedestrianRealm(tags = {}) {
     const highway = normalizedTag(tags.highway), area = normalizedTag(tags.area);
     const areaHighway = normalizedTag(tags['area:highway']), leisure = normalizedTag(tags.leisure);
-    const place = normalizedTag(tags.place), amenity = normalizedTag(tags.amenity), tourism = normalizedTag(tags.tourism);
+    const place = normalizedTag(tags.place), amenity = normalizedTag(tags.amenity), tourism = normalizedTag(tags.tourism), landuse=normalizedTag(tags.landuse);
     if (realmAccessBlocked(tags)) return null;
     if (highway === 'pedestrian' && area === 'yes') return { kind:'pedestrian-area', autoEligible:true, confidence:'high', openBoundaryAllowed:true };
     if (['pedestrian','footway','path'].includes(areaHighway)) return { kind:`area-highway-${areaHighway}`, autoEligible:true, confidence:'high', openBoundaryAllowed:true };
     if (place === 'square') return { kind:'public-square', autoEligible:true, confidence:'high', openBoundaryAllowed:true };
     if (amenity === 'marketplace') return { kind:'marketplace', autoEligible:true, confidence:'medium', openBoundaryAllowed:true };
     if (leisure === 'park') return { kind:'public-park', autoEligible:true, confidence:'medium', openBoundaryAllowed:true };
+    if (landuse === 'village_green') return {kind:'public-village-green',autoEligible:true,confidence:'medium',openBoundaryAllowed:true};
+    if (landuse === 'recreation_ground' || ['garden','recreation_ground'].includes(leisure)) return {kind:'recreation-area-review',autoEligible:false,confidence:'review-only',openBoundaryAllowed:false};
     if (['school','college','university','hospital'].includes(amenity)) return { kind:`facility-${amenity}`, autoEligible:false, confidence:'review-only', openBoundaryAllowed:false };
     if (['zoo','theme_park'].includes(tourism)) return { kind:`facility-${tourism}`, autoEligible:false, confidence:'review-only', openBoundaryAllowed:false };
     return null;
@@ -4175,16 +4293,19 @@
   }
 
   function wayRingFromNodeIds(nodeIds, nodes) {
-    const pts = (nodeIds || []).map((id) => nodes.get(String(id))).filter(Boolean);
-    if (pts.length < 4 || String(nodeIds?.[0]) !== String(nodeIds?.[nodeIds.length - 1])) return [];
+    const pts = (nodeIds || []).map((id) => nodes.get(String(id)));
+    if (pts.some((p)=>!p) || pts.length < 4 || String(nodeIds?.[0]) !== String(nodeIds?.[nodeIds.length - 1])) return [];
     return normalizeClosedRing(pts);
   }
 
-  function stitchRelationRings(memberRefs, wayById, nodes) {
+  function stitchRelationRings(memberRefs, wayById, nodes, diagnostics = null, relationId = null) {
     const segments = [];
-    for (const ref of memberRefs || []) {
+    for (const ref of new Set(memberRefs || [])) {
       const way = wayById.get(String(ref));
-      if (!way || !Array.isArray(way.nodes) || way.nodes.length < 2) continue;
+      if (!way || !Array.isArray(way.nodes) || way.nodes.length < 2) {
+        if(diagnostics)diagnostics.relationMissingMemberWays+=1;
+        continue;
+      }
       segments.push(way.nodes.map(String));
     }
     const rings = [];
@@ -4207,6 +4328,10 @@
       }
       const ring = wayRingFromNodeIds(chain, nodes);
       if (ring.length) rings.push(ring);
+      else if(diagnostics){
+        diagnostics.relationUnclosedRings+=1;
+        if(diagnostics.relationFailureExamples.length<8)diagnostics.relationFailureExamples.push({id:String(relationId),reason:chain[0]===chain[chain.length-1]?'missing-member-nodes':'unclosed-member-chain'});
+      }
     }
     return rings;
   }
@@ -4224,43 +4349,61 @@
     }
     const areas = [], obstacles = [], barriers = [], portals = [];
     const seenArea = new Set(), seenObstacle = new Set();
+    const sourceDiagnostics={elementCount:(payload?.elements||[]).length,nodeCount:nodes.size,wayCount:wayById.size,relationCount:relationElements.length,
+      candidateWayCount:0,candidateRelationCount:0,sourceTagKinds:{},relationMissingMemberWays:0,relationUnclosedRings:0,relationNestedMembers:0,
+      incompleteObstacleCount:0,incompleteBarrierCount:0,wayMissingGeometry:0,relationFailureExamples:[]};
+    const countTags=(tags)=>{for(const tag of ['leisure','landuse','place','amenity','area:highway'])if(tags?.[tag]){
+      const key=`${tag}=${String(tags[tag]).slice(0,40)}`;sourceDiagnostics.sourceTagKinds[key]=(sourceDiagnostics.sourceTagKinds[key]||0)+1;
+    }};
 
+    // A tagged outer way must not bypass a relation's holes/access policy.
+    const realmMemberWays=new Set(relationElements.filter((rel)=>classifyPedestrianRealm(Object.assign({},rel.tags,{access:'yes',foot:'yes'}))).flatMap((rel)=>(rel.members||[]).filter((m)=>m.type==='way').map((m)=>String(m.ref))));
     for (const way of wayById.values()) {
+      countTags(way.tags);
       const ring = wayRingFromNodeIds(way.nodes, nodes);
       const realm = classifyPedestrianRealm(way.tags);
-      if (realm && ring.length) {
+      if(realm)sourceDiagnostics.candidateWayCount+=1;
+      const obstacleKind = classifyRealmObstacle(way.tags);
+      if((realm||obstacleKind)&&!ring.length){sourceDiagnostics.wayMissingGeometry+=1;if(obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;}
+      if (realm && ring.length && !realmMemberWays.has(way.id)) {
         const key=`way:${way.id}`; seenArea.add(key);
         areas.push(Object.assign({ id:key, sourceType:'way', sourceId:way.id, polygon:ring, holes:[], tags:Object.assign({},way.tags) }, realm));
       }
-      const obstacleKind = classifyRealmObstacle(way.tags);
       if (obstacleKind && ring.length) {
         const key=`way:${way.id}`; seenObstacle.add(key);
         obstacles.push({ id:key, kind:obstacleKind, sourceType:'way', sourceId:way.id, polygon:ring, tags:Object.assign({},way.tags) });
       }
       const barrierKind = classifyRealmBarrier(way.tags);
       if (barrierKind) {
+        if(way.nodes.some((id)=>!nodes.has(String(id)))){sourceDiagnostics.incompleteBarrierCount+=1;continue;}
         const geom=(way.nodes||[]).map((id)=>nodes.get(String(id))).filter(Boolean).map((p)=>({lat:p.lat,lng:p.lng}));
         if (geom.length>=2) barriers.push({id:`way:${way.id}`,kind:barrierKind,geometry:geom,tags:Object.assign({},way.tags)});
       }
     }
 
     for (const rel of relationElements) {
+      const realm=classifyPedestrianRealm(rel.tags || {}),obstacleKind=classifyRealmObstacle(rel.tags || {});
+      countTags(rel.tags);
+      if(!realm&&!obstacleKind)continue;
+      sourceDiagnostics.candidateRelationCount+=1;
+      const beforeMissing=sourceDiagnostics.relationMissingMemberWays,beforeOpen=sourceDiagnostics.relationUnclosedRings,beforeNested=sourceDiagnostics.relationNestedMembers;
       const outerIds=[], innerIds=[];
       for (const m of rel.members || []) {
-        if (m.type !== 'way') continue;
+        if (m.type !== 'way') {if(m.type==='relation')sourceDiagnostics.relationNestedMembers+=1;continue;}
         if (String(m.role || '').toLowerCase() === 'inner') innerIds.push(String(m.ref));
         else outerIds.push(String(m.ref));
       }
-      const outers=stitchRelationRings(outerIds,wayById,nodes), inners=stitchRelationRings(innerIds,wayById,nodes);
-      const realm=classifyPedestrianRealm(rel.tags || {});
+      const outers=stitchRelationRings(outerIds,wayById,nodes,sourceDiagnostics,rel.id), inners=stitchRelationRings(innerIds,wayById,nodes,sourceDiagnostics,rel.id);
+      const incomplete=sourceDiagnostics.relationMissingMemberWays>beforeMissing||sourceDiagnostics.relationUnclosedRings>beforeOpen||sourceDiagnostics.relationNestedMembers>beforeNested;
+      if(incomplete&&obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;
       if (realm) {
         for (let i=0;i<outers.length;i+=1) {
           const key=`relation:${rel.id}:outer:${i}`;
           if (seenArea.has(key)) continue;
-          areas.push(Object.assign({id:key,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],holes:inners.map((x)=>x.slice()),tags:Object.assign({},rel.tags||{})},realm));
+          const holes=inners.filter((x)=>pointInRingStrict(x[0],outers[i]));
+          areas.push(Object.assign({id:key,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],holes:holes.map((x)=>x.slice()),tags:Object.assign({},rel.tags||{})},incomplete?{kind:realm.kind,autoEligible:false,confidence:'review-only',openBoundaryAllowed:false,incompleteRelation:true}:realm));
         }
       }
-      const obstacleKind=classifyRealmObstacle(rel.tags || {});
       if (obstacleKind) {
         for (let i=0;i<outers.length;i+=1) obstacles.push({id:`relation:${rel.id}:outer:${i}`,kind:obstacleKind,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],tags:Object.assign({},rel.tags||{})});
       }
@@ -4276,7 +4419,7 @@
 
     const reviewOnlyAreas=areas.filter((a)=>a.autoEligible!==true);
     const autoAreas=areas.filter((a)=>a.autoEligible===true);
-    return { nodes, wayById, areas, autoAreas, reviewOnlyAreas, obstacles, barriers, portals };
+    return { nodes, wayById, areas, autoAreas, reviewOnlyAreas, obstacles, barriers, portals, sourceDiagnostics };
   }
 
   function pointInRingStrict(point, ring) {
@@ -4341,18 +4484,18 @@
     const A=asLatLng(a),B=asLatLng(b); if(!A||!B) return false;
     const spacing=Math.max(2,Number(options.visibilitySampleM||4));
     for(const p of samplePolyline([A,B],spacing)) {
-      if(!pointInRealmArea(p,area,1.8)) return false;
+      if(area&&!pointInRealmArea(p,area,1.8)) return false;
       for(const obstacle of realm?.obstacles||[]) if(pointInRingStrict(p,obstacle.polygon)) return false;
     }
     for(const obstacle of realm?.obstacles||[]) {
       const poly=obstacle.polygon||[];
-      for(let i=1;i<poly.length;i+=1) if(segmentIntersectionPoint(A,B,poly[i-1],poly[i],1e-6)) return false;
+      for(let i=1;i<poly.length;i+=1){const hit=segmentIntersectionInclusive(A,B,poly[i-1],poly[i]);if(hit&&hit.t>1e-6&&hit.t<1-1e-6)return false;}
     }
     const gateTol=Math.max(1.5,Number(options.gateToleranceM||3));
     for(const barrier of realm?.barriers||[]) {
       const g=barrier.geometry||[];
       for(let i=1;i<g.length;i+=1){
-        const hit=segmentIntersectionPoint(A,B,g[i-1],g[i],1e-6);
+        const hit=segmentIntersectionInclusive(A,B,g[i-1],g[i]);
         if(hit && nearestPortalDistanceM(hit.point,realm?.portals||[])>gateTol) return false;
       }
     }
@@ -4382,6 +4525,8 @@
     const P=asLatLng(point); if(!P||!graph?.edges?.size) return null;
     const hit=nearestGraphEdge(graph,P),maxM=Math.max(1,Number(meta.explicit?options.portalSnapMaxM:options.openBoundaryAttachMaxM)|| (meta.explicit?14:7));
     if(!hit||Number(hit.distanceM)>maxM+1e-9) return null;
+    // Check the complete connector, including the portion outside the realm.
+    if(!segmentClearOfRealmObstacles(P,hit.point,null,realm,options))return null;
     if(!meta.explicit && barrierDistanceM(P,realm?.barriers||[])<=Math.max(1,Number(options.openBoundaryBarrierClearanceM||2.5))) return null;
     const split=splitSpecificFineEdgeAtPoint(graph,String(hit.edge.id),hit.point,`realm-portal-${meta.serial||1}`); if(!split?.id) return null;
     const splitNode=graph.nodes.get(String(split.id)); if(!splitNode) return null;
@@ -4536,7 +4681,16 @@
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',productionGraphMutated:false};
     const realm=parsePedestrianRealm(payload),corridorM=Math.max(40,Number(options.corridorM||180));
     const relevant=realm.autoAreas.filter((area)=>realmAreaRelevant(area,A,B,corridorM));
-    if(!relevant.length)return {available:true,accepted:false,reason:'no-auto-eligible-realm',realm,areaCount:realm.areas.length,autoAreaCount:0,reviewAreaCount:realm.reviewOnlyAreas.length,productionGraphMutated:false};
+    const areaCoverage=realm.areas.map((area)=>({id:area.id,kind:area.kind,autoEligible:area.autoEligible,
+      aInside:pointInRealmArea(A,area,2),bInside:pointInRealmArea(B,area,2),
+      aBoundaryM:nearestPointOnGeometry(A,area.polygon)?.distanceM??null,
+      bBoundaryM:nearestPointOnGeometry(B,area.polygon)?.distanceM??null}));
+    const shared={realm,areaCount:realm.areas.length,autoAreaCount:relevant.length,reviewAreaCount:realm.reviewOnlyAreas.length,
+      obstacleCount:realm.obstacles.length,barrierCount:realm.barriers.length,sourceDiagnostics:realm.sourceDiagnostics,
+      areaCoverage:areaCoverage.sort((x,y)=>Math.min(x.aBoundaryM??Infinity,x.bBoundaryM??Infinity)-Math.min(y.aBoundaryM??Infinity,y.bBoundaryM??Infinity)).slice(0,8),
+      productionGraphMutated:false};
+    if(!relevant.length)return Object.assign({available:true,accepted:false,reason:realm.autoAreas.length?'auto-realm-outside-corridor':'no-auto-eligible-realm'},shared);
+    if(realm.sourceDiagnostics.incompleteObstacleCount||realm.sourceDiagnostics.incompleteBarrierCount)return Object.assign({available:true,accepted:false,reason:'incomplete-obstacle-geometry'},shared);
 
     const linear=parseOverpass(payload,{allowPrivateFootAccess:false});
     linear.ways=(linear.ways||[]).filter((way)=>{
@@ -4554,7 +4708,19 @@
     else if(graph.edges.size){snapA=snapPointIntoFineGraph(graph,A,'realm-A',snapMaxM);startId=snapA?.id||null;}
     if(areaForB){endId=addRealmNode(graph,B,'dev37-terminal:B',{realmAreaId:areaForB.id,realmEndpoint:'B'});snapB={id:endId,node:graph.nodes.get(endId),distanceM:0,snapType:'pedestrian-realm-terminal'};}
     else if(graph.edges.size){snapB=snapPointIntoFineGraph(graph,B,'realm-B',snapMaxM);endId=snapB?.id||null;}
-    if(!startId||!endId)return {available:false,reason:'realm-endpoint-attachment-failed',realm,areaCount:realm.areas.length,autoAreaCount:relevant.length,reviewAreaCount:realm.reviewOnlyAreas.length,productionGraphMutated:false};
+    const endpointCoverage={aInsideRealm:Boolean(areaForA),bInsideRealm:Boolean(areaForB),aRoadGapM:snapA?.distanceM??null,bRoadGapM:snapB?.distanceM??null,
+      aRoadWayId:snapA?.sourceWayId||null,bRoadWayId:snapB?.sourceWayId||null};
+    if(!startId||!endId)return Object.assign({available:false,reason:'realm-endpoint-attachment-failed',endpointCoverage},shared);
+    // Snap locations are diagnostics, not permission to invent a 29 m final
+    // sidewalk. A route via a public area must begin/end in that area or near
+    // a mapped accessible line; the production snap tolerance is unchanged.
+    const terminalLimitM=Math.min(10,Math.max(1,Number(options.realmTerminalMaxGapM||8)));
+    const terminalBlocked=(!areaForA&&!segmentClearOfRealmObstacles(A,graph.nodes.get(String(startId)),null,realm,options))||(!areaForB&&!segmentClearOfRealmObstacles(B,graph.nodes.get(String(endId)),null,realm,options));
+    if(terminalBlocked||(!areaForA&&Number(snapA.distanceM)>terminalLimitM)||(!areaForB&&Number(snapB.distanceM)>terminalLimitM)){
+      const lineSearch=dijkstraTimes(graph,startId,1.25,false);
+      const linePath=Number.isFinite(lineSearch.dist.get(String(endId)))?reconstructDijkstra(graph,lineSearch.prev,startId,endId):null;
+      return Object.assign({available:true,accepted:false,reason:'unmapped-terminal-access',terminalBlocked,endpointCoverage,sourceLinePathDistanceM:linePath?.distanceM??null,terminalLimitM},shared);
+    }
 
     const counters={nodeSerial:0,edgeSerial:0},portalRowsByArea=new Map();let explicitPortalCount=0,openBoundaryPortalCount=0,visibilityEdgeCount=0,realmNodeCount=0;
     for(const area of relevant){
@@ -4569,7 +4735,7 @@
       portalRowsByArea.set(area.id,rows);
       const vis=addRealmVisibilityForArea(graph,area,realm,rows,A,B,options,counters);visibilityEdgeCount+=Number(vis.visibilityEdgesAdded||0);realmNodeCount+=Number(vis.nodeCount||0);
     }
-    return {available:true,accepted:false,graph,startId,endId,snapA,snapB,realm,relevantAreas:relevant,areaCount:realm.areas.length,autoAreaCount:relevant.length,reviewAreaCount:realm.reviewOnlyAreas.length,obstacleCount:realm.obstacles.length,barrierCount:realm.barriers.length,explicitPortalCount,openBoundaryPortalCount,portalCount:explicitPortalCount+openBoundaryPortalCount,visibilityEdgeCount,realmNodeCount,productionGraphMutated:false};
+    return Object.assign({available:true,accepted:false,graph,startId,endId,snapA,snapB,relevantAreas:relevant,endpointCoverage,explicitPortalCount,openBoundaryPortalCount,portalCount:explicitPortalCount+openBoundaryPortalCount,visibilityEdgeCount,realmNodeCount},shared);
   }
 
   function pedestrianRealmRescueFromPayload(payload,a,b,options={}) {
@@ -4581,15 +4747,25 @@
     path.walkSeconds=timeS;const distanceM=Number(path.distanceM||timeS*speedMps),baselineM=Number(options.baselineDistanceM),minImprovementM=Math.max(20,Number(options.minImprovementM||120)),improvementM=Number.isFinite(baselineM)?baselineM-distanceM:Infinity;
     const stats=realmPathStats(built.graph,path.edgeIds||[]),maxSyntheticM=Math.max(60,Number(options.maxSyntheticDistanceM||480)),maxRatio=Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2));
     const accepted=stats.syntheticM>1 && distanceM+0.5>=straightM*0.92 && distanceM<=straightM*maxRatio+1e-9 && stats.syntheticM<=maxSyntheticM+1e-9 && (!Number.isFinite(baselineM)||improvementM>=minImprovementM);
-    return Object.assign({},built,{accepted,best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
+    return Object.assign({},built,{accepted,reason:accepted?null:(stats.syntheticM<=1?'no-realm-segment-on-short-path':'realm-route-policy-rejected'),best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
   }
 
   async function runPedestrianRealmRescue(a,b,options={}) {
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',candidates:[],productionGraphMutated:false};
     const bbox=bboxForAB(A,B,Math.max(120,Number(options.marginM||260)));
-    const fetched=options.realmPayload?{payload:options.realmPayload,endpoint:'synthetic/test'}:await fetchPedestrianRealmOverpass(bbox,options);
+    const sourceErrors=[];let fetched=options.realmPayload?{payload:options.realmPayload,endpoint:'synthetic/test'}:null,containmentAttempted=false;
+    if(!fetched)try{fetched=await fetchPedestrianRealmOsmMap(bbox,options);}catch(e){sourceErrors.push(`OSM map: ${e?.message||e}`);}
+    if(!options.realmPayload&&(!fetched||!parsePedestrianRealm(fetched.payload).autoAreas.some((area)=>realmAreaRelevant(area,A,B,Number(options.corridorM||180))))){
+      containmentAttempted=true;
+      try{
+        const overpass=await fetchPedestrianRealmOverpass(bbox,Object.assign({},options,{a:A,b:B,endpoints:(options.endpoints||config.overpassEndpoints).slice(0,1)}));
+        if(!fetched||parsePedestrianRealm(overpass.payload).autoAreas.some((area)=>realmAreaRelevant(area,A,B,Number(options.corridorM||180))))fetched=overpass;
+      }catch(e){sourceErrors.push(`Overpass containment: ${e?.message||e}`);}
+    }
+    if(!fetched)return {available:false,accepted:false,reason:'realm-source-unavailable',sourceErrors,containmentAttempted,realmBbox:bbox,candidates:[],productionGraphMutated:false};
     const topo=pedestrianRealmRescueFromPayload(fetched.payload,A,B,options);
-    topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;
+    topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;topo.sourceErrors=sourceErrors;topo.containmentAttempted=containmentAttempted;
+    topo.relationCompletion=fetched.relationCompletion||null;
     if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
     if(options.fastestOnly===true)return Object.assign({},topo,{candidates:[makePedestrianRealmCandidate('pedestrian-realm-fastest',topo.best.path,commonMeta)],productionGraphMutated:false});
@@ -7069,6 +7245,9 @@
       crossSourceCorridorRescueOnGraphs,
       runCrossSourceCorridorRescue,
       pedestrianRealmOverpassQuery,
+      parsePedestrianRealmOsmXml,
+      relevantIncompleteRealmRelations,
+      fetchPedestrianRealmOsmMap,
       classifyPedestrianRealm,
       classifyRealmObstacle,
       parsePedestrianRealm,
@@ -7076,6 +7255,7 @@
       pointInRingInclusive,
       pointInRealmArea,
       segmentClearOfRealmObstacles,
+      attachRealmPortalToBaseGraph,
       collectRealmBoundaryVisibilityNodes,
       collectRealmCorridorVisibilityNodes,
       collectRealmObstacleVisibilityNodes,

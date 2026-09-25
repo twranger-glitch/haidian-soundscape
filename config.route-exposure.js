@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.0 Pedestrian Realm Graph Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.1 Pedestrian Realm Graph Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -70,7 +70,7 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
     crossSourceMaxCandidates: 48,
     crossSourcePairPool: 10,
     crossSourceMaxTests: 64,
-    // dev37.0: when every line-graph rescue still detours, inspect whitelisted
+    // dev37.1: when every line-graph rescue still detours, inspect whitelisted
     // public pedestrian *areas* (parks, pedestrian plazas, squares) in a detached
     // obstacle-aware visibility graph. Synthetic realm segments are always
     // labelled and never mutate production routing data.
