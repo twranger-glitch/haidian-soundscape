@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.1 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.2 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.1";
+  const VERSION = "v9.0.0-dev37.2";
 
   const DEFAULTS = {
     enabled: true,
@@ -3445,7 +3445,8 @@
       const fastestPath = reconstructDijkstra(graph, fromA.prev, String(startId), String(endId));
       if (!fastestPath?.points?.length) return { available: false, reason: 'experimental-fastest-reconstruction-failed', productionGraphMutated: false };
       fastestPath.walkSeconds = fastestTime;
-      const detourLimitS = fastestTime * (1 + detourPct / 100);
+      const effectiveFastest=Number.isFinite(Number(options.experimentalBaselineSeconds))?Math.min(fastestTime,Number(options.experimentalBaselineSeconds)):fastestTime;
+      const detourLimitS = effectiveFastest * (1 + detourPct / 100);
       const minSun = await searchMinSun(graph, String(startId), String(endId), {
         speedMps,
         detourLimitS,
@@ -4239,6 +4240,30 @@
     }finally{clearTimeout(timer);}
   }
 
+  const realmOpportunityCache=new Map();
+  function pedestrianRealmOpportunityEligible(a,b,options={}) {
+    const A=asLatLng(a),B=asLatLng(b);
+    if(options.enabled===false||!A||!B)return false;
+    const distance=haversineM(A,B);
+    return distance>=20&&distance<=Math.min(900,Math.max(100,Number(options.maxStraightM||650)));
+  }
+  async function preparePedestrianRealmOpportunity(a,b,options={}) {
+    if(!pedestrianRealmOpportunityEligible(a,b,options))return {available:false,reason:'outside-opportunity-scope'};
+    const bbox=bboxForAB(asLatLng(a),asLatLng(b),Math.min(280,Math.max(120,Number(options.marginM||260))));
+    const key=[bbox.south,bbox.west,bbox.north,bbox.east].map((x)=>x.toFixed(5)).join(',');
+    const cached=realmOpportunityCache.get(key),now=Date.now();
+    if(cached&&now-cached.at<300000)return Object.assign({},await cached.promise,{cacheHit:true});
+    const started=nowMs();
+    const promise=fetchPedestrianRealmOsmMap(bbox,Object.assign({},options,{osmMapTimeoutMs:Math.min(10000,Number(options.timeoutMs||10000))}))
+      .then((loaded)=>Object.assign({available:true,bbox,sourceMs:nowMs()-started},loaded))
+      .catch((error)=>({available:false,reason:'realm-source-unavailable',sourceErrors:[`OSM map: ${error?.message||error}`],bbox,sourceMs:nowMs()-started}));
+    // Cache raw source only. Never cache route, shade, or candidate decisions.
+    realmOpportunityCache.set(key,{at:now,promise});
+    while(realmOpportunityCache.size>6)realmOpportunityCache.delete(realmOpportunityCache.keys().next().value);
+    const result=await promise;if(!result.available)realmOpportunityCache.delete(key);
+    return result;
+  }
+
   function realmAccessBlocked(tags = {}) {
     const access = normalizedTag(tags.access), foot = normalizedTag(tags.foot);
     if (['no','private'].includes(foot)) return true;
@@ -4363,7 +4388,7 @@
       const ring = wayRingFromNodeIds(way.nodes, nodes);
       const realm = classifyPedestrianRealm(way.tags);
       if(realm)sourceDiagnostics.candidateWayCount+=1;
-      const obstacleKind = classifyRealmObstacle(way.tags);
+      const obstacleKind = classifyRealmObstacle(way.tags)||(realmAccessBlocked(way.tags)&&classifyPedestrianRealm(Object.assign({},way.tags,{access:'yes',foot:'yes'}))?'restricted-realm':null);
       if((realm||obstacleKind)&&!ring.length){sourceDiagnostics.wayMissingGeometry+=1;if(obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;}
       if (realm && ring.length && !realmMemberWays.has(way.id)) {
         const key=`way:${way.id}`; seenArea.add(key);
@@ -4382,7 +4407,7 @@
     }
 
     for (const rel of relationElements) {
-      const realm=classifyPedestrianRealm(rel.tags || {}),obstacleKind=classifyRealmObstacle(rel.tags || {});
+      const realm=classifyPedestrianRealm(rel.tags || {}),obstacleKind=classifyRealmObstacle(rel.tags || {})||(realmAccessBlocked(rel.tags||{})&&classifyPedestrianRealm(Object.assign({},rel.tags,{access:'yes',foot:'yes'}))?'restricted-realm':null);
       countTags(rel.tags);
       if(!realm&&!obstacleKind)continue;
       sourceDiagnostics.candidateRelationCount+=1;
@@ -4622,6 +4647,22 @@
     return dedupeRealmPoints(rows,Math.max(8,spacing*0.45),Math.max(4,Number(options.maxObstacleVisibilityNodes||config.pedestrianRealmMaxObstacleVisibilityNodes||20)));
   }
 
+  function collectRealmInteriorVisibilityNodes(area,realm,a,b,options={}) {
+    if(options.realmInteriorAlternatives===false)return [];
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return [];
+    const lat0=(A.lat+B.lat)/2*Math.PI/180,mx=111320*Math.cos(lat0),my=111320;
+    const dx=(B.lng-A.lng)*mx,dy=(B.lat-A.lat)*my,d=Math.hypot(dx,dy);if(d<20)return [];
+    const stations=Math.min(10,Math.max(2,Math.ceil(d/35))),rows=[];
+    for(let i=1;i<stations;i+=1)for(const offset of [-36,-18,18,36]){
+      const t=i/stations,p={lat:A.lat+(B.lat-A.lat)*t+dx/d*offset/my,lng:A.lng+(B.lng-A.lng)*t-dy/d*offset/mx};
+      if(!pointInRealmArea(p,area,0))continue;
+      if((realm.obstacles||[]).some((o)=>pointInRingInclusive(p,o.polygon,1)))continue;
+      if(barrierDistanceM(p,realm.barriers||[])<1.5)continue;
+      rows.push({point:p,role:'interior-alternative',score:i,offsetM:offset});
+    }
+    return rows.slice(0,36);
+  }
+
   function addRealmVisibilityForArea(graph, area, realm, endpointRows, a, b, options = {}, counters = {}) {
     const rows=[];
     for(const row of endpointRows||[]) if(row?.id&&graph.nodes.has(String(row.id))) rows.push(Object.assign({},row,{id:String(row.id),point:asLatLng(graph.nodes.get(String(row.id)))||row.point}));
@@ -4663,13 +4704,40 @@
       const edge=addRealmEdge(graph,aRow.id,bRow.id,[pa,pb],{serial:`vis-${area.id}-${++counters.edgeSerial}`,realmAreaId:area.id,realmKind:area.kind,realmConfidence:area.confidence});
       if(edge){degree[row.i]+=1;degree[row.j]+=1;added+=1;}
     }
-    return {nodeCount:unique.length,visibilityEdgesAdded:added,rows:unique};
+    // Existing endpoint/portal priority must not starve lateral interior paths.
+    // Append a sparse local mesh with a separate hard budget, preserving all
+    // previously selected shortest-route edges for the Swan Lake lock.
+    const interior=[];
+    for(const row of collectRealmInteriorVisibilityNodes(area,realm,a,b,options)){
+      const id=addRealmNode(graph,row.point,`dev37-interior:${area.id}:${++serialBase}`,{realmAreaId:area.id,realmVisibilityNode:true,realmVisibilityRole:'interior-alternative'});
+      if(id)interior.push(Object.assign({},row,{id}));
+    }
+    counters.nodeSerial=serialBase;
+    const extraPairs=new Set(),all=unique.concat(interior);let extra=0;
+    for(const row of interior){
+      const candidates=all.filter((other)=>other.id!==row.id).map((other)=>({other,d:haversineM(row.point,other.point)})).filter((x)=>x.d>0.2&&x.d<=80).sort((x,y)=>x.d-y.d);
+      let linked=0;
+      for(const {other} of candidates){
+        if(extra>=180||linked>=6)break;
+        const key=[row.id,other.id].sort().join('|');if(extraPairs.has(key)){linked++;continue;}
+        if(!segmentClearOfRealmObstacles(row.point,other.point,area,realm,options))continue;
+        extraPairs.add(key);
+        if(addRealmEdge(graph,row.id,other.id,[row.point,other.point],{serial:`interior-${area.id}-${++counters.edgeSerial}`,realmAreaId:area.id,realmKind:area.kind,realmConfidence:area.confidence})){extra++;linked++;}
+      }
+    }
+    return {nodeCount:all.length,visibilityEdgesAdded:added+extra,interiorNodeCount:interior.length,rows:all};
   }
 
   function realmPathStats(graph, edgeIds = []) {
-    let totalM=0,syntheticM=0,portalM=0;const areaIds=new Set(),kinds=new Set();
-    for(const id of edgeIds||[]){const e=graph?.edges?.get?.(String(id));if(!e)continue;const d=Number(e.distanceM||0);totalM+=d;if(e.realmSynthetic){syntheticM+=d;if(e.realmPortalConnector)portalM+=d;if(e.realmAreaId)areaIds.add(String(e.realmAreaId));if(e.realmKind)kinds.add(String(e.realmKind));}}
-    return {totalM,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds)};
+    let totalM=0,syntheticM=0,portalM=0,mappedPathM=0;const areaIds=new Set(),kinds=new Set(),segments=[];
+    for(const id of edgeIds||[]){
+      const e=graph?.edges?.get?.(String(id));if(!e)continue;
+      const d=Number(e.distanceM||0);totalM+=d;
+      if(e.realmSynthetic){syntheticM+=d;if(e.realmPortalConnector)portalM+=d;if(e.realmAreaId)areaIds.add(String(e.realmAreaId));if(e.realmKind)kinds.add(String(e.realmKind));}
+      else mappedPathM+=d;
+      segments.push({edgeId:String(id),provenance:e.realmSynthetic?'synthetic-realm':'mapped-path',distanceM:d,sourceWayIds:(e.wayIds||[]).map(String),realmAreaId:e.realmAreaId||null,geometry:(e.geometry||[]).map((p)=>({lat:p.lat,lng:p.lng}))});
+    }
+    return {totalM,mappedPathM,sourceSupportedRealmM:0,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds),segments};
   }
 
   function makePedestrianRealmCandidate(kind,path,meta={}) {
@@ -4689,6 +4757,7 @@
       obstacleCount:realm.obstacles.length,barrierCount:realm.barriers.length,sourceDiagnostics:realm.sourceDiagnostics,
       areaCoverage:areaCoverage.sort((x,y)=>Math.min(x.aBoundaryM??Infinity,x.bBoundaryM??Infinity)-Math.min(y.aBoundaryM??Infinity,y.bBoundaryM??Infinity)).slice(0,8),
       productionGraphMutated:false};
+    if(relevant.length>6)return Object.assign({available:true,accepted:false,reason:'realm-complexity-limit'},shared);
     if(!relevant.length)return Object.assign({available:true,accepted:false,reason:realm.autoAreas.length?'auto-realm-outside-corridor':'no-auto-eligible-realm'},shared);
     if(realm.sourceDiagnostics.incompleteObstacleCount||realm.sourceDiagnostics.incompleteBarrierCount)return Object.assign({available:true,accepted:false,reason:'incomplete-obstacle-geometry'},shared);
 
@@ -4746,16 +4815,19 @@
     const path=reconstructDijkstra(built.graph,route.prev,built.startId,built.endId);if(!path?.points?.length)return Object.assign({},built,{accepted:false,reason:'realm-path-reconstruct-failed',candidates:[],straightM,productionGraphMutated:false});
     path.walkSeconds=timeS;const distanceM=Number(path.distanceM||timeS*speedMps),baselineM=Number(options.baselineDistanceM),minImprovementM=Math.max(20,Number(options.minImprovementM||120)),improvementM=Number.isFinite(baselineM)?baselineM-distanceM:Infinity;
     const stats=realmPathStats(built.graph,path.edgeIds||[]),maxSyntheticM=Math.max(60,Number(options.maxSyntheticDistanceM||480)),maxRatio=Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2));
-    const accepted=stats.syntheticM>1 && distanceM+0.5>=straightM*0.92 && distanceM<=straightM*maxRatio+1e-9 && stats.syntheticM<=maxSyntheticM+1e-9 && (!Number.isFinite(baselineM)||improvementM>=minImprovementM);
+    const opportunity=options.providerMode==='opportunity';
+    const traversesRealm=stats.syntheticM>1||built.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
+    const distancePolicy=opportunity?(!Number.isFinite(baselineM)||distanceM<=baselineM*(1+clamp(options.detourPct,0,60,30)/100)+0.5):(!Number.isFinite(baselineM)||improvementM>=minImprovementM);
+    const accepted=(opportunity||traversesRealm) && distanceM+0.5>=straightM*0.92 && distanceM<=straightM*maxRatio+1e-9 && (opportunity||stats.syntheticM<=maxSyntheticM+1e-9) && distancePolicy;
     return Object.assign({},built,{accepted,reason:accepted?null:(stats.syntheticM<=1?'no-realm-segment-on-short-path':'realm-route-policy-rejected'),best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
   }
 
   async function runPedestrianRealmRescue(a,b,options={}) {
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',candidates:[],productionGraphMutated:false};
     const bbox=bboxForAB(A,B,Math.max(120,Number(options.marginM||260)));
-    const sourceErrors=[];let fetched=options.realmPayload?{payload:options.realmPayload,endpoint:'synthetic/test'}:null,containmentAttempted=false;
-    if(!fetched)try{fetched=await fetchPedestrianRealmOsmMap(bbox,options);}catch(e){sourceErrors.push(`OSM map: ${e?.message||e}`);}
-    if(!options.realmPayload&&(!fetched||!parsePedestrianRealm(fetched.payload).autoAreas.some((area)=>realmAreaRelevant(area,A,B,Number(options.corridorM||180))))){
+    const sourceErrors=(options.realmSource?.sourceErrors||[]).slice();let fetched=options.realmPayload?{payload:options.realmPayload,endpoint:'synthetic/test'}:(options.realmSource?.available?options.realmSource:null),containmentAttempted=false;
+    if(!fetched&&!options.realmSource)try{fetched=await fetchPedestrianRealmOsmMap(bbox,options);}catch(e){sourceErrors.push(`OSM map: ${e?.message||e}`);}
+    if(options.allowContainment!==false&&!options.realmPayload&&(!fetched||!parsePedestrianRealm(fetched.payload).autoAreas.some((area)=>realmAreaRelevant(area,A,B,Number(options.corridorM||180))))){
       containmentAttempted=true;
       try{
         const overpass=await fetchPedestrianRealmOverpass(bbox,Object.assign({},options,{a:A,b:B,endpoints:(options.endpoints||config.overpassEndpoints).slice(0,1)}));
@@ -4763,16 +4835,43 @@
       }catch(e){sourceErrors.push(`Overpass containment: ${e?.message||e}`);}
     }
     if(!fetched)return {available:false,accepted:false,reason:'realm-source-unavailable',sourceErrors,containmentAttempted,realmBbox:bbox,candidates:[],productionGraphMutated:false};
+    if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
     const topo=pedestrianRealmRescueFromPayload(fetched.payload,A,B,options);
     topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;topo.sourceErrors=sourceErrors;topo.containmentAttempted=containmentAttempted;
     topo.relationCompletion=fetched.relationCompletion||null;
     if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
-    if(options.fastestOnly===true)return Object.assign({},topo,{candidates:[makePedestrianRealmCandidate('pedestrian-realm-fastest',topo.best.path,commonMeta)],productionGraphMutated:false});
-    const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,options);
-    if(!searched?.available)return Object.assign({},topo,{candidates:[makePedestrianRealmCandidate('pedestrian-realm-fastest',topo.best.path,commonMeta)],searchReason:searched?.reason||null,productionGraphMutated:false});
-    const candidates=[];if(searched.fastest?.points?.length)candidates.push(makePedestrianRealmCandidate('pedestrian-realm-fastest',searched.fastest,commonMeta));if(searched.minSun?.points?.length&&!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(makePedestrianRealmCandidate('pedestrian-realm-shade',searched.minSun,commonMeta));
-    return Object.assign({},topo,{candidates,searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+    const make=(kind,path)=>{
+      const stats=realmPathStats(topo.best.graph,path.edgeIds||[]);
+      return makePedestrianRealmCandidate(kind,path,Object.assign({},commonMeta,{providerMode:options.providerMode||'topology-rescue',realmSyntheticDistanceM:stats.syntheticM,realmSyntheticRatio:stats.syntheticRatio,realmPortalDistanceM:stats.portalM,realmAreaKinds:stats.kinds,realmAreaIds:stats.areaIds,realmProvenance:stats,shadeSearchComplete:kind==='pedestrian-realm-shade'}));
+    };
+    const pathQualifies=(path)=>{
+      if(!path?.points?.length)return false;
+      const stats=realmPathStats(topo.best.graph,path.edgeIds||[]),distance=Number(path.distanceM||0);
+      const cap=Math.min(topo.best.distanceM,Number.isFinite(Number(options.baselineDistanceM))?Number(options.baselineDistanceM):Infinity)*(1+clamp(options.detourPct,0,60,30)/100);
+      const traverses=stats.syntheticM>1||topo.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
+      return traverses&&distance<=cap+0.5&&stats.syntheticM<=Math.max(60,Number(options.maxSyntheticDistanceM||480))+.01&&distance<=topo.straightM*Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2))+.01;
+    };
+    const fastestCandidate=pathQualifies(topo.best.path)?make('pedestrian-realm-fastest',topo.best.path):null;
+    const finish=(values)=>Object.assign({},topo,values,{accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});
+    if(options.fastestOnly===true)return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:false,complete:false,reason:'fastest-only'},productionGraphMutated:false});
+    const searchStarted=nowMs(),deadline=searchStarted+Math.min(6000,Math.max(500,Number(options.realmSearchTimeoutMs||4000)));
+    const searchOptions=Object.assign({},options,{maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline});
+    // The effective budget uses the shorter of public line and realm fastest.
+    if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
+    try{
+      const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,searchOptions);
+      const candidates=fastestCandidate?[fastestCandidate]:[];let exactReplay=null;
+      if(pathQualifies(searched.minSun)){
+        exactReplay=await exactReplayPathShade(topo.best.graph,searched.minSun,topo.startId,searchOptions);
+        if(!exactReplay.available||exactReplay.withinTolerance!==true)return finish({candidates,shadeSearch:{attempted:true,complete:false,reason:'realm-exact-replay-mismatch',rejectedCandidates:['pedestrian-realm-shade'],elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0)});
+        if(!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(make('pedestrian-realm-shade',searched.minSun));
+      }
+      return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true,elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+    }catch(error){
+      if(options.shouldCancel?.())throw error;
+      return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:true,complete:false,reason:nowMs()>deadline?'realm-shade-time-budget':String(error?.message||error),elapsedMs:nowMs()-searchStarted},productionGraphMutated:false});
+    }
   }
 
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
@@ -7155,6 +7254,8 @@
     runInteriorNodingRescue,
     runCrossSourceCorridorRescue,
     runPedestrianRealmRescue,
+    preparePedestrianRealmOpportunity,
+    pedestrianRealmOpportunityEligible,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
     _internals: {
@@ -7262,6 +7363,9 @@
       buildPedestrianRealmRescueGraph,
       pedestrianRealmRescueFromPayload,
       runPedestrianRealmRescue,
+      preparePedestrianRealmOpportunity,
+      pedestrianRealmOpportunityEligible,
+      collectRealmInteriorVisibilityNodes,
       realmPathStats,
       pedestrianSnapRank,
       pedestrianSnapLabel,
