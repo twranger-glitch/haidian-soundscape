@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.3 Pedestrian Realm Graph Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.4 Pedestrian Realm Graph Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,
@@ -21,7 +21,8 @@ window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   exploreMaxRoutes: 6,
   maxScoredCandidates: 10,
   // Independent local-area source probe; overlaps HGR loading, no Overpass retry.
-  realmOpportunity: { enabled:true, maxStraightM:650, marginM:260, timeoutMs:28000, searchTimeoutMs:6000 },
+  // dev37.4: bounded full-model headroom after ray pruning; 5 m costs retained.
+  realmOpportunity: { enabled:true, maxStraightM:650, marginM:260, timeoutMs:28000, searchTimeoutMs:12000 },
   // dev27: expose the detached verified-fusion min-sun path as a normal comparison candidate.
   autoCompareVerifiedFusion: true,
   fusionFidelityThresholdM: 14,

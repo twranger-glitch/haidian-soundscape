@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.3 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.4 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.3";
+  const VERSION = "v9.0.0-dev37.4";
 
   const DEFAULTS = {
     enabled: true,
@@ -134,6 +134,7 @@
   const config = Object.assign({}, DEFAULTS, globalConfig.graphRouting || {});
 
   let lastDiagnostics = null;
+  let lastRealmSearchDiagnostics = null;
   let lastGraphDebug = null;
   let lastRouteEdges = { fastest: new Set(), minSun: new Set() };
   const lastShadeDebug = new Map();
@@ -204,7 +205,10 @@
     return async function cooperativeYield(force = false) {
       const now = perfNow();
       if (!force && now - last < budgetMs) return false;
-      await yieldToBrowser();
+      // Realm sampling must yield to input/timers without paying one display
+      // frame for every small work batch (or stalling in a background tab).
+      if (options.realmTaskYield) await new Promise(resolve => setTimeout(resolve, 0));
+      else await yieldToBrowser();
       last = perfNow();
       return true;
     };
@@ -932,14 +936,54 @@
   // Realm visibility chords can be hundreds of metres. Their cost must use
   // the length-weighted 5 m geometry sampling and walking-time offsets
   // as final route scoring, rather than five samples at one edge midpoint.
-  async function realmDenseEdgeSunProvider(edge,fromId,at,context,speedMps,spacingM=5) {
+  function createRealmSearchRuntime(options,deadline) {
+    const stats={phase:'search',expandedStates:0,shadeEdgeEvaluations:0,edgeCacheHits:0,edgeCacheSize:0,firstStateOutgoing:0,firstStateFeasible:0,samplesPlanned:0,providerCallsStarted:0,providerCallsCompleted:0,providerCallsPending:0,modelCallsStarted:0,modelCallsCompleted:0,modelCallsFailed:0,modelCallsPending:0,maxModelCallsPending:0,modelTotalMs:0,modelMaxMs:0,yieldCount:0};
+    let closed=false,stopError=null,cancelTimer=null,yieldPromise=null,lastYield=nowMs(),lastProgress=0,rejectStop;
+    const stopPromise=new Promise((_,reject)=>{rejectStop=reject;});stopPromise.catch(()=>{});
+    const stop=(reason)=>{if(stopError)return;closed=true;stopError=new Error(reason==='user-cancelled'?'ROUTE_ANALYSIS_CANCELLED':'REALM_SHADE_DEADLINE');stopError.realmTermination=reason;rejectStop(stopError);};
+    const check=()=>{if(options.shouldCancel?.())stop('user-cancelled');else if(nowMs()>=deadline)stop('deadline');if(stopError)throw stopError;if(closed)throw new Error('Realm search closed');};
+    const timer=setTimeout(()=>stop('deadline'),Math.max(0,deadline-nowMs()));
+    const poll=()=>{if(closed)return;if(options.shouldCancel?.())stop('user-cancelled');else cancelTimer=setTimeout(poll,25);};poll();
+    const engineBefore=window.HaidianShade?.getRouteDiagnostics?.()||{};
+    const snapshot=(termination)=>{
+      const after=window.HaidianShade?.getRouteDiagnostics?.()||{},engineWindowDelta={};
+      for(const key of ['calls','buildingEvalMs','canopyEvalMs','totalMs'])if(Number.isFinite(Number(after[key])))engineWindowDelta[key]=Math.max(0,Number(after[key])-Number(engineBefore[key]||0));
+      const settled=stats.modelCallsCompleted+stats.modelCallsFailed;
+      return Object.assign({},stats,{termination,modelMeanMs:settled?stats.modelTotalMs/settled:0,engineWindowDelta});
+    };
+    return {stats,check,snapshot,
+      async edge(task){
+        check();stats.providerCallsStarted++;stats.providerCallsPending++;
+        const pending=Promise.resolve().then(task).then(value=>{stats.providerCallsCompleted++;return value;}).finally(()=>{stats.providerCallsPending--;});
+        const value=await Promise.race([pending,stopPromise]);check();return value;
+      },
+      async sample(task){
+        check();
+        if(nowMs()-lastYield>=8){
+          if(!yieldPromise){stats.yieldCount++;yieldPromise=new Promise(resolve=>setTimeout(resolve,0)).finally(()=>{lastYield=nowMs();yieldPromise=null;});}
+          await yieldPromise;check();
+        }
+        stats.modelCallsStarted++;stats.modelCallsPending++;stats.maxModelCallsPending=Math.max(stats.maxModelCallsPending,stats.modelCallsPending);
+        const started=nowMs();
+        const pending=Promise.resolve().then(task).then((value)=>{stats.modelCallsCompleted++;return value;},(error)=>{stats.modelCallsFailed++;throw error;}).finally(()=>{const ms=nowMs()-started;stats.modelCallsPending--;stats.modelTotalMs+=ms;stats.modelMaxMs=Math.max(stats.modelMaxMs,ms);});
+        const value=await Promise.race([pending,stopPromise]);check();
+        if(nowMs()-lastProgress>=250){lastProgress=nowMs();options.onProgress?.({stage:'realm-shade-sampling',...snapshot('running'),message:`公園遮蔭搜尋：${stats.expandedStates}狀態／${stats.shadeEdgeEvaluations}邊／${stats.modelCallsCompleted}採樣完成`});}
+        return value;
+      },
+      close(){closed=true;clearTimeout(timer);clearTimeout(cancelTimer);}
+    };
+  }
+
+  async function realmDenseEdgeSunProvider(edge,fromId,at,context,speedMps,spacingM=5,runtime=null) {
     const graph={edges:new Map([[edge.id,edge]])};
     const built=denseShadeSegmentsForPath(graph,[{edgeId:edge.id,from:fromId}],spacingM);
     if(!built.segments.length)throw new Error('Realm shade edge has no samples');
     if(built.segments.length>256)throw new Error('Realm shade sample budget exceeded');
+    if(runtime){runtime.check();runtime.stats.samplesPlanned+=built.segments.length;}
     const startMs=at.getTime()-Number(edge.distanceM)/speedMps*500;
     const models=await runPoolNoYield(built.segments,Math.min(4,Number(context.shadeConcurrency||2)),async(seg)=>{
-      const model=await window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs});
+      const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs});
+      const model=runtime?await runtime.sample(task):await task();
       if(!model||!['sun','shade','night'].includes(model.state)||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)throw new Error('Realm shade model incomplete');
       return model;
     });
@@ -1352,6 +1396,8 @@
     let shadeEvals = 0;
     let shadeCacheHits = 0;
     let expanded = 0;
+    const metrics=options.searchMetrics;
+    const updateMetrics=()=>{if(metrics)Object.assign(metrics,{expandedStates:expanded,shadeEdgeEvaluations:shadeEvals,edgeCacheHits:shadeCacheHits,edgeCacheSize:shadeCache.size});};
     let dominanceRejected = 0;
     let dominanceRemoved = 0;
     const cooperativeYield = makeCooperativeYielder(options);
@@ -1440,11 +1486,11 @@
       const bucket = shadeBucketForMs(atMs, shadeTimeBucketSec);
       const key = options.realmDenseShadeCache ? `realm-dense-v1|${edge.id}|${fromId}|${bucket}` : shadeCacheKey(edge, bucket);
       if (shadeCache.has(key)) {
-        shadeCacheHits += 1;
+        shadeCacheHits += 1;updateMetrics();
         return shadeCache.get(key);
       }
       if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 搜尋未完整完成：日照評估已達安全上限 ${maxShadeEvals} 條 edge；目前結果不可視為真正最不曬。`);
-      shadeEvals += 1;
+      shadeEvals += 1;updateMetrics();
       const promise = Promise.resolve(provider(edge, fromId, new Date(options.realmDenseShadeCache?(bucket*shadeTimeBucketSec+shadeTimeBucketSec/2)*1000:atMs), {
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
@@ -1476,7 +1522,7 @@
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
       const cur = heap.pop();
       if (!cur || cur.active === false) continue;
-      expanded += 1;
+      expanded += 1;updateMetrics();
       if (expanded > maxStates) throw new Error(`OSM Graph 搜尋未完整完成：已達 ${maxStates} 個狀態安全上限；目前結果不可視為真正最不曬。`);
       if (expanded % yieldEveryExpanded === 0) await cooperativeYield();
       if (expanded === 1 || expanded % Math.max(1, Number(config.progressEvery || 20)) === 0) {
@@ -1505,6 +1551,7 @@
         if (Number.isFinite(detourLimitS) && nextWalk + optimisticRemain > detourLimitS + 0.5) continue;
         feasible.push({ next, edge, edgeTime, nextWalk });
       }
+      if(metrics&&expanded===1){metrics.firstStateOutgoing=outgoing.length;metrics.firstStateFeasible=feasible.length;}
       // dev30: all feasible outgoing costs depend only on this immutable label,
       // so they may be evaluated concurrently without changing heap/label order.
       // Keep concurrency bounded: each edge may itself sample multiple ShadeMap
@@ -3473,6 +3520,8 @@
         departure,
         edgeSunProvider: options.edgeSunProvider,
         realmDenseShadeCache: options.realmDenseShadeCache,
+        searchMetrics: options.searchMetrics,
+        realmTaskYield: options.realmTaskYield,
         timeBucketSec: options.timeBucketSec,
         shadeTimeBucketSec: options.shadeTimeBucketSec,
         shadeSampleSpacingM: options.shadeSampleSpacingM,
@@ -4933,33 +4982,44 @@
       return traverses&&distance<=cap+0.5&&stats.syntheticM<=Math.max(60,Number(options.maxSyntheticDistanceM||480))+.01&&distance<=topo.straightM*Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2))+.01;
     };
     const fastestCandidate=pathQualifies(topo.best.path)?make('pedestrian-realm-fastest',topo.best.path):null;
-    const finish=(values)=>Object.assign({},topo,values,{shadeSearch:Object.assign({},values.shadeSearch,{costModel:options.edgeSunProvider?'injected-provider':'length-weighted-along-walk',costSampleSpacingM:options.edgeSunProvider?null:Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),cacheTimeBucketSec:options.edgeSunProvider?null:30}),accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});
+    const finish=(values)=>{if(values.shadeSearch?.profile)lastRealmSearchDiagnostics=Object.assign({},values.shadeSearch.profile);return Object.assign({},topo,values,{shadeSearch:Object.assign({},values.shadeSearch,{costModel:options.edgeSunProvider?'injected-provider':'length-weighted-along-walk',costSampleSpacingM:options.edgeSunProvider?null:Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),cacheTimeBucketSec:options.edgeSunProvider?null:30}),accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});};
     if(options.fastestOnly===true)return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:false,complete:false,reason:'fastest-only'},productionGraphMutated:false});
-    const searchStarted=nowMs(),deadline=searchStarted+Math.min(6000,Math.max(500,Number(options.realmSearchTimeoutMs||6000)));
-    const searchOptions=Object.assign({},options,{maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline});
+    // Full-model control completed just under the old 6 s limit after pruning.
+    // Allow explicit, bounded device headroom; exact replay shares this budget.
+    const searchBudgetMs=clamp(options.realmSearchTimeoutMs,500,12000,12000);
+    const searchStarted=nowMs(),deadline=searchStarted+searchBudgetMs;
+    const runtime=createRealmSearchRuntime(options,deadline);
+    runtime.stats.budgetMs=searchBudgetMs;
+    runtime.stats.yieldMode='timer-task';
+    const searchOptions=Object.assign({},options,{realmTaskYield:true,maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline,searchMetrics:runtime.stats,shadeEdgeBatchConcurrency:Math.min(4,Math.max(1,Number(options.shadeEdgeBatchConcurrency||config.shadeEdgeBatchConcurrency||4))),shadeConcurrency:Math.min(4,Math.max(1,Number(options.shadeConcurrency||config.shadeConcurrency||3)))});
     if(!options.edgeSunProvider){
       const speed=clamp(options.speedMps,0.5,2.5,1.25);
-      searchOptions.edgeSunProvider=(edge,from,at,context)=>realmDenseEdgeSunProvider(edge,from,at,context,speed,Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))));
+      searchOptions.edgeSunProvider=(edge,from,at,context)=>realmDenseEdgeSunProvider(edge,from,at,context,speed,Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),runtime);
       searchOptions.realmDenseShadeCache=true;
       searchOptions.shadeTimeBucketSec=30;
       searchOptions.candidateCorrectnessExactReplayToleranceSec=3;
       searchOptions.sharedShadeCache=new Map();
     }
+    const realmProvider=searchOptions.edgeSunProvider;
+    searchOptions.edgeSunProvider=(...args)=>runtime.edge(()=>realmProvider(...args));
     // The effective budget uses the shorter of public line and realm fastest.
     if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
     try{
       const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,searchOptions);
       const candidates=fastestCandidate?[fastestCandidate]:[];let exactReplay=null;
       if(pathQualifies(searched.minSun)){
+        runtime.stats.phase='exact-replay';
         exactReplay=await exactReplayPathShade(topo.best.graph,searched.minSun,topo.startId,searchOptions);
-        if(!exactReplay.available||exactReplay.withinTolerance!==true)return finish({candidates,shadeSearch:{attempted:true,complete:false,reason:'realm-exact-replay-mismatch',rejectedCandidates:['pedestrian-realm-shade'],elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0)});
+        if(!exactReplay.available||exactReplay.withinTolerance!==true)return finish({candidates,shadeSearch:{attempted:true,complete:false,reason:'realm-exact-replay-mismatch',rejectedCandidates:['pedestrian-realm-shade'],profile:runtime.snapshot('exact-replay-mismatch'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0)});
         if(!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(make('pedestrian-realm-shade',searched.minSun));
       }
-      return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true,elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+      return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true,profile:runtime.snapshot(searched.available?'complete':'unavailable'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
     }catch(error){
-      if(options.shouldCancel?.())throw error;
-      return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:true,complete:false,reason:nowMs()>deadline?'realm-shade-time-budget':String(error?.message||error),elapsedMs:nowMs()-searchStarted},productionGraphMutated:false});
-    }
+      const termination=error.realmTermination||(options.shouldCancel?.()?'user-cancelled':nowMs()>=deadline?'deadline':/日照評估.*安全上限/.test(String(error?.message))?'edge-evaluation-cap':/狀態安全上限/.test(String(error?.message))?'state-cap':/model incomplete/.test(String(error?.message))?'incomplete-model':'provider-error');
+      const profile=runtime.snapshot(termination);lastRealmSearchDiagnostics=Object.assign({},profile);
+      if(options.shouldCancel?.()){error.realmDiagnostics=profile;options.onProgress?.({stage:'realm-search-cancelled',profile});throw error;}
+      return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:true,complete:false,reason:termination==='deadline'?'realm-shade-time-budget':String(error?.message||error),elapsedMs:nowMs()-searchStarted,profile},searchExpandedStates:profile.expandedStates,shadeEdgeEvaluations:profile.shadeEdgeEvaluations,productionGraphMutated:false});
+    }finally{runtime.close();}
   }
 
   // v9.0.0-dev20: create an ephemeral fine-graph overlay containing only the
@@ -7346,6 +7406,7 @@
     pedestrianRealmOpportunityEligible,
     clearCache,
     get lastDiagnostics() { return lastDiagnostics; },
+    get lastRealmSearchDiagnostics() { return lastRealmSearchDiagnostics; },
     _internals: {
       isPedestrianWay,
       parseOverpass,

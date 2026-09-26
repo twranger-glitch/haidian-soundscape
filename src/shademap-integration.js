@@ -472,7 +472,7 @@
   // configured source-ray search square; the existing polygon/ray test remains
   // the final authority, so this changes cost, not semantics.
   const routeBuildingSpatialIndex = {
-    source: null, cells: new Map(), globals: [], cellDeg: 0.001,
+    source: null, cells: new Map(), globals: [], bounds:new WeakMap(), heightBoundRejected:0, directionBoundRejected:0, cellDeg: 0.001,
     featureCount: 0, buildMs: 0, queryCount: 0, candidateTotal: 0,
     fullCandidateTotal: 0, maxCandidates: 0
   };
@@ -3511,7 +3511,7 @@
     return [];
   }
 
-  function featureRayEntryDistance(latlng, feature, bearingDeg, lateralOffsetM = 0) {
+  function featureRayEntryDistance(latlng, feature, bearingDeg, lateralOffsetM = 0, prepared = null) {
     const bearingRad = Number(bearingDeg) * Math.PI / 180;
     const dir = { x: Math.sin(bearingRad), y: Math.cos(bearingRad) };
     const right = { x: Math.cos(bearingRad), y: -Math.sin(bearingRad) };
@@ -3530,14 +3530,13 @@
     if (pointInPolygonFeature(shiftedOrigin.lng, shiftedOrigin.lat, feature)) return 0;
 
     let best = Infinity;
-    for (const ring of outerRingsForFeature(feature)) {
+    const rings=prepared?.rings||outerRingsForFeature(feature).map(ring=>Array.isArray(ring)?ring.map(raw=>raw?localMetersFromLatLng(latlng,{lat:Number(raw[1]),lng:Number(raw[0])}):null):[]);
+    if(prepared&&!prepared.rings)prepared.rings=rings;
+    for (const ring of rings) {
       if (!Array.isArray(ring) || ring.length < 2) continue;
       for (let i = 0; i < ring.length - 1; i += 1) {
-        const aRaw = ring[i];
-        const bRaw = ring[i + 1];
-        if (!aRaw || !bRaw) continue;
-        const a0 = localMetersFromLatLng(latlng, { lat: Number(aRaw[1]), lng: Number(aRaw[0]) });
-        const b0 = localMetersFromLatLng(latlng, { lat: Number(bRaw[1]), lng: Number(bRaw[0]) });
+        const a0=ring[i],b0=ring[i+1];
+        if(!a0||!b0)continue;
         const a = { x: a0.x - rayOrigin.x, y: a0.y - rayOrigin.y };
         const seg = { x: b0.x - a0.x, y: b0.y - a0.y };
         const denom = cross2d(dir, seg);
@@ -3581,10 +3580,11 @@
     const started = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
     const cellDeg = routeBuildingSpatialIndex.cellDeg;
     const cells = new Map();
-    const globals = [];
+    const globals = [],bounds=new WeakMap();
     for (const feature of buildings) {
       const bbox = routeFeatureBounds(feature);
       if (!bbox) continue;
+      bounds.set(feature,bbox);
       const x0 = Math.floor(bbox.minLng / cellDeg), x1 = Math.floor(bbox.maxLng / cellDeg);
       const y0 = Math.floor(bbox.minLat / cellDeg), y1 = Math.floor(bbox.maxLat / cellDeg);
       const cellCount = (x1 - x0 + 1) * (y1 - y0 + 1);
@@ -3601,6 +3601,7 @@
     routeBuildingSpatialIndex.source = buildings;
     routeBuildingSpatialIndex.cells = cells;
     routeBuildingSpatialIndex.globals = globals;
+    routeBuildingSpatialIndex.bounds = bounds;
     routeBuildingSpatialIndex.featureCount = buildings.length;
     routeBuildingSpatialIndex.buildMs = Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - started);
     return routeBuildingSpatialIndex;
@@ -3647,13 +3648,30 @@
     const maxRayWidth = Math.max(0, Number(config.queryShadeSourceRayWidthM) || 9);
     const buildings = routeBuildingCandidates(latlng, maxDistance + maxRayWidth + 3);
     const offsets = shadeSourceRayOffsets();
+    const bearingRad=solar.sunBearingDeg*Math.PI/180,rayDir={x:Math.sin(bearingRad),y:Math.cos(bearingRad)},rayRight={x:Math.cos(bearingRad),y:-Math.sin(bearingRad)};
     const confirmed = [];
     const plausible = [];
 
     for (const feature of buildings) {
-      const hits = [];
+      const heightMeta=buildingHeightMeta(feature);
+      const bbox=routeBuildingSpatialIndex.bounds.get(feature);
+      if(bbox){
+        // A polygon whose nearest bbox point is beyond every possible caster
+        // ray cannot contribute. Include unknown-height plausibility, the full
+        // lateral fan and a 3 m geometric guard; never infer absence from tags.
+        const near={lat:Math.max(bbox.minLat,Math.min(bbox.maxLat,Number(latlng.lat))),lng:Math.max(bbox.minLng,Math.min(bbox.maxLng,Number(latlng.lng)))};
+        const delta=localMetersFromLatLng(latlng,near);
+        const maxHeight=heightMeta.quality==='default'?Math.max(heightMeta.height,unknownMaxHeight):heightMeta.height;
+        const maxReach=Math.min(maxDistance,Math.max(0,(maxHeight-clearance)/tanAlt));
+        if(Math.hypot(delta.x,delta.y)>maxReach+maxRayWidth+3){routeBuildingSpatialIndex.heightBoundRejected++;continue;}
+        const lo=localMetersFromLatLng(latlng,{lat:bbox.minLat,lng:bbox.minLng}),hi=localMetersFromLatLng(latlng,{lat:bbox.maxLat,lng:bbox.maxLng});
+        const interval=(v)=>[Math.min(lo.x*v.x,hi.x*v.x)+Math.min(lo.y*v.y,hi.y*v.y),Math.max(lo.x*v.x,hi.x*v.x)+Math.max(lo.y*v.y,hi.y*v.y)];
+        const along=interval(rayDir),across=interval(rayRight);
+        if(along[1]<-3||along[0]>maxReach+3||across[0]>maxRayWidth+3||across[1]<-maxRayWidth-3){routeBuildingSpatialIndex.directionBoundRejected++;continue;}
+      }
+      const hits = [],preparedRay={};
       for (const offset of offsets) {
-        const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset);
+        const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay);
         if (!Number.isFinite(distance) || distance > maxDistance) continue;
         hits.push({ distance: Math.max(0, distance), offset });
       }
@@ -3683,7 +3701,7 @@
         for (const offset of refineOffsets) {
           if (Math.abs(offset) > maxRayWidth + 1e-6) continue;
           if (admissibleHits.some((hit) => Math.abs(hit.offset - offset) < 1e-6)) continue;
-          const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset);
+          const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay);
           if (!Number.isFinite(distance) || distance > maxDistance) continue;
           const allowed = Math.min(
             maxRayWidth,
@@ -3701,7 +3719,6 @@
       const chosen = centerHit || admissibleHits[0];
       const distance = chosen.distance;
       const entryOffset = chosen.offset;
-      const heightMeta = buildingHeightMeta(feature);
       const requiredHeight = distance * tanAlt + clearance;
       const margin = heightMeta.height - requiredHeight;
       const corridorHitCount = admissibleHits.length;
@@ -3766,7 +3783,7 @@
     return confirmed[0] || plausible[0] || null;
   }
 
-  async function findCanopyShadowEvidence(latlng, solar) {
+  async function findCanopyShadowEvidence(latlng, solar, options = {}) {
     if (!solar || solar.night || state.mode === "buildings" || config.queryCanopyFromCog === false) return null;
     const tanAlt = Math.tan(Math.max(0.001, solar.altitudeRad));
     const maxConfigured = Math.max(20, Number(config.queryShadeSourceMaxDistanceM) || 240);
@@ -3774,9 +3791,10 @@
     const step = Math.max(0.75, Number(config.queryShadeSourceSampleStepM) || 1.25);
     const clearance = Math.max(0, Number(config.queryShadeSourceRayClearanceM) || 0.5);
     const maxDistance = Math.min(maxConfigured, maxCanopy / tanAlt + step);
-    const samples = [];
+    // Evaluate in ray order and stop at the first caster. The previous code
+    // computed the entire ray and loaded all tiles before testing even the
+    // point underfoot. Later samples cannot change the nearest-hit result.
     const rasters = new Map();
-
     for (let distance = 0; distance <= maxDistance; distance += step) {
       const rayHeight = distance * tanAlt + clearance;
       if (rayHeight > maxCanopy) break;
@@ -3784,33 +3802,22 @@
         ? { lat: Number(latlng.lat), lng: Number(latlng.lng) }
         : destinationLatLng(latlng, solar.sunBearingDeg, distance);
       const tile = queryTileAt(sampleLatLng);
-      samples.push({ distance, rayHeight, tile });
       const key = tileKey(tile.x, tile.y, tile.z);
-      if (!rasters.has(key)) rasters.set(key, null);
-    }
-
-    await Promise.all(Array.from(rasters.keys()).map(async (key) => {
-      const [z, x, y] = key.split("/").map(Number);
-      const raster = await readMetaCanopyTile(x, y, z);
-      rasters.set(key, raster);
-    }));
-
-    for (const sample of samples) {
-      const key = tileKey(sample.tile.x, sample.tile.y, sample.tile.z);
-      const canopy = canopyValueFromRaster(rasters.get(key), sample.tile);
-      if (Number.isFinite(canopy) && canopy > sample.rayHeight) {
+      if (!rasters.has(key)) {
+        // The warm path is synchronous. Awaiting an already cached raster on
+        // every ray made unrelated model calls queue behind one another.
+        if (canopyRasterCache.has(key)) {
+          metaPerf.canopyCacheHits += 1;
+          rasters.set(key,touchMapEntry(canopyRasterCache,key));
+        } else rasters.set(key,await readMetaCanopyTile(tile.x,tile.y,tile.z));
+      }
+      if(options.requireComplete&&!rasters.get(key))throw new Error('Required canopy raster unavailable');
+      const canopy = canopyValueFromRaster(rasters.get(key), tile);
+      if (Number.isFinite(canopy) && canopy > rayHeight) {
         return {
-          type: "tree",
-          height: canopy,
-          distance: sample.distance,
-          rayHeight: sample.rayHeight,
-          clearanceMargin: canopy - sample.rayHeight,
-          sampleLatLng: webMercatorPixelCenterLatLng(
-            sample.tile.x * 256 + sample.tile.px,
-            sample.tile.y * 256 + sample.tile.py,
-            sample.tile.z
-          ),
-          confidence: "high"
+          type: "tree",height:canopy,distance,rayHeight,clearanceMargin:canopy-rayHeight,
+          sampleLatLng:webMercatorPixelCenterLatLng(tile.x*256+tile.px,tile.y*256+tile.py,tile.z),
+          confidence:"high"
         };
       }
     }
@@ -7529,7 +7536,7 @@
         const timeoutMs = Math.max(700, Number(options.canopyTimeoutMs) || 4200);
         const canopyStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         try {
-          tree = await withTimeout(findCanopyShadowEvidence(latlng, solar), timeoutMs, "路線樹冠陰影");
+          tree = await withTimeout(findCanopyShadowEvidence(latlng, solar,{requireComplete:true}), timeoutMs, "路線樹冠陰影");
         } catch (_) {
           tree = null;
           canopyQueryFailed = true;
@@ -7634,7 +7641,9 @@
         fullCandidateTotal: routeBuildingSpatialIndex.fullCandidateTotal,
         averageCandidates: routeBuildingSpatialIndex.queryCount ? routeBuildingSpatialIndex.candidateTotal / routeBuildingSpatialIndex.queryCount : 0,
         reductionRatio: routeBuildingSpatialIndex.fullCandidateTotal ? 1 - routeBuildingSpatialIndex.candidateTotal / routeBuildingSpatialIndex.fullCandidateTotal : 0,
-        maxCandidates: routeBuildingSpatialIndex.maxCandidates
+        maxCandidates: routeBuildingSpatialIndex.maxCandidates,
+        heightBoundRejected:routeBuildingSpatialIndex.heightBoundRejected,
+        directionBoundRejected:routeBuildingSpatialIndex.directionBoundRejected
       },
       canopyRasterCacheSize: canopyRasterCache.size,
       canopyRasterPromiseCount: canopyRasterPromises.size,
@@ -7661,6 +7670,8 @@
       lastResult: null
     });
     routeBuildingSpatialIndex.queryCount = 0;
+    routeBuildingSpatialIndex.heightBoundRejected = 0;
+    routeBuildingSpatialIndex.directionBoundRejected = 0;
     routeBuildingSpatialIndex.candidateTotal = 0;
     routeBuildingSpatialIndex.fullCandidateTotal = 0;
     routeBuildingSpatialIndex.maxCandidates = 0;
