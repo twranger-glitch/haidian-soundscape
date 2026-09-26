@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.2 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.3 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.2";
+  const VERSION = "v9.0.0-dev37.3";
 
   const DEFAULTS = {
     enabled: true,
@@ -929,6 +929,25 @@
     };
   }
 
+  // Realm visibility chords can be hundreds of metres. Their cost must use
+  // the length-weighted 5 m geometry sampling and walking-time offsets
+  // as final route scoring, rather than five samples at one edge midpoint.
+  async function realmDenseEdgeSunProvider(edge,fromId,at,context,speedMps,spacingM=5) {
+    const graph={edges:new Map([[edge.id,edge]])};
+    const built=denseShadeSegmentsForPath(graph,[{edgeId:edge.id,from:fromId}],spacingM);
+    if(!built.segments.length)throw new Error('Realm shade edge has no samples');
+    if(built.segments.length>256)throw new Error('Realm shade sample budget exceeded');
+    const startMs=at.getTime()-Number(edge.distanceM)/speedMps*500;
+    const models=await runPoolNoYield(built.segments,Math.min(4,Number(context.shadeConcurrency||2)),async(seg)=>{
+      const model=await window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs});
+      if(!model||!['sun','shade','night'].includes(model.state)||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)throw new Error('Realm shade model incomplete');
+      return model;
+    });
+    let sun=0,shade=0,night=0;
+    models.forEach((m,i)=>{const len=built.segments[i].lengthM;if(m.state==='night')night+=len;else if(m.shaded===true)shade+=len;else sun+=len;});
+    return {directSunFraction:sun/built.totalDistanceM,shadedFraction:shade/built.totalDistanceM,nightFraction:night/built.totalDistanceM,samples:models.length,cacheSafe:true};
+  }
+
   function denseShadeSegmentsForPath(graph, steps, spacingM) {
     const spacing = Math.max(4, Number(spacingM) || 10);
     const out = [];
@@ -1419,14 +1438,14 @@
       const edgeTime = edge.distanceM / speedMps;
       const atMs = departure.getTime() + (walkS + edgeTime / 2) * 1000;
       const bucket = shadeBucketForMs(atMs, shadeTimeBucketSec);
-      const key = shadeCacheKey(edge, bucket);
+      const key = options.realmDenseShadeCache ? `realm-dense-v1|${edge.id}|${fromId}|${bucket}` : shadeCacheKey(edge, bucket);
       if (shadeCache.has(key)) {
         shadeCacheHits += 1;
         return shadeCache.get(key);
       }
       if (shadeEvals >= maxShadeEvals) throw new Error(`OSM Graph 搜尋未完整完成：日照評估已達安全上限 ${maxShadeEvals} 條 edge；目前結果不可視為真正最不曬。`);
       shadeEvals += 1;
-      const promise = Promise.resolve(provider(edge, fromId, new Date(atMs), {
+      const promise = Promise.resolve(provider(edge, fromId, new Date(options.realmDenseShadeCache?(bucket*shadeTimeBucketSec+shadeTimeBucketSec/2)*1000:atMs), {
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
@@ -3453,6 +3472,7 @@
         fastestToEnd: toB,
         departure,
         edgeSunProvider: options.edgeSunProvider,
+        realmDenseShadeCache: options.realmDenseShadeCache,
         timeBucketSec: options.timeBucketSec,
         shadeTimeBucketSec: options.shadeTimeBucketSec,
         shadeSampleSpacingM: options.shadeSampleSpacingM,
@@ -4128,10 +4148,10 @@
   }
 
   async function readRealmResponseText(response, maxBytes) {
-    if(Number(response.headers?.get?.('content-length')||0)>maxBytes)throw new Error('Realm response exceeds byte limit');
+    if(Number(response.headers?.get?.('content-length')||0)>maxBytes){await response.body?.cancel?.();throw new Error('Realm response exceeds byte limit');}
     if(!response.body?.getReader){
       const value=await response.text();
-      if(value.length>maxBytes)throw new Error('Realm response exceeds byte limit');
+      let byteLength=0;for(const ch of value){const cp=ch.codePointAt(0);byteLength+=cp<=0x7f?1:cp<=0x7ff?2:cp<=0xffff?3:4;if(byteLength>maxBytes)throw new Error('Realm response exceeds byte limit');}
       return value;
     }
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -4214,30 +4234,77 @@
   async function fetchPedestrianRealmOsmMap(bbox,options={}) {
     const coords=[bbox.west,bbox.south,bbox.east,bbox.north].map((x)=>Number(x).toFixed(7));
     const endpoint=`https://www.openstreetmap.org/api/0.6/map?bbox=${coords.join(',')}`;
-    const controller=new AbortController(),timeoutMs=Math.min(18000,Math.max(3000,Number(options.osmMapTimeoutMs||15000)));
+    const controller=new AbortController(),timeoutMs=Math.min(30000,Math.max(3000,Number(options.osmMapTimeoutMs||28000)));
     const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    let cancelTimer=null;
+    const pollCancel=()=>{if(options.shouldCancel?.())controller.abort();else cancelTimer=setTimeout(pollCancel,100);};
+    if(options.shouldCancel)pollCancel();
     try {
       options.onProgress?.({stage:'pedestrian-realm-osm-map',message:'讀取 OSM 原始公園／步道／水體資料…',endpoint:'OSM map API'});
-      const response=await fetch(endpoint,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/xml'}});
-      if(!response.ok)throw new Error(`OSM map HTTP ${response.status}`);
-      const xml=await readRealmResponseText(response,3500000);
-      if(xml.length>3500000)throw new Error('OSM map exceeds focused rescue byte limit');
-      let payload=parsePedestrianRealmOsmXml(xml);
+      const acquisition={strategy:'single-map',mapRequests:1,coverage:'complete-requested-bbox',bbox:Object.assign({},bbox),perResponseByteLimit:3500000,mergedElementLimit:15000};
+      const readMap=async(box)=>{
+        if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
+        const coords=[box.west,box.south,box.east,box.north].map((x)=>Number(x).toFixed(7));
+        const response=await fetch(`https://www.openstreetmap.org/api/0.6/map?bbox=${coords.join(',')}`,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/xml'}});
+        if(!response.ok)throw new Error(`OSM map HTTP ${response.status}`);
+        const text=await readRealmResponseText(response,3500000);
+        if(controller.signal.aborted)throw new Error('OSM map deadline exceeded');
+        if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
+        return parsePedestrianRealmOsmXml(text);
+      };
+      let payload;
+      const mapAreaM2=haversineM({lat:bbox.south,lng:bbox.west},{lat:bbox.north,lng:bbox.west})*haversineM({lat:bbox.south,lng:bbox.west},{lat:bbox.south,lng:bbox.east});
+      const plannedSplit=mapAreaM2>200000;
+      try{
+        if(plannedSplit)throw new Error('planned coverage split: per-response byte limit budget');
+        payload=await readMap(bbox);
+      }
+      catch(error){
+        if(controller.signal.aborted||!/byte limit/.test(error?.message||''))throw error;
+        // Preserve the entire requested coverage: never accept just the first
+        // successful tile or shrink away obstacles. One nonrecursive split,
+        // two concurrent reads, original per-response and merged element caps.
+        acquisition.strategy='complete-two-map-split';acquisition.mapRequests=plannedSplit?2:3;
+        if(!plannedSplit)acquisition.initialFailure=String(error.message);
+        acquisition.splitReason=plannedSplit?'bbox-area-budget':'response-byte-limit';
+        const mid=Number(((bbox.south+bbox.north)/2).toFixed(7));
+        const boxes=[Object.assign({},bbox,{north:mid}),Object.assign({},bbox,{south:mid})];
+        acquisition.tiles=boxes;
+        const parts=await Promise.all(boxes.map(readMap));
+        const merged=new Map();
+        for(const part of parts)for(const item of part.elements){
+          const key=`${item.type}:${item.id}`,previous=merged.get(key);
+          if(previous&&JSON.stringify(previous)!==JSON.stringify(item))throw new Error('OSM split snapshot conflict');
+          merged.set(key,item);
+          if(merged.size>15000)throw new Error('merged OSM map exceeds focused rescue element limit');
+        }
+        payload={elements:[...merged.values()],osm3s:{source:'osm-api-map-split'}};
+      }
       const incomplete=relevantIncompleteRealmRelations(payload);
       const relationCompletion={needed:incomplete.length,completed:0,skipped:Math.max(0,incomplete.length-3),errors:[]};
-      for(const rel of incomplete.slice(0,3)){
+      const completed=await Promise.all(incomplete.slice(0,3).map(async(rel)=>{
         try{
           const full=await fetch(`https://www.openstreetmap.org/api/0.6/relation/${rel.id}/full`,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/xml'}});
           if(!full.ok)throw new Error(`HTTP ${full.status}`);
-          const fullXml=await readRealmResponseText(full,1800000);if(fullXml.length>1800000)throw new Error('relation exceeds byte limit');
-          const more=parsePedestrianRealmOsmXml(fullXml),byId=new Map(payload.elements.map((e)=>[`${e.type}:${e.id}`,e]));
-          for(const item of more.elements)byId.set(`${item.type}:${item.id}`,item);
-          if(byId.size>15000)throw new Error('merged OSM map exceeds focused rescue element limit');
-          payload={elements:[...byId.values()],osm3s:payload.osm3s};relationCompletion.completed+=1;
-        }catch(error){relationCompletion.errors.push(`${rel.id}: ${error?.message||error}`);}
+          const more=parsePedestrianRealmOsmXml(await readRealmResponseText(full,1800000));
+          return {rel,more};
+        }catch(error){return {rel,error};}
+      }));
+      for(const {rel,more,error} of completed){
+        if(error){relationCompletion.errors.push(`${rel.id}: ${error?.message||error}`);continue;}
+        const byId=new Map(payload.elements.map((e)=>[`${e.type}:${e.id}`,e]));
+        for(const item of more.elements){
+          const key=`${item.type}:${item.id}`,previous=byId.get(key);
+          if(previous&&JSON.stringify(previous)!==JSON.stringify(item))throw new Error('OSM relation snapshot conflict');
+          byId.set(key,item);
+        }
+        if(byId.size>15000)throw new Error('merged OSM map exceeds focused rescue element limit');
+        payload={elements:[...byId.values()],osm3s:payload.osm3s};relationCompletion.completed+=1;
       }
-      return {payload,endpoint:'OSM map API',relationCompletion};
-    }finally{clearTimeout(timer);}
+      if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
+      acquisition.timeoutMs=timeoutMs;
+      return {payload,endpoint:'OSM map API',relationCompletion,acquisition};
+    }finally{clearTimeout(timer);clearTimeout(cancelTimer);controller.abort();}
   }
 
   const realmOpportunityCache=new Map();
@@ -4254,7 +4321,7 @@
     const cached=realmOpportunityCache.get(key),now=Date.now();
     if(cached&&now-cached.at<300000)return Object.assign({},await cached.promise,{cacheHit:true});
     const started=nowMs();
-    const promise=fetchPedestrianRealmOsmMap(bbox,Object.assign({},options,{osmMapTimeoutMs:Math.min(10000,Number(options.timeoutMs||10000))}))
+    const promise=fetchPedestrianRealmOsmMap(bbox,Object.assign({},options,{osmMapTimeoutMs:Math.min(30000,Number(options.timeoutMs||28000))}))
       .then((loaded)=>Object.assign({available:true,bbox,sourceMs:nowMs()-started},loaded))
       .catch((error)=>({available:false,reason:'realm-source-unavailable',sourceErrors:[`OSM map: ${error?.message||error}`],bbox,sourceMs:nowMs()-started}));
     // Cache raw source only. Never cache route, shade, or candidate decisions.
@@ -4540,7 +4607,7 @@
     const g=(geometry||[]).map(asLatLng).filter(Boolean); if(g.length<2) return null;
     const distanceM=routeDistanceM(g); if(!(distanceM>0.05)) return null;
     let id=`dev37-realm:${meta.serial||1}`,serial=1; while(graph.edges.has(id)) id=`dev37-realm:${meta.serial||1}:${++serial}`;
-    const edge={id,a,b,distanceM,geometry:g.map((p)=>({lat:p.lat,lng:p.lng})),wayIds:[],tagsSummary:{highway:['pedestrian'],foot:['yes'],diagnostic:['dev37-pedestrian-realm'],realm:[String(meta.realmKind||'public-realm')]},realmSynthetic:true,realmAreaId:meta.realmAreaId||null,realmKind:meta.realmKind||null,realmConfidence:meta.realmConfidence||'medium',realmPortalConnector:meta.portalConnector===true,realmOpenBoundaryPortal:meta.openBoundaryPortal===true,productionGraphMutated:false};
+    const edge={id,a,b,distanceM,geometry:g.map((p)=>({lat:p.lat,lng:p.lng})),wayIds:[],tagsSummary:{highway:['pedestrian'],foot:['yes'],diagnostic:['dev37-pedestrian-realm'],realm:[String(meta.realmKind||'public-realm')]},realmSynthetic:true,realmAreaId:meta.realmAreaId||null,realmKind:meta.realmKind||null,realmConfidence:meta.realmConfidence||'medium',realmTerminalConnector:meta.terminalConnector===true,realmPortalConnector:meta.portalConnector===true,realmOpenBoundaryPortal:meta.openBoundaryPortal===true,productionGraphMutated:false};
     graph.edges.set(id,edge); if(!graph.adjacency.has(a))graph.adjacency.set(a,[]);if(!graph.adjacency.has(b))graph.adjacency.set(b,[]);
     graph.adjacency.get(a).push({edgeId:id,to:b});graph.adjacency.get(b).push({edgeId:id,to:a});
     return edge;
@@ -4729,15 +4796,16 @@
   }
 
   function realmPathStats(graph, edgeIds = []) {
-    let totalM=0,syntheticM=0,portalM=0,mappedPathM=0;const areaIds=new Set(),kinds=new Set(),segments=[];
+    let totalM=0,syntheticM=0,portalM=0,mappedPathM=0,terminalConnectorM=0;const areaIds=new Set(),kinds=new Set(),segments=[];
     for(const id of edgeIds||[]){
       const e=graph?.edges?.get?.(String(id));if(!e)continue;
       const d=Number(e.distanceM||0);totalM+=d;
+      if(e.realmTerminalConnector)terminalConnectorM+=d;
       if(e.realmSynthetic){syntheticM+=d;if(e.realmPortalConnector)portalM+=d;if(e.realmAreaId)areaIds.add(String(e.realmAreaId));if(e.realmKind)kinds.add(String(e.realmKind));}
       else mappedPathM+=d;
-      segments.push({edgeId:String(id),provenance:e.realmSynthetic?'synthetic-realm':'mapped-path',distanceM:d,sourceWayIds:(e.wayIds||[]).map(String),realmAreaId:e.realmAreaId||null,geometry:(e.geometry||[]).map((p)=>({lat:p.lat,lng:p.lng}))});
+      segments.push({edgeId:String(id),provenance:e.realmTerminalConnector?'unmapped-terminal-connector':e.realmSynthetic?'synthetic-realm':'mapped-path',distanceM:d,sourceWayIds:(e.wayIds||[]).map(String),realmAreaId:e.realmAreaId||null,geometry:(e.geometry||[]).map((p)=>({lat:p.lat,lng:p.lng}))});
     }
-    return {totalM,mappedPathM,sourceSupportedRealmM:0,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds),segments};
+    return {totalM,terminalConnectorM,mappedPathM,sourceSupportedRealmM:0,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds),segments};
   }
 
   function makePedestrianRealmCandidate(kind,path,meta={}) {
@@ -4804,6 +4872,17 @@
       portalRowsByArea.set(area.id,rows);
       const vis=addRealmVisibilityForArea(graph,area,realm,rows,A,B,options,counters);visibilityEdgeCount+=Number(vis.visibilityEdgesAdded||0);realmNodeCount+=Number(vis.nodeCount||0);
     }
+    if(options.providerMode==='opportunity'){
+      const attachTerminal=(point,nodeId,label,inside)=>{
+        if(inside||haversineM(point,graph.nodes.get(String(nodeId)))<=0.2)return nodeId;
+        const id=addRealmNode(graph,point,`dev37-exact-terminal:${label}`,{realmEndpoint:label});
+        addRealmEdge(graph,nodeId,id,[graph.nodes.get(String(nodeId)),point],{serial:`terminal-${label}`,realmKind:'unmapped-terminal-connector',terminalConnector:true,realmConfidence:'requires-on-site-confirmation'});
+        return id;
+      };
+      startId=attachTerminal(A,startId,'A',areaForA);
+      endId=attachTerminal(B,endId,'B',areaForB);
+      endpointCoverage.terminalConnectorsIncluded=true;
+    }
     return Object.assign({available:true,accepted:false,graph,startId,endId,snapA,snapB,relevantAreas:relevant,endpointCoverage,explicitPortalCount,openBoundaryPortalCount,portalCount:explicitPortalCount+openBoundaryPortalCount,visibilityEdgeCount,realmNodeCount},shared);
   }
 
@@ -4816,7 +4895,7 @@
     path.walkSeconds=timeS;const distanceM=Number(path.distanceM||timeS*speedMps),baselineM=Number(options.baselineDistanceM),minImprovementM=Math.max(20,Number(options.minImprovementM||120)),improvementM=Number.isFinite(baselineM)?baselineM-distanceM:Infinity;
     const stats=realmPathStats(built.graph,path.edgeIds||[]),maxSyntheticM=Math.max(60,Number(options.maxSyntheticDistanceM||480)),maxRatio=Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2));
     const opportunity=options.providerMode==='opportunity';
-    const traversesRealm=stats.syntheticM>1||built.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
+    const traversesRealm=stats.syntheticM-Number(stats.terminalConnectorM||0)>1||built.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
     const distancePolicy=opportunity?(!Number.isFinite(baselineM)||distanceM<=baselineM*(1+clamp(options.detourPct,0,60,30)/100)+0.5):(!Number.isFinite(baselineM)||improvementM>=minImprovementM);
     const accepted=(opportunity||traversesRealm) && distanceM+0.5>=straightM*0.92 && distanceM<=straightM*maxRatio+1e-9 && (opportunity||stats.syntheticM<=maxSyntheticM+1e-9) && distancePolicy;
     return Object.assign({},built,{accepted,reason:accepted?null:(stats.syntheticM<=1?'no-realm-segment-on-short-path':'realm-route-policy-rejected'),best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
@@ -4839,6 +4918,7 @@
     const topo=pedestrianRealmRescueFromPayload(fetched.payload,A,B,options);
     topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;topo.sourceErrors=sourceErrors;topo.containmentAttempted=containmentAttempted;
     topo.relationCompletion=fetched.relationCompletion||null;
+    topo.sourceAcquisition=fetched.acquisition||null;
     if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
     const make=(kind,path)=>{
@@ -4849,14 +4929,22 @@
       if(!path?.points?.length)return false;
       const stats=realmPathStats(topo.best.graph,path.edgeIds||[]),distance=Number(path.distanceM||0);
       const cap=Math.min(topo.best.distanceM,Number.isFinite(Number(options.baselineDistanceM))?Number(options.baselineDistanceM):Infinity)*(1+clamp(options.detourPct,0,60,30)/100);
-      const traverses=stats.syntheticM>1||topo.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
+      const traverses=stats.syntheticM-Number(stats.terminalConnectorM||0)>1||topo.relevantAreas.some((area)=>samplePolyline(path.points,20).some((p)=>pointInRealmArea(p,area,0)));
       return traverses&&distance<=cap+0.5&&stats.syntheticM<=Math.max(60,Number(options.maxSyntheticDistanceM||480))+.01&&distance<=topo.straightM*Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2))+.01;
     };
     const fastestCandidate=pathQualifies(topo.best.path)?make('pedestrian-realm-fastest',topo.best.path):null;
-    const finish=(values)=>Object.assign({},topo,values,{accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});
+    const finish=(values)=>Object.assign({},topo,values,{shadeSearch:Object.assign({},values.shadeSearch,{costModel:options.edgeSunProvider?'injected-provider':'length-weighted-along-walk',costSampleSpacingM:options.edgeSunProvider?null:Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),cacheTimeBucketSec:options.edgeSunProvider?null:30}),accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});
     if(options.fastestOnly===true)return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:false,complete:false,reason:'fastest-only'},productionGraphMutated:false});
-    const searchStarted=nowMs(),deadline=searchStarted+Math.min(6000,Math.max(500,Number(options.realmSearchTimeoutMs||4000)));
+    const searchStarted=nowMs(),deadline=searchStarted+Math.min(6000,Math.max(500,Number(options.realmSearchTimeoutMs||6000)));
     const searchOptions=Object.assign({},options,{maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline});
+    if(!options.edgeSunProvider){
+      const speed=clamp(options.speedMps,0.5,2.5,1.25);
+      searchOptions.edgeSunProvider=(edge,from,at,context)=>realmDenseEdgeSunProvider(edge,from,at,context,speed,Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))));
+      searchOptions.realmDenseShadeCache=true;
+      searchOptions.shadeTimeBucketSec=30;
+      searchOptions.candidateCorrectnessExactReplayToleranceSec=3;
+      searchOptions.sharedShadeCache=new Map();
+    }
     // The effective budget uses the shorter of public line and realm fastest.
     if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
     try{
@@ -7324,6 +7412,7 @@
       benchmarkPathAnalysis,
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
+      realmDenseEdgeSunProvider,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,

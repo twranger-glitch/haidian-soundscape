@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.2 Pedestrian Realm Graph Rescue
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.3 Pedestrian Realm Graph Rescue
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.2";
+  const VERSION = "v9.0.0-dev37.3";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -3486,7 +3486,7 @@
       // changes stretch thresholds, and its cache contains source data only.
       const realmOpportunityOptions=config.realmOpportunity||{};
       const realmSourcePromise=config.graphRouting?.enabled!==false&&window.HaidianPedestrianGraph?.preparePedestrianRealmOpportunity
-        ? window.HaidianPedestrianGraph.preparePedestrianRealmOpportunity(aPoint,bPoint,realmOpportunityOptions)
+        ? window.HaidianPedestrianGraph.preparePedestrianRealmOpportunity(aPoint,bPoint,Object.assign({},realmOpportunityOptions,{shouldCancel:()=>serial!==analysisSerial}))
         : Promise.resolve({available:false,reason:'provider-disabled'});
       const providerStarted = nowMs();
       const providerPromise = fetchRouteCandidates(aPoint, bPoint).catch((providerError) => {
@@ -4296,7 +4296,7 @@
       if(graphCandidates.length&&!perf.routeStretchRescue?.pedestrianRealmAttempted){
         const source=await realmSourcePromise;
         if(serial!==analysisSerial)return;
-        perf.realmOpportunity={attempted:source.reason!=='outside-opportunity-scope'&&source.reason!=='provider-disabled',sourceMs:source.sourceMs||0,cacheHit:source.cacheHit===true,reason:source.reason||null,sourceErrors:source.sourceErrors||[],productionGraphMutated:false};
+        perf.realmOpportunity={attempted:source.reason!=='outside-opportunity-scope'&&source.reason!=='provider-disabled',sourceMs:source.sourceMs||0,cacheHit:source.cacheHit===true,sourceAcquisition:source.acquisition||null,relationCompletion:source.relationCompletion||null,reason:source.reason||null,sourceErrors:source.sourceErrors||[],productionGraphMutated:false};
         if(source.available){
           const started=nowMs();
           try{
@@ -4305,7 +4305,7 @@
               providerMode:'opportunity',realmSource:source,allowContainment:false,
               baselineDistanceM:graphFastestDistanceM(graphCandidates),departure,speedMps,detourPct,
               sharedShadeCache:sharedGraphShadeCache,shouldCancel:()=>serial!==analysisSerial,
-              realmSearchTimeoutMs:realmOpportunityOptions.searchTimeoutMs||4000,
+              realmSearchTimeoutMs:realmOpportunityOptions.searchTimeoutMs||6000,
               shadeConcurrency:config.graphRouting?.shadeConcurrency||2,
               shadeEdgeBatchConcurrency:config.graphRouting?.shadeEdgeBatchConcurrency||4,
               canopyTimeoutMs:config.canopyTimeoutMs,onProgress:(info)=>{if(serial===analysisSerial&&info?.message)setStatus(info.message,"loading")}
