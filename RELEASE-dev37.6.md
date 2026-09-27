@@ -1,0 +1,3 @@
+# ASTRA dev37.6 Unified Shade
+
+Own visual renderer uses self-hosted GeoTIFF 2.1.3, original Meta CHMv2 fine cast shadows and continuous building projections. Keep vendor/, src/, data/ and licenses/ next to index.html. No ShadeMap key is required. Default building cache covers Tainan only; OSM fallback outside coverage may be partial. Missing sources are unknown, not direct sun. Distant terrain is incomplete. Public-site acceptance has NOT been performed. Complete test results, source records, acceptance checklist and 24 inherited + 1 semantic-contract regression failure are in the matching full ASTRA-HANDOFF-next.zip.

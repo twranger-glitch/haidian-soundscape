@@ -2677,9 +2677,9 @@ body.haidian-v4 .haidian-v4-card[aria-pressed="false"] {
 
 <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; font-weight:800;">現代圖資 (自選底圖)</div>
                 <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 臺灣精細地圖</label>
-                <label><input type="radio" name="basemap" value="global" onchange="switchBasemap(this.value)"> 全球通用地圖</label>
                 <label><input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> ESRI 衛星影像</label>
                 <label><input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> OSM 標準地圖</label>
+                <div id="basemapAutoFallbackNote" role="status" aria-live="polite" style="display:none; font-size:11px; color:var(--text-muted); margin:3px 0 5px 4px;">已離開臺灣底圖範圍，正在使用 OSM 標準地圖。</div>
 
                 <!-- 🎯 底圖透明度獨立控制 -->
                 <div style="display:flex; align-items:center; gap:8px; margin-top:8px; margin-bottom:12px; background:#f8fafc; padding:8px 10px; border-radius:8px; border:1px solid #e2e8f0;">
@@ -3933,11 +3933,10 @@ var map = L.map('map', {
 }).setView([23.0278, 120.2004], 15);
 /* ===== [FIX END] ===== */
         
-        var globalLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 22, zIndex: 1 });
         var taiwanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', { attribution: '&copy; <a href="https://maps.nlsc.gov.tw/" target="_blank">內政部國土測繪中心</a>', maxZoom: 20, zIndex: 1 });
         
         // 🌟 新增 ESRI 衛星與 OSM 標準圖資
-        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, zIndex: 1 });
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxNativeZoom: 19, maxZoom: 22, zIndex: 1 });
         var esriSatLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri', maxNativeZoom: 19, maxZoom: 20, zIndex: 1 });
 
         var attrSinica = '&copy; <a href="https://gissrv4.sinica.edu.tw/" target="_blank">中央研究院 臺灣百年歷史地圖</a>';
@@ -3951,7 +3950,7 @@ var map = L.map('map', {
         var history1944Layer = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=AM25K_1944B-jpg-{z}-{x}-{y}', { attribution: attrSinica, maxZoom: 19, maxNativeZoom: 18, opacity: 0.8, zIndex: 2, keepBuffer: 4, updateWhenIdle: false });
 
         var allHistoryLayers = [history1904Layer, history1921Layer, historyTainanLayer, history1875Layer, history1900Layer, history1920Layer, history1944Layer];
-        var allModernLayers = [globalLayer, taiwanLayer, osmLayer, esriSatLayer];
+        var allModernLayers = [taiwanLayer, osmLayer, esriSatLayer];
         // 🌟 地點搜尋功能：進階排版與定位系統
         var placeSearchMarker = null;
 
@@ -8914,20 +8913,29 @@ function getPmtilesGeomCenter(geom) {
         updateOfficialHazardOpacity(getOfficialHazardOpacityValue());
         syncOfficialHazardStatus();
 
-// 🚀 負責切換「現代圖資底圖」
+// 臺灣精細圖僅在原本支援的區域使用；離開範圍時沿用 OSM 標準圖。
+        function isInsideTaiwanBasemapCoverage(center) {
+            return center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5;
+        }
+
+        function showBasemapAutoFallbackNotice(visible) {
+            var note = document.getElementById('basemapAutoFallbackNote');
+            if (note) note.style.display = visible ? 'block' : 'none';
+        }
+
+        // 🚀 負責切換「現代圖資底圖」；舊 global 值一律安全轉到 OSM。
         function switchBasemap(val) {
+            if (val !== 'taiwan' && val !== 'osm' && val !== 'esri_sat') val = 'osm';
             allModernLayers.forEach(function(l) { if (map.hasLayer(l)) map.removeLayer(l); });
 
             document.querySelectorAll('input[name="basemap"]').forEach(function(el) {
                 el.checked = (el.value === val);
             });
 
-            var targetLayer = taiwanLayer;
-            if (val === 'global') targetLayer = globalLayer;
-            else if (val === 'esri_sat') targetLayer = esriSatLayer;
-            else if (val === 'osm') targetLayer = osmLayer;
-
+            var taiwanFallback = val === 'taiwan' && !isInsideTaiwanBasemapCoverage(map.getCenter());
+            var targetLayer = val === 'esri_sat' ? esriSatLayer : (val === 'osm' || taiwanFallback ? osmLayer : taiwanLayer);
             map.addLayer(targetLayer);
+            showBasemapAutoFallbackNotice(taiwanFallback);
 
             // 🎯 套用目前拉桿設定的底圖透明度
             var slider = document.getElementById('basemapOpacity');
@@ -9019,23 +9027,20 @@ function getPmtilesGeomCenter(geom) {
         }, 100);
 
 map.on('moveend', function() {
-            var center = map.getCenter();
-            var inTaiwan = (center.lat >= 20.0 && center.lat <= 26.5 && center.lng >= 118.0 && center.lng <= 122.5);
-            
             var checkedBasemap = document.querySelector('input[name="basemap"]:checked');
-            if (!checkedBasemap) return;
-            var selectedBasemap = checkedBasemap.value;
-            
-            // 只有「臺灣精細地圖」在離開台灣範圍時需要自動切換為全球圖
-            if (selectedBasemap === 'taiwan') { 
-                if (!inTaiwan) {
-                    if (!map.hasLayer(globalLayer)) map.addLayer(globalLayer);
-                    if (map.hasLayer(taiwanLayer)) map.removeLayer(taiwanLayer);
-                } else {
-                    if (!map.hasLayer(taiwanLayer)) map.addLayer(taiwanLayer);
-                    if (map.hasLayer(globalLayer)) map.removeLayer(globalLayer);
-                }
-            }
+            if (!checkedBasemap || checkedBasemap.value !== 'taiwan') return;
+
+            // 僅臺灣精細底圖需要自動回退；手選 OSM / 衛星圖不受地圖移動影響。
+            var useOsmFallback = !isInsideTaiwanBasemapCoverage(map.getCenter());
+            var targetLayer = useOsmFallback ? osmLayer : taiwanLayer;
+            var previousLayer = useOsmFallback ? taiwanLayer : osmLayer;
+            if (!map.hasLayer(targetLayer)) map.addLayer(targetLayer);
+            if (map.hasLayer(previousLayer)) map.removeLayer(previousLayer);
+            showBasemapAutoFallbackNotice(useOsmFallback);
+
+            // 自動切換時保留使用者設定的底圖透明度。
+            var slider = document.getElementById('basemapOpacity');
+            if (slider && targetLayer.setOpacity) targetLayer.setOpacity(parseFloat(slider.value));
         });
         
         function updateHeaderVisibility(hide) {
