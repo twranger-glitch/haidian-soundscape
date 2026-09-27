@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.6 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.7 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.6";
+  const VERSION = "v9.0.0-dev37.7";
 
   const DEFAULTS = {
     enabled: true,
@@ -938,9 +938,10 @@
   // as final route scoring, rather than five samples at one edge midpoint.
   function createRealmSearchRuntime(options,deadline) {
     const stats={phase:'search',expandedStates:0,shadeEdgeEvaluations:0,edgeCacheHits:0,edgeCacheSize:0,firstStateOutgoing:0,firstStateFeasible:0,samplesPlanned:0,providerCallsStarted:0,providerCallsCompleted:0,providerCallsPending:0,modelCallsStarted:0,modelCallsCompleted:0,modelCallsFailed:0,modelCallsPending:0,maxModelCallsPending:0,modelTotalMs:0,modelMaxMs:0,yieldCount:0};
+    const modelController=new AbortController();
     let closed=false,stopError=null,cancelTimer=null,yieldPromise=null,lastYield=nowMs(),lastProgress=0,rejectStop;
     const stopPromise=new Promise((_,reject)=>{rejectStop=reject;});stopPromise.catch(()=>{});
-    const stop=(reason)=>{if(stopError)return;closed=true;stopError=new Error(reason==='user-cancelled'?'ROUTE_ANALYSIS_CANCELLED':'REALM_SHADE_DEADLINE');stopError.realmTermination=reason;rejectStop(stopError);};
+    const stop=(reason)=>{if(stopError)return;closed=true;modelController.abort();stopError=new Error(reason==='user-cancelled'?'ROUTE_ANALYSIS_CANCELLED':'REALM_SHADE_DEADLINE');stopError.realmTermination=reason;rejectStop(stopError);};
     const check=()=>{if(options.shouldCancel?.())stop('user-cancelled');else if(nowMs()>=deadline)stop('deadline');if(stopError)throw stopError;if(closed)throw new Error('Realm search closed');};
     const timer=setTimeout(()=>stop('deadline'),Math.max(0,deadline-nowMs()));
     const poll=()=>{if(closed)return;if(options.shouldCancel?.())stop('user-cancelled');else cancelTimer=setTimeout(poll,25);};poll();
@@ -951,7 +952,7 @@
       const settled=stats.modelCallsCompleted+stats.modelCallsFailed;
       return Object.assign({},stats,{termination,modelMeanMs:settled?stats.modelTotalMs/settled:0,engineWindowDelta});
     };
-    return {stats,check,snapshot,
+    return {stats,check,snapshot,signal:modelController.signal,
       async edge(task){
         check();stats.providerCallsStarted++;stats.providerCallsPending++;
         const pending=Promise.resolve().then(task).then(value=>{stats.providerCallsCompleted++;return value;}).finally(()=>{stats.providerCallsPending--;});
@@ -970,7 +971,7 @@
         if(nowMs()-lastProgress>=250){lastProgress=nowMs();options.onProgress?.({stage:'realm-shade-sampling',...snapshot('running'),message:`公園遮蔭搜尋：${stats.expandedStates}狀態／${stats.shadeEdgeEvaluations}邊／${stats.modelCallsCompleted}採樣完成`});}
         return value;
       },
-      close(){closed=true;clearTimeout(timer);clearTimeout(cancelTimer);}
+      close(){closed=true;modelController.abort();clearTimeout(timer);clearTimeout(cancelTimer);}
     };
   }
 
@@ -982,7 +983,7 @@
     if(runtime){runtime.check();runtime.stats.samplesPlanned+=built.segments.length;}
     const startMs=at.getTime()-Number(edge.distanceM)/speedMps*500;
     const models=await runPoolNoYield(built.segments,Math.min(4,Number(context.shadeConcurrency||2)),async(seg)=>{
-      const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs});
+      const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs,signal:runtime?.signal});
       const model=runtime?await runtime.sample(task):await task();
       if(!model||!['sun','shade','night'].includes(model.state)||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)throw new Error('Realm shade model incomplete');
       return model;
@@ -1389,6 +1390,8 @@
       enabled:true, bucketSec, concurrency, potentialTasks:tasks.length+skippedExisting, tasks:scheduled.length,
       evaluated, cacheHits:skippedExisting, errors, truncatedEdges,
       omittedBySafetyCap:Math.max(0,tasks.length-scheduled.length), maxActive,
+      omissionPolicy:'lazy evaluation; zero lower bound until every feasible time cell is available',
+      omittedCells:tasks.slice(scheduled.length).map(t=>({key:t.key,lowerBoundSunSeconds:0,excludedFromSearch:false})),
       cacheSize:shadeCache.size, durationMs:nowMs()-started
     };
   }
@@ -1422,10 +1425,10 @@
     // Missing cells have zero cost. This never assumes time-invariant shade.
     const lower = new Map([[String(endId),0]]), incoming = new Map();
     const fromStart = options.fastestFromStart?.dist || options.fastestFromStart || dijkstraTimes(graph,String(startId),speedMps).dist;
-    let boundEdges=0, historyBoundRejected=0, boundCacheSize=-1, boundRefreshes=0;
+    let boundEdges=0, historyBoundRejected=0, boundCacheSize=-1, boundRefreshes=0, zeroBoundEdges=0, terminationReason="frontier-exhausted", remainingLowerBound=null;
     const resourceBounds=[];
     async function refreshBounds(){
-    boundEdges=0;lower.clear();lower.set(String(endId),0);incoming.clear();resourceBounds.length=0;
+    boundEdges=0;zeroBoundEdges=0;lower.clear();lower.set(String(endId),0);incoming.clear();resourceBounds.length=0;
     let checked=0;
     for(const [from,refs] of graph.adjacency){
       if(++checked%100===0){if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');await cooperativeYield();}
@@ -1446,6 +1449,7 @@
           }
           if(complete){cost=t*min;boundEdges++;}
         }
+        if(cost===0)zeroBoundEdges++;
         const id=String(ref.to);if(!incoming.has(id))incoming.set(id,[]);incoming.get(id).push({node:String(from),cost,walkS:t});
       }
     }
@@ -1461,7 +1465,7 @@
       resourceBounds.push({lambda,dist});
     }
     boundCacheSize=shadeCache.size;boundRefreshes++;
-    if(metrics)Object.assign(metrics,{admissibleBoundEdges:boundEdges,admissibleStartSunSeconds:lower.get(String(startId))||0,boundRefreshes});
+    if(metrics)Object.assign(metrics,{admissibleBoundEdges:boundEdges,zeroBoundEdges,missingCellLowerBound:0,admissibleStartSunSeconds:lower.get(String(startId))||0,boundRefreshes});
     }
     await refreshBounds();
     const estimate=l=>{let remain=lower.get(l.node)||0;for(const b of resourceBounds)remain=Math.max(remain,(b.dist.get(l.node)||0)-b.lambda*(detourLimitS+0.5-l.walkS));return l.sunS+remain;};
@@ -1506,6 +1510,7 @@
       // A subset of visited nodes preserves every simple-path continuation
       // still available to b.  The small epsilon is only numeric noise.
       return (!graph.edges.get(a.viaEdgeId)?.sourceJunctionLink || !!graph.edges.get(b.viaEdgeId)?.sourceJunctionLink) && Math.abs(a.walkS - b.walkS) <= 1e-9 &&
+        (a.syntheticM||0) <= (b.syntheticM||0) + 1e-9 &&
         a.sunS <= b.sunS + 1e-9 &&
         visitedSubset(a, b);
     }
@@ -1537,7 +1542,7 @@
 
     insertLabel(startLabel);
     heap.push(startLabel);
-    let bestGoal = null;
+    let bestGoal = options.initialGoalLabel||null;
 
     const completedEnvelopes=new Map();
     async function sunForEdge(edge, fromId, walkS, envelopeOnly=false) {
@@ -1605,7 +1610,7 @@
         options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在做細緻 graph 搜尋：${expanded} 個狀態／${shadeEvals} 條 edge 日照` });
       }
 
-      if (bestGoal && estimate(cur) > bestGoal.sunS + 1e-9) break;
+      if (bestGoal && estimate(cur) > bestGoal.sunS + 1e-9){terminationReason='frontier-lower-bound-exceeds-incumbent';remainingLowerBound=estimate(cur);break;}
       if (cur.node === String(endId)) {
         if(!bestGoal || cur.sunS<bestGoal.sunS-1e-9 || (Math.abs(cur.sunS-bestGoal.sunS)<=1e-9&&cur.walkS<bestGoal.walkS))bestGoal = cur;
         continue;
@@ -1634,13 +1639,15 @@
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
         const edgeTime = edge.distanceM / speedMps;
+        const syntheticM=(cur.syntheticM||0)+(edge.realmSynthetic?edge.distanceM:0);
+        if(Number.isFinite(options.maxRealmSyntheticM)&&syntheticM>options.maxRealmSyntheticM+.01)continue;
         const nextWalk = cur.walkS + edgeTime;
         const optimisticRemain = Number(toEnd.get(next));
         if (!Number.isFinite(optimisticRemain)) continue;
         // Exact resource bound: only prune when even the shortest possible
         // continuation would exceed the user's detour cap.
         if (Number.isFinite(detourLimitS) && nextWalk + optimisticRemain > detourLimitS + 0.5) continue;
-        feasible.push({ next, edge, edgeTime, nextWalk });
+        feasible.push({ next, edge, edgeTime, nextWalk, syntheticM });
       }
       if(metrics&&expanded===1){metrics.firstStateOutgoing=outgoing.length;metrics.firstStateFeasible=feasible.length;}
       // dev30: all feasible outgoing costs depend only on this immutable label,
@@ -1656,14 +1663,15 @@
       );
       if (shadeEvals > 0 && shadeEvals % 6 === 0) await cooperativeYield();
       for (const row of shadedOutgoing) {
-        const { next, edge, edgeTime, nextWalk } = row.item;
+        const { next, edge, edgeTime, nextWalk, syntheticM } = row.item;
         const sunFraction = clamp(row.shade?.directSunFraction, 0, 1, 0);
         const nextSun = cur.sunS + edgeTime * sunFraction;
-        const label = { node: next, walkS: nextWalk, sunS: nextSun, parent: cur, viaEdgeId: edge.id, active: true };
+        const label = { node: next, walkS: nextWalk, sunS: nextSun, syntheticM, parent: cur, viaEdgeId: edge.id, active: true };
         if (insertLabel(label)) heap.push(label);
       }
     }
 
+    if(metrics)Object.assign(metrics,{terminationReason,remainingLowerBoundSunSeconds:remainingLowerBound,incumbentSunSeconds:bestGoal?.sunS??null,proofScope:'bucketed selected-source simple paths on supplied graph; no physical/global claim'});
     if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
     return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
   }
@@ -3610,6 +3618,8 @@
         speedMps,
         detourLimitS,
         fastestToEnd: toB,
+        initialGoalLabel:options.initialGoalLabel,
+        maxRealmSyntheticM:options.maxRealmSyntheticM,
         departure,
         edgeSunProvider: options.edgeSunProvider,
         realmDenseShadeCache: options.realmDenseShadeCache,
@@ -4709,7 +4719,7 @@
     let best=Infinity;
     for(const b of barriers||[]) {
       const hit=nearestPointOnGeometry(point,b.geometry||[]);
-      if(hit) best=Math.min(best,Number(hit.distanceM||Infinity));
+      if(hit) best=Math.min(best,Number(hit.distanceM??Infinity));
     }
     return best;
   }
@@ -4791,7 +4801,7 @@
     for(const p of samples){
       const cd=localNodingCorridorDistanceM(p,A,B); if(cd>corridorM+1e-9) continue;
       const hit=nearestGraphEdge(graph,p); if(!hit) continue;
-      const gap=Number(hit.distanceM||Infinity),maxM=Math.max(1,Number(options.openBoundaryAttachMaxM||7)); if(gap>maxM+1e-9) continue;
+      const gap=Number(hit.distanceM??Infinity),maxM=Math.max(1,Number(options.openBoundaryAttachMaxM||7)); if(gap>maxM+1e-9) continue;
       if(barrierDistanceM(p,realm?.barriers||[])<=Math.max(1,Number(options.openBoundaryBarrierClearanceM||2.5))) continue;
       ranked.push({point:p,gapM:gap,corridorDistanceM:cd,score:gap*8+cd});
     }
@@ -4981,13 +4991,16 @@
     const graph=cloneFineGraphForExperimentalUse(base)||{nodes:new Map(),edges:new Map(),adjacency:new Map(),experimentalClone:true,productionGraphMutated:false};
     graph.pedestrianRealmGraph=true;graph.productionGraphMutated=false;
     const snapMaxM=Math.max(20,Number(options.snapMaxM||config.snapMaxM||120));
-    const areaForA=relevant.find((x)=>pointInRealmArea(A,x,2)),areaForB=relevant.find((x)=>pointInRealmArea(B,x,2));
+    // Match the existing visibility validator's 1.8 m boundary tolerance. The
+    // old 2 m test could create an isolated terminal rejected by every edge.
+    // This tightens membership; it does not expand road snap or access rights.
+    const areaForA=relevant.find((x)=>pointInRealmArea(A,x,1.8)),areaForB=relevant.find((x)=>pointInRealmArea(B,x,1.8));
     let snapA=null,snapB=null,startId=null,endId=null;
     if(areaForA){startId=addRealmNode(graph,A,'dev37-terminal:A',{realmAreaId:areaForA.id,realmEndpoint:'A'});snapA={id:startId,node:graph.nodes.get(startId),distanceM:0,snapType:'pedestrian-realm-terminal'};}
     else if(graph.edges.size){snapA=snapPointIntoFineGraph(graph,A,'realm-A',snapMaxM);startId=snapA?.id||null;}
     if(areaForB){endId=addRealmNode(graph,B,'dev37-terminal:B',{realmAreaId:areaForB.id,realmEndpoint:'B'});snapB={id:endId,node:graph.nodes.get(endId),distanceM:0,snapType:'pedestrian-realm-terminal'};}
     else if(graph.edges.size){snapB=snapPointIntoFineGraph(graph,B,'realm-B',snapMaxM);endId=snapB?.id||null;}
-    const endpointCoverage={aInsideRealm:Boolean(areaForA),bInsideRealm:Boolean(areaForB),aRoadGapM:snapA?.distanceM??null,bRoadGapM:snapB?.distanceM??null,
+    const endpointCoverage={aInsideRealm:!!areaForA&&pointInRealmArea(A,areaForA,0),bInsideRealm:!!areaForB&&pointInRealmArea(B,areaForB,0),aBoundaryToleranceUsed:!!areaForA&&!pointInRealmArea(A,areaForA,0),bBoundaryToleranceUsed:!!areaForB&&!pointInRealmArea(B,areaForB,0),boundaryToleranceM:1.8,aRoadGapM:snapA?.distanceM??null,bRoadGapM:snapB?.distanceM??null,
       aRoadWayId:snapA?.sourceWayId||null,bRoadWayId:snapB?.sourceWayId||null};
     if(!startId||!endId)return Object.assign({available:false,reason:'realm-endpoint-attachment-failed',endpointCoverage},shared);
     // Snap locations are diagnostics, not permission to invent a 29 m final
@@ -5043,6 +5056,37 @@
     return Object.assign({},built,{accepted,reason:accepted?null:(stats.syntheticM<=1?'no-realm-segment-on-short-path':'realm-route-policy-rejected'),best:accepted?{graph:built.graph,path,distanceM,improvementM,stats}:null,baselineDistanceM:Number.isFinite(baselineM)?baselineM:null,straightM,distanceM,improvementM,pathStats:stats,candidates:[],productionGraphMutated:false});
   }
 
+  // A bounded candidate generator, not a proof or pruning rule. It searches
+  // mapped/validated realm edges with arrival-dependent shade + walk cost.
+  // Exact label search still keeps its history-safe frontier independently.
+  async function realmWeightedShadeCandidate(graph,startId,endId,options,deadline){
+    const speed=clamp(options.speedMps,.5,2.5,1.25),departure=new Date(options.departure||Date.now()),toB=dijkstraTimes(graph,String(endId),speed,true);
+    const limit=Number(options.experimentalBaselineSeconds||toB.dist.get(String(startId)))*(1+clamp(options.detourPct,0,60,30)/100),weight=.35;
+    const q=new MinHeap((a,b)=>(a.sunS+weight*(a.walkS+(toB.dist.get(a.node)||0)))-(b.sunS+weight*(b.walkS+(toB.dist.get(b.node)||0))));
+    const start={node:String(startId),walkS:0,sunS:0,parent:null,viaEdgeId:null},best=new Map([[start.node,0]]);q.push(start);
+    let expanded=0,evaluations=0;
+    while(q.size&&nowMs()<deadline&&expanded<900&&evaluations<1100){
+      if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');const cur=q.pop();
+      if(cur.sunS+weight*cur.walkS>(best.get(cur.node)??Infinity)+1e-9)continue;
+      if(cur.node===String(endId))return {path:reconstructLabelPath(graph,cur),label:cur,expanded,evaluations,proof:'bounded weighted candidate only'};
+      expanded++;if(expanded%8===0)await new Promise(r=>setTimeout(r,0));
+      for(const ref of graph.adjacency.get(cur.node)||[]){
+        if(nowMs()>=deadline)break;const next=String(ref.to),e=graph.edges.get(ref.edgeId);if(!e||pathHasNode(cur,next))continue;
+        if(graph.edges.get(cur.viaEdgeId)?.sourceJunctionLink&&e.sourceJunctionLink)continue;
+        const currentGroup=graph.nodes.get(cur.node)?.sourceJunctionGroup,nextGroup=graph.nodes.get(next)?.sourceJunctionGroup;
+        if(nextGroup&&nextGroup!==currentGroup){let label=cur,seen=false;while(label){if(graph.nodes.get(label.node)?.sourceJunctionGroup===nextGroup){seen=true;break;}label=label.parent;}if(seen)continue;}
+        const syntheticM=(cur.syntheticM||0)+(e.realmSynthetic?e.distanceM:0);if(syntheticM>Number(options.maxRealmSyntheticM||480)+.01)continue;
+        const walk=cur.walkS+e.distanceM/speed,remaining=toB.dist.get(next);if(!Number.isFinite(remaining)||walk+remaining>limit+.5)continue;
+        const bucket=Math.floor((departure.getTime()+(cur.walkS+e.distanceM/speed/2)*1000)/30000),key=`realm-dense-v1|${e.id}|${cur.node}|${bucket}`;
+        let cost=options.sharedShadeCache.get(key);if(!cost){evaluations++;cost=Promise.resolve(options.edgeSunProvider(e,cur.node,new Date((bucket*30+15)*1000),{}));options.sharedShadeCache.set(key,cost);}
+        const shade=await cost;if(!Number.isFinite(shade?.directSunFraction)||shade.cacheSafe===false)throw new Error('Realm candidate source incomplete');
+        const sun=cur.sunS+e.distanceM/speed*shade.directSunFraction,score=sun+weight*walk;
+        if(score<(best.get(next)??Infinity)-1e-9){best.set(next,score);q.push({node:next,walkS:walk,sunS:sun,syntheticM,parent:cur,viaEdgeId:e.id});}
+      }
+    }
+    return {path:null,label:null,expanded,evaluations,proof:'bounded generator exhausted its budget'};
+  }
+
   async function runPedestrianRealmRescue(a,b,options={}) {
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',candidates:[],productionGraphMutated:false};
     const bbox=bboxForAB(A,B,Math.max(120,Number(options.marginM||260)));
@@ -5084,7 +5128,7 @@
     const runtime=createRealmSearchRuntime(options,deadline);
     runtime.stats.budgetMs=searchBudgetMs;
     runtime.stats.yieldMode='timer-task';
-    const searchOptions=Object.assign({},options,{realmTaskYield:true,maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline,searchMetrics:runtime.stats,shadeEdgeBatchConcurrency:Math.min(4,Math.max(1,Number(options.shadeEdgeBatchConcurrency||config.shadeEdgeBatchConcurrency||4))),shadeConcurrency:Math.min(4,Math.max(1,Number(options.shadeConcurrency||config.shadeConcurrency||3)))});
+    const searchOptions=Object.assign({},options,{maxRealmSyntheticM:Math.max(60,Number(options.maxSyntheticDistanceM||480)),realmTaskYield:true,maxExpandedStates:Math.min(12000,Number(options.maxExpandedStates||8000)),maxShadeEdgeEvaluations:Math.min(2200,Number(options.maxShadeEdgeEvaluations||1500)),shouldCancel:()=>options.shouldCancel?.()||nowMs()>deadline,searchMetrics:runtime.stats,shadeEdgeBatchConcurrency:Math.min(4,Math.max(1,Number(options.shadeEdgeBatchConcurrency||config.shadeEdgeBatchConcurrency||4))),shadeConcurrency:Math.min(4,Math.max(1,Number(options.shadeConcurrency||config.shadeConcurrency||3)))});
     if(!options.edgeSunProvider){
       const speed=clamp(options.speedMps,0.5,2.5,1.25);
       searchOptions.edgeSunProvider=(edge,from,at,context)=>realmDenseEdgeSunProvider(edge,from,at,context,speed,Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),runtime);
@@ -5097,21 +5141,39 @@
     searchOptions.edgeSunProvider=(...args)=>runtime.edge(()=>realmProvider(...args));
     // The effective budget uses the shorter of public line and realm fastest.
     if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
+    let seed=null,seedReplay=null,boundedCandidate=null;
     try{
+      if(!options.edgeSunProvider&&searchBudgetMs>=4000&&Number(options.maxExpandedStates||8000)>=8000&&Number(options.maxShadeEdgeEvaluations||1500)>=1500){
+        runtime.stats.phase='weighted-shade-candidate';
+        seed=await realmWeightedShadeCandidate(topo.best.graph,topo.startId,topo.endId,searchOptions,Math.min(deadline-1500,searchStarted+4200));
+        runtime.stats.seed={expanded:seed.expanded,evaluations:seed.evaluations,found:!!seed.path,distanceM:seed.path?.distanceM,syntheticM:seed.label?.syntheticM,qualifies:pathQualifies(seed.path),proof:seed.proof};
+        if(pathQualifies(seed.path)){
+          seedReplay=await exactReplayPathShade(topo.best.graph,seed.path,topo.startId,searchOptions);
+          if(seedReplay.available&&seedReplay.withinTolerance===true){
+            searchOptions.initialGoalLabel=seed.label;
+            if(!sameGraphPathGeometry(seed.path,topo.best.path)){
+              boundedCandidate=make('pedestrian-realm-shade',seed.path);boundedCandidate.searchIncomplete=true;
+              boundedCandidate.label='公園遮蔭候選（有界搜尋；非全域最優）';
+              Object.assign(boundedCandidate.graphMeta,{shadeSearchComplete:false,generation:'arrival-dependent weighted search',exactReplay:seedReplay});
+            }
+          }
+        }
+      }
+      runtime.stats.phase='search';
       const searched=await runExperimentalSearchOnClone(topo.best.graph,topo.startId,topo.endId,searchOptions);
-      const candidates=fastestCandidate?[fastestCandidate]:[];let exactReplay=null;
+      const candidates=fastestCandidate?[fastestCandidate]:[];if(boundedCandidate)candidates.push(boundedCandidate);let exactReplay=null;
       if(pathQualifies(searched.minSun)){
         runtime.stats.phase='exact-replay';
         exactReplay=await exactReplayPathShade(topo.best.graph,searched.minSun,topo.startId,searchOptions);
         if(!exactReplay.available||exactReplay.withinTolerance!==true)return finish({candidates,shadeSearch:{attempted:true,complete:false,reason:'realm-exact-replay-mismatch',rejectedCandidates:['pedestrian-realm-shade'],profile:runtime.snapshot('exact-replay-mismatch'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0)});
-        if(!sameGraphPathGeometry(searched.minSun,searched.fastest))candidates.push(make('pedestrian-realm-shade',searched.minSun));
+        if(!sameGraphPathGeometry(searched.minSun,searched.fastest)){if(boundedCandidate)candidates.splice(candidates.indexOf(boundedCandidate),1);candidates.push(make('pedestrian-realm-shade',searched.minSun));}
       }
       return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true,profile:runtime.snapshot(searched.available?'complete':'unavailable'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
     }catch(error){
       const termination=error.realmTermination||(options.shouldCancel?.()?'user-cancelled':nowMs()>=deadline?'deadline':/日照評估.*安全上限/.test(String(error?.message))?'edge-evaluation-cap':/狀態安全上限/.test(String(error?.message))?'state-cap':/model incomplete/.test(String(error?.message))?'incomplete-model':'provider-error');
       const profile=runtime.snapshot(termination);lastRealmSearchDiagnostics=Object.assign({},profile);
       if(options.shouldCancel?.()){error.realmDiagnostics=profile;options.onProgress?.({stage:'realm-search-cancelled',profile});throw error;}
-      return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:true,complete:false,reason:termination==='deadline'?'realm-shade-time-budget':String(error?.message||error),elapsedMs:nowMs()-searchStarted,profile},searchExpandedStates:profile.expandedStates,shadeEdgeEvaluations:profile.shadeEdgeEvaluations,productionGraphMutated:false});
+      return finish({candidates:[...(fastestCandidate?[fastestCandidate]:[]),...(boundedCandidate?[boundedCandidate]:[])],shadeSearch:{attempted:true,complete:false,seedReplay,reason:termination==='deadline'?'realm-shade-time-budget':String(error?.message||error),elapsedMs:nowMs()-searchStarted,profile},searchExpandedStates:profile.expandedStates,shadeEdgeEvaluations:profile.shadeEdgeEvaluations,productionGraphMutated:false});
     }finally{runtime.close();}
   }
 
@@ -7091,6 +7153,17 @@
       perf.exactReplayMs=nowMs()-replayStarted;
     }
     lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',geometryReconciliation:sourceFull.geometryReconciliation||null,searchComplete:!searchFailure,searchFailure,searchMetrics,overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,exactReplay,pruningCertificate,candidateLifecycle,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
+    lastDiagnostics.searchCertificate={
+      scope:'bucketed-selected-source-graph',complete:!searchFailure,physicalGlobalOptimal:false,
+      selectedSourceScope:'CHMv2/building local model; distant terrain incomplete',
+      timeBucketSec:Number(options.shadeTimeBucketSec||config.shadeTimeBucketSec),
+      prewarmOmitted:Number(temporalShade?.omittedBySafetyCap||0),missingCellLowerBoundSunSeconds:0,
+      omissionPolicy:'omitted prewarm cells remain searchable and are evaluated on demand',
+      termination:searchFailure?'safety-budget-or-source-error':searchMetrics?.terminationReason||'frontier-exhausted',
+      incumbentSunSeconds:minSun.path?.directSunSeconds??null,remainingLowerBoundSunSeconds:searchMetrics?.remainingLowerBoundSunSeconds??null,
+      onDemandLimit:Number(options.maxShadeEdgeEvaluations||config.maxShadeEdgeEvaluations),
+      actualArrivalReplay:exactReplay,pruningValid:pruningCertificate?.valid!==false
+    };
     return {available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false};
   }
 

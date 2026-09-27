@@ -83,5 +83,5 @@
   const start=()=>invalidate(),end=()=>request();for(const e of ['movestart','zoomstart'])map.on(e,start);for(const e of ['moveend','zoomend','resize'])map.on(e,end);
   return {request,invalidate,setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
  }
- global.HaidianOwnShade={version:'v9.0.0-dev37.6',create,projectBuilding,containsShadow,classify,terrainOcclusion,terrainTileAddress};
+ global.HaidianOwnShade={version:'v9.0.0-dev37.7',create,projectBuilding,containsShadow,classify,terrainOcclusion,terrainTileAddress};
 })(typeof window!=='undefined'?window:globalThis);

@@ -361,6 +361,8 @@
   let querySampleCell = null;
   let queryCanopyBenefitLayer = null;
   let activePointQuery = null;
+  let pointWorkController=null,pointRefreshTimer=null;
+  const pointLifecycle={requests:0,cancelled:0,completed:0,errors:0,lastStatus:'idle'};
   let pointShadeRetryTimer = null;
   let lastMapDragAt = 0;
   let lastLiveViewSignature = null;
@@ -991,7 +993,7 @@
         white-space:normal!important;max-width:300px;padding:0!important;
         background:#fff!important;border:1px solid #99f6e4!important;
         border-radius:14px!important;box-shadow:0 12px 30px rgba(15,23,42,.18)!important;
-        color:#0f172a!important;overflow:hidden
+        color:#0f172a!important;max-height:min(38vh,360px);overflow-y:auto
       }
       .leaflet-tooltip.haidian-shade-query-tooltip:before{display:none!important}
       .haidian-shade-query-popup{min-width:246px;line-height:1.38;background:#fff;isolation:isolate}
@@ -1192,6 +1194,7 @@
     if (effectiveBuildingMode() === "pipeline") {
       const st = lastBuildingPipelineStatus || {};
       if (st.mode === "pipeline-hybrid") return "預建建物圖磚（Overture＋OSM）＋ OpenStreetMap live 補齊";
+      if (st.mode === "regional-osm") return "OpenStreetMap 區域預建快取（ODbL；非全臺）";
       if (st.fallback === "OSM") return "OpenStreetMap / Overpass（預建圖磚範圍外或不完整時自動 fallback）";
       return buildingPilotRequested() && config.buildingMode !== "pipeline"
         ? "預建建物圖磚（測試模式）"
@@ -1205,6 +1208,8 @@
     if (effectiveBuildingMode() === "none") return "未載入";
     if (effectiveBuildingMode() === "pipeline") {
       const st = lastBuildingPipelineStatus || {};
+      if(st.sourceState&&['timeout','http-error','network-or-cors','bbox-limit','source-unavailable'].includes(st.sourceState))return `建築來源不足（${st.sourceState}）；不是確認 0 棟`;
+      if(st.mode==='regional-osm')return `${st.region} 區域快取：${st.featureCount} 棟；高度未知 ${st.unknownHeight} 棟${st.coverageComplete?'':'；範圍或幾何不完整'}${st.missingGeometry?`（${st.missingGeometry} 筆幾何不合法）`:''}`;
       if (st.mode === "idle") return config.buildingTileUrl ? "等待載入預建圖磚" : "尚未設定建築圖磚 URL";
       if (st.mode === "pipeline-outside-coverage") return `預建圖磚 AOI 外；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
       if (st.mode === "pipeline-manifest-error") return `建物 manifest／版本無法確認；已切換 OSM${st.fallbackFeatureCount != null ? ` ${st.fallbackFeatureCount} 棟` : ""}`;
@@ -1221,7 +1226,7 @@
     }
     if (effectiveBuildingMode() === "osm") {
       if (lastBuildingFetchError) return `Overpass 失敗：${lastBuildingFetchError.message || lastBuildingFetchError}`;
-      if (lastBuildingCoverageKey) return `Overpass 已取得 ${Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0} 棟`;
+      if (lastBuildingCoverageKey) return `OSM 已取得 ${Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0} 棟`;
       return "Overpass 尚未查詢";
     }
     return Array.isArray(lastBuildingFeatures) ? `已載入 ${lastBuildingFeatures.length} 棟` : "尚未載入";
@@ -1360,7 +1365,7 @@
   }
 
   function applyShadeDate(date, immediate) {
-    if(state.visualProvider!=="shademap"){if(state.enabled){ownShadeLayer?.request();scheduleUnifiedView();}return;}
+    if(state.visualProvider!=="shademap"){if(state.enabled){ownShadeLayer?.request();scheduleUnifiedView();schedulePointRefresh('time');}return;}
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
     shadePendingDate = new Date(date.getTime());
     const requestSerial = ++shadeDateRequestSerial;
@@ -2085,27 +2090,24 @@
     return config.bareTerrainLabel || "全球地形 DEM fallback";
   }
 
-  async function getDemBitmapForSpec(spec, x, y, z) {
-    // Callers must crop after parent selection. Never silently change only z.
+  const demTileTasks=createShadeTaskStore(4,32,8000),officialDtmTasks=createShadeTaskStore(2,12,9500);
+  async function getDemBitmapForSpec(spec,x,y,z,options={}) {
     if(z>spec.maxZoom)throw new Error('DEM requires parent tile and subtile crop');
     const url=fillTemplate(spec.template,x,y,z),key=spec.id+':'+url;
-    const negative=demNegativeCache.get(key);
-    if(negative&&negative.until>Date.now())throw new Error(negative.reason);
+    const negative=demNegativeCache.get(key);if(negative&&negative.until>Date.now())throw new Error(negative.reason);
+    if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
     if(demBitmapCache.has(key))return touchMapEntry(demBitmapCache,key);
-    const promise=(async()=>{
-      if(demActive>=4){if(demWaiters.length>=32)throw new Error('DEM queue budget');await new Promise(r=>demWaiters.push(r));}
-      demActive++;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    return demTileTasks.run(key,async signal=>{
       try{
-        const r=await fetch(url,{mode:'cors',cache:'force-cache',signal:controller.signal});
-        if(!r.ok){const error=new Error('DEM HTTP '+r.status);error.status=r.status;throw error;}
-        return await createImageBitmap(await r.blob());
-      }catch(error){demNegativeCache.set(key,{until:Date.now()+([404,410].includes(error.status)?300000:10000),reason:String(error.message||error)});while(demNegativeCache.size>256)demNegativeCache.delete(demNegativeCache.keys().next().value);throw error;}
-      finally{clearTimeout(timer);demActive--;demWaiters.shift()?.();}
-    })();
-    demBitmapCache.set(key,promise);
-    promise.catch(()=>{if(demBitmapCache.get(key)===promise)demBitmapCache.delete(key);});
-    if(demBitmapCache.size>120){const oldKey=demBitmapCache.keys().next().value,old=demBitmapCache.get(oldKey);demBitmapCache.delete(oldKey);old.then(bitmap=>setTimeout(()=>bitmap.close?.(),1000),()=>{});}
-    return promise;
+        const r=await fetch(url,{mode:'cors',cache:'force-cache',signal});
+        if(!r.ok){const e=new Error('DEM HTTP '+r.status);e.status=r.status;throw e;}
+        const bitmap=await createImageBitmap(await r.blob());
+        if(signal.aborted){bitmap.close?.();throw Object.assign(new Error('cancelled'),{name:'AbortError'});}
+        demBitmapCache.set(key,Promise.resolve(bitmap));
+        if(demBitmapCache.size>120){const k=demBitmapCache.keys().next().value,old=demBitmapCache.get(k);demBitmapCache.delete(k);old.then(b=>setTimeout(()=>b.close?.(),1000),()=>{});}
+        return bitmap;
+      }catch(error){if(!signal.aborted){demNegativeCache.set(key,{until:Date.now()+([404,410].includes(error.status)?300000:10000),reason:String(error.message||error)});while(demNegativeCache.size>256)demNegativeCache.delete(demNegativeCache.keys().next().value);}throw error;}
+    },options.signal);
   }
 
   async function readGroundTerrainHeights(x, y, z) {
@@ -3100,7 +3102,7 @@
     return 156543.03392804097 * cosLat / Math.pow(2, zoom);
   }
 
-  async function segmentLocalCanopyPatch(latlng) {
+  async function segmentLocalCanopyPatch(latlng,options={}) {
     if (config.queryCanopyBenefitEnabled === false || config.queryCanopyFromCog === false) return null;
     const z = Math.max(10, Math.min(17, Number(config.queryZoom) || 17));
     const seed = latLngToTilePixel(latlng.lat, latlng.lng, z);
@@ -3127,7 +3129,7 @@
       for (let ty = minTy; ty <= maxTy; ty += 1) {
         const key = tileKey(tx, ty, z);
         tileJobs.push((async () => {
-          tileRasters.set(key, await readMetaCanopyTile(tx, ty, z));
+          tileRasters.set(key, await readMetaCanopyTile(tx, ty, z,options));
         })());
       }
     }
@@ -3244,10 +3246,15 @@
   function buildingReceiverCoverageKnown() {
     if (effectiveBuildingMode() === "none" || state.mode === "trees") return false;
     if (effectiveBuildingMode() === "custom") return Array.isArray(lastBuildingFeatures);
-    return !!lastBuildingCoverageKey;
+    return !!lastBuildingLoadedBounds&&lastBuildingPipelineStatus?.fetchComplete!==false;
   }
 
-  function estimateCanopyShadowContribution(patch, solar, buildings = null) {
+  function checkCanopyBenefitSignal(signal) {
+    if (signal?.aborted) { const e = new Error("樹冠試算已取消"); e.name = "AbortError"; throw e; }
+  }
+
+  async function estimateCanopyShadowContribution(patch, solar, buildings = null, options = {}) {
+    checkCanopyBenefitSignal(options.signal);
     if (!patch || !Array.isArray(patch.pixels) || !patch.pixels.length || !solar || solar.night) return null;
     const minAltitude = Math.max(0, Number(config.queryCanopyBenefitMinSolarAltitudeDeg) || 3);
     if (!(solar.altitudeDeg >= minAltitude)) {
@@ -3262,8 +3269,17 @@
     const dir = { x: Math.sin(theta), y: Math.cos(theta) };
     const cells = new Map();
     let theoreticalMaxLength = 0;
-
+    let sliceStarted = monotonicNow();
+    const checkpoint = async () => {
+      checkCanopyBenefitSignal(options.signal);
+      if (monotonicNow() - sliceStarted >= 8) {
+        await yieldToBrowser();
+        checkCanopyBenefitSignal(options.signal);
+        sliceStarted = monotonicNow();
+      }
+    };
     for (const pixel of patch.pixels) {
+      await checkpoint();
       const base = localMetersFromLatLng(patch.center, pixel.latlng);
       const length = Math.min(maxShadowLength, Math.max(0, Number(pixel.height) / tanAlt));
       theoreticalMaxLength = Math.max(theoreticalMaxLength, length);
@@ -3290,13 +3306,31 @@
 
     const receiverBuildings = Array.isArray(buildings) ? buildings : (Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures : []);
     const receiverKnown = buildingReceiverCoverageKnown();
+    // Exact broad phase: discard only footprints whose bounding box cannot
+    // contain any projected receiver cell. Keep holes/concavity in the existing
+    // point-in-polygon narrow phase; never replace the geometry by its bounds.
+    let minLat=Infinity,minLng=Infinity,maxLat=-Infinity,maxLng=-Infinity;
+    for (const cell of cells.values()) {
+      cell.latlng=latLngFromLocalMeters(patch.center,cell.x,cell.y);
+      minLat=Math.min(minLat,cell.latlng.lat);maxLat=Math.max(maxLat,cell.latlng.lat);
+      minLng=Math.min(minLng,cell.latlng.lng);maxLng=Math.max(maxLng,cell.latlng.lng);
+    }
+    const receivers=[];
+    if(receiverKnown) for(const feature of receiverBuildings){
+      const bounds=routeFeatureBounds(feature);
+      if(!bounds || !(bounds.maxLat<minLat||bounds.minLat>maxLat||bounds.maxLng<minLng||bounds.minLng>maxLng)) receivers.push({feature,bounds});
+      await checkpoint();
+    }
     let buildingCells = 0;
     const shadowPoints = [];
+    let cellNumber=0;
     for (const cell of cells.values()) {
+      if((cellNumber++ & 63)===0)await checkpoint();
       const ll = latLngFromLocalMeters(patch.center, cell.x, cell.y);
       cell.latlng = ll;
       shadowPoints.push({ x: cell.x, y: cell.y, latlng: ll });
-      if (receiverKnown && receiverBuildings.some((feature) => pointInPolygonFeature(ll.lng, ll.lat, feature))) {
+      if (receiverKnown && receivers.some(({feature,bounds:b}) =>
+        (!b || (ll.lat>=b.minLat&&ll.lat<=b.maxLat&&ll.lng>=b.minLng&&ll.lng<=b.maxLng)) && pointInPolygonFeature(ll.lng, ll.lat, feature))) {
         cell.receiver = "building";
         buildingCells += 1;
       } else {
@@ -3402,7 +3436,8 @@
     };
   }
 
-  function estimateCanopyDailyBenefit(patch, latlng, baseDate, buildings = null) {
+  async function estimateCanopyDailyBenefit(patch, latlng, baseDate, buildings = null, options = {}) {
+    checkCanopyBenefitSignal(options.signal);
     if (config.queryCanopyDailyEnabled === false || !patch || !latlng) return null;
     const startHour = Math.max(0, Math.min(23.5, Number(config.queryCanopyDailyStartHour) || 8));
     const endHour = Math.max(startHour + 0.25, Math.min(24, Number(config.queryCanopyDailyEndHour) || 18));
@@ -3420,7 +3455,7 @@
       sampleDate.setMinutes(Math.round(midpointHour * 60));
       const solar = solarPositionAt(latlng, sampleDate);
       const shadow = solar && !solar.night
-        ? estimateCanopyShadowContribution(patch, solar, receiverBuildings)
+        ? await estimateCanopyShadowContribution(patch, solar, receiverBuildings, options)
         : null;
       samples.push({
         date: sampleDate,
@@ -3429,6 +3464,8 @@
         solar,
         shadow
       });
+      await yieldToBrowser();
+      checkCanopyBenefitSignal(options.signal);
     }
 
     const summary = summarizeCanopyDailySamples(samples, stepHours, receiverKnown);
@@ -3441,19 +3478,19 @@
     };
   }
 
-  async function analyzeCanopyBenefitAt(latlng, solar = null) {
+  async function analyzeCanopyBenefitAt(latlng, solar = null,options={}) {
     const sun = solar || solarPositionAt(latlng, state.date);
-    const patch = await segmentLocalCanopyPatch(latlng);
+    const patch = await segmentLocalCanopyPatch(latlng,options);
     if (!patch) return { available: false, reason: "此點未形成可分析的 CHMv2 樹冠片" };
     let receiverBuildings = [];
     try {
       receiverBuildings = await getQueryableBuildings();
     } catch (_) {}
-    const daily = estimateCanopyDailyBenefit(patch, latlng, state.date, receiverBuildings);
+    const daily = await estimateCanopyDailyBenefit(patch, latlng, options.date||state.date, receiverBuildings, options);
     if (!sun || sun.night) {
       return { available: true, patch, solar: sun, shadow: null, daily, reason: "夜間不計算目前樹冠投影陰影；全天累積仍依所選日期計算" };
     }
-    const shadow = estimateCanopyShadowContribution(patch, sun, receiverBuildings);
+    const shadow = await estimateCanopyShadowContribution(patch, sun, receiverBuildings, options);
     return {
       available: true,
       patch,
@@ -3513,6 +3550,13 @@
     if (model.canopyBenefitResolving && priority < currentPriority) return;
     if (model.canopyBenefitTargetKey === targetKey && (model.canopyBenefitResolving || model.canopyBenefit)) return;
 
+    model.canopyBenefitController?.abort();
+    const benefitController = new AbortController();
+    model.canopyBenefitController = benefitController;
+    const cancelBenefit = () => benefitController.abort();
+    if(model.signal?.aborted)cancelBenefit();
+    else model.signal?.addEventListener('abort',cancelBenefit,{once:true});
+    const benefitTimer=setTimeout(cancelBenefit,Math.max(1800,Number(config.queryCanopyBenefitTimeoutMs)||5500));
     const localToken = (Number(model.canopyBenefitToken) || 0) + 1;
     model.canopyBenefitToken = localToken;
     model.canopyBenefitTargetKey = targetKey;
@@ -3524,11 +3568,7 @@
     removeCanopyBenefitOverlay();
     refreshPointQueryTooltip(serial, model);
     try {
-      const result = await withTimeout(
-        analyzeCanopyBenefitAt(targetLatLng, solarPositionAt(targetLatLng, state.date)),
-        Math.max(1800, Number(config.queryCanopyBenefitTimeoutMs) || 5500),
-        "樹冠遮蔭試算"
-      );
+      const result = await analyzeCanopyBenefitAt(targetLatLng, solarPositionAt(targetLatLng, model.date||state.date),{signal:benefitController.signal,date:model.date});
       if (serial !== pointQuerySerial || model.canopyBenefitToken !== localToken) return;
       model.canopyBenefit = result;
       if (result && result.available) drawCanopyBenefitOverlay(result);
@@ -3537,7 +3577,10 @@
       model.canopyBenefit = null;
       model.canopyBenefitError = error && error.message ? error.message : "樹冠遮蔭試算失敗";
     } finally {
+      clearTimeout(benefitTimer);
+      model.signal?.removeEventListener('abort',cancelBenefit);
       if (serial === pointQuerySerial && model.canopyBenefitToken === localToken) {
+        model.canopyBenefitController = null;
         model.canopyBenefitResolving = false;
         refreshPointQueryTooltip(serial, model);
       }
@@ -4037,6 +4080,12 @@
       model.shadeSource = null;
       return;
     }
+    if(state.visualProvider!=='shademap'){
+      const source=shade.modelSource,type=shade.sourceType;
+      model.shadeSource={type,confidence:'model',method:'自有共用模型／同一點位與時間',
+        tree:type==='tree'?{...source,height:source?.heightM,distance:source?.distanceM}:source?.tree,building:type==='building'?{...source,height:source?.heightM,distance:source?.distanceM}:source?.building};
+      model.shadeSourceResolving=false;const tree=model.shadeSource.tree;if(tree?.sampleLatLng)resolveCanopyBenefit(serial,model,tree.sampleLatLng,'shadow-source',1);refreshPointQueryTooltip(serial,model);return;
+    }
     model.shadeSourceResolving = true;
     model.shadeSource = undefined;
     refreshPointQueryTooltip(serial, model);
@@ -4062,8 +4111,13 @@
     }
   }
 
-  async function shadeStatusAt(latlng) {
-    if(state.visualProvider!=="shademap"){const m=await analyzeShadeModelAt(latlng.lat,latlng.lng,state.date);return {label:m.reliability==="partial"?"資料不足／未知":m.state==="night"?"夜間":m.shaded?"模型遮蔭":"模型日照",shaded:m.reliability==="partial"?null:m.shaded,night:m.state==="night",solar:m.solar};}
+  async function shadeStatusAt(latlng, options={}) {
+    if(state.visualProvider!=="shademap"){
+      const date=options.date||state.date,m=await analyzeShadeModelAt(latlng.lat,latlng.lng,date,{signal:options.signal});
+      const confirmedShade=m.classification==='confirmed-shade',unknown=m.state==='unknown'||(!confirmedShade&&m.reliability==='partial');
+      const buildingPartial=state.mode!=='trees'&&!routeBuildingCoverageSafeAt(latlng);
+      return {label:m.state==='night'?'夜間':confirmedShade?'已確認遮蔭':unknown?'資料不足／未知':'所選來源：模型日照',shaded:confirmedShade?true:unknown?null:m.shaded,night:m.state==='night',solar:m.solar,classification:m.classification,reliability:m.reliability,buildingPartial,at:new Date(date).toISOString(),modelSource:m.source,sourceType:m.sourceType};
+    }
     const solar = solarPositionAt(latlng, state.date);
     if (solar && solar.night) {
       return { label: "🌙 夜間", shaded: null, night: true, solar };
@@ -4130,10 +4184,10 @@
     return !Number.isFinite(raw)||raw===255?null:raw>0?raw:0;
   }
 
-  async function queryCanopyAtTile(tile) {
+  async function queryCanopyAtTile(tile,options={}) {
     if (config.queryCanopyFromCog === false) return null;
     await ensureGeoTIFF();
-    const raster = await readMetaCanopyTile(tile.x, tile.y, tile.z);
+    const raster = await readMetaCanopyTile(tile.x, tile.y, tile.z,options);
     return canopyValueFromRaster(raster, tile);
   }
 
@@ -4163,7 +4217,7 @@
       config.taiwanOfficialDtmProxyUrl.trim().length > 0;
   }
 
-  async function queryOfficialTaiwanDtm(latlng) {
+  async function queryOfficialTaiwanDtm(latlng,options={}) {
     const region = taiwanOfficialDtmRegion(latlng);
     if (!region) return null;
     if (!officialDtmProxyConfigured()) {
@@ -4177,7 +4231,7 @@
     const key = `${region.code}:${Number(latlng.lat).toFixed(5)},${Number(latlng.lng).toFixed(5)}`;
     if (officialDtmPointCache.has(key)) return officialDtmPointCache.get(key);
 
-    const promise = (async () => {
+    const promise = officialDtmTasks.run(key,async signal => {
       const base = new URL(config.taiwanOfficialDtmProxyUrl, window.location.href);
       base.searchParams.set("lat", Number(latlng.lat).toFixed(7));
       base.searchParams.set("lng", Number(latlng.lng).toFixed(7));
@@ -4187,6 +4241,7 @@
       const controller = new AbortController();
       const timeoutMs = Math.max(1000, Number(config.taiwanOfficialDtmTimeoutMs) || 9000);
       const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      const cancel=()=>controller.abort();signal.addEventListener('abort',cancel,{once:true});
       let response;
       try {
         response = await fetch(base.toString(), {
@@ -4205,7 +4260,7 @@
         }
         throw error;
       } finally {
-        window.clearTimeout(timer);
+        window.clearTimeout(timer);signal.removeEventListener('abort',cancel);
       }
       if (!response.ok) throw new Error(`官方 DTM HTTP ${response.status}`);
       const payload = await response.json();
@@ -4220,9 +4275,9 @@
         authoritative: true,
         region: region.code
       };
-    })();
+    },options.signal);
 
-    officialDtmPointCache.set(key, promise);
+    promise.then(value=>officialDtmPointCache.set(key,Promise.resolve(value)),()=>{});
     if (officialDtmPointCache.size > 256) {
       officialDtmPointCache.delete(officialDtmPointCache.keys().next().value);
     }
@@ -4234,10 +4289,10 @@
     }
   }
 
-  async function queryGlobalTerrainFallback(latlng, tile, reason = "") {
+  async function queryGlobalTerrainFallback(latlng, tile, reason = "",options={}) {
     const region = taiwanOfficialDtmRegion(latlng);
     const sampled = await withTimeout(
-      sampleGroundTerrainHeightAtTilePixel(tile, globalTerrainSpec(region ? region.code : null)),
+      sampleGroundTerrainHeightAtTilePixel(tile, globalTerrainSpec(region ? region.code : null),options),
       Math.max(1000, Number(config.queryGlobalDemFallbackTimeoutMs) || 4500),
       "全球 DEM 備援"
     );
@@ -4256,10 +4311,10 @@
     };
   }
 
-  async function queryPointGround(latlng, tile) {
+  async function queryPointGround(latlng, tile,options={}) {
     const region = taiwanOfficialDtmRegion(latlng);
     if (region && officialTerrainConfigured()) {
-      const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
+      const sampled = await sampleGroundTerrainHeightAtTilePixel(tile,null,options);
       return {
         height: sampled ? sampled.height : null,
         source: sampled && sampled.spec ? sampled.spec.label : (config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ"),
@@ -4274,15 +4329,16 @@
 
     if (region && officialDtmProxyConfigured()) {
       try {
-        const official = await queryOfficialTaiwanDtm(latlng);
+        const official = await queryOfficialTaiwanDtm(latlng,options);
         return Object.assign({ fallback: false, fallbackReason: "" }, official);
       } catch (error) {
+        if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
         if (config.taiwanGlobalDemFallbackEnabled !== false) {
           console.warn("[Haidian Shade] official DTM unavailable; using global point fallback:", error);
           return queryGlobalTerrainFallback(
             latlng,
             tile,
-            error && error.message ? error.message : "官方 DTM 查詢失敗"
+            error && error.message ? error.message : "官方 DTM 查詢失敗",options
           );
         }
         throw error;
@@ -4290,7 +4346,7 @@
     }
 
     if (region && config.taiwanGlobalDemFallbackEnabled !== false) {
-      return queryGlobalTerrainFallback(latlng, tile, "官方 DTM 安全代理尚未設定");
+      return queryGlobalTerrainFallback(latlng, tile, "官方 DTM 安全代理尚未設定",options);
     }
 
     if (region && config.taiwanHideGlobalDemPointValue !== false) {
@@ -4306,7 +4362,7 @@
       };
     }
 
-    const sampled = await sampleGroundTerrainHeightAtTilePixel(tile);
+    const sampled = await sampleGroundTerrainHeightAtTilePixel(tile,null,options);
     return {
       height: sampled ? sampled.height : null,
       source: sampled && sampled.spec ? sampled.spec.label : (config.bareTerrainLabel || "全球地形 DEM"),
@@ -4319,7 +4375,7 @@
     };
   }
 
-  async function sampleGroundTerrainHeightAtTilePixel(tile, forcedSpec = null) {
+  async function sampleGroundTerrainHeightAtTilePixel(tile, forcedSpec = null,options={}) {
     if (!config.metaBlendBareTerrain) return null;
 
     const spec = forcedSpec || groundTerrainSpecForTile(tile.x, tile.y, tile.z);
@@ -4327,7 +4383,7 @@
     const factor = 1 << (tile.z - demZ);
     const parentX = Math.floor(tile.x / factor);
     const parentY = Math.floor(tile.y / factor);
-    const bitmap = await getDemBitmapForSpec(spec, parentX, parentY, demZ);
+    const bitmap = await getDemBitmapForSpec(spec, parentX, parentY, demZ,options);
 
     const sourceX = Math.max(0, Math.min(255, Math.floor(((tile.x % factor) * 256 + tile.px) / factor)));
     const sourceY = Math.max(0, Math.min(255, Math.floor(((tile.y % factor) * 256 + tile.py) / factor)));
@@ -4367,6 +4423,7 @@
       groundFallback: false,
       groundFallbackReason: "",
       shade: undefined,
+      date:new Date(state.date.getTime()),
       solar: solarPositionAt(latlng, state.date),
       shadeSource: undefined,
       shadeSourceResolving: false,
@@ -4617,8 +4674,8 @@
 
     let shadeInterpretation = "讀取中";
     if (isNight) shadeInterpretation = "夜間：太陽位於地平線下，不歸類為樹蔭或建築陰影";
-    else if (shade && shade.shaded === false) shadeInterpretation = "ShadeMap SDK：直接日照";
-    else if (shade && shade.shaded === true) shadeInterpretation = "ShadeMap SDK：陰影";
+    else if (shade && shade.shaded === false) shadeInterpretation = state.visualProvider==='shademap'?"ShadeMap SDK：直接日照":"自有模型：所選來源日照（地形未完成）";
+    else if (shade && shade.shaded === true) shadeInterpretation = state.visualProvider==='shademap'?"ShadeMap SDK：陰影":"自有模型：已確認遮蔭";
     else if (shade && shade.label) shadeInterpretation = String(shade.label);
 
     let sourceInterpretation = "—";
@@ -4708,6 +4765,8 @@
           ${secondaryRows.map(([label, value]) => `
             <div class="hsq-row"><span class="hsq-row-label">${escapeHtml(label)}</span><span class="hsq-row-value">${value}</span></div>
           `).join("")}
+          <div class="hsq-row">點位／畫面時間：${escapeHtml((model.date||state.date).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}))}（臺灣）</div>
+          ${model.shade?.buildingPartial?'<div class="hsq-row">建築來源不足；已確認樹蔭仍有效，空白區不能確認日照。</div>':''}
           ${canopyBenefitHtml(model)}
           <details class="hsq-details">
             <summary>資料與精度</summary>
@@ -4733,9 +4792,29 @@
     }
   }
 
+  function cancelPointWork(){
+    clearTimeout(pointRefreshTimer);pointRefreshTimer=null;
+    if(pointWorkController&&!pointWorkController.signal.aborted){pointWorkController.abort();pointLifecycle.cancelled++;}
+    pointWorkController=null;
+  }
+  function schedulePointRefresh(reason='data-ready'){
+    if(!activePointQuery||!queryPopup)return;
+    const latlng=activePointQuery.latlng;
+    cancelPointWork();clearPointShadeRetry();
+    activePointQuery.serial=++pointQuerySerial;
+    activePointQuery.model.navigationUpdating=true;pointLifecycle.lastStatus='pending:'+reason;
+    refreshPointQueryTooltip(activePointQuery.serial,activePointQuery.model);
+    pointRefreshTimer=setTimeout(()=>{
+      pointRefreshTimer=null;
+      if(!activePointQuery||!queryPopup)return;
+      if(!state.enabled||mapRef?.getBounds?.().contains?.(latlng)===false){closePointQueryOverlay();pointLifecycle.lastStatus='cancelled-outside-view';return;}
+      runPointQueryAtLatLng(latlng).catch(()=>{pointLifecycle.errors++;pointLifecycle.lastStatus='error';});
+    },220);
+  }
   async function refreshActivePointShade() {
     const active = activePointQuery;
     if (!active || active.serial !== pointQuerySerial || !queryPopup) return;
+    if(state.visualProvider!=='shademap'){schedulePointRefresh('data-ready');return;}
     if (!shadeLayer || !shadeReady) return;
     try {
       const shade = await shadeStatusAt(active.latlng);
@@ -4787,6 +4866,8 @@
 
   function schedulePointShadeRetry(serial, startedAt) {
     clearPointShadeRetry();
+    if(state.visualProvider!=="shademap")return; // Own-model errors are terminal; retry is explicit or online.
+
     const start = Number(startedAt) || Date.now();
     const tick = async () => {
       if (
@@ -4796,7 +4877,7 @@
         !queryPopup
       ) return;
 
-      if (shadeReady && shadeLayer) {
+      if(state.visualProvider!=='shademap'||(shadeReady&&shadeLayer)) {
         await refreshActivePointShade();
         return;
       }
@@ -5012,6 +5093,7 @@
   }
 
   function removePointQueryOverlay() {
+    cancelPointWork();
     clearPointShadeRetry();
     removeCanopyBenefitOverlay();
     activePointQuery = null;
@@ -5107,6 +5189,8 @@
     const model = pointQueryViewModel(latlng, tile);
 
     removePointQueryOverlay();
+    pointWorkController=new AbortController();model.signal=pointWorkController.signal;model.date=new Date(state.date.getTime());
+    pointLifecycle.requests++;pointLifecycle.lastStatus='pending';
     activePointQuery = { serial, latlng, model, startedAt: Date.now() };
     queryPointMarker = L.marker(latlng, {
       interactive: false,
@@ -5145,9 +5229,9 @@
     bindPointQueryTooltipControls();
 
     // 1) Shade status: independent and usually available immediately.
-    shadeStatusAt(latlng).then((shade) => {
+    shadeStatusAt(latlng,{signal:model.signal,date:model.date}).then((shade) => {
       if (serial !== pointQuerySerial) return;
-      model.shade = shade;
+      model.shade = shade;model.navigationUpdating=false;pointLifecycle.completed++;pointLifecycle.lastStatus=shade.classification||'complete';
       model.solar = shade && shade.solar ? shade.solar : model.solar;
       if (shade && shade.shaded === true && !shade.night) {
         if (shade.groundCanopy && shade.groundCanopyTree) {
@@ -5171,14 +5255,14 @@
       }
     }).catch(() => {
       if (serial !== pointQuerySerial) return;
-      model.shade = { label: "陰影判讀暫不可用", shaded: null };
+      model.shade = { label: '陰影判讀暫不可用', shaded: null };model.navigationUpdating=false;pointLifecycle.errors++;pointLifecycle.lastStatus='error';
       refreshPointQueryTooltip(serial, model);
       schedulePointShadeRetry(serial, activePointQuery && activePointQuery.startedAt);
     });
 
     // 2) Canopy: often already in cache because the visible ShadeMap surface used it.
     withTimeout(
-      queryCanopyAtTile(tile),
+      queryCanopyAtTile(tile,{signal:model.signal}),
       config.queryCanopyTimeoutMs,
       "CHMv2"
     ).then((canopy) => {
@@ -5199,7 +5283,7 @@
     // server-side proxy. The secret/api_key never enters this browser bundle.
     // Elsewhere (or when explicitly allowed) use the global DEM fallback.
     withTimeout(
-      queryPointGround(latlng, tile),
+      queryPointGround(latlng, tile,{signal:model.signal}),
       Math.max(3000, Number(config.queryGroundTotalTimeoutMs) || 14500),
       "地面高程"
     ).then((groundResult) => {
@@ -5273,6 +5357,7 @@
     const markQueryForNavigation = () => {
       lastMapDragAt = Date.now();
       if (!activePointQuery || activePointQuery.serial !== pointQuerySerial || !queryPopup) return;
+      if(state.visualProvider!=='shademap'){schedulePointRefresh('navigation');return;}
       activePointQuery.model.navigationUpdating = true;
       refreshPointQueryTooltip(activePointQuery.serial, activePointQuery.model);
     };
@@ -5285,6 +5370,8 @@
     mapRef.on("viewreset", markQueryForNavigation);
     mapRef.on("zoomlevelschange", markQueryForNavigation);
     mapRef.on("dragend", () => { lastMapDragAt = Date.now(); });
+    mapRef.on('moveend',()=>{if(state.visualProvider!=='shademap')schedulePointRefresh('moveend');});
+    mapRef.on('zoomend',()=>{if(state.visualProvider!=='shademap')schedulePointRefresh('zoomend');});
     mapRef.on("click", handleMapPointQuery);
     const mapContainer = typeof mapRef.getContainer === "function" ? mapRef.getContainer() : null;
     if (mapContainer && typeof mapContainer.addEventListener === "function") {
@@ -6562,8 +6649,13 @@
           signal: controller ? controller.signal : undefined
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const json = await response.json();
+        const limit=12*1024*1024;
+        if(Number(response.headers?.get?.('content-length')||0)>limit){await response.body?.cancel?.();throw new Error('building source byte limit');}
+        let json;
+        if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let bytes=0;try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>limit){await reader.cancel();throw new Error('building source byte limit');}chunks.push(part.value);}}finally{reader.releaseLock();}const all=new Uint8Array(bytes);let offset=0;for(const part of chunks){all.set(part,offset);offset+=part.length;}json=JSON.parse(new TextDecoder().decode(all));}
+        else json=await response.json();
         if (!json || !Array.isArray(json.elements)) throw new Error("invalid JSON payload");
+        if(json.elements.length>25000)throw new Error('building geometry count limit');
         return { json, endpoint };
       } catch (error) {
         const timedOut = controller && controller.signal && controller.signal.aborted;
@@ -6576,7 +6668,7 @@
     throw new Error(`Overpass unavailable (${errors.join(" | ") || "total timeout"})`);
   }
 
-  async function loadOSMBuildings(options={}) {
+  async function legacyLoadOSMBuildings(options={}) {
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom) return [];
 
     const bounds = mapRef.getBounds();
@@ -6685,6 +6777,77 @@
     return promise;
   }
 
+  // dev37.7: bounded, same-origin OSM regional snapshots precede the existing
+  // Tainan pipeline. No coverage claim outside each published AOI.
+  let regionalManifestCache=null;
+  const regionalTileCache=new Map(),liveBuildingResults=new Map();
+  const REGIONAL_ROOT='./buildings/dev37.7/';
+  async function loadRegionalBuildings(options={}){
+    if(!window.HaidianBuildingSources||!mapRef||mapRef.getZoom()<config.buildingMinZoom)return null;
+    let manifest;
+    try{
+      manifest=regionalManifestCache||await buildingTileTasks.run('regional:manifest',async signal=>{
+        const r=await fetch(REGIONAL_ROOT+'manifest.json',{signal});if(!r.ok)throw new Error('regional manifest HTTP '+r.status);
+        const m=await r.json();if(!m.version||!Array.isArray(m.regions))throw new Error('invalid regional manifest');return regionalManifestCache=m;
+      },options.signal);
+    }catch(e){if(options.signal?.aborted)throw e;recordShadeError('regional-manifest',e);return null;}
+    const padded=paddedBuildingBounds(mapRef.getBounds()),center=mapRef.getCenter();
+    const region=manifest.regions.find(r=>center.lng>=r.aoi[0]&&center.lat>=r.aoi[1]&&center.lng<=r.aoi[2]&&center.lat<=r.aoi[3]);
+    if(!region)return null;
+    const a=region.aoi,b={west:Math.max(padded.west,a[0]),south:Math.max(padded.south,a[1]),east:Math.min(padded.east,a[2]),north:Math.min(padded.north,a[3])};
+    const tiles=buildingTileRangeForBounds(b,region.zoom).filter(t=>region.tiles[`${t.z}/${t.x}/${t.y}`]),cap=64;
+    const results=await Promise.allSettled(tiles.slice(0,cap).map(t=>{
+      const key=`regional:${manifest.version}:${region.id}:${t.z}/${t.x}/${t.y}`;
+      if(regionalTileCache.has(key))return Promise.resolve(touchMapEntry(regionalTileCache,key));
+      return buildingTileTasks.run(key,async signal=>{
+        const entry=region.tiles[`${t.z}/${t.x}/${t.y}`],r=await fetch(REGIONAL_ROOT+entry.path,{signal});if(!r.ok)throw new Error('regional tile HTTP '+r.status);
+        const json=await r.json();if(!Array.isArray(json.features)||json.features.length!==entry.features)throw new Error('regional tile feature-count mismatch');
+        const features=json.features.map(normalizePipelineBuildingFeature).filter(Boolean);
+        if(!signal.aborted){regionalTileCache.set(key,features);while(regionalTileCache.size>64)regionalTileCache.delete(regionalTileCache.keys().next().value);}return features;
+      },options.signal);
+    }));
+    if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+    const errors=results.filter(r=>r.status==='rejected'),features=[...new Map(results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value).map(f=>[f.properties.building_uid,f])).values()];
+    const fetchComplete=!errors.length&&tiles.length<=cap,geometryComplete=region.geometryComplete===true;
+    lastBuildingFeatures=features;lastBuildingCoverageKey=`regional:${manifest.version}:${region.id}`;
+    lastBuildingLoadedBounds=fetchComplete&&geometryComplete?b:null;
+    lastBuildingFetchError=errors.length?errors[0].reason:null;
+    lastBuildingPipelineStatus={mode:'regional-osm',region:region.id,dataVersion:manifest.version,source:'OSM',license:manifest.license,sourceUrl:region.sourceUrl,
+      coverageStatus:window.HaidianBuildingSources.within(padded,a)?'full':'partial',coverageComplete:fetchComplete&&geometryComplete&&window.HaidianBuildingSources.within(padded,a),fetchComplete,
+      sourceState:errors.length?'source-unavailable':!geometryComplete?'missing-geometry':features.length?'ready':'empty-success',missingGeometry:region.missingGeometry,
+      unknownHeight:features.filter(f=>f.properties.height_quality==='default').length,tileCount:tiles.length,loadedTileCount:results.length-errors.length,featureCount:features.length,sourceCounts:{'OSM-regional':features.length},coverageAoi:{west:a[0],south:a[1],east:a[2],north:a[3]},
+      error:errors.length?String(errors[0].reason):null};
+    updateBuildingRuntimeStatus();syncBuildingAttribution();syncBuildingDebugOverlay();return features;
+  }
+  async function loadOSMBuildings(options={}){
+    if(!window.HaidianBuildingSources)return legacyLoadOSMBuildings(options);
+    if(!mapRef||mapRef.getZoom()<config.buildingMinZoom)return [];
+    const padded=paddedBuildingBounds(mapRef.getBounds()),key=[padded.south,padded.west,padded.north,padded.east].map(v=>v.toFixed(4)).join(',');
+    // At wide views return explicit partial instead of issuing an unbounded query.
+    const tooWide=(padded.east-padded.west)>.06||(padded.north-padded.south)>.06;
+    let result=liveBuildingResults.get(key);
+    try{
+      if(tooWide)throw Object.assign(new Error('building bbox exceeds bounded 0.06° window; zoom in'),{code:'bbox-limit'});
+      if(!result)result=await buildingTileTasks.run('osm-live:'+key,async signal=>{
+        const bbox=`${padded.south},${padded.west},${padded.north},${padded.east}`;
+        const query=`[out:json][timeout:12];(way["building"](${bbox});way["building:part"](${bbox});relation["building"](${bbox});relation["building:part"](${bbox}););out body geom;`;
+        const {json,endpoint}=await fetchOverpassJson(query,signal);
+        const collection=window.HaidianBuildingSources.convert(json,{name:'OSM-live',url:endpoint,version:new Date().toISOString()});
+        return {features:collection.features.map(normalizePipelineBuildingFeature).filter(Boolean),diagnostics:collection.diagnostics};
+      },options.signal);
+      if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+      liveBuildingResults.set(key,result);while(liveBuildingResults.size>8)liveBuildingResults.delete(liveBuildingResults.keys().next().value);
+      lastBuildingFeatures=result.features;lastBuildingCoverageKey='osm-live:'+key;lastBuildingLoadedBounds=result.diagnostics.complete?padded:null;lastBuildingFetchError=null;
+      lastBuildingPipelineStatus={...(lastBuildingPipelineStatus||{}),fallback:'OSM',sourceState:result.diagnostics.status,fetchComplete:true,effectiveCoverageComplete:result.diagnostics.complete,missingGeometry:result.diagnostics.issues.length,unknownHeight:result.diagnostics.unknownHeight,sourceCounts:{'OSM-live':result.features.length},fallbackFeatureCount:result.features.length};
+    }catch(error){
+      if(options.signal?.aborted)throw error;
+      lastBuildingFetchError=error;lastBuildingFeatures=[];lastBuildingLoadedBounds=null;lastBuildingCoverageKey=null;
+      const message=String(error.message||error),kind=error.code||(/timeout/i.test(message)?'timeout':/HTTP/.test(message)?'http-error':'network-or-cors');
+      lastBuildingPipelineStatus={...(lastBuildingPipelineStatus||{}),fallback:'OSM',sourceState:kind,fetchComplete:false,effectiveCoverageComplete:false,fallbackFeatureCount:0,fallbackError:message};recordShadeError('osm-buildings',error);
+    }
+    updateBuildingRuntimeStatus();syncBuildingDebugOverlay();return lastBuildingFeatures;
+  }
+
   function featureCentroidInsideAoi(feature, aoi) {
     if (!aoi) return false;
     const metrics = buildingFeatureMetrics(feature);
@@ -6736,6 +6899,8 @@
       }
     }
 
+    const regional=await loadRegionalBuildings(options);
+    if(regional!==null)return regional;
     if (effectiveBuildingMode() === "pipeline") {
       const pipeline = await loadPipelineBuildings(options);
       const status = lastBuildingPipelineStatus || {};
@@ -6743,7 +6908,7 @@
       if (pipelineComplete || config.buildingPipelineFallbackToOsm === false) return pipeline;
 
       const fallback = await loadOSMBuildings(options);
-      const fallbackOk = Array.isArray(fallback) && fallback.length > 0 && !lastBuildingFetchError;
+      const fallbackOk = !!lastBuildingLoadedBounds && !lastBuildingFetchError;
 
       // v8.6.3: when the viewport crosses the pilot AOI boundary, keep the
       // prebuilt buildings that are valid inside the AOI and use live OSM only
@@ -6761,7 +6926,7 @@
           const source = feature && feature.properties && feature.properties.building_source || "unknown";
           counts[source] = (counts[source] || 0) + 1;
         }
-        lastBuildingPipelineStatus = Object.assign({}, status, {
+        lastBuildingPipelineStatus = Object.assign({}, status, lastBuildingPipelineStatus, {
           mode: "pipeline-hybrid",
           sourceCounts: counts,
           fallback: "OSM",
@@ -6776,7 +6941,7 @@
         return merged;
       }
 
-      lastBuildingPipelineStatus = Object.assign({}, status, {
+      lastBuildingPipelineStatus = Object.assign({}, status, lastBuildingPipelineStatus, {
         fallback: "OSM",
         fallbackFeatureCount: Array.isArray(fallback) ? fallback.length : 0,
         fallbackError: lastBuildingFetchError && (lastBuildingFetchError.message || String(lastBuildingFetchError)) || null
@@ -7222,9 +7387,9 @@
     if(!routeModelPreparation&&routeBuildingModelReady()&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();
     if(routeModelPreparation){try{await routeModelPreparation;}catch(_){};if(routeBuildingModelReady()&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();}
     if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
-    if(buildingFailureUntil>Date.now())return getRouteShadeCacheContext();
+    if(buildingFailureUntil>Date.now()&&buildingFailureView===key)return getRouteShadeCacheContext();
     routeModelPreparationKey=key;
-    routeModelPreparation=(async()=>{try{await getBuildings(options);if(lastBuildingFetchError||lastBuildingPipelineStatus?.fetchComplete===false){buildingFailureUntil=Date.now()+15000;buildingFailureView=key;}}finally{routeModelPreparedAt=Date.now();}})();
+    routeModelPreparation=(async()=>{try{await getBuildings(options);if(lastBuildingFetchError||lastBuildingPipelineStatus?.fetchComplete===false){buildingFailureUntil=Date.now()+15000;buildingFailureView=key;}}finally{routeModelPreparedAt=Date.now();if(!options.signal?.aborted)schedulePointRefresh("buildings-ready");}})();
     try{await routeModelPreparation;}catch(error){if(!options.signal?.aborted){buildingFailureUntil=Date.now()+15000;recordShadeError('building-view',error);}}finally{routeModelPreparation=null;}
     return getRouteShadeCacheContext();
   }
@@ -7244,7 +7409,7 @@
   }
   function unifiedDiagnostics(){
     const tiles=Object.values(groundCanopyShadeLayer?._tiles||{}).map(t=>t.el?.__shadeStats).filter(Boolean);
-    return {decoder:{...shadeDataState.decoder},worker:{...shadeDataState.worker},tileJobs:canopyTileTasks.diagnostics(),cogJobs:canopyCogTasks.diagnostics(),buildingJobs:buildingTileTasks.diagnostics(),errors:shadeDataState.errors.slice(),errorCounts:{...shadeDataState.counts},canopyCacheTiles:canopyRasterCache.size,cogCacheEntries:metaCogCache.size,visualConsumers:visualTileControllers.size,groundActive:groundCanopyShadeActiveRenders,groundQueue:groundCanopyShadeRenderQueue.length,visibleTiles:tiles.length,partialTiles:tiles.filter(t=>t.partial).length,ground:tiles,terrain:'incomplete: distant terrain not included',minCanopyZoom:config.metaMinZoom};
+    return {decoder:{...shadeDataState.decoder},worker:{...shadeDataState.worker},tileJobs:canopyTileTasks.diagnostics(),cogJobs:canopyCogTasks.diagnostics(),buildingJobs:buildingTileTasks.diagnostics(),demJobs:demTileTasks.diagnostics(),errors:shadeDataState.errors.slice(),errorCounts:{...shadeDataState.counts},canopyCacheTiles:canopyRasterCache.size,cogCacheEntries:metaCogCache.size,visualConsumers:visualTileControllers.size,groundActive:groundCanopyShadeActiveRenders,groundQueue:groundCanopyShadeRenderQueue.length,visibleTiles:tiles.length,partialTiles:tiles.filter(t=>t.partial).length,ground:tiles,terrain:'incomplete: distant terrain not included',minCanopyZoom:config.metaMinZoom};
   }
   function updateUnifiedShadeStatus(){
     if(state.visualProvider!=='own'||!state.enabled)return;
@@ -7272,14 +7437,14 @@
   function retryUnifiedData(){
     if(shadeDataState.decoder.status!=='ready')shadeDataState.decoder.attempts=0;
     canopyNegativeCache.clear();shadeDataState.sourceFailures.clear();buildingFailureUntil=0;
-    ownShadeLayer?.request();scheduleUnifiedView();
+    ownShadeLayer?.request();scheduleUnifiedView();schedulePointRefresh('retry/online');
   }
   function enableOwnShade(){
     if(!mapRef)mapRef=resolveMap();
     if(!mapRef||!window.HaidianOwnShade){setStatus('自有陰影模組或地圖尚未就緒。',true);return;}
     state.enabled=true;syncVisualProviderControls();syncPointQueryCursor();setNavigationCanvasState(false);
     if(mapRef.attributionControl&&!mapRef.__haidianOwnAttribution){mapRef.attributionControl.addAttribution('<a href="https://registry.opendata.aws/dataforgood-fb-forestsv2/" target="_blank" rel="noopener">CHMv2 © Meta / WRI</a> · CC BY 4.0');mapRef.__haidianOwnAttribution=true;}
-    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{await prepareRouteModel({signal});return {features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
+    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{await prepareRouteModel({signal});return {features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false&&lastBuildingPipelineStatus?.coverageComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
     ownShadeLayer.request();scheduleUnifiedView();
   }
   async function setVisualProvider(provider){
@@ -7371,6 +7536,7 @@
     // viewport, even when CHMv2 coverage tiles are unchanged.
     if (config.preserveShadeLayerDuringNavigation === false) detachShadeLayerOnly();
     if (activePointQuery && activePointQuery.serial === pointQuerySerial && queryPopup) {
+      if(state.visualProvider!=='shademap'){schedulePointRefresh('navigation');return;}
       activePointQuery.model.navigationUpdating = true;
       refreshPointQueryTooltip(activePointQuery.serial, activePointQuery.model);
     }
@@ -7604,7 +7770,8 @@
     ));
     const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable);
     const token = JSON.stringify({
-      revision: 'dev37.6-unified-shade-model-v3',
+      revision: 'dev37.7-unified-shade-model-v4',
+      regionalVersion:String(regionalManifestCache?.version||''),
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
       buildingDataVersion: String(config.buildingDataVersion || ''),
@@ -7746,6 +7913,7 @@
         }
       }
 
+      if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
       let sourceType = "sun";
       let source = null;
       if (building && tree) {
@@ -7895,10 +8063,11 @@
     enable: enableShade,
     prepareRouteModel,
     setVisualProvider,
-    getVisualDiagnostics:()=>({provider:state.visualProvider,sdkFailure,own:ownShadeLayer?.diagnostics()||null,unified:unifiedDiagnostics(),terrain:"distant-terrain-not-included"}),
+    getVisualDiagnostics:()=>({date:state.date.toISOString(),provider:state.visualProvider,sdkFailure,own:ownShadeLayer?.diagnostics()||null,unified:unifiedDiagnostics(),terrain:"distant-terrain-not-included"}),
     disable: disableShade,
     rebuild: rebuildShade,
     analyzeShadeModelAt,
+    getPointDiagnostics(){return {...pointLifecycle,active:!!activePointQuery,pending:!!activePointQuery&&(activePointQuery.model.shade===undefined||!!activePointQuery.model.navigationUpdating),time:activePointQuery?.model.date?.toISOString()||null};},
     getRouteDiagnostics,
     resetRouteDiagnostics,
     getRouteShadeCacheContext,
@@ -7911,7 +8080,7 @@
     analyzeCanopyAt(lat, lng, date) {
       const latlng = { lat: Number(lat), lng: Number(lng) };
       const when = date ? new Date(date) : state.date;
-      return analyzeCanopyBenefitAt(latlng, solarPositionAt(latlng, when));
+      return analyzeCanopyBenefitAt(latlng, solarPositionAt(latlng, when),{date:when});
     },
     analyzeCanopyDayAt(lat, lng, date) {
       const latlng = { lat: Number(lat), lng: Number(lng) };
@@ -7920,7 +8089,7 @@
         if (!patch) return { available: false, reason: "此點未形成可分析的 CHMv2 樹冠片" };
         let buildings = [];
         try { buildings = await getQueryableBuildings(); } catch (_) {}
-        return { available: true, patch, daily: estimateCanopyDailyBenefit(patch, latlng, when, buildings) };
+        return { available: true, patch, daily: await estimateCanopyDailyBenefit(patch, latlng, when, buildings) };
       });
     },
     getCanvasDiagnostics: getShadeCanvasDiagnostics,
