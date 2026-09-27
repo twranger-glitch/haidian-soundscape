@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.5 Pedestrian Realm Graph Rescue
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.6 Pedestrian Realm Graph Rescue
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.5";
+  const VERSION = "v9.0.0-dev37.6";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -640,6 +640,9 @@
       longestSunM: 0,
       longestShadeM: 0,
       sourceDistanceM: { building: 0, tree: 0, mixed: 0, unknown: 0 },
+      unknownDistanceM: 0,
+      unknownSeconds: 0,
+      confirmedDaylightDistanceM: 0,
       partialDistanceM: 0
     };
     let currentSun = 0;
@@ -657,7 +660,10 @@
         continue;
       }
       summary.daylightDistanceM += len;
-      if (model.shaded === true) {
+      const unknown=model.state==='unknown'||model.ok===false||model.confirmed===false||(model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
+      if(unknown){
+        summary.unknownDistanceM+=len;summary.unknownSeconds+=sec;summary.sourceDistanceM.unknown+=len;currentSun=0;currentShade=0;
+      } else if (model.shaded === true) {
         summary.shadedDistanceM += len;
         summary.shadedSeconds += sec;
         currentShade += len;
@@ -672,10 +678,15 @@
         currentShade = 0;
         summary.longestSunM = Math.max(summary.longestSunM, currentSun);
       }
-      if (model.reliability === "partial") summary.partialDistanceM += len;
+      if(!unknown)summary.confirmedDaylightDistanceM+=len;
+      if (unknown||model.reliability === "partial") summary.partialDistanceM += len;
     }
-    summary.shadeRatio = summary.daylightDistanceM > 0 ? summary.shadedDistanceM / summary.daylightDistanceM : null;
-    summary.sunRatio = summary.daylightDistanceM > 0 ? summary.directSunDistanceM / summary.daylightDistanceM : null;
+    summary.coverageRatio=summary.daylightDistanceM>0?summary.confirmedDaylightDistanceM/summary.daylightDistanceM:null;
+    summary.unknownRatio=summary.daylightDistanceM>0?summary.unknownDistanceM/summary.daylightDistanceM:null;
+    summary.directSunSecondsRange=[summary.directSunSeconds,summary.directSunSeconds+summary.unknownSeconds];
+    summary.ratioDenominator="all-daylight-distance; shade+sun+unknown=1; null when no confirmed samples";
+    summary.shadeRatio = summary.confirmedDaylightDistanceM > 0 ? summary.shadedDistanceM / summary.daylightDistanceM : null;
+    summary.sunRatio = summary.confirmedDaylightDistanceM > 0 ? summary.directSunDistanceM / summary.daylightDistanceM : null;
     summary.nightRatio = summary.totalDistanceM > 0 ? summary.nightDistanceM / summary.totalDistanceM : null;
     summary.daylightRatio = summary.totalDistanceM > 0 ? summary.daylightDistanceM / summary.totalDistanceM : null;
     summary.walkSeconds = summary.totalDistanceM / speedMps;
@@ -843,6 +854,7 @@
       else if (shadePct >= 50) verdict = "這條路有一半以上路段可遮蔭";
       else verdict = "這條路直接日照較多";
     }
+    if(s.unknownDistanceM>0.01)verdict="資料不足：部分路段日照／遮蔭未知";
     const title = escapeHtml(options.title || verdict);
     const eyebrow = options.eyebrow ? `<div class="re-result-eyebrow">${escapeHtml(options.eyebrow)}</div>` : "";
     const hero = allNight
@@ -852,9 +864,10 @@
         </div>`
       : `<div class="re-result-hero">
           <div class="shade"><span>遮蔭</span><b>${shade}</b></div>
-          <div class="sun"><span>直接日照</span><b>${sun}</b></div>
+          <div class="sun"><span>已確認日照</span><b>${sun}</b></div>
+          ${s.unknownDistanceM>0.01?`<div><span>未知</span><b>${Math.round(s.unknownRatio*100)}%</b></div>`:""}
         </div>`;
-    const sentence = allNight
+    const sentence = s.unknownDistanceM>0.01 ? `約 ${formatMinutes(s.walkSeconds)} 路程，${formatDistance(s.unknownDistanceM)} 的資料不足；已確認日照 ${formatMinutes(s.directSunSeconds)}，未知部分最多另有 ${formatMinutes(s.unknownSeconds)}，不能判定整條路的實際日曬比例。` : allNight
       ? `約 ${formatMinutes(s.walkSeconds)} 路程，出發到抵達都在夜間；直接日照為 <strong>0.0 分</strong>。夜間不是「遮蔭」，因此不硬算進遮蔭百分比。`
       : `約 ${formatMinutes(s.walkSeconds)} 路程，其中約 <strong>${formatMinutes(s.directSunSeconds)}</strong> 會直接曬到太陽。`;
     return `
@@ -1499,7 +1512,8 @@
       (done, total) => setStatus(`dev35.3：dense 候選完成 ${done}/${total}；最多 ${denseCandidateConcurrency} 條同時精算。`, "loading")
     );
     const eligibleScored = scored.filter((c) => c.eligible !== false);
-    const selected = eligibleScored.slice().sort((a, b) => {
+    const reliableScored=eligibleScored.filter(c=>!(c.analysis.summary.unknownDistanceM>0.01));
+    const selected = reliableScored.slice().sort((a, b) => {
       const sunA = a.analysis.summary.directSunSeconds;
       const sunB = b.analysis.summary.directSunSeconds;
       if (Math.abs(sunA - sunB) > 0.5) return sunA - sunB;
@@ -1521,9 +1535,10 @@
       scored,
       selected,
       best: selected,
-      activeCandidateId: selected?.id || null,
+      activeCandidateId: selected?.id || scored[0]?.id || null,
       detourPct,
-      comparisonValid: eligibleScored.length >= 2,
+      comparisonValid: reliableScored.length >= 2,
+      shadeComparisonIncomplete: reliableScored.length !== eligibleScored.length,
       rejectedQuality,
       denseScoring: {
         candidateConcurrency: denseCandidateConcurrency,
@@ -3078,19 +3093,22 @@
       if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
       if (c.kind === 'graph-shade' || c.kind === 'graph-fastest') badges.push(`<em class="graph">${c?.graphMeta?.backend === 'nationwide-hgr2' ? '全臺 HGR2' : (c?.graphMeta?.backend === 'nationwide-hgr1' ? '全臺 HGR1' : 'OSM Graph')}</em>`);
       if (c?.graphMeta?.usesConditionalPrivateAccess) badges.push('<em class="over">OSM private・需確認</em>');
+      if(s.unknownDistanceM>0.01)badges.push('<em class="over">陰影資料不足・不參與最少日曬排名</em>');
       if (c.searchIncomplete) badges.push('<em class="over">搜尋未完成・備援</em>');
       if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">候選中日曬最少</em>');
       if (c.eligible === false) badges.push('<em class="over">超過上限</em>');
       if (c.id === activeId) badges.push('<em class="viewing">目前顯示</em>');
       return `<button type="button" class="re-candidate${c.id === activeId ? " is-selected" : ""}" data-re-candidate-id="${escapeHtml(c.id)}" aria-pressed="${c.id === activeId ? "true" : "false"}">
         <div class="re-candidate-title"><b>${escapeHtml(candidateName(c, bundle))}</b><span>${badges.join('')}</span></div>
-        <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>${s.daylightDistanceM <= 0.01 && s.nightDistanceM > 0 ? "夜間 100%" : `遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}`}</span><span>日照 ${formatMinutes(s.directSunSeconds)}</span></div>
+        <div class="re-candidate-metrics"><span>${formatDistance(s.totalDistanceM)}</span><span>${s.daylightDistanceM <= 0.01 && s.nightDistanceM > 0 ? "夜間 100%" : `遮蔭 ${s.shadeRatio == null ? "—" : Math.round(s.shadeRatio * 100) + "%"}`}</span><span>日照 ${s.unknownDistanceM>0.01 ? formatMinutes(s.directSunSeconds)+"～"+formatMinutes(s.directSunSeconds+s.unknownSeconds)+"（含未知）" : formatMinutes(s.directSunSeconds)}</span></div>
         <small>${c?.graphMeta?.requiresJunctionGeometryConfirmation ? `來源路網接縫約 ${Number(c.graphMeta.sourceTopologyJoinDistanceM||0).toFixed(1)}m，已計入距離／日曬；位置需現地確認 · ` : ''}${c.searchIncomplete ? '遮蔭搜尋未完成，保留最快備援；不可視為全域最小日曬 · ' : ''}${c.kind === "experimental-fused" ? `${Number(c.experimentalFusion?.connectorCount || 0)} 個 verified witness · productionGraphMutated=${c.experimentalFusion?.productionGraphMutated === true ? "true" : "false"} · ` : ""}${c.kind === "mature-rescue" ? '獨立 pedestrian engine cross-check · ' : ''}${(c.kind === 'topology-repair-fastest' || c.kind === 'topology-repair-shade') ? `detached endpoint noding repair · gap ${Number(c?.graphMeta?.connectorGapM || 0).toFixed(1)}m · productionGraphMutated=false · ` : ''}${(c.kind === 'interior-repair-fastest' || c.kind === 'interior-repair-shade') ? `detached interior noding repair · productionGraphMutated=false · ` : ''}${(c.kind === 'cross-source-fastest' || c.kind === 'cross-source-shade') ? `detached OSM×Overture union · ${Math.round(Number(c?.graphMeta?.connectorCount || 0))} stitch · max gap ${Number(c?.graphMeta?.connectorGapMaxM || 0).toFixed(1)}m · productionGraphMutated=false · ` : ''}${(c.kind === 'pedestrian-realm-fastest' || c.kind === 'pedestrian-realm-shade') ? `已映射線 ${Math.round(Number(c?.graphMeta?.realmProvenance?.mappedPathM || 0))}m／獨立來源支持面段 ${Math.round(Number(c?.graphMeta?.realmProvenance?.sourceSupportedRealmM || 0))}m／synthetic ${Math.round(Number(c?.graphMeta?.realmSyntheticDistanceM || 0))}m (${Math.round(Number(c?.graphMeta?.realmSyntheticRatio || 0)*100)}%) · 未映射成明確步道的區段請依現場確認 · productionGraphMutated=false · ` : ''}${c?.graphMeta?.usesConditionalPrivateAccess ? `含約 ${Math.round(Number(c.graphMeta.privateAccessDistanceM || 0))}m OSM access=private 路段，請依現場入口／開放規則確認 · ` : ''}${detour > 0.5 ? `比最短路線多約 ${Math.round(detour)}%` : "接近最短路線"} · 點一下可切換地圖</small>
       </button>`;
     }).join('');
 
     let notice = '';
-    if (!bundle.comparisonValid) {
+    if(bundle.shadeComparisonIncomplete){
+      notice='<div class="re-candidate-alert"><b>遮蔭資料不足，無法完成日照排名</b><span>未知路段未算作直接日照。候選仍可檢視，不能宣稱已找到最少日曬路線。</span></div>';
+    } else if (!bundle.comparisonValid) {
       notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線（符合繞路上限）</b><span>已完成曝曬分析，但還不能判定真正的「最不曬」。手繪路線即使略超過上限，也會顯示在下方供你點選比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
     } else {
       const selectedName = candidateName(bundle.best, bundle);

@@ -1,12 +1,13 @@
-/* Original CPU viewport renderer. No SDK, API key, shaders or WebGL ownership.
- * Visual cells call the same point model as route samples at the slider time.
- * A cell is an approximation over its area; it is not a footprint survey.
- */
+/* ASTRA Unified Shade: continuous building geometry. Canopy projection remains
+ * in the original CHMv2 tile renderer; both share data and solar geometry.
+ * Never calls a route analyzer per display pixel; never reads Canvas as evidence. */
 (function(global){
  'use strict';
  const tick=()=>new Promise(r=>setTimeout(r,0));
  function classify(model){
-  if(!model||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)return 'unknown';
+  if(!model||model.ok===false)return 'unknown';
+  if(model.classification==='confirmed-shade')return 'shade';
+  if(model.reliability==='partial'||model.routeCacheSafe===false)return 'unknown';
   return model.state==='night'?'night':model.shaded===true?'shade':model.state==='sun'?'sun':'unknown';
  }
  function terrainOcclusion(receiverHeight,samples,altitudeRad,clearanceM=0.5){
@@ -22,66 +23,65 @@
   const sourceZ=Math.min(z,maxZoom),factor=2**(z-sourceZ);
   return {x:Math.floor(x/factor),y:Math.floor(y/factor),z:sourceZ,factor,sx:(x%factor)*256/factor,sy:(y%factor)*256/factor,size:256/factor};
  }
- function create(options){
-  const map=options.map,doc=options.document||document;
-  const canvas=doc.createElement('canvas');canvas.className='haidian-own-shade-canvas';
-  Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',zIndex:'450',opacity:String(options.opacity??0.5)});
-  const ctx=canvas.getContext('2d',{alpha:true});if(!ctx)throw Error('Canvas 2D unavailable');
-  const pane=map.getPane?.('overlayPane')||map.getPanes().overlayPane;pane.appendChild(canvas);
-  let disposed=false,generation=0,timer=null,running=false,pending=null,lastKey=null,visible=true;
-  const stats={renders:0,completed:0,cancelled:0,samples:0,errors:0,active:0,maxActive:0,canvasCount:1,webglContexts:0,queueDepth:0,cacheHits:0,lastFrameMs:0,firstPaintMs:null,unknown:0};
-  const started=performance.now();
-  const invalidate=()=>{generation++;pending=null;stats.queueDepth=0;canvas.style.visibility='hidden';lastKey=null;clearTimeout(timer);};
-  function key(){const b=map.getBounds(),size=map.getSize();return [b.getSouth(),b.getWest(),b.getNorth(),b.getEast(),map.getZoom(),size.x,size.y,options.date().getTime(),options.mode(),options.modelKey?.()||''].join('|');}
-  function request(){
-   if(disposed||!visible)return;
-   const k=key();if(k===lastKey&&!running){stats.cacheHits++;canvas.style.visibility='visible';return;}
-   const job={generation:++generation,key:k,date:new Date(options.date()),mode:options.mode()};pending=job;stats.queueDepth=1;
-   clearTimeout(timer);timer=setTimeout(pump,Math.max(0,options.debounceMs??100));
+ // Project an opaque vertical prism. The union of both horizontal faces and
+ // every swept boundary (including courtyard walls) handles concavity and holes
+ // without convex-hull bridges. Opaque mask compositing performs the union.
+ function projectBuilding(feature,solar,project,height){
+  if(!solar||solar.night||solar.altitudeRad<=0)return null;
+  const g=feature?.geometry,polys=g?.type==='Polygon'?[g.coordinates]:g?.type==='MultiPolygon'?g.coordinates:[];
+  const meta=height||{},top=Number(meta.height),base=Math.max(0,Number(meta.baseHeight)||0);
+  if(!Number.isFinite(top)||top<=base)return null;
+  const bearing=Number(solar.sunBearingDeg)*Math.PI/180,tan=Math.tan(solar.altitudeRad),faces=[];
+  const move=(p,h)=>{const lat=Number(p[1]),lng=Number(p[0]);return project({lat:lat-Math.cos(bearing)*h/tan/111195.08,lng:lng-Math.sin(bearing)*h/tan/(111195.08*Math.max(.01,Math.cos(lat*Math.PI/180)))});};
+  for(const poly of polys){
+   if(!poly?.length)continue;
+   const bottom=poly.map(r=>r.map(p=>move(p,base))),roof=poly.map(r=>r.map(p=>move(p,top)));
+   faces.push({rings:bottom},{rings:roof});
+   for(let r=0;r<poly.length;r++)for(let i=1;i<poly[r].length;i++)faces.push({rings:[[bottom[r][i-1],bottom[r][i],roof[r][i],roof[r][i-1]]]});
   }
-  async function pump(){
-   if(running||disposed||!pending)return;
-   const job=pending;pending=null;stats.queueDepth=0;running=true;
-   const valid=()=>!disposed&&visible&&generation===job.generation;
-   const t=performance.now();stats.renders++;
-   try{
-    await options.prepare?.();if(!valid())return;
-    const size=map.getSize(),maxCells=Math.min(2400,Math.max(64,options.maxCells||1600));
-    let cell=Math.max(8,options.cellPx||12,Math.ceil(Math.sqrt(size.x*size.y/maxCells)));
-    while(Math.ceil(size.x/cell)*Math.ceil(size.y/cell)>maxCells)cell++;
-    canvas.width=Math.max(1,Math.ceil(size.x));canvas.height=Math.max(1,Math.ceil(size.y));
-    const origin=map.containerPointToLayerPoint([0,0]);
-    canvas.style.transform=`translate(${origin.x}px,${origin.y}px)`;
-    ctx.clearRect(0,0,canvas.width,canvas.height);canvas.style.visibility='visible';
-    const cols=Math.ceil(size.x/cell),rows=Math.ceil(size.y/cell);let next=0,unknown=0,lastYield=performance.now();
-    const cells=cols*rows;
-    async function worker(){while(valid()){
-     const i=next++;if(i>=cells)return;
-     const x=(i%cols)*cell,y=Math.floor(i/cols)*cell,p=map.containerPointToLatLng([Math.min(size.x,x+cell/2),Math.min(size.y,y+cell/2)]);
-     let model;stats.active++;stats.maxActive=Math.max(stats.maxActive,stats.active);
-     try{model=await options.analyze(p.lat,p.lng,job.date,{canopyTimeoutMs:1200});}catch(_){stats.errors++;}finally{stats.active--;}
-     if(!valid())return;stats.samples++;
-     const state=classify(model);if(state==='unknown')unknown++;
-     ctx.fillStyle=state==='shade'?'#172554':state==='unknown'?'rgba(202,138,4,.38)':state==='night'?'rgba(30,41,59,.3)':'rgba(0,0,0,0)';
-     if(state!=='sun')ctx.fillRect(x,y,cell,cell);
-     if(stats.firstPaintMs===null&&state==='shade')stats.firstPaintMs=performance.now()-started;
-     if(performance.now()-lastYield>=8){await tick();lastYield=performance.now();}
-    }}
-    await Promise.all([worker(),worker()]);
-    if(valid()){
-     stats.completed++;stats.unknown=unknown;stats.cellPx=cell;stats.cells=cells;stats.lastFrameMs=performance.now()-t;
-     lastKey=key();options.onStatus?.({state:unknown?'partial':'complete',unknown,cells,cellPx:cell,ms:stats.lastFrameMs,terrain:'bounded-flat-surface; distant terrain not included'});
-    }else stats.cancelled++;
-   }catch(error){if(valid())options.onStatus?.({state:'unknown',error:String(error.message||error)});}
-   finally{running=false;if(pending&&!disposed)timer=setTimeout(pump,0);}
-  }
-  const start=()=>invalidate(),end=()=>request();
-  for(const event of ['movestart','zoomstart'])map.on(event,start);
-  for(const event of ['moveend','zoomend','resize'])map.on(event,end);
-  return {request,invalidate,setOpacity(v){canvas.style.opacity=String(v);},setVisible(v){visible=!!v;if(!visible)invalidate();else request();},
-   diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},
-   dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();stats.canvasCount=0;}
-  };
+  return {faces,heightM:top,baseHeightM:base,lengthM:top/tan,quality:meta.quality||'default',heightSource:meta.source||'unknown'};
  }
- global.HaidianOwnShade={version:'v9.0.0-dev37.5',create,classify,terrainOcclusion,terrainTileAddress};
+ function inRing(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)inside=!inside;}return inside;}
+ function containsShadow(shadow,p){return !!shadow?.faces.some(f=>f.rings.reduce((inside,r)=>inside!==inRing(p,r),false));}
+ function create(options){
+  const map=options.map,doc=options.document||document,canvas=doc.createElement('canvas');canvas.className='haidian-own-shade-canvas haidian-building-shadow-canvas';
+  Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',zIndex:'451',opacity:String(options.opacity??.5)});
+  const ctx=canvas.getContext('2d'),masks=[doc.createElement('canvas'),doc.createElement('canvas')];
+  const pane=map.getPane?.('overlayPane')||map.getPanes().overlayPane;pane.appendChild(canvas);
+  let disposed=false,generation=0,timer=null,controller=null,running=false,pending=false;
+  const stats={renders:0,completed:0,cancelled:0,features:0,measured:0,estimated:0,unknownHeight:0,faces:0,canvasCount:1,webglContexts:0,queueDepth:0,lastFrameMs:0,firstPaintMs:null,partial:true,modelPointCalls:0};
+  const activated=performance.now();
+  function invalidate(){generation++;pending=false;clearTimeout(timer);controller?.abort();canvas.style.visibility='hidden';options.invalidate?.();}
+  function request(){if(disposed)return;invalidate();pending=true;stats.queueDepth=1;timer=setTimeout(pump,options.debounceMs??160);options.onRequest?.();}
+  async function pump(){
+   if(disposed||running||!pending)return;pending=false;stats.queueDepth=0;running=true;controller=new AbortController();const signal=controller.signal,serial=generation,start=performance.now(),valid=()=>!signal.aborted&&!disposed&&serial===generation;
+   stats.renders++;
+   try{
+    const mode=options.mode(),data=mode==='trees'?{features:[],complete:true}:await options.prepare(signal);
+    if(!valid())return;
+    const size=map.getSize(),origin=map.containerPointToLayerPoint([0,0]);canvas.width=Math.max(1,Math.min(2400,Math.ceil(size.x)));canvas.height=Math.max(1,Math.min(1800,Math.ceil(size.y)));
+    canvas.style.transform=`translate(${origin.x}px,${origin.y}px)`;for(const m of masks){m.width=canvas.width;m.height=canvas.height;}
+    const solar=options.solar(map.getCenter(),options.date()),features=data?.features||[];
+    let n=0,faces=0,measured=0,estimated=0,unknown=0,lastYield=performance.now();
+    for(const feature of features){
+     if(!valid())return;
+     const height=options.height(feature),shape=projectBuilding(feature,solar,p=>map.latLngToContainerPoint(p),height);if(!shape){if(!solar.night)unknown++;continue;}
+     if(height.quality==='measured')measured++;else if(height.quality==='default')unknown++;else estimated++;
+     const mask=masks[height.quality==='measured'?1:0].getContext('2d');mask.fillStyle='#172554';
+     for(const face of shape.faces){mask.beginPath();for(const ring of face.rings){if(!ring.length)continue;mask.moveTo(ring[0].x,ring[0].y);for(let i=1;i<ring.length;i++)mask.lineTo(ring[i].x,ring[i].y);mask.closePath();}mask.fill('evenodd');faces++;}
+     n++;if(performance.now()-lastYield>7){await tick();lastYield=performance.now();}
+    }
+    if(!valid())return;
+    // Unknown/inferred heights are visibly distinguished, not sold as measured.
+    ctx.clearRect(0,0,canvas.width,canvas.height);ctx.globalAlpha=.48;ctx.drawImage(masks[0],0,0);ctx.globalAlpha=1;ctx.drawImage(masks[1],0,0);
+    stats.features=n;stats.faces=faces;stats.measured=measured;stats.estimated=estimated;stats.unknownHeight=unknown;stats.partial=!data?.complete||unknown>0||size.x>2400||size.y>1800;stats.lastFrameMs=performance.now()-start;stats.completed++;
+    if(n&&stats.firstPaintMs===null)stats.firstPaintMs=performance.now()-activated;
+    canvas.style.visibility='visible';options.onStatus?.({state:stats.partial?'partial':'complete',...stats});
+   }catch(e){if(!signal.aborted){stats.partial=true;options.onStatus?.({state:'unknown',error:e.message});}}
+   finally{if(signal.aborted)stats.cancelled++;running=false;if(pending&&!disposed)timer=setTimeout(pump,0);}
+  }
+  const start=()=>invalidate(),end=()=>request();for(const e of ['movestart','zoomstart'])map.on(e,start);for(const e of ['moveend','zoomend','resize'])map.on(e,end);
+  return {request,invalidate,setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
+ }
+ global.HaidianOwnShade={version:'v9.0.0-dev37.6',create,projectBuilding,containsShadow,classify,terrainOcclusion,terrainTileAddress};
 })(typeof window!=='undefined'?window:globalThis);

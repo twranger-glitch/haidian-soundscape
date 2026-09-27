@@ -26,7 +26,7 @@
     metaPrebuiltEnabled: false,
     metaPrebuiltRegions: [],
     metaCogBaseUrl: "https://data.source.coop/tge-labs/meta-chm-v2/chm",
-    geotiffUrl: "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js",
+    geotiffUrl: "./vendor/geotiff-2.1.3/geotiff.js",
     metaMinZoom: 14,
     // z17 aligns with CHMv2's native ~1.19 m Web-Mercator pixels.
     // The bare-earth DEM is overzoomed above its z15 maximum; canopy stays native.
@@ -321,6 +321,8 @@
 
   let mapRef = null;
   let ownShadeLayer = null, sdkFailure = null;
+  const visualTileControllers=new Set();
+  let unifiedViewTimer=null;
   let routeModelPreparation = null, routeModelPreparationKey = null, routeModelPreparedAt = 0;
   let shadePreviousMaxZoom = null;
   let shadeZoomConstraintApplied = false;
@@ -1358,7 +1360,7 @@
   }
 
   function applyShadeDate(date, immediate) {
-    if(state.visualProvider!=="shademap"){if(state.enabled)ownShadeLayer?.request();return;}
+    if(state.visualProvider!=="shademap"){if(state.enabled){ownShadeLayer?.request();scheduleUnifiedView();}return;}
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
     shadePendingDate = new Date(date.getTime());
     const requestSerial = ++shadeDateRequestSerial;
@@ -1420,6 +1422,7 @@
 
         <div class="haidian-shade-row" style="display:block">
           <label>視覺引擎 <select id="haidianShadeProvider" class="haidian-shade-select"><option value="own">自有陰影（免 SDK／Key）</option><option value="shademap">已授權 ShadeMap SDK（選用）</option><option value="off">關閉圖層（保留路線分析）</option></select></label>
+          <button type="button" id="haidianShadeRetryData" class="haidian-shade-button">重新嘗試載入資料</button>
           <div style="margin-bottom:5px">研究模式</div>
           <select id="haidianShadeMode" class="haidian-shade-select">
             <option value="full">完整：樹木＋建築</option>
@@ -1455,7 +1458,7 @@
         <label class="haidian-shade-row" style="cursor:pointer">
           <input id="haidianShadeGroundCanopy" type="checkbox"
             style="width:15px;height:15px;margin:0;accent-color:#172554">
-          <span>補足地面樹蔭（校正）</span>
+          <span>顯示精細地面樹蔭（投影模型）</span>
         </label>
 
         <label class="haidian-shade-row" style="cursor:pointer">
@@ -1550,6 +1553,7 @@
       if (state.enabled) await rebuildShade();
     });
 
+    document.getElementById("haidianShadeRetryData")?.addEventListener("click",retryUnifiedData);
     dateEl.addEventListener("change", syncDateFromControls);
 
     timeEl.addEventListener("input", () => {
@@ -1570,6 +1574,7 @@
       .addEventListener("input", (event) => {
         state.opacity = Number(event.target.value);
         ownShadeLayer?.setOpacity(state.opacity);
+        const ownPane=mapRef?.getPane?.("haidianGroundCanopyShadePane");if(ownPane)ownPane.style.opacity=String(state.opacity);
         if (shadeLayer && typeof shadeLayer.setOpacity === "function") {
           shadeLayer.setOpacity(state.opacity);
         }
@@ -1705,23 +1710,101 @@
   }
 
 
-  async function ensureGeoTIFF() {
-    if (window.GeoTIFF && typeof window.GeoTIFF.fromUrl === "function") return;
-    if (geoTiffPromise) return geoTiffPromise;
-
-    geoTiffPromise = (async () => {
-      await loadScript(
-        config.geotiffUrl,
-        () => window.GeoTIFF && typeof window.GeoTIFF.fromUrl === "function"
-      );
-      if (!window.GeoTIFF || typeof window.GeoTIFF.fromUrl !== "function") {
-        throw new Error("GeoTIFF.js 載入失敗，無法讀取 Meta CHMv2 COG。");
+  // Shared, reference-counted jobs. The last departing consumer aborts network
+  // work and removes queued work; route and visual consumers never cancel each other.
+  function createShadeTaskStore(limit, maxQueued, timeoutMs) {
+    const jobs = new Map(), queue = [];
+    const stats = { active:0, peak:0, queuedPeak:0, started:0, joined:0, aborted:0, rejected:0 };
+    function abortError(){const e=new Error('Shade work cancelled');e.name='AbortError';return e;}
+    function pump(){
+      while(stats.active<limit && queue.length){
+        const job=queue.shift();
+        if(!job.clients.size || job.controller.signal.aborted){if(jobs.get(job.key)===job)jobs.delete(job.key);continue;}
+        job.running=true;stats.active++;stats.started++;stats.peak=Math.max(stats.peak,stats.active);
+        const timer=setTimeout(()=>job.controller.abort(Object.assign(new Error('Shade source timeout'),{code:'timeout'})),timeoutMs);
+        Promise.resolve().then(()=>job.work(job.controller.signal)).then(
+          value=>{for(const c of job.clients)c.finish(null,value);},
+          error=>{for(const c of job.clients)c.finish(job.controller.signal.reason?.code==='timeout'?job.controller.signal.reason:error);}
+        ).finally(()=>{clearTimeout(timer);stats.active--;if(jobs.get(job.key)===job)jobs.delete(job.key);pump();});
       }
-    })().catch((error) => {
-      geoTiffPromise = null;
-      throw error;
-    });
+    }
+    return {run(key,work,signal){
+      if(signal?.aborted)return Promise.reject(abortError());
+      let job=jobs.get(key);
+      if(job?.controller.signal.aborted)job=null;
+      if(!job){
+        if(queue.length>=maxQueued){stats.rejected++;const e=new Error('Shade queue is full');e.code='queue-budget';return Promise.reject(e);}
+        job={key,work,clients:new Set(),controller:new AbortController(),running:false};jobs.set(key,job);queue.push(job);stats.queuedPeak=Math.max(stats.queuedPeak,queue.length);
+      }else stats.joined++;
+      return new Promise((resolve,reject)=>{
+        let settled=false;
+        const client={finish(error,value){if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);job.clients.delete(client);if(error)reject(error);else resolve(value);}};
+        function cancel(){client.finish(abortError());if(!job.clients.size){stats.aborted++;job.controller.abort();if(!job.running){const i=queue.indexOf(job);if(i>=0)queue.splice(i,1);if(jobs.get(key)===job)jobs.delete(key);}}}
+        job.clients.add(client);signal?.addEventListener('abort',cancel,{once:true});pump();
+      });
+    },diagnostics(){return {...stats,queued:queue.length,pending:jobs.size};}};
+  }
+  const canopyTileTasks=createShadeTaskStore(4,48,18000);
+  const canopyCogTasks=createShadeTaskStore(3,12,16000);
+  const buildingTileTasks=createShadeTaskStore(4,64,12000);
+  const shadeDataState={decoder:{status:'idle',attempts:0,error:null},errors:[],counts:{},tiles:new Map(),sourceFailures:new Map(),worker:{status:'idle',active:0}};
+  function shadeErrorKind(error){
+    if(error?.code)return error.code;
+    const s=String(error?.message||error);
+    if(error?.name==='AbortError')return 'cancelled';
+    if(/404|410|not found/i.test(s))return 'source-missing';
+    if(/401|403|denied/i.test(s))return 'source-denied';
+    if(/timeout|timed out/i.test(s))return 'timeout';
+    if(/range|206/i.test(s))return 'range-error';
+    return 'network-or-cors';
+  }
+  function recordShadeError(key,error){
+    const kind=shadeErrorKind(error);if(kind==='cancelled')return;
+    shadeDataState.counts[kind]=(shadeDataState.counts[kind]||0)+1;
+    if(!shadeDataState.errors.some(x=>x.key===key&&x.kind===kind)){
+      shadeDataState.errors.push({key,kind,at:Date.now()});if(shadeDataState.errors.length>20)shadeDataState.errors.shift();
+    }
+  }
+  function tileDataStatus(key,status){shadeDataState.tiles.delete(key);shadeDataState.tiles.set(key,status);while(shadeDataState.tiles.size>256)shadeDataState.tiles.delete(shadeDataState.tiles.keys().next().value);}
+  function abortableShadeDelay(ms,signal){return new Promise((resolve,reject)=>{
+    const done=()=>{signal?.removeEventListener('abort',cancel);resolve();};
+    const timer=setTimeout(done,ms);function cancel(){clearTimeout(timer);signal?.removeEventListener('abort',cancel);const e=new Error('Shade work cancelled');e.name='AbortError';reject(e);}
+    if(signal?.aborted)cancel();else signal?.addEventListener('abort',cancel,{once:true});
+  });}
+  async function retryShadeSource(work,signal){
+    try{return await work();}catch(error){
+      const kind=shadeErrorKind(error);if(signal?.aborted||['cancelled','source-missing','source-denied','decoder-unavailable','decoder-api-invalid'].includes(kind))throw error;
+      await abortableShadeDelay(250,signal);return work();
+    }
+  }
 
+  async function ensureGeoTIFF() {
+    if (window.GeoTIFF && typeof window.GeoTIFF.fromUrl === "function") {
+      shadeDataState.decoder.status='ready';shadeDataState.decoder.error=null;return window.GeoTIFF;
+    }
+    if(geoTiffPromise)return geoTiffPromise;
+    if(shadeDataState.decoder.attempts>=3){const e=new Error('GeoTIFF decoder unavailable; retry data after connection recovers');e.code='decoder-unavailable';throw e;}
+    geoTiffPromise=(async()=>{
+      while(shadeDataState.decoder.attempts<3){
+        if(window.GeoTIFF&&typeof window.GeoTIFF.fromUrl==='function'){shadeDataState.decoder.status='ready';return window.GeoTIFF;}
+        shadeDataState.decoder.status='loading';shadeDataState.decoder.attempts++;
+        try{
+          await new Promise((resolve,reject)=>{
+            const script=document.createElement('script');script.src=config.geotiffUrl;script.async=true;
+            const timer=setTimeout(()=>finish(new Error('decoder timeout')),6000);
+            const finish=(error)=>{clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove?.();reject(error);}else resolve();};
+            script.onload=()=>finish(window.GeoTIFF&&typeof window.GeoTIFF.fromUrl==='function'?null:Object.assign(new Error('Unsupported GeoTIFF API'),{code:'decoder-api-invalid'}));
+            script.onerror=()=>finish(new Error('decoder load failed'));document.head.appendChild(script);
+          });
+          shadeDataState.decoder.status='ready';shadeDataState.decoder.error=null;
+          return window.GeoTIFF;
+        }catch(error){
+          shadeDataState.decoder.error=error.code||'decoder-unavailable';
+          if(shadeDataState.decoder.attempts<3)await abortableShadeDelay(300*shadeDataState.decoder.attempts);
+        }
+      }
+      shadeDataState.decoder.status='unavailable';const e=new Error('GeoTIFF decoder unavailable');e.code='decoder-unavailable';recordShadeError('decoder',e);throw e;
+    })().finally(()=>{geoTiffPromise=null;});
     return geoTiffPromise;
   }
 
@@ -1735,6 +1818,7 @@
     try {
       const size = Math.max(1, Math.floor(Number(config.metaGeoTiffWorkerPoolSize) || 2));
       geoTiffWorkerPool = new window.GeoTIFF.Pool(size);
+      shadeDataState.worker.status='ready';shadeDataState.worker.active=size;
       metaPerf.geoTiffPoolCreates += 1;
       return geoTiffWorkerPool;
     } catch (error) {
@@ -1746,17 +1830,21 @@
 
   async function readMetaRasterWindow(image, options) {
     const pool = getGeoTiffWorkerPool();
-    if (!pool) return image.readRasters(options);
+    if (!pool) {await yieldToBrowser();return image.readRasters(options);}
     try {
       return await image.readRasters(Object.assign({}, options, { pool }));
     } catch (error) {
       // Some CSP/browser combinations can reject worker construction even though
       // GeoTIFF.Pool exists. Retry once without the pool instead of losing canopy.
+      if(options.signal?.aborted||error?.name==='AbortError')throw error;
+      if(!/worker|CSP|security|blob|importScripts/i.test(String(error?.message||error)))throw error;
+      try{geoTiffWorkerPool?.destroy();}catch(_){}
       geoTiffWorkerPoolDisabled = true;
       geoTiffWorkerPool = null;
       metaPerf.geoTiffPoolFallbacks += 1;
-      console.warn("[Haidian Shade] GeoTIFF worker decode failed; retrying without pool:", error);
-      return image.readRasters(options);
+      shadeDataState.worker.status='fallback';recordShadeError('geotiff-worker',Object.assign(new Error('Worker unavailable'),{code:'worker-unavailable'}));
+      await yieldToBrowser();
+      shadeDataState.worker.active=0;return image.readRasters(options);
     }
   }
 
@@ -1820,7 +1908,8 @@
     }
   }
 
-  async function acquireGroundCanopyShadeRenderSlot(generation) {
+  async function acquireGroundCanopyShadeRenderSlot(generation, signal) {
+    if(signal?.aborted)return null;
     const limit = groundCanopyShadeConcurrencyLimit();
     if (groundCanopyShadeActiveRenders < limit) {
       groundCanopyShadeActiveRenders += 1;
@@ -1831,7 +1920,10 @@
       return releaseGroundCanopyShadeRenderSlot;
     }
     return new Promise((resolve) => {
-      groundCanopyShadeRenderQueue.push({ generation, resolve });
+      if(groundCanopyShadeRenderQueue.length>=96){resolve(null);return;}
+      const waiter={generation,resolve:(value)=>{signal?.removeEventListener('abort',cancel);resolve(value);}};
+      const cancel=()=>{const i=groundCanopyShadeRenderQueue.indexOf(waiter);if(i>=0)groundCanopyShadeRenderQueue.splice(i,1);waiter.resolve(null);};
+      signal?.addEventListener('abort',cancel,{once:true});groundCanopyShadeRenderQueue.push(waiter);
       metaPerf.groundCanopyShadeQueuedPeak = Math.max(
         metaPerf.groundCanopyShadeQueuedPeak,
         groundCanopyShadeRenderQueue.length
@@ -1878,121 +1970,70 @@
     };
   }
 
-  async function openMetaCog(url) {
-    let promise = metaCogCache.get(url);
-    if (promise) {
-      metaPerf.cogCacheHits += 1;
-      touchMapEntry(metaCogCache, url);
-      return promise;
-    }
-
-    metaPerf.cogOpens += 1;
-    promise = (async () => {
-      const tiff = await window.GeoTIFF.fromUrl(url);
-      const count = await tiff.getImageCount();
-      const levels = [];
-      const images = {};
-
-      for (let i = 0; i < count; i += 1) {
-        const image = await tiff.getImage(i);
-        images[i] = image;
-        if (image.fileDirectory.PhotometricInterpretation !== 4) {
-          levels.push({ idx: i, width: image.getWidth() });
+  async function openMetaCog(url, signal) {
+    await ensureGeoTIFF();
+    const cached=metaCogCache.get(url);if(cached){metaPerf.cogCacheHits++;return touchMapEntry(metaCogCache,url);}
+    const failure=shadeDataState.sourceFailures.get(url);if(failure&&failure.until>Date.now())throw Object.assign(new Error(failure.kind),{code:failure.kind});
+    return canopyCogTasks.run(url,async sharedSignal=>{
+      metaPerf.cogOpens++;
+      try{
+        const result=await retryShadeSource(async()=>{
+          const tiff=await window.GeoTIFF.fromUrl(url,{cacheSize:24,blockSize:65536,allowFullFile:false},sharedSignal);
+          const count=await tiff.getImageCount(),levels=[],images={};
+          for(let i=0;i<count;i++){
+            if(sharedSignal.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+            const image=await tiff.getImage(i);images[i]=image;
+            if(image.fileDirectory.PhotometricInterpretation!==4)levels.push({idx:i,width:image.getWidth()});
+          }
+          levels.sort((a,b)=>b.width-a.width);if(!levels.length)throw new Error('No raster overview');
+          return {tiff,levels,images};
+        },sharedSignal);
+        if(!sharedSignal.aborted){metaCogCache.set(url,Promise.resolve(result));while(metaCogCache.size>Math.min(8,Number(config.metaMaxCachedCogs)||8))metaCogCache.delete(metaCogCache.keys().next().value);}
+        shadeDataState.sourceFailures.delete(url);return result;
+      }catch(error){
+        const kind=shadeErrorKind(error);
+        if(!['cancelled','decoder-unavailable','decoder-api-invalid'].includes(kind)){
+          shadeDataState.sourceFailures.set(url,{kind,until:Date.now()+(['source-missing','source-denied'].includes(kind)?60000:5000)});
+          while(shadeDataState.sourceFailures.size>64)shadeDataState.sourceFailures.delete(shadeDataState.sourceFailures.keys().next().value);
         }
+        recordShadeError(url,error);throw error;
       }
-
-      levels.sort((a, b) => b.width - a.width);
-      if (!levels.length) throw new Error("Meta COG 沒有可讀取的 raster overview。");
-      return { tiff, levels, images };
-    })();
-
-    // A transient CORS/range/network failure must remain retryable. Do not keep a
-    // rejected COG promise pinned in the warm-start cache for the whole session.
-    promise.catch(() => {
-      if (metaCogCache.get(url) === promise) metaCogCache.delete(url);
-    });
-    metaCogCache.set(url, promise);
-    const maxCached = Math.max(2, Number(config.metaMaxCachedCogs) || 16);
-    while (metaCogCache.size > maxCached) {
-      metaCogCache.delete(metaCogCache.keys().next().value);
-    }
-    return promise;
+    },signal);
   }
 
-  async function readMetaCanopyTile(x, y, z) {
-    if (z < 10) return null;
-
-    const key = tileKey(x, y, z);
-    if (canopyRasterCache.has(key)) {
-      metaPerf.canopyCacheHits += 1;
-      return touchMapEntry(canopyRasterCache, key);
-    }
-    if (canopyRasterPromises.has(key)) {
-      metaPerf.canopyPromiseJoins += 1;
-      return canopyRasterPromises.get(key);
-    }
-
+  async function readMetaCanopyTile(x,y,z,options={}) {
+    if(z<10||z>17||y<0||y>=2**z)return null;
+    x=((x%2**z)+2**z)%2**z;
+    const key=tileKey(x,y,z),signal=options.signal;
+    if(signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+    if(canopyRasterCache.has(key)){metaPerf.canopyCacheHits++;return touchMapEntry(canopyRasterCache,key);}
     if((canopyNegativeCache.get(key)||0)>Date.now())return null;
-    if(canopyRasterPromises.size>=32)return null; // Unknown, never unbounded pending reads.
-    metaPerf.canopyReads += 1;
-    const promise = (async () => {
-      const scaleFromZ10 = 1 << (z - 10);
-      const parentX = Math.floor(x / scaleFromZ10);
-      const parentY = Math.floor(y / scaleFromZ10);
-      const quadkey = tileToQuadkey(parentX, parentY, 10);
-      const url = `${config.metaCogBaseUrl.replace(/\/+$/, "")}/${quadkey}.tif`;
-
-      let cog;
-      try {
-        cog = await openMetaCog(url);
-      } catch (error) {
-        console.warn("[Haidian Shade] Meta COG open failed:", url, error);
-        return null;
+    try{
+      const result=await canopyTileTasks.run(key,async sharedSignal=>{
+        await ensureGeoTIFF();metaPerf.canopyReads++;
+        const scaleFromZ10=2**(z-10),parentX=Math.floor(x/scaleFromZ10),parentY=Math.floor(y/scaleFromZ10);
+        const quadkey=tileToQuadkey(parentX,parentY,10),url=`${config.metaCogBaseUrl.replace(/\/+$/, '')}/${quadkey}.tif`;
+        const cog=await openMetaCog(url,sharedSignal),targetLevel=17-z;
+        const level=cog.levels[Math.min(Math.max(targetLevel,0),cog.levels.length-1)],side=level.width/scaleFromZ10;
+        const px=(x%scaleFromZ10)*side,py=(y%scaleFromZ10)*side;
+        const bands=await retryShadeSource(()=>readMetaRasterWindow(cog.images[level.idx],{
+          window:[Math.round(px),Math.round(py),Math.round(px+side),Math.round(py+side)],width:256,height:256,resampleMethod:'nearest',fillValue:255,signal:sharedSignal
+        }),sharedSignal);
+        if(sharedSignal.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+        const raster=bands[0];canopyRasterCache.set(key,raster);
+        while(canopyRasterCache.size>Math.min(256,Math.max(32,Number(config.canopyCacheTiles)||128)))canopyRasterCache.delete(canopyRasterCache.keys().next().value);
+        const unknown=raster.reduce((n,v)=>n+(v===255||!Number.isFinite(v)?1:0),0);
+        tileDataStatus(key,{status:unknown===raster.length?'no-data':unknown?'partial':'ready',unknown,total:raster.length});canopyNegativeCache.delete(key);return raster;
+      },signal);
+      return result;
+    }catch(error){
+      const kind=shadeErrorKind(error);tileDataStatus(key,{status:kind});recordShadeError(key,error);
+      if(kind==='cancelled'&&signal?.aborted)throw error;
+      if(!['decoder-unavailable','decoder-api-invalid','cancelled','queue-budget'].includes(kind)){
+        canopyNegativeCache.set(key,Date.now()+5000);while(canopyNegativeCache.size>256)canopyNegativeCache.delete(canopyNegativeCache.keys().next().value);
       }
-
-      // CHMv2 native z10 tiles are 32768 px wide with internal overviews.
-      // Taylor Geospatial's reference viewer uses overview index (17-z), which
-      // makes each requested XYZ tile line up with a 256×256 source window.
-      const targetLevel = 17 - z;
-      const level = cog.levels[
-        Math.min(Math.max(targetLevel, 0), cog.levels.length - 1)
-      ];
-      const side = level.width / scaleFromZ10;
-      const px = (x % scaleFromZ10) * side;
-      const py = (y % scaleFromZ10) * side;
-
-      try {
-        const bands = await readMetaRasterWindow(cog.images[level.idx], {
-          window: [
-            Math.round(px),
-            Math.round(py),
-            Math.round(px + side),
-            Math.round(py + side)
-          ],
-          width: 256,
-          height: 256,
-          resampleMethod: "nearest",
-          fillValue: 255 // Out-of-window/NoData remains unknown.
-        });
-        const raster = bands[0];
-        canopyRasterCache.set(key, raster);
-        const maxCached = Math.max(32, Number(config.canopyCacheTiles) || 256);
-        while (canopyRasterCache.size > maxCached) {
-          canopyRasterCache.delete(canopyRasterCache.keys().next().value);
-        }
-        return raster;
-      } catch (error) {
-        console.warn("[Haidian Shade] Meta COG window failed:", quadkey, error);
-        return null;
-      }
-    })().then(raster=>{
-      if(!raster){canopyNegativeCache.set(key,Date.now()+30000);while(canopyNegativeCache.size>256)canopyNegativeCache.delete(canopyNegativeCache.keys().next().value);}
-      else canopyNegativeCache.delete(key);
-      return raster;
-    }).finally(() => canopyRasterPromises.delete(key));
-
-    canopyRasterPromises.set(key, promise);
-    return promise;
+      return null;
+    }
   }
 
   function tileCenterLatLng(x, y, z) {
@@ -2299,6 +2340,8 @@
         canvas.width = 256;
         canvas.height = 256;
         canvas.setAttribute("aria-hidden", "true");
+        canvas.className="haidian-canopy-footprint-tile";
+        const controller=new AbortController(),signal=controller.signal;canvas.__shadeAbort=controller;visualTileControllers.add(controller);
 
         (async () => {
           const displayMaxZoom = Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20);
@@ -2310,7 +2353,8 @@
           try {
             await ensureGeoTIFF();
             const req = displayCanopyRasterRequest(coords.x, coords.y, coords.z);
-            const canopy = await readMetaCanopyTile(req.parentX, req.parentY, req.nativeZ);
+            const canopy = await readMetaCanopyTile(req.parentX, req.parentY, req.nativeZ,{signal});
+            if (signal.aborted)return;
             if (!canopy) {
               done(null, canvas);
               return;
@@ -2325,6 +2369,7 @@
             const minHeight = Math.max(0, Number(config.canopyOverlayMinHeight) || 2);
             const overlayYieldRows = Math.max(0, Math.floor(Number(config.canopyOverlayYieldRows) || 0));
             for (let yy = 0; yy < smallSize; yy += 1) {
+              if(signal.aborted)return;
               for (let xx = 0; xx < smallSize; xx += 1) {
                 const sx = Math.max(0, Math.min(255, Math.floor(req.cropX + xx)));
                 const sy = Math.max(0, Math.min(255, Math.floor(req.cropY + yy)));
@@ -2348,36 +2393,37 @@
             ctx.drawImage(small, 0, 0, smallSize, smallSize, 0, 0, 256, 256);
             done(null, canvas);
           } catch (error) {
-            console.warn("[Haidian Shade] canopy overlay tile:", error);
+            if(!signal.aborted)recordShadeError("canopy-overlay",error);
             done(null, canvas);
           }
-        })();
+        })().finally(()=>visualTileControllers.delete(controller));
 
         return canvas;
       }
     });
 
-    return new CanopyGrid({
+    const layer=new CanopyGrid({
       tileSize: 256,
       minZoom: config.metaMinZoom,
       maxZoom: Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20),
       opacity: Number(config.canopyOverlayOpacity) || 0.28,
       zIndex: 650,
       updateWhenIdle: true,
-      keepBuffer: 1,
+      keepBuffer: 0,
       noWrap: true
     });
+    layer.on("tileunload",e=>e.tile.__shadeAbort?.abort());return layer;
   }
 
   function syncCanopyOverlay() {
-    if(state.visualProvider!=="shademap")return;
+    if(state.visualProvider==="off")return;
     if (!mapRef) return;
     const shouldShow = state.enabled && state.canopyOverlay && state.mode !== "buildings";
 
     // v8.3: during the provisional progressive frame, do not let the Leaflet
     // canopy overlay launch an unbounded second wave of CHMv2 reads. The overlay
     // returns after the full surface upgrade, when its tiles should be cache hits.
-    if (progressiveCanopyOverlayDeferred) {
+    if (state.visualProvider==="shademap" && progressiveCanopyOverlayDeferred) {
       removeCanopyOverlay();
       return;
     }
@@ -2561,7 +2607,7 @@
     };
   }
 
-  async function renderGroundCanopyShadeTile(coords, canvas, generation) {
+  async function renderGroundCanopyShadeTile(coords, canvas, generation, signal) {
     const startedAt = monotonicNow();
     if (
       config.groundCanopyShadeEnabled === false ||
@@ -2571,10 +2617,10 @@
       coords.z > Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20)
     ) return;
 
-    const releaseRenderSlot = await acquireGroundCanopyShadeRenderSlot(generation);
+    const releaseRenderSlot = await acquireGroundCanopyShadeRenderSlot(generation,signal);
     if (!releaseRenderSlot) return;
     try {
-    if (generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
+    if (signal?.aborted || generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
 
     const center = tileCenterLatLng(coords.x, coords.y, coords.z);
     const solar = solarPositionAt(center, state.date);
@@ -2614,10 +2660,13 @@
     await ensureGeoTIFF();
     await Promise.all(casterTiles.map(async (tile) => {
       const key = tileKey(tile.x, tile.y, tile.z);
-      rasterMap.set(key, await readMetaCanopyTile(tile.x, tile.y, tile.z));
+      rasterMap.set(key, await readMetaCanopyTile(tile.x, tile.y, tile.z,{signal}));
     }));
-    if (generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
+    if (signal?.aborted || generation !== groundCanopyShadeGeneration || !state.enabled || !state.groundCanopyShade) return;
 
+    const missingTiles=casterTiles.filter(t=>!rasterMap.get(tileKey(t.x,t.y,t.z))).length;
+    const noDataPixels=[...rasterMap.values()].reduce((n,r)=>n+(r?r.reduce((c,v)=>c+(v===255?1:0),0):65536),0);
+    canvas.__shadeStats={partial:missingTiles>0||noDataPixels>0,failedTiles:missingTiles,sourceTiles:casterTiles.length,noDataPixels,horizonCapped:55/tanAlt>maxShadowM,unknownFraction:(missingTiles||noDataPixels)?1:0};
     const coreMask = new Uint8Array(targetW * targetH);
     const projectedMask = new Uint8Array(targetW * targetH);
     const minHeight = Math.max(0.5, Number(config.groundCanopyShadeMinHeightM) || 2);
@@ -2633,7 +2682,7 @@
       if (shadeRowsSinceYield < shadeYieldRows) return true;
       shadeRowsSinceYield = 0;
       await yieldToBrowser();
-      return generation === groundCanopyShadeGeneration && state.enabled && state.groundCanopyShade;
+      return !signal?.aborted && generation === groundCanopyShadeGeneration && state.enabled && state.groundCanopyShade;
     };
 
     // v8.4.1: create an exact native-pixel ground core beneath every CHMv2
@@ -2725,7 +2774,7 @@
         ? legacyGapFill
         : Math.max(0, Math.floor(Number(config.groundCanopyShadeProjectedGapFillPx) || 0))
     );
-    if (generation !== groundCanopyShadeGeneration) return;
+    if (signal?.aborted || generation !== groundCanopyShadeGeneration) return;
 
     let corePixels = 0;
     let projectedPixels = 0;
@@ -2778,7 +2827,9 @@
     ctx.imageSmoothingEnabled = smoothOverzoom;
     if (smoothOverzoom && "imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
     ctx.clearRect(0, 0, 256, 256);
+    if(canvas.__shadeStats.partial){ctx.fillStyle='rgba(202,138,4,.16)';ctx.fillRect(0,0,256,256);}
     ctx.drawImage(small, 0, 0, targetW, targetH, 0, 0, 256, 256);
+    canvas.__shadeStats.renderMs=monotonicNow()-startedAt;
     metaPerf.groundCanopyShadeTiles += 1;
     metaPerf.groundCanopyShadeRenderMs += Math.max(0, monotonicNow() - startedAt);
     } finally {
@@ -2809,30 +2860,34 @@
         canvas.width = 256;
         canvas.height = 256;
         canvas.setAttribute("aria-hidden", "true");
+        canvas.className='haidian-ground-shade-tile';
+        const controller=new AbortController();canvas.__shadeAbort=controller;visualTileControllers.add(controller);
         const generation = groundCanopyShadeGeneration;
-        renderGroundCanopyShadeTile(coords, canvas, generation)
+        renderGroundCanopyShadeTile(coords, canvas, generation,controller.signal)
           .then(() => done(null, canvas))
           .catch((error) => {
-            console.warn("[Haidian Shade] ground canopy shade tile:", error);
+            if(!controller.signal.aborted){recordShadeError('ground-shade',error);canvas.__shadeStats={partial:true,error:shadeErrorKind(error),unknownFraction:1};const ctx=canvas.getContext('2d');ctx.fillStyle='rgba(202,138,4,.16)';ctx.fillRect(0,0,256,256);}
             done(null, canvas);
-          });
+          }).finally(()=>{visualTileControllers.delete(controller);updateUnifiedShadeStatus();});
         return canvas;
       }
     });
-    return new GroundShadeGrid({
+    const layer=new GroundShadeGrid({
       pane: "haidianGroundCanopyShadePane",
       tileSize: 256,
       minZoom: config.metaMinZoom,
       maxZoom: Math.max(config.metaMaxZoom, Number(config.groundCanopyShadeDisplayMaxZoom) || 20),
       opacity: 1,
       updateWhenIdle: true,
-      keepBuffer: 1,
+      keepBuffer: 0,
       noWrap: true
     });
+    layer.on("tileunload",e=>e.tile.__shadeAbort?.abort());return layer;
   }
 
   function redrawGroundCanopyShadeOverlay() {
-    if(state.visualProvider!=="shademap")return;
+    if(state.visualProvider==='own'){scheduleUnifiedView();return;}
+    if(state.visualProvider==='off')return;
     groundCanopyShadeGeneration += 1;
     if (groundCanopyShadeLayer && typeof groundCanopyShadeLayer.redraw === "function") {
       try { groundCanopyShadeLayer.redraw(); } catch (_) {}
@@ -2840,10 +2895,10 @@
   }
 
   function syncGroundCanopyShadeOverlay() {
-    if(state.visualProvider!=="shademap")return;
+    if(state.visualProvider==="off")return;
     if (!mapRef) return;
     const shouldShow = state.enabled && state.groundCanopyShade && state.mode !== "buildings" && config.groundCanopyShadeEnabled !== false;
-    if (progressiveCanopyOverlayDeferred) {
+    if (state.visualProvider==="shademap" && progressiveCanopyOverlayDeferred) {
       removeGroundCanopyShadeOverlay();
       return;
     }
@@ -3501,7 +3556,10 @@
     if (declaredQuality === "direct" || /^OSM height$/i.test(source) || /direct height/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
     else if (declaredQuality === "floors-derived" || /building:levels|num_floors/i.test(source)) quality = "levels";
     else if (["context-inferred", "heuristic", "estimated"].includes(declaredQuality) || (source && !/預設|default/i.test(source))) quality = "estimated";
-    return { height: safeHeight, source: source || "預設估計值", quality, declaredQuality };
+    if(!(Number.isFinite(height)&&height>0))quality='default';
+    const rawBase=parseFloat(properties.min_height ?? properties['min_height'] ?? properties.render_min_height ?? 0);
+    const baseHeight=Number.isFinite(rawBase)?Math.max(0,rawBase):0;
+    return { height: safeHeight, baseHeight, roofHeight:Number(properties['roof:height']||properties.roof_height||0), source: source || "預設估計值", quality, declaredQuality };
   }
 
   function buildingHeightForFeature(feature) {
@@ -3573,6 +3631,24 @@
       }
     }
     return Number.isFinite(best) ? best : null;
+  }
+
+  // Ray/prism intersection for raised structures and courtyards. Preserve the
+  // established ordinary-footprint corridor model for locked route behavior.
+  function buildingPrismRayDistance(origin,feature,bearing,offset,prepared,meta,tanAlt,clearance,maxDistance){
+    const polys=feature.geometry?.type==='Polygon'?[feature.geometry.coordinates]:feature.geometry?.coordinates||[];
+    if(!meta.baseHeight&&!polys.some(p=>p.length>1))return featureRayEntryDistance(origin,feature,bearing,offset,prepared);
+    const rad=bearing*Math.PI/180,dir={x:Math.sin(rad),y:Math.cos(rad)},start={x:Math.cos(rad)*offset,y:-Math.sin(rad)*offset};
+    const lower=Math.max(0,(meta.baseHeight-clearance)/tanAlt),upper=Math.min(maxDistance,(meta.height-clearance)/tanAlt);
+    if(upper<lower)return null;
+    const cuts=[lower,upper];
+    for(const poly of polys)for(const raw of poly){const ring=raw.map(p=>localMetersFromLatLng(origin,{lat:p[1],lng:p[0]}));
+      for(let i=1;i<ring.length;i++){const a={x:ring[i-1].x-start.x,y:ring[i-1].y-start.y},edge={x:ring[i].x-ring[i-1].x,y:ring[i].y-ring[i-1].y},den=cross2d(dir,edge);if(Math.abs(den)<1e-9)continue;const t=cross2d(a,edge)/den,u=cross2d(a,dir)/den;if(t>lower&&t<upper&&u>=0&&u<=1)cuts.push(t);}}
+    cuts.sort((a,b)=>a-b);
+    for(let i=1;i<cuts.length;i++){const t=(cuts[i-1]+cuts[i])/2,px=start.x+dir.x*t,py=start.y+dir.y*t;
+      const point=destinationLatLng(origin,(Math.atan2(px,py)*180/Math.PI+360)%360,Math.hypot(px,py));
+      if(pointInPolygonFeature(point.lng,point.lat,feature))return cuts[i-1];}
+    return null;
   }
 
   function shadeSourceRayOffsets() {
@@ -3697,7 +3773,7 @@
       }
       const hits = [],preparedRay={};
       for (const offset of offsets) {
-        const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay);
+        const distance = buildingPrismRayDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay, heightMeta, tanAlt, clearance, maxDistance);
         if (!Number.isFinite(distance) || distance > maxDistance) continue;
         hits.push({ distance: Math.max(0, distance), offset });
       }
@@ -3727,7 +3803,7 @@
         for (const offset of refineOffsets) {
           if (Math.abs(offset) > maxRayWidth + 1e-6) continue;
           if (admissibleHits.some((hit) => Math.abs(hit.offset - offset) < 1e-6)) continue;
-          const distance = featureRayEntryDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay);
+          const distance = buildingPrismRayDistance(latlng, feature, solar.sunBearingDeg, offset, preparedRay, heightMeta, tanAlt, clearance, maxDistance);
           if (!Number.isFinite(distance) || distance > maxDistance) continue;
           const allowed = Math.min(
             maxRayWidth,
@@ -3822,6 +3898,7 @@
     // point underfoot. Later samples cannot change the nearest-hit result.
     const rasters = new Map();
     for (let distance = 0; distance <= maxDistance; distance += step) {
+      if(options.signal?.aborted)throw Object.assign(new Error("cancelled"),{name:"AbortError"});
       const rayHeight = distance * tanAlt + clearance;
       if (rayHeight > maxCanopy) break;
       const sampleLatLng = distance === 0
@@ -3835,7 +3912,7 @@
         if (canopyRasterCache.has(key)) {
           metaPerf.canopyCacheHits += 1;
           rasters.set(key,touchMapEntry(canopyRasterCache,key));
-        } else rasters.set(key,await readMetaCanopyTile(tile.x,tile.y,tile.z));
+        } else rasters.set(key,await readMetaCanopyTile(tile.x,tile.y,tile.z,{signal:options.signal}));
       }
       if(options.requireComplete&&!rasters.get(key))throw new Error('Required canopy raster unavailable');
       const canopy = canopyValueFromRaster(rasters.get(key), tile);
@@ -5623,7 +5700,7 @@
       cache: {
         cogs: metaCogCache.size,
         canopyRasters: canopyRasterCache.size,
-        canopyPending: canopyRasterPromises.size,
+        canopyPending: canopyTileTasks.diagnostics().pending,
         surfaceUrls: metaSurfaceUrls.size,
         provisionalSurfaceUrls: metaProvisionalSurfaceUrls.size,
         surfacePending: metaSurfacePromises.size,
@@ -5666,18 +5743,12 @@
   }
 
   function terrariumSource(template, maxZoom) {
-    const spec={id:'sdk-terrarium',template,maxZoom:Math.max(0,Number(maxZoom)||15)};
-    return {tileSize:256,maxZoom:spec.maxZoom,
-      getSourceUrl:async({x,y,z})=>{
-        const key=template+'|'+[z,x,y].join('/');if(demUrlCache.has(key))return touchMapEntry(demUrlCache,key);
-        const factor=2**Math.max(0,z-spec.maxZoom),pz=Math.min(z,spec.maxZoom),px=Math.floor(x/factor),py=Math.floor(y/factor);
-        const bitmap=await getDemBitmapForSpec(spec,px,py,pz),canvas=document.createElement('canvas');canvas.width=canvas.height=256;
-        const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
-        ctx.drawImage(bitmap,(x%factor)*256/factor,(y%factor)*256/factor,256/factor,256/factor,0,0,256,256);
-        const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('DEM encoding failed');
-        const url=URL.createObjectURL(blob);demUrlCache.set(key,url);
-        while(demUrlCache.size>120){const first=demUrlCache.keys().next().value;URL.revokeObjectURL(demUrlCache.get(first));demUrlCache.delete(first);}return url;
-      },getElevation:({r,g,b})=>r*256+g+b/256-32768};
+    // SDK callback is synchronous. Let its maxZoom contract overzoom native DEM.
+    const limit=Math.max(0,Number(maxZoom)||15);
+    return {tileSize:256,maxZoom:limit,getSourceUrl:({x,y,z})=>{
+      if(z>limit)throw new Error('SDK requested DEM above source maxZoom');
+      return fillTemplate(template,x,y,z);
+    },getElevation:({r,g,b})=>r*256+g+b/256-32768};
   }
 
   function bareTerrainSource() {
@@ -5829,7 +5900,7 @@
   }
 
   function paddedBuildingBounds(bounds) {
-    const paddingM = currentBuildingFetchPaddingM(bounds);
+    const paddingM = currentBuildingFetchPaddingM(bounds)+100;
     if (!paddingM || !bounds) return {
       south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast()
     };
@@ -6269,7 +6340,7 @@
     };
   }
 
-  async function loadPipelineHeightContext(baseFeatures, padded, z, tileIndex) {
+  async function loadPipelineHeightContext(baseFeatures, padded, z, tileIndex, options={}) {
     const features = Array.isArray(baseFeatures) ? baseFeatures : [];
     const needsContext = features.some((feature) => {
       const props = feature && feature.properties ? feature.properties : {};
@@ -6284,7 +6355,7 @@
     const contextTiles = buildingTileRangeForBounds(expanded, z)
       .filter((tile) => buildingTileIndexHas(tileIndex, tile));
 
-    const settled = await Promise.allSettled(contextTiles.map(fetchBuildingTile));
+    const settled = await Promise.allSettled(contextTiles.slice(0,64).map(t=>fetchBuildingTile(t,options)));
     const unique = new Map();
     for (const feature of features) {
       const props = feature && feature.properties ? feature.properties : {};
@@ -6302,32 +6373,22 @@
     return Array.from(unique.values());
   }
 
-  async function fetchBuildingTile(tile) {
-    const key = `${tile.z}/${tile.x}/${tile.y}`;
-    if (buildingTileCache.has(key)) return buildingTileCache.get(key);
-    if (!config.buildingTileUrl) return [];
-    const url = fillTemplate(config.buildingTileUrl, tile.x, tile.y, tile.z);
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const timeoutMs = Math.max(1000, Number(config.buildingTileFetchClientTimeoutMs) || 5000);
-    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_) {} }, timeoutMs) : null;
-    const promise = fetch(url, controller ? { signal: controller.signal } : undefined)
-      .then((response) => {
-        if (!response.ok) throw new Error(`building tile HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((collection) => (collection.features || []).map(normalizePipelineBuildingFeature).filter(Boolean))
-      .catch((error) => {
-        buildingTileCache.delete(key);
-        throw error;
-      })
-      .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
-    buildingTileCache.set(key, promise);
-    const cacheLimit = Math.max(32, Number(config.buildingTileCacheMaxEntries) || 160);
-    if (buildingTileCache.size > cacheLimit) buildingTileCache.delete(buildingTileCache.keys().next().value);
-    return promise;
+  async function fetchBuildingTile(tile, options={}) {
+    const key=`${tile.z}/${tile.x}/${tile.y}`;
+    if(buildingTileCache.has(key))return touchMapEntry(buildingTileCache,key);
+    if(!config.buildingTileUrl)return [];
+    return buildingTileTasks.run(key,async signal=>{
+      const features=await retryShadeSource(async()=>{
+        const response=await fetch(fillTemplate(config.buildingTileUrl,tile.x,tile.y,tile.z),{signal});
+        if(!response.ok)throw new Error(`building tile HTTP ${response.status}`);
+        const collection=await response.json();return (collection.features||[]).map(normalizePipelineBuildingFeature).filter(Boolean);
+      },signal);
+      if(!signal.aborted){buildingTileCache.set(key,Promise.resolve(features));while(buildingTileCache.size>Math.min(160,Number(config.buildingTileCacheMaxEntries)||96))buildingTileCache.delete(buildingTileCache.keys().next().value);}
+      return features;
+    },options.signal);
   }
 
-  async function loadPipelineBuildings() {
+  async function loadPipelineBuildings(options={}) {
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom || !config.buildingTileUrl) return [];
     const padded = paddedBuildingBounds(mapRef.getBounds());
     const z = Math.max(0, Number(config.buildingTileZoom) || 16);
@@ -6402,7 +6463,9 @@
       ? tiles.filter((tile) => buildingTileIndexHas(tileIndex, tile))
       : tiles;
     const knownEmptyTileCount = Math.max(0, tiles.length - expectedTiles.length);
-    const settled = await Promise.allSettled(expectedTiles.map(fetchBuildingTile));
+    if(expectedTiles.length>64){lastBuildingPipelineStatus={mode:'zoom-budget',coverageComplete:false,fetchComplete:false,tileCount:expectedTiles.length};return [];}
+    const settled = await Promise.allSettled(expectedTiles.map(t=>fetchBuildingTile(t,options)));
+    if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
     const groups = [];
     const errors = [];
     settled.forEach((result, i) => {
@@ -6437,7 +6500,7 @@
       }
     }
     const features = Array.from(unique.values());
-    const contextFeatures = await loadPipelineHeightContext(features, padded, z, tileIndex);
+    const contextFeatures = await loadPipelineHeightContext(features, padded, z, tileIndex, options);
     calibrateLowConfidenceBuildingHeights(features, contextFeatures);
     lastBuildingFeatures = features;
     lastBuildingCoverageKey = `pipeline:${z}:${tiles.map((t) => `${t.x}/${t.y}`).join("|")}`;
@@ -6473,7 +6536,7 @@
     return Array.from(new Set(urls));
   }
 
-  async function fetchOverpassJson(query) {
+  async function fetchOverpassJson(query, outerSignal) {
     const endpoints = overpassEndpointList();
     if (!endpoints.length) throw new Error("No Overpass endpoint configured");
     const perEndpointTimeoutMs = Math.max(3000, Number(config.buildingFetchClientTimeoutMs) || 12000);
@@ -6482,10 +6545,12 @@
     const errors = [];
 
     for (const endpoint of endpoints) {
+      if(outerSignal?.aborted)throw Object.assign(new Error("cancelled"),{name:"AbortError"});
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
       const timeoutMs = Math.max(1000, Math.min(perEndpointTimeoutMs, remaining));
       const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const abortOuter=()=>controller?.abort();outerSignal?.addEventListener('abort',abortOuter,{once:true});
       const timeoutId = controller ? setTimeout(() => {
         try { controller.abort("overpass-timeout"); } catch (_) { try { controller.abort(); } catch (_) {} }
       }, timeoutMs) : null;
@@ -6504,13 +6569,14 @@
         const timedOut = controller && controller.signal && controller.signal.aborted;
         errors.push(`${endpoint}: ${timedOut ? `timeout after ${timeoutMs} ms` : (error && error.message ? error.message : String(error))}`);
       } finally {
+        outerSignal?.removeEventListener("abort",abortOuter);
         if (timeoutId) clearTimeout(timeoutId);
       }
     }
     throw new Error(`Overpass unavailable (${errors.join(" | ") || "total timeout"})`);
   }
 
-  async function loadOSMBuildings() {
+  async function loadOSMBuildings(options={}) {
     if (!mapRef || mapRef.getZoom() < config.buildingMinZoom) return [];
 
     const bounds = mapRef.getBounds();
@@ -6539,7 +6605,7 @@
     metaPerf.buildingFetches += 1;
     lastBuildingFetchError = null;
 
-    const promise = fetchOverpassJson(query)
+    const promise = fetchOverpassJson(query,options.signal)
       .then(({ json, endpoint }) => {
         const features = [];
 
@@ -6580,6 +6646,8 @@
               building: tags.building || "",
               amenity: tags.amenity || "",
               building_levels: tags["building:levels"] || "",
+              min_height: Number(tags.min_height)||0,
+              roof_height: Number(tags["roof:height"])||0,
               overpass_endpoint: endpoint,
               building_uid: `osm-live-${element.id}`
             }
@@ -6602,7 +6670,7 @@
         // Never pin a transient Overpass failure in the promise cache. A later
         // activation/pan must be able to retry the same viewport.
         overpassCache.delete(key);
-        console.warn("[Haidian Shade] OSM buildings:", error);
+        recordShadeError("osm-buildings",error);
         updateBuildingRuntimeStatus();
         return [];
       })
@@ -6654,7 +6722,7 @@
     return merged;
   }
 
-  async function getBuildings() {
+  async function getBuildings(options={}) {
     if (state.mode === "trees") return [];
 
     if (effectiveBuildingMode() === "none") return [];
@@ -6669,12 +6737,12 @@
     }
 
     if (effectiveBuildingMode() === "pipeline") {
-      const pipeline = await loadPipelineBuildings();
+      const pipeline = await loadPipelineBuildings(options);
       const status = lastBuildingPipelineStatus || {};
       const pipelineComplete = !!(status.coverageComplete && status.fetchComplete);
       if (pipelineComplete || config.buildingPipelineFallbackToOsm === false) return pipeline;
 
-      const fallback = await loadOSMBuildings();
+      const fallback = await loadOSMBuildings(options);
       const fallbackOk = Array.isArray(fallback) && fallback.length > 0 && !lastBuildingFetchError;
 
       // v8.6.3: when the viewport crosses the pilot AOI boundary, keep the
@@ -6718,7 +6786,7 @@
       return fallback;
     }
 
-    return loadOSMBuildings();
+    return loadOSMBuildings(options);
   }
 
   function lonLatToXYZ(lat, lon, z) {
@@ -7141,32 +7209,78 @@
   }
 
   // Data readiness is independent from visualization and never loads an SDK.
-  async function prepareRouteModel() {
+  let buildingFailureUntil=0,buildingFailureView='';
+  async function prepareRouteModel(options={}) {
     if(!mapRef)mapRef=resolveMap();
     if(!mapRef||state.mode==='trees'||effectiveBuildingMode()==='none')return getRouteShadeCacheContext();
     const bounds=mapRef.getBounds();
+    const padded=paddedBuildingBounds(bounds),cached=lastBuildingLoadedBounds;
+    const marginLat=100/111320,marginLng=100/(111320*Math.max(.2,Math.cos(mapRef.getCenter().lat*Math.PI/180)));
+    padded.south+=marginLat;padded.north-=marginLat;padded.west+=marginLng;padded.east-=marginLng;
+    if(cached&&routeBuildingModelReady()&&cached.south<=padded.south&&cached.west<=padded.west&&cached.north>=padded.north&&cached.east>=padded.east)return getRouteShadeCacheContext();
     const key=[bounds.getSouth(),bounds.getWest(),bounds.getNorth(),bounds.getEast(),state.mode,effectiveBuildingMode()].join('|');
-    if(!routeModelPreparation&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();
-    if(routeModelPreparation){try{await routeModelPreparation;}catch(_){};if(routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();}
+    if(!routeModelPreparation&&routeBuildingModelReady()&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();
+    if(routeModelPreparation){try{await routeModelPreparation;}catch(_){};if(routeBuildingModelReady()&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();}
+    if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+    if(buildingFailureUntil>Date.now())return getRouteShadeCacheContext();
     routeModelPreparationKey=key;
-    routeModelPreparation=(async()=>{try{await getBuildings();}finally{routeModelPreparedAt=Date.now();}})();
-    try{await routeModelPreparation;}catch(_){/* Missing coverage stays partial. */}finally{routeModelPreparation=null;}
+    routeModelPreparation=(async()=>{try{await getBuildings(options);if(lastBuildingFetchError||lastBuildingPipelineStatus?.fetchComplete===false){buildingFailureUntil=Date.now()+15000;buildingFailureView=key;}}finally{routeModelPreparedAt=Date.now();}})();
+    try{await routeModelPreparation;}catch(error){if(!options.signal?.aborted){buildingFailureUntil=Date.now()+15000;recordShadeError('building-view',error);}}finally{routeModelPreparation=null;}
     return getRouteShadeCacheContext();
   }
   function syncVisualProviderControls(){
     const own=state.visualProvider!=='shademap',toggle=document.getElementById('haidianShadeToggle');
     if(toggle){toggle.checked=state.enabled;toggle.disabled=state.visualProvider==='off';}
-    for(const id of ['haidianShadeCanopyOverlay','haidianShadeGroundCanopy']){const el=document.getElementById(id);if(el?.parentElement)el.parentElement.style.display=own?'none':'';}
-    const legend=document.querySelector?.('.haidian-shade-legend');if(legend&&own)legend.innerHTML='<span>深藍：模型陰影　黃色：資料未知　透明：日照</span>';
+    for(const id of ['haidianShadeCanopyOverlay','haidianShadeGroundCanopy']){const el=document.getElementById(id);if(el?.parentElement)el.parentElement.style.display='';}
+    const legend=document.querySelector?.('.haidian-shade-legend');if(legend&&own)legend.innerHTML='<span>深藍：投影陰影　淡藍：估計建築　綠色：樹冠範圍　黃：來源不足</span>';
+  }
+  let unifiedRetryTimer=null,unifiedRetryBudget=2;
+  function cancelUnifiedTiles(){
+    clearTimeout(unifiedRetryTimer);
+    groundCanopyShadeGeneration++;for(const c of visualTileControllers)c.abort();visualTileControllers.clear();
+    while(groundCanopyShadeRenderQueue.length)groundCanopyShadeRenderQueue.shift().resolve(null);
+    clearTimeout(unifiedViewTimer);
+    const pane=mapRef?.getPane?.('haidianGroundCanopyShadePane');if(pane)pane.style.visibility='hidden';
+  }
+  function unifiedDiagnostics(){
+    const tiles=Object.values(groundCanopyShadeLayer?._tiles||{}).map(t=>t.el?.__shadeStats).filter(Boolean);
+    return {decoder:{...shadeDataState.decoder},worker:{...shadeDataState.worker},tileJobs:canopyTileTasks.diagnostics(),cogJobs:canopyCogTasks.diagnostics(),buildingJobs:buildingTileTasks.diagnostics(),errors:shadeDataState.errors.slice(),errorCounts:{...shadeDataState.counts},canopyCacheTiles:canopyRasterCache.size,cogCacheEntries:metaCogCache.size,visualConsumers:visualTileControllers.size,groundActive:groundCanopyShadeActiveRenders,groundQueue:groundCanopyShadeRenderQueue.length,visibleTiles:tiles.length,partialTiles:tiles.filter(t=>t.partial).length,ground:tiles,terrain:'incomplete: distant terrain not included',minCanopyZoom:config.metaMinZoom};
+  }
+  function updateUnifiedShadeStatus(){
+    if(state.visualProvider!=='own'||!state.enabled)return;
+    const d=unifiedDiagnostics(),b=ownShadeLayer?.diagnostics(),low=mapRef.getZoom()<config.metaMinZoom;
+    shadeReady=(state.mode==='buildings'||(!low&&d.visibleTiles>0&&!d.partialTiles))&&(state.mode==='trees'||b?.partial===false);
+    const trees=state.mode==='buildings'?'樹冠未選用':low?'請放大後載入樹冠':`樹蔭 ${d.visibleTiles} 磚／${d.partialTiles} 磚來源不足`;
+    setStatus(`自有引擎｜${trees}；建築 ${b?.features||0}（估計 ${b?.estimated||0}／高度未知 ${b?.unknownHeight||0}）。遠距地形 incomplete。${d.decoder.status==='unavailable'?'解碼器未就緒，可重試資料。':''}`,low||d.partialTiles>0||b?.partial||d.decoder.status==='unavailable');
+  }
+  function scheduleUnifiedView(isRetry=false){
+    if(!isRetry)unifiedRetryBudget=2;
+    if(state.visualProvider!=='own'||!state.enabled)return;
+    clearTimeout(unifiedViewTimer);unifiedViewTimer=setTimeout(()=>{
+      if(!state.enabled||state.visualProvider!=='own')return;
+      syncCanopyOverlay();syncGroundCanopyShadeOverlay();
+      groundCanopyShadeLayer?.redraw();canopyOverlayLayer?.redraw();
+      const pane=mapRef.getPane?.('haidianGroundCanopyShadePane');if(pane)pane.style.visibility='';
+      updateUnifiedShadeStatus();
+      clearTimeout(unifiedRetryTimer);
+      if(unifiedRetryBudget>0)unifiedRetryTimer=setTimeout(()=>{
+        const d=unifiedDiagnostics();
+        if(d.partialTiles>0&&d.decoder.status==='ready'&&state.enabled){unifiedRetryBudget--;scheduleUnifiedView(true);}
+      },6500);
+    },180);
+  }
+  function retryUnifiedData(){
+    if(shadeDataState.decoder.status!=='ready')shadeDataState.decoder.attempts=0;
+    canopyNegativeCache.clear();shadeDataState.sourceFailures.clear();buildingFailureUntil=0;
+    ownShadeLayer?.request();scheduleUnifiedView();
   }
   function enableOwnShade(){
     if(!mapRef)mapRef=resolveMap();
     if(!mapRef||!window.HaidianOwnShade){setStatus('自有陰影模組或地圖尚未就緒。',true);return;}
     state.enabled=true;syncVisualProviderControls();syncPointQueryCursor();setNavigationCanvasState(false);
     if(mapRef.attributionControl&&!mapRef.__haidianOwnAttribution){mapRef.attributionControl.addAttribution('<a href="https://registry.opendata.aws/dataforgood-fb-forestsv2/" target="_blank" rel="noopener">CHMv2 © Meta / WRI</a> · CC BY 4.0');mapRef.__haidianOwnAttribution=true;}
-    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,analyze:analyzeShadeModelAt,prepare:prepareRouteModel,date:()=>state.date,mode:()=>state.mode,modelKey:()=>lastBuildingCoverageKey,maxCells:config.ownMaxCells,opacity:state.opacity,
-      onStatus:(r)=>{shadeReady=r.state==='complete';setStatus(r.state==='unknown'?'模型資料不足／未知':`自有陰影：${r.unknown||0}/${r.cells||0}格未知；網格${r.cellPx||0}px。遠距地形遮蔽未包含。`,r.state!=='complete');}});
-    ownShadeLayer.request();setStatus('正在載入自有模型；無資料處將標示未知。');
+    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{await prepareRouteModel({signal});return {features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
+    ownShadeLayer.request();scheduleUnifiedView();
   }
   async function setVisualProvider(provider){
     if(!['own','shademap','off'].includes(provider))throw new Error('Unknown visual provider');
@@ -7264,6 +7378,7 @@
   }
 
   function disableShade(updateStatus = true) {
+    cancelUnifiedTiles();
     if(ownShadeLayer){ownShadeLayer.dispose();ownShadeLayer=null;}
     clearPendingProgressiveUpgrade();
     clearPendingBuildingUpgrade();
@@ -7361,6 +7476,7 @@
     mapMoveHooked = true;
 
     const startNavigation = () => {
+      if(state.visualProvider==='own'){cancelUnifiedTiles();return;}
       if (state.visualProvider!=="shademap" || sdkFailure || !state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
 
@@ -7372,6 +7488,7 @@
     };
 
     const scheduleRebuild = () => {
+      if(state.visualProvider==='own'){scheduleUnifiedView();return;}
       if (state.visualProvider!=="shademap" || sdkFailure || !state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
 
@@ -7487,7 +7604,7 @@
     ));
     const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable);
     const token = JSON.stringify({
-      revision: 'dev35.2-route-shade-model-v2',
+      revision: 'dev37.6-unified-shade-model-v3',
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
       buildingDataVersion: String(config.buildingDataVersion || ''),
@@ -7574,6 +7691,7 @@
     const startedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
     routeModelPerf.calls += 1;
     try {
+      if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
       const latlng = { lat: Number(lat), lng: Number(lng) };
       const when = date instanceof Date ? new Date(date.getTime()) : new Date(date || Date.now());
       if (!Number.isFinite(latlng.lat) || !Number.isFinite(latlng.lng) || Number.isNaN(when.getTime())) {
@@ -7614,12 +7732,16 @@
       if (options.canopy !== false && state.mode !== "buildings") {
         const timeoutMs = Math.max(700, Number(options.canopyTimeoutMs) || 4200);
         const canopyStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+        const canopyController=new AbortController(),cancelCanopy=()=>canopyController.abort();
+        options.signal?.addEventListener('abort',cancelCanopy,{once:true});
+        const canopyTimer=setTimeout(cancelCanopy,timeoutMs);
         try {
-          tree = await withTimeout(findCanopyShadowEvidence(latlng, solar,{requireComplete:true}), timeoutMs, "路線樹冠陰影");
+          tree = await findCanopyShadowEvidence(latlng, solar,{requireComplete:true,signal:canopyController.signal});
         } catch (_) {
           tree = null;
           canopyQueryFailed = true;
         } finally {
+          clearTimeout(canopyTimer);options.signal?.removeEventListener('abort',cancelCanopy);
           routeModelPerf.canopyEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - canopyStarted);
         }
       }
@@ -7649,9 +7771,11 @@
         source = compactRouteTreeEvidence(tree);
       }
 
-      const shaded = sourceType !== "sun";
+      const hasShade = sourceType !== "sun";
+      const uncertainBuilding=building && (building.plausibleUnknownHeight||building.heightQuality==='default');
+      const confirmedShade=hasShade&&!!(tree||(building&&!uncertainBuilding));
       const lowSun = solar.altitudeDeg < Math.max(0, Number(config.queryShadeSourceMinAltitudeDeg) || 1.5);
-      const reliability = (!buildingReady && state.mode !== "trees" && effectiveBuildingMode() !== "none") || lowSun || canopyQueryFailed
+      const reliability = (uncertainBuilding&&!tree)||(!buildingCoverageSafe && state.mode !== "trees" && effectiveBuildingMode() !== "none") || lowSun || canopyQueryFailed
         ? "partial"
         : "model";
       const caveats = [];
@@ -7660,17 +7784,23 @@
       }
       if (lowSun) caveats.push("太陽接近地平線，遠距遮蔽物可能超出目前路線模型的可靠追蹤距離。");
       if (canopyQueryFailed) caveats.push("本次樹冠查詢逾時或失敗，可能低估樹蔭。");
-      caveats.push("v8.9.0-dev1 非視覺路線模型目前以 CHMv2 樹冠與已載入建築反向光線判讀；地形遠距遮蔽仍由畫面 ShadeMap 引擎較完整。");
+      if(uncertainBuilding)caveats.push("建築高度未知；投影僅為估計，不能確認遮蔭。");
+      caveats.push("自有 CHMv2／建築局部平坦模型；遠距地形遮蔽 incomplete。");
+      const unresolved=!confirmedShade && reliability==='partial';
+      const shaded=confirmedShade?true:unresolved?null:false;
 
       const result = {
         ok: true,
         lat: latlng.lat,
         lng: latlng.lng,
         date: when.toISOString(),
-        state: shaded ? "shade" : "sun",
+        state: unresolved ? "unknown" : shaded ? "shade" : "sun",
+        classification: confirmedShade ? "confirmed-shade" : unresolved ? "unknown" : "confirmed-sun",
+        confirmed: !unresolved,
+        scope:"selected-sources-flat-ground; distant-terrain-incomplete",
         shaded,
-        directSun: !shaded,
-        sourceType,
+        directSun: unresolved ? null : !shaded,
+        sourceType: unresolved ? "unknown" : sourceType,
         source,
         solar,
         reliability,
@@ -7725,7 +7855,7 @@
         directionBoundRejected:routeBuildingSpatialIndex.directionBoundRejected
       },
       canopyRasterCacheSize: canopyRasterCache.size,
-      canopyRasterPromiseCount: canopyRasterPromises.size,
+      canopyRasterPromiseCount: canopyTileTasks.diagnostics().pending,
       canopyNegativeCacheSize: canopyNegativeCache.size,
       mode: state.mode
     };
@@ -7758,11 +7888,14 @@
     return getRouteDiagnostics();
   }
 
+  window.addEventListener?.("online",()=>retryUnifiedData());
+
   window.HaidianShade = {
+    retryData:retryUnifiedData,
     enable: enableShade,
     prepareRouteModel,
     setVisualProvider,
-    getVisualDiagnostics:()=>({provider:state.visualProvider,sdkFailure,own:ownShadeLayer?.diagnostics()||null,terrain:"distant-terrain-not-included"}),
+    getVisualDiagnostics:()=>({provider:state.visualProvider,sdkFailure,own:ownShadeLayer?.diagnostics()||null,unified:unifiedDiagnostics(),terrain:"distant-terrain-not-included"}),
     disable: disableShade,
     rebuild: rebuildShade,
     analyzeShadeModelAt,

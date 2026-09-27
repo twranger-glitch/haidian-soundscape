@@ -1,4 +1,4 @@
-/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.5 Pedestrian Realm Graph Rescue */
+/* Haidian Soundscape — Route Exposure configuration v9.0.0-dev37.6 Pedestrian Realm Graph Rescue */
 window.HAIDIAN_ROUTE_EXPOSURE_CONFIG = {
   sampleSpacingM: 10,
   walkingSpeedKmh: 4.5,

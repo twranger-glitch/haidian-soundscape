@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.5 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.6 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.5";
+  const VERSION = "v9.0.0-dev37.6";
 
   const DEFAULTS = {
     enabled: true,
