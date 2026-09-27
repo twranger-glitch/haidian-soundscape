@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.4 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.5 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.4";
+  const VERSION = "v9.0.0-dev37.5";
 
   const DEFAULTS = {
     enabled: true,
@@ -846,7 +846,7 @@
       distanceM += edge.distanceM;
       for (const p of geometry) {
         const last = points[points.length - 1];
-        if (!last || haversineM(last, p) > 0.2) points.push({ lat: p.lat, lng: p.lng });
+        if (!last || haversineM(last, p) > 1e-6) points.push({ lat: p.lat, lng: p.lng });
       }
     }
     return { points, edgeIds, distanceM };
@@ -1004,7 +1004,7 @@
       for (let i = 1; i < (geometry || []).length; i += 1) {
         const a = geometry[i - 1], b = geometry[i];
         const len = haversineM(a, b);
-        if (!(len > 0.05)) continue;
+        if (!(len > 1e-6)) continue;
         const chunks = Math.max(1, Math.ceil(len / spacing));
         const chunkLen = len / chunks;
         for (let c = 0; c < chunks; c += 1) {
@@ -1347,14 +1347,25 @@
       if(Number.isFinite(rawMin)&&Number.isFinite(rawMax)&&rawMax-rawMin+1>maxBucketsPerEdge) truncatedEdges += 1;
       for (const bucket of allBuckets) {
         potentialTasks += 1;
-        const key = shadeCacheKey(edge, bucket);
-        if (shadeCache.has(key)) { skippedExisting += 1; continue; }
-        tasks.push({ edge, bucket, key });
+        for(const from of options.realmDenseShadeCache?[String(edge.a),String(edge.b)]:[String(edge.a)]){
+          if(options.realmDenseShadeCache){
+            const other=from===String(edge.a)?String(edge.b):String(edge.a),starts=fromStart?.dist||fromStart,ends=toEnd?.dist||toEnd;
+            const first=shadeBucketForMs(departureMs+(Number(starts.get(from))+edgeTime/2)*1000,bucketSec);
+            const last=shadeBucketForMs(departureMs+(detourLimitS+0.5-Number(ends.get(other))-edgeTime/2)*1000,bucketSec);
+            if(bucket<first||bucket>last)continue;
+          }
+          const key=options.realmDenseShadeCache?`realm-dense-v1|${edge.id}|${from}|${bucket}`:shadeCacheKey(edge,bucket);
+          if(shadeCache.has(key)){skippedExisting++;continue;}tasks.push({edge,bucket,key,from});
+        }
       }
     }
     // Favor tasks closest to departure first if an unusually large graph exceeds
     // the safety budget. Any omitted key is still evaluated lazily by search.
-    tasks.sort((a,b)=>Math.abs(a.bucket - shadeBucketForMs(departureMs,bucketSec))-Math.abs(b.bucket-shadeBucketForMs(departureMs,bucketSec)) || String(a.edge.id).localeCompare(String(b.edge.id)));
+    tasks.sort(options.realmDenseShadeCache ? ((a,b)=>{
+      const dist=fromStart?.dist||fromStart,end=toEnd?.dist||toEnd;
+      const score=t=>Number(dist.get(t.from))+t.edge.distanceM/speedMps+Number(end.get(t.from===String(t.edge.a)?String(t.edge.b):String(t.edge.a)));
+      return score(a)-score(b)||String(a.edge.id).localeCompare(String(b.edge.id))||a.from.localeCompare(b.from)||a.bucket-b.bucket;
+    }) : ((a,b)=>Math.abs(a.bucket - shadeBucketForMs(departureMs,bucketSec))-Math.abs(b.bucket-shadeBucketForMs(departureMs,bucketSec)) || String(a.edge.id).localeCompare(String(b.edge.id))));
     const scheduled = tasks.slice(0, maxEvaluations);
     let evaluated = 0, errors = 0, maxActive = 0, active = 0;
     options.onProgress?.({ stage:'temporal-shade-table', message:`dev33：預先批次建立 temporal shade table（${scheduled.length} edge/time cells，concurrency ${concurrency}）…` });
@@ -1363,7 +1374,7 @@
       if (shadeCache.has(task.key)) { skippedExisting += 1; return; }
       const centerMs = (task.bucket * bucketSec + bucketSec / 2) * 1000;
       active += 1; maxActive = Math.max(maxActive, active);
-      const promise = Promise.resolve(provider(task.edge, task.edge.a, new Date(centerMs), {
+      const promise = Promise.resolve(provider(task.edge, task.from, new Date(centerMs), {
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
@@ -1375,7 +1386,7 @@
       finally { active -= 1; }
     });
     return {
-      enabled:true, bucketSec, concurrency, potentialTasks, tasks:scheduled.length,
+      enabled:true, bucketSec, concurrency, potentialTasks:tasks.length+skippedExisting, tasks:scheduled.length,
       evaluated, cacheHits:skippedExisting, errors, truncatedEdges,
       omittedBySafetyCap:Math.max(0,tasks.length-scheduled.length), maxActive,
       cacheSize:shadeCache.size, durationMs:nowMs()-started
@@ -1407,7 +1418,55 @@
     // node/time bucket can incorrectly erase a slightly sunnier-but-earlier
     // arrival that later reaches a much shadier corridor.  Keep a tiny Pareto
     // frontier of (walk time, direct-sun time) labels instead.
-    const heap = new MinHeap((a, b) => (a.sunS - b.sunS) || (a.walkS - b.walkS));
+    // A lower envelope over every feasible cached time bucket is admissible.
+    // Missing cells have zero cost. This never assumes time-invariant shade.
+    const lower = new Map([[String(endId),0]]), incoming = new Map();
+    const fromStart = options.fastestFromStart?.dist || options.fastestFromStart || dijkstraTimes(graph,String(startId),speedMps).dist;
+    let boundEdges=0, historyBoundRejected=0, boundCacheSize=-1, boundRefreshes=0;
+    const resourceBounds=[];
+    async function refreshBounds(){
+    boundEdges=0;lower.clear();lower.set(String(endId),0);incoming.clear();resourceBounds.length=0;
+    let checked=0;
+    for(const [from,refs] of graph.adjacency){
+      if(++checked%100===0){if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');await cooperativeYield();}
+      for(const ref of refs){
+        const edge=graph.edges.get(ref.edgeId);if(!edge)continue;
+        const t=edge.distanceM/speedMps,earliest=Number(fromStart.get(String(from)))+t/2;
+        const latest=detourLimitS+0.5-Number(toEnd.get(String(ref.to)))-t/2;
+        let cost=0;
+        if(options.admissibleShadeBounds!==false && Number.isFinite(earliest)&&Number.isFinite(latest)&&latest>=earliest){
+          const first=shadeBucketForMs(departure.getTime()+earliest*1000,shadeTimeBucketSec),last=shadeBucketForMs(departure.getTime()+latest*1000,shadeTimeBucketSec);
+          let min=1,complete=last-first<1000;
+          for(let bucket=first;complete&&bucket<=last;bucket++){
+            const key=options.realmDenseShadeCache?`realm-dense-v1|${edge.id}|${from}|${bucket}`:shadeCacheKey(edge,bucket);
+            if(!shadeCache.has(key)){complete=false;break;}
+            const value=await shadeCache.get(key);
+            if(!value||value.cacheSafe===false||!Number.isFinite(value.directSunFraction)){complete=false;break;}
+            min=Math.min(min,clamp(value.directSunFraction,0,1,0));
+          }
+          if(complete){cost=t*min;boundEdges++;}
+        }
+        const id=String(ref.to);if(!incoming.has(id))incoming.set(id,[]);incoming.get(id).push({node:String(from),cost,walkS:t});
+      }
+    }
+    const boundsHeap=new MinHeap((a,b)=>a.t-b.t);boundsHeap.push({node:String(endId),t:0});
+    while(boundsHeap.size){const c=boundsHeap.pop();if(c.t!==lower.get(c.node))continue;for(const ref of incoming.get(c.node)||[]){const t=c.t+ref.cost;if(t<(lower.get(ref.node)??Infinity)){lower.set(ref.node,t);boundsHeap.push({node:ref.node,t});}}}
+    // Lagrangian relaxation: sun >= shortest(sun + lambda*walk) -
+    // lambda*remainingBudget for EVERY feasible continuation, even with history.
+    // Taking max of several lower bounds remains safe; no label is discarded
+    // based on a top-N, beam, or assumed stationary sun model.
+    if(options.admissibleShadeBounds!==false)for(const lambda of [0.25,0.5,1,2]){
+      const dist=new Map([[String(endId),0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:String(endId),t:0});
+      while(q.size){const c=q.pop();if(c.t!==dist.get(c.node))continue;for(const ref of incoming.get(c.node)||[]){const t=c.t+ref.cost+lambda*ref.walkS;if(t<(dist.get(ref.node)??Infinity)){dist.set(ref.node,t);q.push({node:ref.node,t});}}}
+      resourceBounds.push({lambda,dist});
+    }
+    boundCacheSize=shadeCache.size;boundRefreshes++;
+    if(metrics)Object.assign(metrics,{admissibleBoundEdges:boundEdges,admissibleStartSunSeconds:lower.get(String(startId))||0,boundRefreshes});
+    }
+    await refreshBounds();
+    const estimate=l=>{let remain=lower.get(l.node)||0;for(const b of resourceBounds)remain=Math.max(remain,(b.dist.get(l.node)||0)-b.lambda*(detourLimitS+0.5-l.walkS));return l.sunS+remain;};
+    const compare=(a,b)=>(estimate(a)-estimate(b))||(a.walkS-b.walkS);
+    let heap = new MinHeap(compare);
     const startLabel = { node: String(startId), walkS: 0, sunS: 0, parent: null, viaEdgeId: null, active: true };
     const labelsByState = new Map();
 
@@ -1446,7 +1505,7 @@
       // Equal arrival time preserves downstream time-dependent edge costs.
       // A subset of visited nodes preserves every simple-path continuation
       // still available to b.  The small epsilon is only numeric noise.
-      return Math.abs(a.walkS - b.walkS) <= 1e-9 &&
+      return (!graph.edges.get(a.viaEdgeId)?.sourceJunctionLink || !!graph.edges.get(b.viaEdgeId)?.sourceJunctionLink) && Math.abs(a.walkS - b.walkS) <= 1e-9 &&
         a.sunS <= b.sunS + 1e-9 &&
         visitedSubset(a, b);
     }
@@ -1480,8 +1539,22 @@
     heap.push(startLabel);
     let bestGoal = null;
 
-    async function sunForEdge(edge, fromId, walkS) {
+    const completedEnvelopes=new Map();
+    async function sunForEdge(edge, fromId, walkS, envelopeOnly=false) {
       const edgeTime = edge.distanceM / speedMps;
+      if(options.completeEdgeTimeEnvelope&&options.realmDenseShadeCache&&!envelopeOnly){
+        const group=edge.id+'|'+fromId;
+        if(!completedEnvelopes.has(group)){
+          const other=String(fromId)===String(edge.a)?String(edge.b):String(edge.a);
+          const first=shadeBucketForMs(departure.getTime()+(Number(fromStart.get(String(fromId)))+edgeTime/2)*1000,shadeTimeBucketSec);
+          const last=shadeBucketForMs(departure.getTime()+(detourLimitS+0.5-Number(toEnd.get(other))-edgeTime/2)*1000,shadeTimeBucketSec);
+          const task=(async()=>{for(let b=first;b<=last&&b-first<1000;b++){
+            if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
+            await sunForEdge(edge,fromId,(b*shadeTimeBucketSec+shadeTimeBucketSec/2)-departure.getTime()/1000-edgeTime/2,true);
+          }})();completedEnvelopes.set(group,task);
+        }
+        await completedEnvelopes.get(group);
+      }
       const atMs = departure.getTime() + (walkS + edgeTime / 2) * 1000;
       const bucket = shadeBucketForMs(atMs, shadeTimeBucketSec);
       const key = options.realmDenseShadeCache ? `realm-dense-v1|${edge.id}|${fromId}|${bucket}` : shadeCacheKey(edge, bucket);
@@ -1520,6 +1593,9 @@
 
     while (heap.size) {
       if (options.shouldCancel?.()) throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      if(options.admissibleShadeBounds!==false && shadeCache.size-boundCacheSize>=64 && expanded%64===0){
+        await refreshBounds();const queued=heap.data;heap=new MinHeap(compare);for(const label of queued)if(label.active!==false)heap.push(label);
+      }
       const cur = heap.pop();
       if (!cur || cur.active === false) continue;
       expanded += 1;updateMetrics();
@@ -1529,10 +1605,22 @@
         options.onProgress?.({ stage: "search", expanded, shadeEvals, message: `正在做細緻 graph 搜尋：${expanded} 個狀態／${shadeEvals} 條 edge 日照` });
       }
 
-      if (bestGoal && (cur.sunS > bestGoal.sunS + 0.01 || (Math.abs(cur.sunS - bestGoal.sunS) < 0.01 && cur.walkS >= bestGoal.walkS))) break;
+      if (bestGoal && estimate(cur) > bestGoal.sunS + 1e-9) break;
       if (cur.node === String(endId)) {
-        bestGoal = cur;
+        if(!bestGoal || cur.sunS<bestGoal.sunS-1e-9 || (Math.abs(cur.sunS-bestGoal.sunS)<=1e-9&&cur.walkS<bestGoal.walkS))bestGoal = cur;
         continue;
+      }
+      // Removing the prefix's visited vertices is a relaxation of all legal
+      // simple continuations. Its shortest distance can only be a lower bound.
+      // This is history-safe even when arrival-dependent shade changes.
+      if(options.historyDistanceBound!==false && cur.parent && graph.edges.size<=4000){
+        const blocked=visitedSetForLabel(cur),dist=new Map([[cur.node,0]]),q=new MinHeap((a,b)=>a.t-b.t);
+        q.push({node:cur.node,t:0});let remain=Infinity;
+        while(q.size){const c=q.pop();if(c.t!==dist.get(c.node))continue;if(c.node===String(endId)){remain=c.t;break;}
+          if(cur.walkS+c.t>detourLimitS+0.5)break;
+          for(const ref of graph.adjacency.get(c.node)||[]){const next=String(ref.to);if(blocked.has(next))continue;const e=graph.edges.get(ref.edgeId);if(!e)continue;const t=c.t+e.distanceM/speedMps;if(t<(dist.get(next)??Infinity)){dist.set(next,t);q.push({node:next,t});}}
+        }
+        if(!Number.isFinite(remain)||cur.walkS+remain>detourLimitS+0.5){historyBoundRejected++;if(metrics)metrics.historyBoundRejected=historyBoundRejected;continue;}
       }
 
       const outgoing = graph.adjacency.get(cur.node) || [];
@@ -1540,6 +1628,9 @@
       for (const ref of outgoing) {
         const next = String(ref.to);
         if (pathHasNode(cur, next)) continue; // simple path: no shaded dead-end score games.
+        const currentGroup=graph.nodes.get(cur.node)?.sourceJunctionGroup,nextGroup=graph.nodes.get(next)?.sourceJunctionGroup;
+        if(nextGroup&&nextGroup!==currentGroup){let label=cur,seen=false;while(label){if(graph.nodes.get(label.node)?.sourceJunctionGroup===nextGroup){seen=true;break;}label=label.parent;}if(seen)continue;}
+        if(graph.edges.get(cur.viaEdgeId)?.sourceJunctionLink&&graph.edges.get(ref.edgeId)?.sourceJunctionLink)continue;
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
         const edgeTime = edge.distanceM / speedMps;
@@ -1573,8 +1664,8 @@
       }
     }
 
-    if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved };
-    return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved };
+    if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
+    return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
   }
 
   function routeSignature(points) {
@@ -2081,6 +2172,7 @@
   function nearestGraphEdge(graph, point) {
     let best = null;
     for (const edge of graph?.edges?.values?.() || []) {
+      if(edge.sourceJunctionLink)continue;
       const hit = nearestPointOnGeometry(point, edge.geometry);
       if (hit && (!best || hit.distanceM < best.distanceM)) best = Object.assign({ edge }, hit);
     }
@@ -2144,6 +2236,7 @@
     const bestA = new Map(), bestB = new Map();
     let nearestA = null, nearestB = null;
     for (const edge of graph.edges.values()) {
+      if(edge.sourceJunctionLink)continue;
       const ca = index.byNode.get(String(edge.a ?? edge.from ?? ''));
       if (!ca) continue;
       const ha = nearestPointOnGeometry(A, edge.geometry || []);
@@ -6880,6 +6973,33 @@
     return {nodes,edges,adjacency,nationwideTileGraph:graph.nationwideTileGraph===true,preRefinedFineGraph:true,hgr2:graph.hgr2===true,productionGraphMutated:false,refinement:{preRefined:true,prunedBeforeSearch:true}};
   }
 
+  // HGR2 source topology joins edge endpoints that are not always coincident.
+  // Legacy concatenation already drew straight lines across these gaps but
+  // omitted their distance and shade. Make EXACTLY those inherited transitions
+  // explicit, without adding connectivity between different source node IDs.
+  function reconcileHgr2Geometry(source) {
+    const graph=cloneFineGraphForExperimentalUse(source),ports=new Map();
+    graph.preRefinedFineGraph=true;graph.hgr2=true;
+    graph.nodes=new Map();graph.edges=new Map();graph.adjacency=new Map();
+    const report={sourceEdges:source.edges.size,portNodes:0,junctionLinks:0,junctionDistanceM:0,maxJunctionGapM:0,distanceCorrectionM:0,connectivity:'same-source-node-only; inherited unsurveyed straight transitions'};
+    const port=(group,p)=>{const key=String(group)+'@'+Number(p.lat).toFixed(9)+','+Number(p.lng).toFixed(9);
+      if(!graph.nodes.has(key)){graph.nodes.set(key,{...source.nodes.get(String(group)),id:key,lat:p.lat,lng:p.lng,sourceJunctionGroup:String(group)});graph.adjacency.set(key,[]);if(!ports.has(String(group)))ports.set(String(group),[]);ports.get(String(group)).push(key);}
+      return key;};
+    const add=e=>{graph.edges.set(e.id,e);graph.adjacency.get(e.a).push({edgeId:e.id,to:e.b});graph.adjacency.get(e.b).push({edgeId:e.id,to:e.a});};
+    for(const e of source.edges.values()){
+      if(!e.geometry||e.geometry.length<2)continue;
+      const geometry=e.geometry.map(p=>({lat:p.lat,lng:p.lng})),a=port(e.a,geometry[0]),b=port(e.b,geometry[geometry.length-1]),distanceM=routeDistanceM(geometry);
+      report.distanceCorrectionM+=distanceM-e.distanceM;add({...e,a,b,geometry,distanceM});
+    }
+    for(const [group,ids] of ports)for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
+      const a=ids[i],b=ids[j],geometry=[graph.nodes.get(a),graph.nodes.get(b)].map(p=>({lat:p.lat,lng:p.lng})),distanceM=routeDistanceM(geometry);
+      if(!(distanceM>0))continue;
+      add({id:'source-junction:'+group+':'+i+':'+j,a,b,geometry,distanceM,sourceJunctionLink:true,sourceJunctionGroup:group,wayIds:[],highways:['footway'],tagsSummary:{},pedestrianAllowed:true});
+      report.junctionLinks++;report.junctionDistanceM+=distanceM;report.maxJunctionGapM=Math.max(report.maxJunctionGapM,distanceM);
+    }
+    report.portNodes=graph.nodes.size;graph.geometryReconciliation=report;return graph;
+  }
+
   async function findRoutesOnHgr2FineGraph(a,b,externalGraph,options={}) {
     const totalStarted=nowMs(), A=asLatLng(a), B=asLatLng(b);
     if(!A||!B) throw new Error('A/B 座標不完整。');
@@ -6890,7 +7010,8 @@
     // analysis-local cache, even when callers do not explicitly provide one.
     const sharedShadeCache = options.sharedShadeCache && typeof options.sharedShadeCache.has === 'function' ? options.sharedShadeCache : new Map();
     const perf={hgr2Direct:true}; let t=nowMs();
-    const sourceFull=externalGraph; perf.graphReuseMs=nowMs()-t;
+    const sourceFull=options.edgeSunProvider?cloneFineGraphForExperimentalUse(externalGraph):reconcileHgr2Geometry(externalGraph); perf.graphReuseMs=nowMs()-t;
+    if(!options.edgeSunProvider)options={...options,realmDenseShadeCache:true,shadeTimeBucketSec:30,edgeSunProvider:(edge,from,at,context)=>realmDenseEdgeSunProvider(edge,from,at,context,speedMps,5),candidateCorrectnessExactReplayToleranceSec:3};
     if(!sourceFull?.edges?.size) return {available:false,reason:'empty-hgr2-graph',candidates:[]};
     const snapMaxM=Number(options.snapMaxM||config.snapMaxM||120);
     t=nowMs();
@@ -6918,7 +7039,7 @@
       lastGraphDebug={graph:full,raw:null,contracted:null,snapA,snapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
       const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:Object.assign({edgeIds:fastestPath.edgeIds,snapA,snapB,backend:'nationwide-hgr2',topologyOnly:true},accessStats)});
       const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
-      lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:Number(externalGraph?.edges?.size||0),prunedEdgeRatio:1,fineNodes:full.nodes.size,fineEdges:full.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType,highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null},snapB:{distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType,highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:null,minSunDistanceM:null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:0,shadeEdgeEvaluations:0,shadeCacheHits:0,shadeCacheSize:0,temporalShadeTable:null,exactReplay:null,pruningCertificate:null,candidateLifecycle,candidateCount:1,searchMode:'topology-only-fastest',topologyOnly:true,labelPruningMode:'not-run',responsiveScheduling:true,hgr2PreRefined:true,accessStats,graphStats:graphStats(full),performance:perf,productionGraphMutated:false};
+      lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',geometryReconciliation:sourceFull.geometryReconciliation||null,searchComplete:false,overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:Number(externalGraph?.edges?.size||0),prunedEdgeRatio:1,fineNodes:full.nodes.size,fineEdges:full.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType,highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null},snapB:{distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType,highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:null,minSunDistanceM:null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:0,shadeEdgeEvaluations:0,shadeCacheHits:0,shadeCacheSize:0,temporalShadeTable:null,exactReplay:null,pruningCertificate:null,candidateLifecycle,candidateCount:1,searchMode:'topology-only-fastest',topologyOnly:true,labelPruningMode:'not-run',responsiveScheduling:true,hgr2PreRefined:true,accessStats,graphStats:graphStats(full),performance:perf,productionGraphMutated:false};
       return {available:true,candidates:[fastestCandidate],diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false,topologyOnly:true};
     }
     t=nowMs(); const keptEdgeIds=detourEligibleEdgeIds(full,fromA,toB,speedMps,detourLimitS,options); perf.pruneMs=nowMs()-t;
@@ -6930,11 +7051,13 @@
     lastGraphDebug={graph,raw:null,contracted:null,snapA:prodSnapA,snapB:prodSnapB,bbox:options.bbox||null,endpoint:'nationwide-hgr2',builtAt:Date.now(),nationwide:true,experimentalBaseGraph:full,experimentalSnapA:snapA,experimentalSnapB:snapB};
     options.onProgress?.({stage:'shade-search',message:`dev33：HGR2 micrograph 已裁到 ${keptEdgeIds.size}/${full.edges.size} fine edges；先建立 temporal shade table…`});
     t=nowMs();
-    const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
+    let searchFailure=null;
+    const searchMetrics={};
+    const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {enabled:true,incomplete:true,reason:searchFailure};});
     perf.temporalShadeTableMs=nowMs()-t; perf.temporalShade=temporalShade;
     options.onProgress?.({stage:'shade-search',message:`dev33：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
     t=nowMs();
-    const minSun=await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,departure,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel});
+    const minSun=searchFailure?{path:null,reason:searchFailure,expanded:0,shadeEvals:0}:await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,fastestFromStart:fromA,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {path:null,reason:searchFailure,expanded:searchMetrics.expandedStates||0,shadeEvals:searchMetrics.shadeEdgeEvaluations||0};});
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
     lastRouteEdges.fastest=new Set(fastestPath.edgeIds||[]); lastRouteEdges.minSun=new Set(minSun.path?.edgeIds||[]);
     const candidateLifecycle=[];
@@ -6951,6 +7074,14 @@
     } else {
       candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
     }
+    for(const candidate of candidates){
+      const joins=(candidate.graphMeta.edgeIds||[]).map(id=>graph.edges.get(id)).filter(e=>e?.sourceJunctionLink);
+      candidate.graphMeta.sourceTopologyJoinDistanceM=joins.reduce((n,e)=>n+e.distanceM,0);
+      candidate.graphMeta.sourceTopologyJoinCount=joins.length;
+      candidate.graphMeta.requiresJunctionGeometryConfirmation=joins.some(e=>e.distanceM>2);
+      candidate.graphMeta.shadeSearchComplete=!searchFailure;
+      if(searchFailure){candidate.searchIncomplete=true;candidate.fallbackReason=searchFailure;candidate.label='最快備援（遮蔭搜尋未完成）';}
+    }
     const pruningCertificate=pruningCorrectnessCertificate(full,keptEdgeIds,fromA,toB,speedMps,detourLimitS,options);
     let exactReplay=null;
     if(options.candidateCorrectnessExactReplayEnabled!==false && config.candidateCorrectnessExactReplayEnabled!==false && minSun.path?.edgeIds?.length){
@@ -6959,7 +7090,7 @@
       exactReplay=await exactReplayPathShade(graph,minSun.path,prodSnapA.id,Object.assign({},options,{speedMps,departure}));
       perf.exactReplayMs=nowMs()-replayStarted;
     }
-    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,exactReplay,pruningCertificate,candidateLifecycle,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
+    lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',geometryReconciliation:sourceFull.geometryReconciliation||null,searchComplete:!searchFailure,searchFailure,searchMetrics,overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,exactReplay,pruningCertificate,candidateLifecycle,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
     return {available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false};
   }
 
@@ -7474,6 +7605,7 @@
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
       realmDenseEdgeSunProvider,
+      reconcileHgr2Geometry,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,
       primaryHighway,

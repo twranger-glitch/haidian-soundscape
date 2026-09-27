@@ -6,7 +6,8 @@
  *   trees     = live Meta CHMv2 canopy surface, no buildings
  *   buildings = bare-earth DEM + buildings
  *
- * ShadeMap SDK handles shadow computation.
+ * dev37.5: owned viewport Canvas uses the route point classifier by default.
+ * The licensed SDK is an optional, explicit visual provider.
  * Buildings are supplied through getFeatures().
  */
 (function () {
@@ -14,6 +15,8 @@
 
   const DEFAULTS = {
     apiKey: "",
+    visualShadeProvider: "own", // SDK is explicit opt-in only.
+    ownMaxCells: 1600,
     // live-cog = stream the real Meta CHMv2 COG and build temporary Terrarium tiles in-browser.
     // xyz/static = use pre-generated Terrarium surface XYZ tiles (local or remote URL).
     metaMode: "live-cog",
@@ -304,6 +307,7 @@
 
   const state = {
     enabled: false,
+    visualProvider: ["own","shademap","off"].includes(config.visualShadeProvider) ? config.visualShadeProvider : "own",
     mode: ["full", "trees", "buildings"].includes(config.defaultResearchMode)
       ? config.defaultResearchMode
       : "full",
@@ -316,6 +320,8 @@
   };
 
   let mapRef = null;
+  let ownShadeLayer = null, sdkFailure = null;
+  let routeModelPreparation = null, routeModelPreparationKey = null, routeModelPreparedAt = 0;
   let shadePreviousMaxZoom = null;
   let shadeZoomConstraintApplied = false;
   let shadeLayer = null;
@@ -483,9 +489,12 @@
   const metaSurfacePromises = new Map();
   const metaSurfaceMeta = new Map();
   const demBitmapCache = new Map();
+  const demNegativeCache = new Map(), demUrlCache = new Map();
+  let demActive=0;const demWaiters=[];
   const officialDtmPointCache = new Map();
   const canopyRasterCache = new Map();
   const canopyRasterPromises = new Map();
+  const canopyNegativeCache = new Map();
 
   function resolveMap() {
     if (typeof config.getMap === "function") {
@@ -1349,6 +1358,7 @@
   }
 
   function applyShadeDate(date, immediate) {
+    if(state.visualProvider!=="shademap"){if(state.enabled)ownShadeLayer?.request();return;}
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
     shadePendingDate = new Date(date.getTime());
     const requestSerial = ++shadeDateRequestSerial;
@@ -1397,7 +1407,7 @@
     section.innerHTML = `
       <div class="haidian-shade-title">
         ☀️ 日照與樹蔭模擬
-        <span class="haidian-shade-badge">ShadeMap × Meta CHMv2</span>
+        <span class="haidian-shade-badge">自有模型 × Meta CHMv2</span>
         <span class="haidian-shade-badge">全球動態載入</span>
       </div>
 
@@ -1409,6 +1419,7 @@
         </label>
 
         <div class="haidian-shade-row" style="display:block">
+          <label>視覺引擎 <select id="haidianShadeProvider" class="haidian-shade-select"><option value="own">自有陰影（免 SDK／Key）</option><option value="shademap">已授權 ShadeMap SDK（選用）</option><option value="off">關閉圖層（保留路線分析）</option></select></label>
           <div style="margin-bottom:5px">研究模式</div>
           <select id="haidianShadeMode" class="haidian-shade-select">
             <option value="full">完整：樹木＋建築</option>
@@ -1455,7 +1466,7 @@
 
         <div class="haidian-shade-legend">
           <span><i class="haidian-shade-swatch" style="background:rgba(16,185,129,.55)"></i>樹冠範圍</span>
-          <span><i class="haidian-shade-swatch" style="background:${config.defaultColor};opacity:${Math.max(.35, state.opacity)}"></i>ShadeMap 陰影</span>
+          <span><i class="haidian-shade-swatch" style="background:${config.defaultColor};opacity:${Math.max(.35, state.opacity)}"></i>模型陰影／黃色為未知</span>
           <span><i class="haidian-shade-swatch" style="background:${config.groundCanopyShadeColor || config.defaultColor};opacity:${Math.max(.25, Number(config.groundCanopyShadeOpacity) || .42)}"></i>地面樹蔭補償</span>
         </div>
 
@@ -1464,9 +1475,9 @@
         </div>
 
         <div class="haidian-shade-source">
-          <b>陰影：</b>ShadeMap Leaflet SDK<br>
+          <b>陰影：</b>自有 Canvas 共用路線光線模型；SDK 僅選用<br>
           <b>樹冠：</b>${terrainSourceLabel()}<br>
-          <b>陰影地形：</b>${escapeHtml(dynamicShadowTerrainLabel(mapRef && mapRef.getCenter ? mapRef.getCenter() : null))}<br>
+          <b>地形限制：</b>自有圖層未計遠距地形遮蔽；局部平地光線模型<br>
           <b>臺灣點位海拔：</b>${escapeHtml(officialTerrainConfigured() ? (config.taiwanTerrainLabel || "內政部官方 DTM Terrarium XYZ") : (config.taiwanOfficialDtmLabel || "內政部 DTM 20 m"))}${officialTerrainConfigured() ? "" : "（需安全代理）"}<br>
           <b>建築：</b>${buildingSourceLabel()}<br>
           <b>建築載入：</b><span id="haidianShadeBuildingRuntime">${escapeHtml(buildingRuntimeStatusText())}</span>
@@ -1475,7 +1486,7 @@
         <label class="haidian-shade-row" style="cursor:pointer">
           <input id="haidianShadeBuildingDebug" type="checkbox"
             style="width:15px;height:15px;margin:0;accent-color:#f97316">
-          <span>顯示實際送入 ShadeMap 的建築輪廓（除錯）</span>
+          <span>顯示模型使用的建築輪廓（除錯）</span>
         </label>
 
         <div class="haidian-shade-actions">
@@ -1489,6 +1500,7 @@
         </div>
 
         <div class="haidian-shade-note">
+          自有圖層以網格中心判讀樹冠／建築遮蔭，藍色為模型陰影、黃色為資料不足，非精確邊界。尚不含遠距山岳地形遮蔽；路線依到達時間計分，圖層顯示滑桿瞬間。
           Meta CHMv2 為 world-scale 樹冠高度模型；移動到其他城市後會依目前視野自動載入當地資料。
           CHMv2 原生樹冠解析度以 z17 為基準；v8.4 可繼續放大檢視，但 z18–20 僅為原生資料 overzoom，不代表新增空間精度。
           「地面樹蔭補償」依 CHMv2 樹高與目前太陽方向，先建立連續的樹冠下地面核心，再補上背陽投影；v8.4.2 只做保守的一像素裂縫修補與低透明邊緣平滑，z18–20 顯示採高品質 overzoom，降低方塊感但不宣稱新增資料精度，仍屬模型估計。
@@ -1513,10 +1525,12 @@
     document.getElementById("haidianShadeQueryToggle").checked = state.queryOnClick;
     document.getElementById("haidianShadeBuildingDebug").checked = state.buildingDebugOverlay;
     updateTimeLabel();
+    syncVisualProviderControls();
     updateBuildingRuntimeStatus();
     syncBuildingAttribution();
 
-    if (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY") {
+    const providerEl=document.getElementById("haidianShadeProvider");providerEl.value=state.visualProvider;providerEl.addEventListener("change",()=>setVisualProvider(providerEl.value));
+    if (state.visualProvider==="shademap" && (!config.apiKey || config.apiKey === "YOUR_SHADEMAP_API_KEY")) {
       setStatus("尚未設定 ShadeMap API key；介面已整合，但陰影引擎尚不能啟動。", true);
     }
 
@@ -1555,6 +1569,7 @@
       .getElementById("haidianShadeOpacity")
       .addEventListener("input", (event) => {
         state.opacity = Number(event.target.value);
+        ownShadeLayer?.setOpacity(state.opacity);
         if (shadeLayer && typeof shadeLayer.setOpacity === "function") {
           shadeLayer.setOpacity(state.opacity);
         }
@@ -1658,6 +1673,8 @@
   }
 
   async function ensureEngine() {
+    if(state.visualProvider!=="shademap")throw new Error("SDK is disabled in own/off mode");
+    if(sdkFailure)throw new Error("Licensed SDK unavailable; reload after authorization is resolved");
     if (window.L && typeof L.shadeMap === "function") return;
     if (enginePromise) return enginePromise;
 
@@ -1915,6 +1932,8 @@
       return canopyRasterPromises.get(key);
     }
 
+    if((canopyNegativeCache.get(key)||0)>Date.now())return null;
+    if(canopyRasterPromises.size>=32)return null; // Unknown, never unbounded pending reads.
     metaPerf.canopyReads += 1;
     const promise = (async () => {
       const scaleFromZ10 = 1 << (z - 10);
@@ -1953,7 +1972,7 @@
           width: 256,
           height: 256,
           resampleMethod: "nearest",
-          fillValue: 0
+          fillValue: 255 // Out-of-window/NoData remains unknown.
         });
         const raster = bands[0];
         canopyRasterCache.set(key, raster);
@@ -1966,7 +1985,11 @@
         console.warn("[Haidian Shade] Meta COG window failed:", quadkey, error);
         return null;
       }
-    })().finally(() => canopyRasterPromises.delete(key));
+    })().then(raster=>{
+      if(!raster){canopyNegativeCache.set(key,Date.now()+30000);while(canopyNegativeCache.size>256)canopyNegativeCache.delete(canopyNegativeCache.keys().next().value);}
+      else canopyNegativeCache.delete(key);
+      return raster;
+    }).finally(() => canopyRasterPromises.delete(key));
 
     canopyRasterPromises.set(key, promise);
     return promise;
@@ -2022,25 +2045,25 @@
   }
 
   async function getDemBitmapForSpec(spec, x, y, z) {
-    const key = `${spec.id}:${tileKey(x, y, z)}`;
-    let promise = demBitmapCache.get(key);
-    if (!promise) {
-      promise = (async () => {
-        const url = fillTemplate(spec.template, x, y, z);
-        const response = await fetch(url, { mode: "cors", cache: "force-cache" });
-        if (!response.ok) throw new Error(`${spec.label} HTTP ${response.status}`);
-        return createImageBitmap(await response.blob());
-      })();
-      // Do not poison the bitmap cache with a rejected Promise. A transient global
-      // terrain failure must be retryable on the next point/tile request.
-      promise.catch(() => {
-        if (demBitmapCache.get(key) === promise) demBitmapCache.delete(key);
-      });
-      demBitmapCache.set(key, promise);
-      if (demBitmapCache.size > 120) {
-        demBitmapCache.delete(demBitmapCache.keys().next().value);
-      }
-    }
+    // Callers must crop after parent selection. Never silently change only z.
+    if(z>spec.maxZoom)throw new Error('DEM requires parent tile and subtile crop');
+    const url=fillTemplate(spec.template,x,y,z),key=spec.id+':'+url;
+    const negative=demNegativeCache.get(key);
+    if(negative&&negative.until>Date.now())throw new Error(negative.reason);
+    if(demBitmapCache.has(key))return touchMapEntry(demBitmapCache,key);
+    const promise=(async()=>{
+      if(demActive>=4){if(demWaiters.length>=32)throw new Error('DEM queue budget');await new Promise(r=>demWaiters.push(r));}
+      demActive++;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+      try{
+        const r=await fetch(url,{mode:'cors',cache:'force-cache',signal:controller.signal});
+        if(!r.ok){const error=new Error('DEM HTTP '+r.status);error.status=r.status;throw error;}
+        return await createImageBitmap(await r.blob());
+      }catch(error){demNegativeCache.set(key,{until:Date.now()+([404,410].includes(error.status)?300000:10000),reason:String(error.message||error)});while(demNegativeCache.size>256)demNegativeCache.delete(demNegativeCache.keys().next().value);throw error;}
+      finally{clearTimeout(timer);demActive--;demWaiters.shift()?.();}
+    })();
+    demBitmapCache.set(key,promise);
+    promise.catch(()=>{if(demBitmapCache.get(key)===promise)demBitmapCache.delete(key);});
+    if(demBitmapCache.size>120){const oldKey=demBitmapCache.keys().next().value,old=demBitmapCache.get(oldKey);demBitmapCache.delete(oldKey);old.then(bitmap=>setTimeout(()=>bitmap.close?.(),1000),()=>{});}
     return promise;
   }
 
@@ -2059,7 +2082,7 @@
       canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingEnabled = false;
 
       const crop = 256 / factor;
       const sx = (x % factor) * crop;
@@ -2089,7 +2112,7 @@
           canvas.width = 256;
           canvas.height = 256;
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingEnabled = false;
           const crop = 256 / factor;
           const sx = (x % factor) * crop;
           const sy = (y % factor) * crop;
@@ -2347,6 +2370,7 @@
   }
 
   function syncCanopyOverlay() {
+    if(state.visualProvider!=="shademap")return;
     if (!mapRef) return;
     const shouldShow = state.enabled && state.canopyOverlay && state.mode !== "buildings";
 
@@ -2808,6 +2832,7 @@
   }
 
   function redrawGroundCanopyShadeOverlay() {
+    if(state.visualProvider!=="shademap")return;
     groundCanopyShadeGeneration += 1;
     if (groundCanopyShadeLayer && typeof groundCanopyShadeLayer.redraw === "function") {
       try { groundCanopyShadeLayer.redraw(); } catch (_) {}
@@ -2815,6 +2840,7 @@
   }
 
   function syncGroundCanopyShadeOverlay() {
+    if(state.visualProvider!=="shademap")return;
     if (!mapRef) return;
     const shouldShow = state.enabled && state.groundCanopyShade && state.mode !== "buildings" && config.groundCanopyShadeEnabled !== false;
     if (progressiveCanopyOverlayDeferred) {
@@ -3813,6 +3839,7 @@
       }
       if(options.requireComplete&&!rasters.get(key))throw new Error('Required canopy raster unavailable');
       const canopy = canopyValueFromRaster(rasters.get(key), tile);
+      if(options.requireComplete&&canopy===null)throw new Error("Required canopy pixel is NoData");
       if (Number.isFinite(canopy) && canopy > rayHeight) {
         return {
           type: "tree",height:canopy,distance,rayHeight,clearanceMargin:canopy-rayHeight,
@@ -3959,6 +3986,7 @@
   }
 
   async function shadeStatusAt(latlng) {
+    if(state.visualProvider!=="shademap"){const m=await analyzeShadeModelAt(latlng.lat,latlng.lng,state.date);return {label:m.reliability==="partial"?"資料不足／未知":m.state==="night"?"夜間":m.shaded?"模型遮蔭":"模型日照",shaded:m.reliability==="partial"?null:m.shaded,night:m.state==="night",solar:m.solar};}
     const solar = solarPositionAt(latlng, state.date);
     if (solar && solar.night) {
       return { label: "🌙 夜間", shaded: null, night: true, solar };
@@ -4022,7 +4050,7 @@
   function canopyValueFromRaster(raster, tile) {
     if (!raster) return null;
     const raw = Number(raster[tile.index]);
-    return raw > 0 && raw < 255 ? raw : 0;
+    return !Number.isFinite(raw)||raw===255?null:raw>0?raw:0;
   }
 
   async function queryCanopyAtTile(tile) {
@@ -5638,14 +5666,18 @@
   }
 
   function terrariumSource(template, maxZoom) {
-    return {
-      tileSize: 256,
-      maxZoom,
-      getSourceUrl: ({ x, y, z }) =>
-        fillTemplate(template, x, y, z),
-      getElevation: ({ r, g, b }) =>
-        r * 256 + g + b / 256 - 32768
-    };
+    const spec={id:'sdk-terrarium',template,maxZoom:Math.max(0,Number(maxZoom)||15)};
+    return {tileSize:256,maxZoom:spec.maxZoom,
+      getSourceUrl:async({x,y,z})=>{
+        const key=template+'|'+[z,x,y].join('/');if(demUrlCache.has(key))return touchMapEntry(demUrlCache,key);
+        const factor=2**Math.max(0,z-spec.maxZoom),pz=Math.min(z,spec.maxZoom),px=Math.floor(x/factor),py=Math.floor(y/factor);
+        const bitmap=await getDemBitmapForSpec(spec,px,py,pz),canvas=document.createElement('canvas');canvas.width=canvas.height=256;
+        const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(bitmap,(x%factor)*256/factor,(y%factor)*256/factor,256/factor,256/factor,0,0,256,256);
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('DEM encoding failed');
+        const url=URL.createObjectURL(blob);demUrlCache.set(key,url);
+        while(demUrlCache.size>120){const first=demUrlCache.keys().next().value;URL.revokeObjectURL(demUrlCache.get(first));demUrlCache.delete(first);}return url;
+      },getElevation:({r,g,b})=>r*256+g+b/256-32768};
   }
 
   function bareTerrainSource() {
@@ -6993,7 +7025,9 @@
     clearCanvasCleanupTimers();
 
     const mountDate = new Date(state.date.getTime());
-    const layer = L.shadeMap({
+    let layer=null;
+    const failSdkOnce=()=>{if(sdkFailure||state.visualProvider!=="shademap"||serial!==shadeRebuildSerial)return;sdkFailure="sdk-unavailable";disableShade(false);setStatus("ShadeMap 授權／引擎不可用，已停止重試；請選自有引擎。",true);};
+    layer = L.shadeMap({
       date: mountDate,
       color: config.defaultColor,
       opacity: state.opacity,
@@ -7003,9 +7037,10 @@
         ? getPreviewBuildingsCachedOnly
         : getBuildings,
       debug: (message) =>
-        console.debug("[Haidian ShadeMap]", message)
+        {if(/401|not licensed|unauthori[sz]ed/i.test(String(message)))failSdkOnce();}
     });
 
+    if(sdkFailure){layer.remove?.();return null;}
     beginShadeCanvasOwnership(serial);
     shadeLayer = layer;
     shadeLayerSerial = serial;
@@ -7020,6 +7055,7 @@
     shadeIdleHandler = idleHandler;
     if (layer && typeof layer.on === "function") {
       layer.on("idle", idleHandler);
+      layer.on("error",failSdkOnce);
     }
 
     try {
@@ -7104,7 +7140,45 @@
     if (opts.scheduleScrub !== false) scheduleRetiredCanvasScrub();
   }
 
+  // Data readiness is independent from visualization and never loads an SDK.
+  async function prepareRouteModel() {
+    if(!mapRef)mapRef=resolveMap();
+    if(!mapRef||state.mode==='trees'||effectiveBuildingMode()==='none')return getRouteShadeCacheContext();
+    const bounds=mapRef.getBounds();
+    const key=[bounds.getSouth(),bounds.getWest(),bounds.getNorth(),bounds.getEast(),state.mode,effectiveBuildingMode()].join('|');
+    if(!routeModelPreparation&&routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();
+    if(routeModelPreparation){try{await routeModelPreparation;}catch(_){};if(routeModelPreparationKey===key&&Date.now()-routeModelPreparedAt<30000)return getRouteShadeCacheContext();}
+    routeModelPreparationKey=key;
+    routeModelPreparation=(async()=>{try{await getBuildings();}finally{routeModelPreparedAt=Date.now();}})();
+    try{await routeModelPreparation;}catch(_){/* Missing coverage stays partial. */}finally{routeModelPreparation=null;}
+    return getRouteShadeCacheContext();
+  }
+  function syncVisualProviderControls(){
+    const own=state.visualProvider!=='shademap',toggle=document.getElementById('haidianShadeToggle');
+    if(toggle){toggle.checked=state.enabled;toggle.disabled=state.visualProvider==='off';}
+    for(const id of ['haidianShadeCanopyOverlay','haidianShadeGroundCanopy']){const el=document.getElementById(id);if(el?.parentElement)el.parentElement.style.display=own?'none':'';}
+    const legend=document.querySelector?.('.haidian-shade-legend');if(legend&&own)legend.innerHTML='<span>深藍：模型陰影　黃色：資料未知　透明：日照</span>';
+  }
+  function enableOwnShade(){
+    if(!mapRef)mapRef=resolveMap();
+    if(!mapRef||!window.HaidianOwnShade){setStatus('自有陰影模組或地圖尚未就緒。',true);return;}
+    state.enabled=true;syncVisualProviderControls();syncPointQueryCursor();setNavigationCanvasState(false);
+    if(mapRef.attributionControl&&!mapRef.__haidianOwnAttribution){mapRef.attributionControl.addAttribution('<a href="https://registry.opendata.aws/dataforgood-fb-forestsv2/" target="_blank" rel="noopener">CHMv2 © Meta / WRI</a> · CC BY 4.0');mapRef.__haidianOwnAttribution=true;}
+    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,analyze:analyzeShadeModelAt,prepare:prepareRouteModel,date:()=>state.date,mode:()=>state.mode,modelKey:()=>lastBuildingCoverageKey,maxCells:config.ownMaxCells,opacity:state.opacity,
+      onStatus:(r)=>{shadeReady=r.state==='complete';setStatus(r.state==='unknown'?'模型資料不足／未知':`自有陰影：${r.unknown||0}/${r.cells||0}格未知；網格${r.cellPx||0}px。遠距地形遮蔽未包含。`,r.state!=='complete');}});
+    ownShadeLayer.request();setStatus('正在載入自有模型；無資料處將標示未知。');
+  }
+  async function setVisualProvider(provider){
+    if(!['own','shademap','off'].includes(provider))throw new Error('Unknown visual provider');
+    disableShade(false);state.visualProvider=provider;syncVisualProviderControls();
+    const el=document.getElementById('haidianShadeProvider');if(el)el.value=provider;
+    if(provider!=='off')await enableShade();else setStatus('視覺圖層已關閉；路線模型仍可使用。');
+  }
   async function enableShade() {
+    if(state.visualProvider==='off')return;
+    if(state.visualProvider==='own')return enableOwnShade();
+    if(sdkFailure){setStatus('ShadeMap 授權／引擎不可用，已停止重試；可選自有引擎。',true);return;}
+
     cancelMetaWarmStart();
     cancelBuildingWarmPrefetch();
     clearPendingBuildingUpgrade();
@@ -7122,6 +7196,7 @@
     }
 
     state.enabled = true;
+    syncVisualProviderControls();
     syncPointQueryCursor();
     initShadeCanvasBaseline();
     installShadeCanvasObserver();
@@ -7159,7 +7234,7 @@
       }
     } catch (error) {
       if (serial !== shadeRebuildSerial || !state.enabled) return;
-      console.error(error);
+      sdkFailure="sdk-unavailable";
       detachShadeLayerOnly();
       state.enabled = false;
       syncPointQueryCursor();
@@ -7189,6 +7264,7 @@
   }
 
   function disableShade(updateStatus = true) {
+    if(ownShadeLayer){ownShadeLayer.dispose();ownShadeLayer=null;}
     clearPendingProgressiveUpgrade();
     clearPendingBuildingUpgrade();
     cancelBuildingWarmPrefetch();
@@ -7205,6 +7281,7 @@
     clearPointShadeRetry();
     detachShadeLayerOnly();
     state.enabled = false;
+    syncVisualProviderControls();
     removeCanopyOverlay();
     removeGroundCanopyShadeOverlay();
 
@@ -7220,6 +7297,8 @@
 
   async function rebuildShade(options = {}) {
     if (!mapRef || !state.enabled) return;
+    if(state.visualProvider!=="shademap"){if(state.visualProvider==="own")enableOwnShade();return;}
+    if(sdkFailure)return;
 
     clearPendingProgressiveUpgrade();
     clearPendingBuildingUpgrade();
@@ -7270,7 +7349,7 @@
       }
     } catch (error) {
       if (serial !== shadeRebuildSerial || !state.enabled) return;
-      console.error(error);
+      sdkFailure="sdk-unavailable";
       detachShadeLayerOnly();
       setNavigationCanvasState(false);
       setStatus(`更新失敗：${error.message || error}`, true);
@@ -7282,7 +7361,7 @@
     mapMoveHooked = true;
 
     const startNavigation = () => {
-      if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
+      if (state.visualProvider!=="shademap" || sdkFailure || !state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
 
       // Invalidate the current preparation BEFORE any stale async task gets a
@@ -7293,7 +7372,7 @@
     };
 
     const scheduleRebuild = () => {
-      if (!state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
+      if (state.visualProvider!=="shademap" || sdkFailure || !state.enabled || state.mode === "buildings" || config.metaMode !== "live-cog") return;
       if (document.body && document.body.classList.contains("listening-mode")) return;
 
       clearTimeout(liveMoveTimer);
@@ -7331,7 +7410,7 @@
       if (mapRef && panelReady) {
         hookMapMoveRebuild();
         hookMapPointQuery();
-        scheduleMetaWarmStart();
+        if(state.visualProvider==="shademap")scheduleMetaWarmStart();
         clearInterval(timer);
         return;
       }
@@ -7647,6 +7726,7 @@
       },
       canopyRasterCacheSize: canopyRasterCache.size,
       canopyRasterPromiseCount: canopyRasterPromises.size,
+      canopyNegativeCacheSize: canopyNegativeCache.size,
       mode: state.mode
     };
   }
@@ -7680,6 +7760,9 @@
 
   window.HaidianShade = {
     enable: enableShade,
+    prepareRouteModel,
+    setVisualProvider,
+    getVisualDiagnostics:()=>({provider:state.visualProvider,sdkFailure,own:ownShadeLayer?.diagnostics()||null,terrain:"distant-terrain-not-included"}),
     disable: disableShade,
     rebuild: rebuildShade,
     analyzeShadeModelAt,
