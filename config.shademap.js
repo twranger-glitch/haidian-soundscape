@@ -1,4 +1,4 @@
-/* dev37.6: self-hosted decoder and original ASTRA renderers; no SDK key required. */
+/* dev37.7: self-hosted decoder and original ASTRA renderers; no SDK key required. */
 window.HAIDIAN_SHADEMAP_CONFIG = Object.assign({
   visualShadeProvider: 'own',
   buildingMode: 'pipeline',
