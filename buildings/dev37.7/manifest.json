@@ -1,0 +1,841 @@
+{
+  "version": "osm-regions-2026-09-27-dev37.7",
+  "builtAt": "2026-09-27T13:25:46.969Z",
+  "license": "ODbL-1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "licenseUrl": "https://www.openstreetmap.org/copyright",
+  "coverageClaim": "Five bounded regional snapshots; not nationwide. Completeness describes downloaded OSM geometry, not all real-world buildings.",
+  "regions": [
+    {
+      "id": "chenggong",
+      "aoi": [
+        121.37,
+        23.095,
+        121.402,
+        23.127
+      ],
+      "sourceUrl": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.37,23.095,121.402,23.127",
+      "sourceRequests": null,
+      "sourceSha256": "36471fbd1e7b9ec069295166c87d06dc29848071b02ff4433d7bc4b270cca7e1",
+      "capturedAt": "2026-09-27T09:14:33.133Z",
+      "zoom": 16,
+      "status": "ready",
+      "geometryComplete": true,
+      "featureCount": 51,
+      "unknownHeight": 42,
+      "missingGeometry": 0,
+      "tiles": {
+        "16/54864/28442": {
+          "path": "chenggong/16/54864/28442.geojson",
+          "bytes": 3619,
+          "sha256": "29fcbb230d97d8777aa4a18bec657500a2da792dde68c8a79699d0f2424729ee",
+          "features": 3
+        },
+        "16/54864/28443": {
+          "path": "chenggong/16/54864/28443.geojson",
+          "bytes": 8859,
+          "sha256": "9fb667673507d116ea8aba3a7c2f28ad7bb013af29378cfacfaad4676f3f3bd6",
+          "features": 8
+        },
+        "16/54863/28444": {
+          "path": "chenggong/16/54863/28444.geojson",
+          "bytes": 828,
+          "sha256": "f205dfbbf6d4b25ef806bd3920d217e84164026b4b597cf923b90db07b385896",
+          "features": 1
+        },
+        "16/54865/28441": {
+          "path": "chenggong/16/54865/28441.geojson",
+          "bytes": 848,
+          "sha256": "f77480745d2cbec7493a3820c41622373cc747b58c2e24a61f1e774b03c7eeb0",
+          "features": 1
+        },
+        "16/54868/28438": {
+          "path": "chenggong/16/54868/28438.geojson",
+          "bytes": 723,
+          "sha256": "a448545f0048427fe95d05ece8fb10b686464f16bb1a1d44b15f8f2fe628fffb",
+          "features": 1
+        },
+        "16/54867/28438": {
+          "path": "chenggong/16/54867/28438.geojson",
+          "bytes": 1396,
+          "sha256": "489c9d96c94e0674c44266253a09ef4928e0d8948b1c0cf3028e60191263df91",
+          "features": 2
+        },
+        "16/54866/28439": {
+          "path": "chenggong/16/54866/28439.geojson",
+          "bytes": 1403,
+          "sha256": "e6f01f420d27f1229851d86e808b31a2fed4fb25feebc78612df67795eaa499a",
+          "features": 2
+        },
+        "16/54868/28440": {
+          "path": "chenggong/16/54868/28440.geojson",
+          "bytes": 4880,
+          "sha256": "e9694f55ca1ca3ef4743a062d5fde298b7552ba6983b621d019db1913f9f64ec",
+          "features": 7
+        },
+        "16/54868/28439": {
+          "path": "chenggong/16/54868/28439.geojson",
+          "bytes": 6890,
+          "sha256": "22f7ff941196e7946a676767c3c9c57bc44e1f2119039a5274afee512f0563f0",
+          "features": 10
+        },
+        "16/54865/28443": {
+          "path": "chenggong/16/54865/28443.geojson",
+          "bytes": 2778,
+          "sha256": "ecc82b539ec1861534394d38f18a318a1a0372bc63e3bebb8451956cb6511597",
+          "features": 4
+        },
+        "16/54864/28444": {
+          "path": "chenggong/16/54864/28444.geojson",
+          "bytes": 9974,
+          "sha256": "4119de764d938a44f92e5d77f3d2cbd5e701bf5e77af8465be83d0ab7f0b04b2",
+          "features": 10
+        },
+        "16/54863/28443": {
+          "path": "chenggong/16/54863/28443.geojson",
+          "bytes": 3896,
+          "sha256": "c0f45375bd17ccbe443fc0c3bf0c213e9ce12c66f7bc283d60d230bf853ff7ed",
+          "features": 3
+        },
+        "16/54866/28438": {
+          "path": "chenggong/16/54866/28438.geojson",
+          "bytes": 1409,
+          "sha256": "1c28cbc4e2953682bac3962ccb0064f2a3dd6cc77c4c143257294a1a1f9eb0ca",
+          "features": 2
+        },
+        "16/54867/28439": {
+          "path": "chenggong/16/54867/28439.geojson",
+          "bytes": 1648,
+          "sha256": "b9a453246f172bd341c827e4e95e315b7e1061a160871314c6dbc40280bc9909",
+          "features": 1
+        },
+        "16/54867/28440": {
+          "path": "chenggong/16/54867/28440.geojson",
+          "bytes": 1407,
+          "sha256": "3d65ab2b6b8366c4a0f4d5cf869c11901e7c4585279b6d29e90afcdfdcf433b7",
+          "features": 2
+        }
+      }
+    },
+    {
+      "id": "hualien",
+      "aoi": [
+        121.593,
+        23.963,
+        121.617,
+        23.987
+      ],
+      "sourceUrl": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.593,23.963,121.617,23.987",
+      "sourceRequests": [
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.593,23.963,121.605,23.975",
+          "status": 200,
+          "bytes": 8845830
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.605,23.963,121.617,23.975",
+          "status": 200,
+          "bytes": 2862355
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.593,23.975,121.605,23.987",
+          "status": 200,
+          "bytes": 7234820
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=121.605,23.975,121.617,23.987",
+          "status": 200,
+          "bytes": 7366078
+        }
+      ],
+      "sourceSha256": "c6ff9a79ed22ee5c27cca804f4fc028af7a5df08c9439ba6bc7704813f0def8a",
+      "capturedAt": "2026-09-27T09:14:36.764Z",
+      "zoom": 16,
+      "status": "missing-geometry",
+      "geometryComplete": false,
+      "featureCount": 8634,
+      "unknownHeight": 8156,
+      "missingGeometry": 4,
+      "tiles": {
+        "16/54903/28272": {
+          "path": "hualien/16/54903/28272.geojson",
+          "bytes": 287712,
+          "sha256": "8706bd23e437dc3129553b0b3218b88bb378758695b78e2ddcd8727e2fdd3c2f",
+          "features": 398
+        },
+        "16/54903/28268": {
+          "path": "hualien/16/54903/28268.geojson",
+          "bytes": 122496,
+          "sha256": "ffc027fa1ecc7fb3a935e36a1750bed2c3ea19b3fe77bd2d89899f26e89566e1",
+          "features": 171
+        },
+        "16/54906/28269": {
+          "path": "hualien/16/54906/28269.geojson",
+          "bytes": 567257,
+          "sha256": "03c7a1b167c4d8e1c6a0720d722b795350df0235e8b17c166cdaa535a0609c75",
+          "features": 742
+        },
+        "16/54907/28269": {
+          "path": "hualien/16/54907/28269.geojson",
+          "bytes": 216196,
+          "sha256": "2008f9d09eab869ce452c7eef40cf732fc209a72774021a12c9671c3cfff5dc5",
+          "features": 285
+        },
+        "16/54904/28270": {
+          "path": "hualien/16/54904/28270.geojson",
+          "bytes": 355299,
+          "sha256": "a6e4183720dd29124295fbded1eb38faf45e941bbd9ecb65d4adc501e1e18fac",
+          "features": 495
+        },
+        "16/54904/28271": {
+          "path": "hualien/16/54904/28271.geojson",
+          "bytes": 713605,
+          "sha256": "68233812eccd2260628952ee3681d27ad121191afa057093535c2470194c17fe",
+          "features": 1000
+        },
+        "16/54905/28270": {
+          "path": "hualien/16/54905/28270.geojson",
+          "bytes": 356636,
+          "sha256": "da0e54bb472e57e8205d12c5321e9dcbf0b106c0cf8d0d857f281502a4235148",
+          "features": 499
+        },
+        "16/54903/28271": {
+          "path": "hualien/16/54903/28271.geojson",
+          "bytes": 334280,
+          "sha256": "22492cb54d8de332fcdc7f68103765b0800d32f49ec85cfd54ee72aa508aec21",
+          "features": 466
+        },
+        "16/54904/28272": {
+          "path": "hualien/16/54904/28272.geojson",
+          "bytes": 233110,
+          "sha256": "f7e4f3a4886fa9a1ba2760dba8996779eadc9fa3d236d55565e144f561fb6015",
+          "features": 329
+        },
+        "16/54905/28272": {
+          "path": "hualien/16/54905/28272.geojson",
+          "bytes": 17188,
+          "sha256": "999ebcdb035746aace4141764e9eced779d796acd5ccbf1578bcb5599089c518",
+          "features": 24
+        },
+        "16/54905/28271": {
+          "path": "hualien/16/54905/28271.geojson",
+          "bytes": 258104,
+          "sha256": "4c08168dd1ec3b802bc458a53926eefdf3157d2333854621b2e88222a88b59df",
+          "features": 364
+        },
+        "16/54903/28270": {
+          "path": "hualien/16/54903/28270.geojson",
+          "bytes": 353005,
+          "sha256": "f1b0cdd06f26cd699e678bf962bfd0d850ac7d3707d0c9292ff2541d2a36285c",
+          "features": 497
+        },
+        "16/54906/28271": {
+          "path": "hualien/16/54906/28271.geojson",
+          "bytes": 66704,
+          "sha256": "9eaf2247408cee35536eec105189d9f2fad7330e1151bc45334939ced30ac811",
+          "features": 86
+        },
+        "16/54906/28270": {
+          "path": "hualien/16/54906/28270.geojson",
+          "bytes": 118812,
+          "sha256": "518c0cee8e14f9d8413af4c00e514e12063cd07794909f3e969c39e9af75748d",
+          "features": 153
+        },
+        "16/54907/28270": {
+          "path": "hualien/16/54907/28270.geojson",
+          "bytes": 279722,
+          "sha256": "76462cea74511c54761de20a38d04487d83b92c32e3a6e9141f812e0df7f2e7d",
+          "features": 388
+        },
+        "16/54906/28272": {
+          "path": "hualien/16/54906/28272.geojson",
+          "bytes": 727,
+          "sha256": "25305c04052dede297e310ca9ac0d68fa7ec0a6f7d9ecde564db8a4fa3761104",
+          "features": 1
+        },
+        "16/54904/28267": {
+          "path": "hualien/16/54904/28267.geojson",
+          "bytes": 57141,
+          "sha256": "3712cc8e95313c4b03d89cc41fba27bccb6374af36cd87a0400b038266e94dab",
+          "features": 75
+        },
+        "16/54904/28268": {
+          "path": "hualien/16/54904/28268.geojson",
+          "bytes": 442246,
+          "sha256": "cf11e6e8da8eab7b311bbfcba091bbd1f8a61a9b53a702d97d6d164769c2799d",
+          "features": 613
+        },
+        "16/54903/28269": {
+          "path": "hualien/16/54903/28269.geojson",
+          "bytes": 105002,
+          "sha256": "9c9f718d50050ddb246e5047d90c917058eaa4a476e69ea14ee713fca6c25f7e",
+          "features": 144
+        },
+        "16/54905/28268": {
+          "path": "hualien/16/54905/28268.geojson",
+          "bytes": 386850,
+          "sha256": "9d1c5fe6a8e78e6c220f2698081ffc55e75c15bc7563c855c35aaeeba6a66c57",
+          "features": 525
+        },
+        "16/54904/28269": {
+          "path": "hualien/16/54904/28269.geojson",
+          "bytes": 250124,
+          "sha256": "e995a9196ee7ea72f15020596451652c977564916f37b1ac87402f95330f98e2",
+          "features": 343
+        },
+        "16/54905/28269": {
+          "path": "hualien/16/54905/28269.geojson",
+          "bytes": 440796,
+          "sha256": "07f026931cca29eba21a82c36ac5da69500ddc53274114925c20bf6d20caa995",
+          "features": 609
+        },
+        "16/54903/28267": {
+          "path": "hualien/16/54903/28267.geojson",
+          "bytes": 105036,
+          "sha256": "7edc25aa16c9d20e4d68f8312ab0d0d6fe86cd6151fd1216b63223a221cd9e12",
+          "features": 146
+        },
+        "16/54905/28267": {
+          "path": "hualien/16/54905/28267.geojson",
+          "bytes": 92419,
+          "sha256": "a6f412917de83b4c515d594837f961ae34e8c7d0603370a72bb2cd905ce3b6c0",
+          "features": 122
+        },
+        "16/54906/28268": {
+          "path": "hualien/16/54906/28268.geojson",
+          "bytes": 226502,
+          "sha256": "3b604ff9b0a1a62970bb49ee381683db414490d249c5ab03c42efdc262d62555",
+          "features": 314
+        },
+        "16/54907/28268": {
+          "path": "hualien/16/54907/28268.geojson",
+          "bytes": 181481,
+          "sha256": "9c799e6efe8e4577f4d2add139c62bdc6f6e9e30e82d4c2d20f8e764e1c6ab2b",
+          "features": 235
+        },
+        "16/54907/28267": {
+          "path": "hualien/16/54907/28267.geojson",
+          "bytes": 41631,
+          "sha256": "b3910888eb7b873bffa3600270045c47af55492bca4dacf31b2ea008bc81f916",
+          "features": 58
+        },
+        "16/54906/28267": {
+          "path": "hualien/16/54906/28267.geojson",
+          "bytes": 25242,
+          "sha256": "4b407170d7e092b22c8756284f3ae4d75993880ea9eb960b4a76ac22758b0c24",
+          "features": 33
+        }
+      }
+    },
+    {
+      "id": "alishan",
+      "aoi": [
+        120.79,
+        23.498,
+        120.814,
+        23.522
+      ],
+      "sourceUrl": "https://api.openstreetmap.org/api/0.6/map.json?bbox=120.79,23.498,120.814,23.522",
+      "sourceRequests": null,
+      "sourceSha256": "6cd6e21f856b140bb1ac6cecd2ddce4e5ce5ea1559ed065fcd68d0e4ad294b73",
+      "capturedAt": "2026-09-27T09:14:44.180Z",
+      "zoom": 16,
+      "status": "ready",
+      "geometryComplete": true,
+      "featureCount": 92,
+      "unknownHeight": 91,
+      "missingGeometry": 0,
+      "tiles": {
+        "16/54760/28361": {
+          "path": "alishan/16/54760/28361.geojson",
+          "bytes": 18056,
+          "sha256": "71d8a379e12e9c5ce4ff5c65bd8f950023c57189235806c9525534e0581bd707",
+          "features": 22
+        },
+        "16/54759/28362": {
+          "path": "alishan/16/54759/28362.geojson",
+          "bytes": 40616,
+          "sha256": "1e868974635f4826796288e21ed0047901cdcd434c333b0a1dbac679a55e5e4e",
+          "features": 44
+        },
+        "16/54760/28360": {
+          "path": "alishan/16/54760/28360.geojson",
+          "bytes": 3186,
+          "sha256": "1fd5de5bbf8a4cbfeeafd40e266aae6aad0ba1f5ef82ae905ce1175aa900363b",
+          "features": 4
+        },
+        "16/54761/28362": {
+          "path": "alishan/16/54761/28362.geojson",
+          "bytes": 4637,
+          "sha256": "b1f0eabe2a1184bc85635f4d8098a22379326b7e4ff0b761b0b82ae036a84b6f",
+          "features": 6
+        },
+        "16/54759/28363": {
+          "path": "alishan/16/54759/28363.geojson",
+          "bytes": 2718,
+          "sha256": "05ccbd4f7276014db4f2de6336e3bdd899510f45f2cb9d918dfbb9b08ad3ae51",
+          "features": 2
+        },
+        "16/54761/28363": {
+          "path": "alishan/16/54761/28363.geojson",
+          "bytes": 3033,
+          "sha256": "50be49494e313cc0d8dc04871a47b3db17cd4e215cf9a7456a2a03314a86afac",
+          "features": 4
+        },
+        "16/54757/28362": {
+          "path": "alishan/16/54757/28362.geojson",
+          "bytes": 6489,
+          "sha256": "8bd46684159c0a42f283630bdd970711b1be93d03602b1ad215a8e993338156d",
+          "features": 7
+        },
+        "16/54757/28363": {
+          "path": "alishan/16/54757/28363.geojson",
+          "bytes": 3189,
+          "sha256": "6f7a701557a37c78d0a0722b283c693e731ff528be42795e5c829f10d4c67d3c",
+          "features": 3
+        },
+        "16/54761/28361": {
+          "path": "alishan/16/54761/28361.geojson",
+          "bytes": 3173,
+          "sha256": "c3692bfa9067203e8c215dd11b7688232190a883cff2cd15a26373f201889347",
+          "features": 3
+        },
+        "16/54760/28362": {
+          "path": "alishan/16/54760/28362.geojson",
+          "bytes": 2288,
+          "sha256": "71739e06fbccfc3093067b1142b77a12dbb90c96c04532d973fd47ebf4a8b593",
+          "features": 3
+        }
+      }
+    },
+    {
+      "id": "magong",
+      "aoi": [
+        119.554,
+        23.553,
+        119.578,
+        23.577
+      ],
+      "sourceUrl": "https://api.openstreetmap.org/api/0.6/map.json?bbox=119.554,23.553,119.578,23.577",
+      "sourceRequests": null,
+      "sourceSha256": "c1dec707d62b09fe2ebfdba8ce87cb0b61ac3ef6e8e3af73852adf1c8514ee27",
+      "capturedAt": "2026-09-27T09:14:52.662Z",
+      "zoom": 16,
+      "status": "ready",
+      "geometryComplete": true,
+      "featureCount": 254,
+      "unknownHeight": 197,
+      "missingGeometry": 0,
+      "tiles": {
+        "16/54533/28353": {
+          "path": "magong/16/54533/28353.geojson",
+          "bytes": 1405,
+          "sha256": "fda0497d1d01af7427c093fafab2469766132358845938e5de46582d93e42f95",
+          "features": 2
+        },
+        "16/54533/28351": {
+          "path": "magong/16/54533/28351.geojson",
+          "bytes": 27456,
+          "sha256": "f55f9c052209dae430a68ef948af457f980f2463f3378a7a54b5094e71bbe756",
+          "features": 35
+        },
+        "16/54535/28349": {
+          "path": "magong/16/54535/28349.geojson",
+          "bytes": 40703,
+          "sha256": "616e19b723c7dbaa32de189ee5a7a92f67860a353f56114781a9919212a274ce",
+          "features": 51
+        },
+        "16/54534/28349": {
+          "path": "magong/16/54534/28349.geojson",
+          "bytes": 19983,
+          "sha256": "0508a9adcbcb5b66f2c37ce321a7cec0af5e326dd82554535da94ec54814b7dd",
+          "features": 25
+        },
+        "16/54535/28352": {
+          "path": "magong/16/54535/28352.geojson",
+          "bytes": 4406,
+          "sha256": "cbf6fc7b108cd3227b8546d06136166a4dc44d1797c960185c7602ffc3b31b3c",
+          "features": 5
+        },
+        "16/54536/28352": {
+          "path": "magong/16/54536/28352.geojson",
+          "bytes": 854,
+          "sha256": "e59ef16e89c49bad01701853e3841739b31e589f3abdf5e49260dd0161c6439b",
+          "features": 1
+        },
+        "16/54534/28350": {
+          "path": "magong/16/54534/28350.geojson",
+          "bytes": 38218,
+          "sha256": "e7609c1dbe7eecaca07617482b03cee9a4f6f3c122a5112c85331072f53a12a8",
+          "features": 38
+        },
+        "16/54535/28350": {
+          "path": "magong/16/54535/28350.geojson",
+          "bytes": 18803,
+          "sha256": "c496465ffaeb54276381163d4a70a7e699518bfc0c2cc8c354159574d6b46eb9",
+          "features": 18
+        },
+        "16/54535/28351": {
+          "path": "magong/16/54535/28351.geojson",
+          "bytes": 14546,
+          "sha256": "325da09dcb601bb4636f4f2d695e6f955ddb77cae3b25558338db2c363ca4c35",
+          "features": 17
+        },
+        "16/54534/28352": {
+          "path": "magong/16/54534/28352.geojson",
+          "bytes": 17664,
+          "sha256": "13212f5b7c187b0ecc72c2c11749796b33f69fb34930e58ef16891e8454ac42a",
+          "features": 16
+        },
+        "16/54534/28351": {
+          "path": "magong/16/54534/28351.geojson",
+          "bytes": 26628,
+          "sha256": "e50557901db20e59a114bb5ffe2e25796f5e089bfeb20e0153bc19d7eb757699",
+          "features": 27
+        },
+        "16/54536/28350": {
+          "path": "magong/16/54536/28350.geojson",
+          "bytes": 13256,
+          "sha256": "6ad0389ed4ae3e239d4c01e1b7b1944618ba8a10f883f5a0b9c269bacefd0afd",
+          "features": 11
+        },
+        "16/54536/28351": {
+          "path": "magong/16/54536/28351.geojson",
+          "bytes": 8307,
+          "sha256": "b692bcc2c9b9a749aaf49ac4b95db365fb6c367e518b7cf37e8f667ad875838b",
+          "features": 9
+        },
+        "16/54536/28349": {
+          "path": "magong/16/54536/28349.geojson",
+          "bytes": 3911,
+          "sha256": "a3fe1e2987b154ca05c382e7445daa941a1a296a4ef4d2fe3eb30f05a98724b1",
+          "features": 4
+        },
+        "16/54533/28350": {
+          "path": "magong/16/54533/28350.geojson",
+          "bytes": 16606,
+          "sha256": "21df8ed30e4c8af6e777a20d0da0f90685f1abc273a10c81226b0fe5c66375c7",
+          "features": 18
+        },
+        "16/54533/28352": {
+          "path": "magong/16/54533/28352.geojson",
+          "bytes": 11683,
+          "sha256": "3149a8c7e56dc35f75c1b8069f5a4941f574696bbae728e4bb726edc01a2096a",
+          "features": 11
+        },
+        "16/54536/28354": {
+          "path": "magong/16/54536/28354.geojson",
+          "bytes": 1477,
+          "sha256": "5edcbb3cfb1b6339379a164555678fd308241eead48ff6c1dcf3de43452c489f",
+          "features": 2
+        },
+        "16/54535/28354": {
+          "path": "magong/16/54535/28354.geojson",
+          "bytes": 1407,
+          "sha256": "776a69cb7a7613f1c24d51ddb91c923b799c3f4ae7f9fbf4bac558f03e9769fe",
+          "features": 2
+        },
+        "16/54532/28352": {
+          "path": "magong/16/54532/28352.geojson",
+          "bytes": 1976,
+          "sha256": "a8c478b2b84ffabb8e0dac61af54b8411c4f8a7f93c3cdaaaee5666f22bbd0ed",
+          "features": 2
+        }
+      }
+    },
+    {
+      "id": "tokyo",
+      "aoi": [
+        139.756,
+        35.67,
+        139.78,
+        35.694
+      ],
+      "sourceUrl": "https://api.openstreetmap.org/api/0.6/map.json?bbox=139.756,35.67,139.78,35.694",
+      "sourceRequests": [
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=139.756,35.67,139.768,35.682",
+          "status": 200,
+          "bytes": 9044439
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=139.768,35.67,139.78,35.682",
+          "status": 200,
+          "bytes": 8055512
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=139.756,35.682,139.768,35.694",
+          "status": 200,
+          "bytes": 7565453
+        },
+        {
+          "url": "https://api.openstreetmap.org/api/0.6/map.json?bbox=139.768,35.682,139.78,35.694",
+          "status": 200,
+          "bytes": 10637314
+        }
+      ],
+      "sourceSha256": "36ff06f21b4302e9c1850510e3fc333358ec7b199f399a927ce3a24169962a39",
+      "capturedAt": "2026-09-27T09:14:55.325Z",
+      "zoom": 16,
+      "status": "ready",
+      "geometryComplete": true,
+      "featureCount": 8273,
+      "unknownHeight": 7207,
+      "missingGeometry": 0,
+      "tiles": {
+        "16/58210/25807": {
+          "path": "tokyo/16/58210/25807.geojson",
+          "bytes": 45693,
+          "sha256": "4503a19049a3bf70496ce145ef596b9802436ba41bad8017af204ab9434036f1",
+          "features": 54
+        },
+        "16/58211/25807": {
+          "path": "tokyo/16/58211/25807.geojson",
+          "bytes": 90672,
+          "sha256": "79f18437472b3dac25cd5d781ac436c395f5f4e60354675a502441e83cdd3a0a",
+          "features": 100
+        },
+        "16/58211/25806": {
+          "path": "tokyo/16/58211/25806.geojson",
+          "bytes": 102413,
+          "sha256": "5ee2617282b594f4696e3d0466b2842226c5e9cf51ce9b7300e4a73e2cbe935c",
+          "features": 107
+        },
+        "16/58211/25809": {
+          "path": "tokyo/16/58211/25809.geojson",
+          "bytes": 78571,
+          "sha256": "b9fc83189dd3a98bf7d3fa0d848eb5b3119c37540cdd2a1e000d6645e3a2ae4d",
+          "features": 98
+        },
+        "16/58212/25809": {
+          "path": "tokyo/16/58212/25809.geojson",
+          "bytes": 107895,
+          "sha256": "67c7ba44a2130b278c940e4bfbd7a1fdd3cc137a0bff7ca216236fc60f3b459f",
+          "features": 137
+        },
+        "16/58211/25808": {
+          "path": "tokyo/16/58211/25808.geojson",
+          "bytes": 381966,
+          "sha256": "13026b0afa4fbffe887b2b982332fb717636c221bfb343b8745b43fbca970b6c",
+          "features": 495
+        },
+        "16/58213/25807": {
+          "path": "tokyo/16/58213/25807.geojson",
+          "bytes": 572467,
+          "sha256": "95d335629341d5fe70705a2949dd6bbd21d2c2e301e5ca8d9c621d4cb92aecce",
+          "features": 741
+        },
+        "16/58212/25806": {
+          "path": "tokyo/16/58212/25806.geojson",
+          "bytes": 239524,
+          "sha256": "2ab4527366f9eec0e03dc84924d2785c535a79aca2a2ab06b4454286b7add77b",
+          "features": 256
+        },
+        "16/58213/25808": {
+          "path": "tokyo/16/58213/25808.geojson",
+          "bytes": 655281,
+          "sha256": "0ec757afc007e94262c4aa272f7e1a36744c64c610fbd51e8d58ef9f9469f7a7",
+          "features": 867
+        },
+        "16/58210/25805": {
+          "path": "tokyo/16/58210/25805.geojson",
+          "bytes": 87153,
+          "sha256": "a1f0b1fec0d6cd6325e7489836f8686dd4a06ad3f6c3d0003cc9dd535e58641a",
+          "features": 98
+        },
+        "16/58210/25806": {
+          "path": "tokyo/16/58210/25806.geojson",
+          "bytes": 24784,
+          "sha256": "da2737c813fc0945afb0746aa62c608b85345ae082085cf76650b2cb710e2c29",
+          "features": 26
+        },
+        "16/58211/25805": {
+          "path": "tokyo/16/58211/25805.geojson",
+          "bytes": 57595,
+          "sha256": "b3758b0283f8db2caf0b1a48d06a1d2704c397175a1e26dbb46aae078a88747a",
+          "features": 59
+        },
+        "16/58210/25804": {
+          "path": "tokyo/16/58210/25804.geojson",
+          "bytes": 114400,
+          "sha256": "b69ce8ade1e980b15a4284679c6170f1a51c09ed48f37994e47a9fc96a71bd95",
+          "features": 136
+        },
+        "16/58211/25804": {
+          "path": "tokyo/16/58211/25804.geojson",
+          "bytes": 375203,
+          "sha256": "21b00f1f5a8eee395242b60d12b76e454e615cea851e9479ae3105a4f297c3f5",
+          "features": 467
+        },
+        "16/58212/25805": {
+          "path": "tokyo/16/58212/25805.geojson",
+          "bytes": 77975,
+          "sha256": "ac4ca0ef84c7566d0c2ed330202d6bf46feb1414047f88a24beb7582f3170b6f",
+          "features": 91
+        },
+        "16/58210/25808": {
+          "path": "tokyo/16/58210/25808.geojson",
+          "bytes": 166677,
+          "sha256": "a89f94ec79332849f12efec56a90015d1e6068d657a22f0554792270898c017b",
+          "features": 208
+        },
+        "16/58212/25808": {
+          "path": "tokyo/16/58212/25808.geojson",
+          "bytes": 532649,
+          "sha256": "1c8dee447e49ee63a372598581ffbfa515cc890831676a98553c66c42869ee0c",
+          "features": 687
+        },
+        "16/58212/25807": {
+          "path": "tokyo/16/58212/25807.geojson",
+          "bytes": 246859,
+          "sha256": "28a918a9450b972c16c972feb9fa6886e81f3cc46dd7b323e999c122e8621b59",
+          "features": 307
+        },
+        "16/58209/25809": {
+          "path": "tokyo/16/58209/25809.geojson",
+          "bytes": 1581,
+          "sha256": "346a093f4bcb73f64641c2de36247f244ddbb46a7ef579bd92dbbcf7b7263df8",
+          "features": 2
+        },
+        "16/58210/25809": {
+          "path": "tokyo/16/58210/25809.geojson",
+          "bytes": 48378,
+          "sha256": "f33d6bc0cba6b5f82ac2e6e93e0932c9e3fe68f2213014c7e0152f9ac7ea0557",
+          "features": 64
+        },
+        "16/58209/25807": {
+          "path": "tokyo/16/58209/25807.geojson",
+          "bytes": 4459,
+          "sha256": "e5336c4fe9995e29302aadebaf7ae5c22575f16df29f463fb6f662b8ac98a66b",
+          "features": 6
+        },
+        "16/58209/25808": {
+          "path": "tokyo/16/58209/25808.geojson",
+          "bytes": 4250,
+          "sha256": "28d665cf08c7a7a2821d3d6216ca3782cba9482a6716250fa65dc33fd0dac27c",
+          "features": 5
+        },
+        "16/58213/25809": {
+          "path": "tokyo/16/58213/25809.geojson",
+          "bytes": 102420,
+          "sha256": "4a32f4bb5be1e5c8f3f0006f4f7eb0ee31ec033881508bea5752c77947b657fe",
+          "features": 134
+        },
+        "16/58214/25808": {
+          "path": "tokyo/16/58214/25808.geojson",
+          "bytes": 114684,
+          "sha256": "e5963d5589ffbfdcfa37db9e8570f3cd911248c2d0609987732d2ca984bd19e7",
+          "features": 156
+        },
+        "16/58214/25807": {
+          "path": "tokyo/16/58214/25807.geojson",
+          "bytes": 105248,
+          "sha256": "f78fbf20dd6efa667533cd3e3fe54b8e4ecf5c048311ee53e26369fbdc7e4796",
+          "features": 137
+        },
+        "16/58214/25806": {
+          "path": "tokyo/16/58214/25806.geojson",
+          "bytes": 44962,
+          "sha256": "86291ccfbd9e1815e9d82bbb7607d85ca387af281bbfa5b3f5964eb57b64eb97",
+          "features": 60
+        },
+        "16/58213/25806": {
+          "path": "tokyo/16/58213/25806.geojson",
+          "bytes": 203006,
+          "sha256": "afad434cd49b1d2abd758ae289092bf461a3274caee100458fd7bc2d84b55885",
+          "features": 229
+        },
+        "16/58214/25809": {
+          "path": "tokyo/16/58214/25809.geojson",
+          "bytes": 30473,
+          "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43",
+          "features": 40
+        },
+        "16/58212/25804": {
+          "path": "tokyo/16/58212/25804.geojson",
+          "bytes": 621657,
+          "sha256": "19332e0321a58f43a6b3bcc348623f8944a60bb5d4171d1afb82b955031cf81b",
+          "features": 801
+        },
+        "16/58209/25804": {
+          "path": "tokyo/16/58209/25804.geojson",
+          "bytes": 12523,
+          "sha256": "c420dbbf16f25ced05eabb9f4857c5a0cd0937be1e78dadac6c80f215c065594",
+          "features": 10
+        },
+        "16/58209/25803": {
+          "path": "tokyo/16/58209/25803.geojson",
+          "bytes": 5257,
+          "sha256": "ad4dc86f3d7c7a599f6b296a9ec3c26a5ed76f2689fa0d3cc043c2caa878e967",
+          "features": 5
+        },
+        "16/58210/25803": {
+          "path": "tokyo/16/58210/25803.geojson",
+          "bytes": 55611,
+          "sha256": "aa83b5256f68a16b717abe09a81d599633c48980cac6b033167f4fd4454314a3",
+          "features": 66
+        },
+        "16/58209/25806": {
+          "path": "tokyo/16/58209/25806.geojson",
+          "bytes": 5736,
+          "sha256": "1a15f72538754ea32c420112a7dbcb0080997fe008ce3428972ada913451eb8a",
+          "features": 7
+        },
+        "16/58211/25803": {
+          "path": "tokyo/16/58211/25803.geojson",
+          "bytes": 145867,
+          "sha256": "2d620900abad6f4271e2434db89a1cb579466ab4333bae3cb59cae70fbebeeae",
+          "features": 184
+        },
+        "16/58209/25805": {
+          "path": "tokyo/16/58209/25805.geojson",
+          "bytes": 6062,
+          "sha256": "c6647e2d614d4e5537f8f6d94c296826cf43de61ff55b4d7dd5325399f1fb893",
+          "features": 7
+        },
+        "16/58212/25803": {
+          "path": "tokyo/16/58212/25803.geojson",
+          "bytes": 187312,
+          "sha256": "707699b8617917489bc46db34c763a283febd25b621f97e3dea0fae72fb51c64",
+          "features": 238
+        },
+        "16/58213/25805": {
+          "path": "tokyo/16/58213/25805.geojson",
+          "bytes": 388390,
+          "sha256": "ff22cf1ae1d384076a594060c4a06f329521c35c64ec43b2be8b9f1ce4906a41",
+          "features": 509
+        },
+        "16/58213/25804": {
+          "path": "tokyo/16/58213/25804.geojson",
+          "bytes": 541638,
+          "sha256": "c10dedd1bd254d022651e1a5baf41bb4da92196f6f71843601b240f0ab26e7a4",
+          "features": 712
+        },
+        "16/58214/25805": {
+          "path": "tokyo/16/58214/25805.geojson",
+          "bytes": 122099,
+          "sha256": "c1149651f741472638e040e972629e93f928913517995ed1fde9fd564365809b",
+          "features": 163
+        },
+        "16/58213/25803": {
+          "path": "tokyo/16/58213/25803.geojson",
+          "bytes": 186720,
+          "sha256": "7bb2cb1f69a45fdf974496be63fccc26595de273bc8e6a0fa1da9f1c3103745c",
+          "features": 240
+        },
+        "16/58214/25804": {
+          "path": "tokyo/16/58214/25804.geojson",
+          "bytes": 128242,
+          "sha256": "016a39eab6e75b402b83cc2d3aa90f2cbc179cfad8449acc61e731c8c0e2791f",
+          "features": 165
+        },
+        "16/58214/25803": {
+          "path": "tokyo/16/58214/25803.geojson",
+          "bytes": 34743,
+          "sha256": "257b10f3cd0ac30a22e94addd7baccc9f82e1b858b9027089955f9f1c1bbdd43",
+          "features": 46
+        }
+      }
+    }
+  ]
+}
