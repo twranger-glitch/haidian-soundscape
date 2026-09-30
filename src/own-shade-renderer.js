@@ -43,6 +43,24 @@
  }
  function inRing(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)inside=!inside;}return inside;}
  function containsShadow(shadow,p){return !!shadow?.faces.some(f=>f.rings.reduce((inside,r)=>inside!==inRing(p,r),false));}
+ const featureIndexes=new WeakMap();
+ function candidates(features,origin,radius){
+  let index=featureIndexes.get(features);if(!index){const cells=new Map(),wide=[];for(const f of features){const b=global.ASTRABuildingData?.featureBox(f);if(!b)continue;const x0=Math.floor(b.west/.002),x1=Math.floor(b.east/.002),y0=Math.floor(b.south/.002),y1=Math.floor(b.north/.002);if((x1-x0+1)*(y1-y0+1)>100){wide.push(f);continue;}for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const k=x+','+y;if(!cells.has(k))cells.set(k,[]);cells.get(k).push(f);}}index={cells,wide};featureIndexes.set(features,index);}
+  const dy=radius/111195.08,dx=dy/Math.max(.08,Math.cos(origin.lat*Math.PI/180)),out=new Set(index.wide);
+  for(let x=Math.floor((origin.lng-dx)/.002);x<=Math.floor((origin.lng+dx)/.002);x++)for(let y=Math.floor((origin.lat-dy)/.002);y<=Math.floor((origin.lat+dy)/.002);y++)for(const f of index.cells.get((((x+90000)%180000+180000)%180000-90000)+','+y)||[])out.add(f);return [...out];
+ }
+ // Same vertical-prism union as Canvas. Ground receiver, flat local model.
+ // Missing heights are only plausible evidence, never a confirmed shadow.
+ function findEvidence(features,origin,solar,height,radius=1200){
+  if(!solar||solar.night)return null;const cos=Math.cos(origin.lat*Math.PI/180),project=p=>({x:(((p.lng-origin.lng+180)%360+360)%360-180)*111195.08*cos,y:(p.lat-origin.lat)*111195.08});let best=null;
+  for(const f of candidates(features,origin,radius)){
+   const meta=height(f),unknown=!(Number(meta.height)>0),h=unknown?{...meta,height:24}:meta,shape=projectBuilding(f,solar,project,h);if(!containsShadow(shape,{x:0,y:0}))continue;
+   const b=global.ASTRABuildingData.featureBox(f),near=project({lng:Math.max(b.west,Math.min(b.east,origin.lng)),lat:Math.max(b.south,Math.min(b.north,origin.lat))}),distance=Math.hypot(near.x,near.y);if(distance>radius)continue;
+   const precise=meta.quality==='measured'&&f.properties.geometry_quality==='source-footprint'&&!unknown;
+   const row={type:'building',feature:f,height:unknown?null:meta.height,heightSource:meta.source,heightQuality:meta.quality,distance,requiredHeight:distance*Math.tan(solar.altitudeRad),confidence:precise?'high':'possible',plausibleUnknownHeight:unknown};
+   if(!best||(precise&&!best.precise)||(precise===best.precise&&distance<best.distance))best={...row,precise};
+  }return best;
+ }
  function create(options){
   const map=options.map,doc=options.document||document,canvas=doc.createElement('canvas');canvas.className='haidian-own-shade-canvas haidian-building-shadow-canvas';
   Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',zIndex:'451',opacity:String(options.opacity??.5)});
@@ -65,16 +83,17 @@
     let n=0,faces=0,measured=0,estimated=0,unknown=0,lastYield=performance.now();
     for(const feature of features){
      if(!valid())return;
-     const height=options.height(feature),shape=projectBuilding(feature,solar,p=>map.latLngToContainerPoint(p),height);if(!shape){if(!solar.night)unknown++;continue;}
-     if(height.quality==='measured')measured++;else if(height.quality==='default')unknown++;else estimated++;
-     const mask=masks[height.quality==='measured'?1:0].getContext('2d');mask.fillStyle='#172554';
+     const height=options.height(feature),shape=projectBuilding(feature,solar,p=>map.latLngToContainerPoint({...p,lng:p.lng+360*Math.round((map.getCenter().lng-p.lng)/360)}),height);if(!shape){if(!solar.night)unknown++;continue;}
+     const precise=height.quality==='measured'&&feature.properties?.geometry_quality!=='generalized';
+     if(precise)measured++;else if(height.quality==='default')unknown++;else estimated++;
+     const mask=masks[precise?1:0].getContext('2d');mask.fillStyle='#172554';
      for(const face of shape.faces){mask.beginPath();for(const ring of face.rings){if(!ring.length)continue;mask.moveTo(ring[0].x,ring[0].y);for(let i=1;i<ring.length;i++)mask.lineTo(ring[i].x,ring[i].y);mask.closePath();}mask.fill('evenodd');faces++;}
      n++;if(performance.now()-lastYield>7){await tick();lastYield=performance.now();}
     }
     if(!valid())return;
     // Unknown/inferred heights are visibly distinguished, not sold as measured.
     ctx.clearRect(0,0,canvas.width,canvas.height);ctx.globalAlpha=.48;ctx.drawImage(masks[0],0,0);ctx.globalAlpha=1;ctx.drawImage(masks[1],0,0);
-    stats.features=n;stats.faces=faces;stats.measured=measured;stats.estimated=estimated;stats.unknownHeight=unknown;stats.partial=!data?.complete||unknown>0||size.x>2400||size.y>1800;stats.lastFrameMs=performance.now()-start;stats.completed++;
+    stats.features=n;stats.faces=faces;stats.measured=measured;stats.estimated=estimated;stats.unknownHeight=unknown;stats.partial=!data?.complete||unknown>0||estimated>0||size.x>2400||size.y>1800;stats.lastFrameMs=performance.now()-start;stats.completed++;
     if(n&&stats.firstPaintMs===null)stats.firstPaintMs=performance.now()-activated;
     canvas.style.visibility='visible';options.onStatus?.({state:stats.partial?'partial':'complete',...stats});
    }catch(e){if(!signal.aborted){stats.partial=true;options.onStatus?.({state:'unknown',error:e.message});}}
@@ -83,5 +102,5 @@
   const start=()=>invalidate(),end=()=>request();for(const e of ['movestart','zoomstart'])map.on(e,start);for(const e of ['moveend','zoomend','resize'])map.on(e,end);
   return {request,invalidate,setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
  }
- global.HaidianOwnShade={version:'v9.0.0-dev37.7',create,projectBuilding,containsShadow,classify,terrainOcclusion,terrainTileAddress};
+ global.HaidianOwnShade={version:'v9.0.0-dev37.8',create,projectBuilding,containsShadow,findEvidence,classify,terrainOcclusion,terrainTileAddress};
 })(typeof window!=='undefined'?window:globalThis);

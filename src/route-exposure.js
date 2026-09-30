@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.7 Pedestrian Realm Graph Rescue
+ * Haidian Soundscape — Route Exposure Foundation v9.0.0-dev37.8 Pedestrian Realm Graph Rescue
  *
  * Capabilities:
  * - hand-drawn fixed-route shade exposure analysis;
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.7";
+  const VERSION = "v9.0.0-dev37.8";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -119,6 +119,7 @@
   let aPoint = null;
   let bPoint = null;
   let analysisSerial = 0;
+  let analysisController=new AbortController();
   let doubleClickWasEnabled = null;
   let lastAnalysis = null;
   let lastCandidates = [];
@@ -163,6 +164,7 @@
   }
 
   function nowLocalInputValue() {
+    if(window.ASTRAClock)return window.ASTRAClock.input(new Date());
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -175,7 +177,8 @@
   }
 
   function formatDepartureSummary(value) {
-    const date = value instanceof Date ? value : new Date(value);
+    let date;try{date=value instanceof Date?value:window.ASTRAClock?window.ASTRAClock.parseLocal(value):new Date(value);}catch(e){return e.message;}
+    if(window.ASTRAClock)return window.ASTRAClock.label(date);
     if (Number.isNaN(date.getTime())) return "時間未設定";
     return new Intl.DateTimeFormat("zh-TW", {
       month: "numeric", day: "numeric", weekday: "short",
@@ -187,7 +190,7 @@
     const d = date instanceof Date ? date : new Date(date);
     if (Number.isNaN(d.getTime()) || !panel) return;
     const pad = (n) => String(n).padStart(2, "0");
-    const value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const value = window.ASTRAClock?window.ASTRAClock.input(d):`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const hidden = panel.querySelector("[data-re-departure]");
     const dateInput = panel.querySelector("[data-re-date]");
     const timeInput = panel.querySelector("[data-re-time]");
@@ -197,6 +200,8 @@
     if (timeInput) timeInput.value = parts.time;
     syncUiState();
   }
+
+  window.addEventListener?.('astra-timezone-change',()=>{setDepartureDate(window.HaidianShade?.state?.date||new Date());});
 
   function syncDepartureFromParts() {
     if (!panel) return;
@@ -417,7 +422,7 @@
 
   function departureDateFromPanel() {
     const value = panel?.querySelector("[data-re-departure]")?.value;
-    const date = value ? new Date(value) : new Date();
+    const date = value ? (window.ASTRAClock?window.ASTRAClock.parseLocal(value):new Date(value)) : new Date();
     return Number.isNaN(date.getTime()) ? new Date() : date;
   }
 
@@ -693,12 +698,12 @@
     return summary;
   }
 
-  async function ensureShadeReady() {
+  async function ensureShadeReady(options={}) {
     if (!window.HaidianShade || typeof window.HaidianShade.analyzeShadeModelAt !== "function") {
       throw new Error("找不到 v8.9.0 的路線陰影分析介面。請確認 shademap-integration.js 已先載入。");
     }
     // Route scoring loads only model data, never a visual SDK (including OFF).
-    if(window.HaidianShade.prepareRouteModel)await window.HaidianShade.prepareRouteModel();
+    if(window.HaidianShade.prepareRouteModel)return window.HaidianShade.prepareRouteModel(options);
   }
 
   async function maybeHeatContext(points, departure, serial) {
@@ -720,13 +725,15 @@
   }
 
   async function analyzeRoute(points, options = {}) {
-    await ensureShadeReady();
     const route = (points || []).map(asLatLng).filter(Boolean);
     if (route.length < 2) throw new Error("路線至少需要兩個點。");
     const spacingM = clamp(options.sampleSpacingM, 5, 25, spacingFromPanel());
     const speedMps = clamp(options.speedMps, 0.5, 2.5, speedMpsFromPanel());
     const departure = options.departure instanceof Date ? new Date(options.departure.getTime()) : new Date(options.departure || departureDateFromPanel());
     if (Number.isNaN(departure.getTime())) throw new Error("出發時間不正確。");
+    const signal=options.signal||analysisController.signal;
+    const prepared=await ensureShadeReady({points:route,date:departure,purpose:'route',signal});
+    const buildingSnapshot=prepared?.snapshot;
     const segments = buildSampleSegments(route, spacingM);
     if (!segments.length) throw new Error("路線長度不足。");
     if (segments.length > Number(config.maxRouteSamples || 420)) {
@@ -743,7 +750,7 @@
           segment.sample.lat,
           segment.sample.lng,
           at,
-          { canopyTimeoutMs: config.canopyTimeoutMs }
+          { canopyTimeoutMs: config.canopyTimeoutMs,buildingSnapshot,signal }
         );
         if (serial !== analysisSerial) throw new Error("ROUTE_ANALYSIS_CANCELLED");
         return { segment, at, model };
@@ -757,6 +764,7 @@
       route,
       departure: departure.toISOString(),
       sampleSpacingM: spacingM,
+      buildingSnapshot:buildingSnapshot?{key:buildingSnapshot.cacheKey,release:buildingSnapshot.release,state:buildingSnapshot.state,stats:buildingSnapshot.stats}:null,
       walkingSpeedMps: speedMps,
       walkingSpeedKmh: speedMps * 3.6,
       segments: results,
@@ -855,7 +863,7 @@
       else verdict = "這條路直接日照較多";
     }
     if(s.unknownDistanceM>0.01)verdict="資料不足：部分路段日照／遮蔭未知";
-    const clock=d=>{try{return new Date(d).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});}catch(_){return '未知';}};
+    const clock=d=>{try{return new Date(d).toLocaleString('zh-TW',{timeZone:window.ASTRAClock?.zone||'Asia/Taipei',hour12:false});}catch(_){return '未知';}};
     const visualDate=window.HaidianShade?.getVisualDiagnostics?.().date;
     const temporalNote=`<div class="re-note">路線出發：${clock(analysis.departure)}（臺灣時間）；各段依預估抵達時間取樣。圖面：${visualDate?clock(visualDate):'未啟用'}；點位卡片採圖面時間。${visualDate&&Math.abs(new Date(visualDate)-new Date(analysis.departure))>60000?'圖面與路線時間不同，請勿直接比對陰影。':''}<br>資料覆蓋率僅指所選來源完成分類；遠距地形遮蔽尚未完成。</div>`;
     const title = escapeHtml(options.title || verdict);
@@ -1436,10 +1444,11 @@
     const candidateAudit = options.candidateAudit || null;
     const qualityChecked = applyRouteQuality(candidates).map(withCandidateIdentity);
     if (candidateAudit) candidateAudit.quality = qualityChecked.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:c?.routeQuality?.valid === false ? 'rejected' : 'kept', reasons:c?.routeQuality?.reasons || [] }));
+    const walkabilitySafe=c=>c?.kind!=='manual'&&c?.walkability?.state!=='partial'&&!(Number(c?.graphMeta?.realmSyntheticDistanceM||0)>.01)&&c?.graphMeta?.conditionalAccess!==true;
     const qualityValid = qualityChecked.filter((c) => c?.routeQuality?.valid !== false);
     const rejectedQuality = qualityChecked.filter((c) => c?.routeQuality?.valid === false);
     if (!qualityValid.length) throw new Error("候選路線都有明顯折返或重複走廊，已全部淘汰。請重新設定 A、B。");
-    const baselineCandidates = qualityValid.filter((c) => c?.kind !== "manual" && c?.kind !== "experimental-fused");
+    const baselineCandidates = qualityValid.filter((c) => walkabilitySafe(c)&&c?.kind !== "manual" && c?.kind !== "experimental-fused");
     const fastest = (baselineCandidates.length ? baselineCandidates : qualityValid).reduce((best, c) => {
       if (!best) return c;
       const d = Number(c.distanceM) || Infinity;
@@ -1447,7 +1456,7 @@
       return d < bestD ? c : best;
     }, null);
     const detourPct = clamp(options.detourPct, 0, 60, detourCapFromPanel());
-    let eligible = qualityValid.filter((c) => candidateWithinDetour(c, fastest, detourPct));
+    let eligible = qualityValid.filter((c) => walkabilitySafe(c)&&candidateWithinDetour(c, fastest, detourPct));
     const maxScored = clamp(config.maxScoredCandidates, 2, 14, 10);
     if (eligible.length > maxScored) {
       const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual" || c.kind === "experimental-fused" || c.kind === "pedestrian-realm-shade").map((c) => c.id)].filter(Boolean));
@@ -1465,7 +1474,7 @@
     // cap, score it once so the user can inspect the trade-off instead of having
     // an evidence-backed comparison silently disappear from the UI.
     const comparisonOutside = qualityChecked.filter((c) =>
-      (c?.kind === "manual" || c?.kind === "experimental-fused") &&
+      (c?.kind === "manual" || c?.kind === "experimental-fused" || !walkabilitySafe(c)) &&
       c?.routeQuality?.valid !== false && !eligibleIds.has(c.id)
     );
     const scoringPool = eligible.concat(comparisonOutside);
@@ -1516,7 +1525,7 @@
       (done, total) => setStatus(`dev35.3：dense 候選完成 ${done}/${total}；最多 ${denseCandidateConcurrency} 條同時精算。`, "loading")
     );
     const eligibleScored = scored.filter((c) => c.eligible !== false);
-    const reliableScored=eligibleScored.filter(c=>!(c.analysis.summary.unknownDistanceM>0.01));
+    const reliableScored=eligibleScored.filter(c=>walkabilitySafe(c)&&!(c.analysis.summary.unknownDistanceM>0.01));
     const selected = reliableScored.slice().sort((a, b) => {
       const sunA = a.analysis.summary.directSunSeconds;
       const sunB = b.analysis.summary.directSunSeconds;
@@ -1542,7 +1551,7 @@
       activeCandidateId: selected?.id || scored[0]?.id || null,
       detourPct,
       comparisonValid: reliableScored.length >= 2,
-      shadeComparisonIncomplete: reliableScored.length !== eligibleScored.length,
+      shadeComparisonIncomplete: reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c)),
       rejectedQuality,
       denseScoring: {
         candidateConcurrency: denseCandidateConcurrency,
@@ -1561,6 +1570,7 @@
   }
 
   function candidateName(candidate, bundle) {
+    if(candidate?.kind==='mapped-walk-fastest')return 'OSM 步行線候選（端點偏移另列）';
     if (candidate?.kind === "experimental-fused") return "官方資料融合最不曬";
     if (candidate?.kind === "mature-rescue") return "獨立步行引擎救援候選";
     if (candidate?.kind === "topology-repair-fastest") return "OSM 端點拓樸修復最快候選";
@@ -3283,7 +3293,7 @@
   }
 
   function startDrawMode(options = {}) {
-    analysisSerial += 1;
+    analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     stopDrawMode();
     uiMode = "draw";
     if (options.reset !== false) {
@@ -3308,7 +3318,7 @@
   }
 
   function startABMode() {
-    analysisSerial += 1;
+    analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     stopDrawMode();
     uiMode = "ab";
     aPoint = null;
@@ -3324,7 +3334,7 @@
   }
 
   function clearAll(clearStatus = true) {
-    analysisSerial += 1;
+    analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     stopDrawMode();
     drawPoints = [];
     savedDrawnRoute = [];
@@ -3355,7 +3365,7 @@
     }
     captureDrawnRouteIfValid();
     stopDrawMode();
-    analysisSerial += 1;
+    analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     const serial = analysisSerial;
     setBusy(true);
     try {
@@ -3485,7 +3495,7 @@
       return;
     }
     stopDrawMode();
-    analysisSerial += 1;
+    analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     const serial = analysisSerial;
     setBusy(true);
     const perfStart = nowMs();
@@ -3501,6 +3511,7 @@
       const departure = departureDateFromPanel();
       const speedMps = speedMpsFromPanel();
       const detourPct = detourCapFromPanel();
+      const graphBuildingSnapshot=(await ensureShadeReady({points:[aPoint,bPoint],date:departure,purpose:'route',signal:analysisController.signal}))?.snapshot;
       lastManualGraphDiagnosis = null;
       lastCandidateCorrectnessAudit = null;
       lastOfficialDiscovery = null;
@@ -3535,7 +3546,7 @@
       let selectedOverpassAllowPrivate = null;
       lastGraphFailure = null;
       if (config.graphRouting?.enabled !== false && window.HaidianPedestrianGraph?.findRoutes) {
-        await ensureShadeReady();
+        await ensureShadeReady({points:[aPoint,bPoint],date:departure,purpose:'route',signal:analysisController.signal});
         try {
           const warmContext = routeShadeWarmCacheContext();
           shadeWarmCacheModelToken = warmContext.modelToken || null;
@@ -3592,7 +3603,7 @@
               candidateCorrectnessExactReplayEnabled: config.graphRouting?.candidateCorrectnessExactReplayEnabled,
               candidateCorrectnessExactReplayToleranceSec: config.graphRouting?.candidateCorrectnessExactReplayToleranceSec,
               sharedShadeCache: sharedGraphShadeCache,
-              canopyTimeoutMs: config.canopyTimeoutMs,
+              buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs: config.canopyTimeoutMs,
               maxExpandedStates: config.graphRouting?.maxExpandedStates,
               maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
               cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
@@ -3880,7 +3891,7 @@
               shadeTimeBucketSec: config.graphRouting?.shadeTimeBucketSec,
               shadeSampleSpacingM: config.graphRouting?.shadeSampleSpacingM,
               shadeMaxSamplesPerEdge: config.graphRouting?.shadeMaxSamplesPerEdge,
-              canopyTimeoutMs: config.canopyTimeoutMs,
+              buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs: config.canopyTimeoutMs,
               maxExpandedStates: config.graphRouting?.maxExpandedStates,
               maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
               cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
@@ -3944,7 +3955,7 @@
               shadeTimeBucketSec: config.graphRouting?.shadeTimeBucketSec,
               shadeSampleSpacingM: config.graphRouting?.shadeSampleSpacingM,
               shadeMaxSamplesPerEdge: config.graphRouting?.shadeMaxSamplesPerEdge,
-              canopyTimeoutMs: config.canopyTimeoutMs,
+              buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs: config.canopyTimeoutMs,
               maxExpandedStates: config.graphRouting?.maxExpandedStates,
               maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
               cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
@@ -4009,7 +4020,7 @@
               shadeTimeBucketSec: config.graphRouting?.shadeTimeBucketSec,
               shadeSampleSpacingM: config.graphRouting?.shadeSampleSpacingM,
               shadeMaxSamplesPerEdge: config.graphRouting?.shadeMaxSamplesPerEdge,
-              canopyTimeoutMs: config.canopyTimeoutMs,
+              buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs: config.canopyTimeoutMs,
               maxExpandedStates: config.graphRouting?.maxExpandedStates,
               maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
               cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
@@ -4335,7 +4346,7 @@
               realmSearchTimeoutMs:realmOpportunityOptions.searchTimeoutMs||12000,
               shadeConcurrency:config.graphRouting?.shadeConcurrency||2,
               shadeEdgeBatchConcurrency:config.graphRouting?.shadeEdgeBatchConcurrency||4,
-              canopyTimeoutMs:config.canopyTimeoutMs,onProgress:(info)=>{if(serial===analysisSerial&&info?.message)setStatus(info.message,"loading")}
+              buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs:config.canopyTimeoutMs,onProgress:(info)=>{if(serial===analysisSerial&&info?.message)setStatus(info.message,"loading")}
             });
             if(serial!==analysisSerial)return;
             const candidates=realm.accepted?realm.candidates||[]:[];
@@ -4348,6 +4359,8 @@
         }
       }
 
+      const mappedSource=await realmSourcePromise;
+      if(mappedSource.available&&window.HaidianPedestrianGraph.mappedWalkCandidate){const mapped=window.HaidianPedestrianGraph.mappedWalkCandidate(mappedSource.payload,aPoint,bPoint,{speedMps});perf.mappedWalkAudit=mapped.walkability||{state:'unavailable',reason:mapped.reason};if(mapped.candidate)stretchRescueCandidates.push(mapped.candidate);}
       const providerCandidates = await providerPromise;
       if (serial !== analysisSerial) return;
       let exploratoryCandidates = [];
@@ -4422,7 +4435,7 @@
             shadeConcurrency: config.graphRouting?.shadeConcurrency || 2,
             shadeEdgeBatchConcurrency: config.graphRouting?.shadeEdgeBatchConcurrency,
             sharedShadeCache: sharedGraphShadeCache,
-            canopyTimeoutMs: config.canopyTimeoutMs,
+            buildingSnapshot:graphBuildingSnapshot,canopyTimeoutMs: config.canopyTimeoutMs,
             maxExpandedStates: config.graphRouting?.maxExpandedStates,
             maxShadeEdgeEvaluations: config.graphRouting?.maxShadeEdgeEvaluations,
             cooperativeYieldMs: config.graphRouting?.cooperativeYieldMs,
@@ -4809,7 +4822,7 @@
     node.querySelectorAll("[data-re-detour-chip]").forEach((chip) => chip.addEventListener("click", () => setDetourPct(Number(chip.dataset.reDetourChip))));
     node.querySelector("[data-re-detour]").addEventListener("input", syncUiState);
     node.querySelector("[data-re-reset]").addEventListener("click", () => clearAll(true));
-    node.querySelector("[data-re-cancel]").addEventListener("click", () => { analysisSerial += 1; setBusy(false); setStatus("已取消目前運算。", ""); });
+    node.querySelector("[data-re-cancel]").addEventListener("click", () => { analysisController.abort();analysisController=new AbortController();analysisSerial += 1; setBusy(false); setStatus("已取消目前運算。", ""); });
     node.querySelector("[data-re-json]").addEventListener("click", exportJson);
     node.querySelector("[data-re-csv]").addEventListener("click", exportCsv);
     node.addEventListener("click", (event) => {

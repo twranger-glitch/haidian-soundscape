@@ -31,5 +31,5 @@
   return {type:'FeatureCollection',features,diagnostics:{status:issues.length?'missing-geometry':features.length?'ready':'empty-success',complete:issues.length===0,featureCount:features.length,unknownHeight:features.filter(f=>!f.properties.height_known).length,relationCount:relations.length,issues}};
  }
  const within=(b,a)=>b.west>=a[0]&&b.south>=a[1]&&b.east<=a[2]&&b.north<=a[3];
- global.HaidianBuildingSources={version:'v9.0.0-dev37.7',convert,validRing,inside,stitch,height,within};
+ global.HaidianBuildingSources={version:'v9.0.0-dev37.8',convert,validRing,inside,stitch,height,within};
 })(typeof window!=='undefined'?window:globalThis);

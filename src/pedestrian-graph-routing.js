@@ -1,5 +1,5 @@
 /*
- * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.7 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
+ * Haidian Soundscape — Local OSM Pedestrian Graph Routing v9.0.0-dev37.8 (Pedestrian Realm Graph rescue + dev36 topology rescue stack; dev32 correctness locked)
  *
  * Purpose:
  * - fetch the local OpenStreetMap pedestrian network with Overpass;
@@ -13,7 +13,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "v9.0.0-dev37.7";
+  const VERSION = "v9.0.0-dev37.8";
 
   const DEFAULTS = {
     enabled: true,
@@ -916,7 +916,7 @@
     const samples = shadeSamplePoints(geometry, context.shadeSampleSpacingM, context.shadeMaxSamplesPerEdge);
     if (!samples.length) return { directSunFraction: 0, shadedFraction: 0, nightFraction: 1, samples: 0 };
     const models = await runPool(samples, context.shadeConcurrency, async (p) => {
-      return window.HaidianShade.analyzeShadeModelAt(p.lat, p.lng, at, { canopyTimeoutMs: context.canopyTimeoutMs });
+      return window.HaidianShade.analyzeShadeModelAt(p.lat, p.lng, at, { buildingSnapshot:context.buildingSnapshot, canopyTimeoutMs: context.canopyTimeoutMs });
     });
     let sun = 0, shade = 0, night = 0, partial = 0, cacheUnsafe = 0;
     for (const model of models) {
@@ -983,7 +983,7 @@
     if(runtime){runtime.check();runtime.stats.samplesPlanned+=built.segments.length;}
     const startMs=at.getTime()-Number(edge.distanceM)/speedMps*500;
     const models=await runPoolNoYield(built.segments,Math.min(4,Number(context.shadeConcurrency||2)),async(seg)=>{
-      const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{canopyTimeoutMs:context.canopyTimeoutMs,signal:runtime?.signal});
+      const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{buildingSnapshot:context.buildingSnapshot,canopyTimeoutMs:context.canopyTimeoutMs,signal:runtime?.signal});
       const model=runtime?await runtime.sample(task):await task();
       if(!model||!['sun','shade','night'].includes(model.state)||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)throw new Error('Realm shade model incomplete');
       return model;
@@ -1046,7 +1046,7 @@
       async (seg) => {
         const at = new Date(dep.getTime() + (seg.cumulativeMidM / safeSpeed) * 1000);
         const model = await window.HaidianShade.analyzeShadeModelAt(seg.sample.lat, seg.sample.lng, at, {
-          canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+          buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
         });
         return { seg, at, model };
       }
@@ -1379,7 +1379,7 @@
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
-        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       }));
       shadeCache.set(task.key, promise);
       try { await promise; evaluated += 1; }
@@ -1573,7 +1573,7 @@
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
-        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       }));
       shadeCache.set(key, promise);
       try {
@@ -1789,7 +1789,7 @@
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
-        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       });
       const sunFraction = clamp(result?.directSunFraction, 0, 1, 0);
       directSunSeconds += edgeTimeS * sunFraction;
@@ -3632,7 +3632,7 @@
         shadeConcurrency: options.shadeConcurrency,
         shadeEdgeBatchConcurrency: options.shadeEdgeBatchConcurrency,
         sharedShadeCache: options.sharedShadeCache,
-        canopyTimeoutMs: options.canopyTimeoutMs,
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs,
         maxExpandedStates: options.maxExpandedStates,
         maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
         cooperativeYieldMs: options.cooperativeYieldMs,
@@ -4962,7 +4962,7 @@
 
   function makePedestrianRealmCandidate(kind,path,meta={}) {
     const shade=kind==='pedestrian-realm-shade',id=shade?'graph-pedestrian-realm-min-sun':'graph-pedestrian-realm-fastest',hash=geometryHash(path?.points||[]);
-    return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,graphMeta:Object.assign({backend:'osm-pedestrian-realm',pedestrianRealmRescue:true,productionGraphMutated:false,requiresOnSitePathConfirmation:true},meta)};
+    return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,walkability:{state:Number(meta.realmSyntheticDistanceM||0)>.01?'partial':'source-supported',reason:Number(meta.realmSyntheticDistanceM||0)>.01?'synthetic park chords have no mapped walking surface':'mapped paths',syntheticM:Number(meta.realmSyntheticDistanceM||0)},graphMeta:Object.assign({backend:'osm-pedestrian-realm',pedestrianRealmRescue:true,productionGraphMutated:false,requiresOnSitePathConfirmation:true},meta)};
   }
 
   function buildPedestrianRealmRescueGraph(payload,a,b,options={}) {
@@ -5085,6 +5085,23 @@
       }
     }
     return {path:null,label:null,expanded,evaluations,proof:'bounded generator exhausted its budget'};
+  }
+
+  function mappedWalkCandidate(payload,a,b,options={}){
+    const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints'};
+    const parsed=parseOverpass(payload,{allowPrivateFootAccess:false});
+    parsed.ways=(parsed.ways||[]).filter(w=>normalizedTag(w.tags?.area)!=='yes'&&!w.tags?.['area:highway']);
+    const source=refineGraph(contractGraph(buildRawGraph(parsed),[]),options),graph=cloneFineGraphForExperimentalUse(source);
+    if(!graph?.edges.size)return {available:false,reason:'no-mapped-walkable-lines',productionGraphMutated:false};
+    const snapA=snapPointIntoFineGraph(graph,A,'mapped-A',8),snapB=snapPointIntoFineGraph(graph,B,'mapped-B',8);
+    if(!snapA?.id||!snapB?.id||snapA.distanceM>8||snapB.distanceM>8)return {available:false,reason:'endpoint-outside-mapped-path',snapA:snapA?.distanceM,snapB:snapB?.distanceM,productionGraphMutated:false};
+    const speed=clamp(options.speedMps,.5,2.5,1.25),found=dijkstraTimes(graph,snapA.id,speed,false),seconds=found.dist.get(String(snapB.id));
+    if(!Number.isFinite(seconds))return {available:false,reason:'mapped-lines-disconnected',productionGraphMutated:false};
+    const path=reconstructDijkstra(graph,found.prev,snapA.id,snapB.id),stats=realmPathStats(graph,path.edgeIds),gaps={aM:snapA.distanceM,bM:snapB.distanceM};
+    const partial=Math.max(gaps.aM,gaps.bM)>.5;
+    const audit={state:partial?'partial':'source-supported',reason:partial?'route ends on mapped ways; endpoint access is unverified':'OSM accessible mapped ways only',endpointGaps:gaps,syntheticM:0,geometrySource:'OSM ways',scope:'mapped access tags; no field survey or guarantee of temporary restrictions'};
+    const candidate={id:'graph-mapped-walk-fastest',stableCandidateId:'graph-mapped-walk-fastest:'+geometryHash(path.points),geometryHash:geometryHash(path.points),kind:'mapped-walk-fastest',points:path.points,distanceM:path.distanceM,durationS:seconds,walkability:audit,graphMeta:{backend:'osm-mapped-detached',productionGraphMutated:false,walkability:audit,realmProvenance:stats}};
+    return {available:true,candidate,walkability:audit,productionGraphMutated:false};
   }
 
   async function runPedestrianRealmRescue(a,b,options={}) {
@@ -5232,7 +5249,7 @@
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
-        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       });
       const sunFrac = clamp(shade?.directSunFraction, 0, 1, 0);
       const shadeFrac = clamp(shade?.shadedFraction, 0, 1, Math.max(0, 1 - sunFrac));
@@ -5321,7 +5338,7 @@
       shadeSampleSpacingM: options.shadeSampleSpacingM,
       shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge,
       shadeConcurrency: options.shadeConcurrency,
-      canopyTimeoutMs: options.canopyTimeoutMs,
+      buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs,
       maxExpandedStates: options.maxExpandedStates,
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
       cooperativeYieldMs: options.cooperativeYieldMs,
@@ -6552,7 +6569,7 @@
         shadeSampleSpacingM: options.shadeSampleSpacingM || config.shadeSampleSpacingM,
         shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge || config.shadeMaxSamplesPerEdge,
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
-        canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
+        buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       });
       const directSunFraction = clamp(shade?.directSunFraction, 0, 1, 0);
       const edgeSunSeconds = edgeTime * directSunFraction;
@@ -7115,11 +7132,11 @@
     t=nowMs();
     let searchFailure=null;
     const searchMetrics={};
-    const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {enabled:true,incomplete:true,reason:searchFailure};});
+    const temporalShade=await buildTemporalShadeTable(graph,fromA,toB,{speedMps,detourLimitS,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,sharedShadeCache,temporalShadeTableEnabled:options.temporalShadeTableEnabled,temporalShadeTableConcurrency:options.temporalShadeTableConcurrency,temporalShadeTableMaxBucketsPerEdge:options.temporalShadeTableMaxBucketsPerEdge,temporalShadeTableMaxEvaluations:options.temporalShadeTableMaxEvaluations,buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {enabled:true,incomplete:true,reason:searchFailure};});
     perf.temporalShadeTableMs=nowMs()-t; perf.temporalShade=temporalShade;
     options.onProgress?.({stage:'shade-search',message:`dev33：temporal shade table ${temporalShade.evaluated||0} cells 完成；history-safe min-sun 改為查表搜尋…`});
     t=nowMs();
-    const minSun=searchFailure?{path:null,reason:searchFailure,expanded:0,shadeEvals:0}:await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,fastestFromStart:fromA,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {path:null,reason:searchFailure,expanded:searchMetrics.expandedStates||0,shadeEvals:searchMetrics.shadeEdgeEvaluations||0};});
+    const minSun=searchFailure?{path:null,reason:searchFailure,expanded:0,shadeEvals:0}:await searchMinSun(graph,prodSnapA.id,prodSnapB.id,{speedMps,detourLimitS,fastestToEnd:toB,fastestFromStart:fromA,departure,realmDenseShadeCache:options.realmDenseShadeCache,completeEdgeTimeEnvelope:true,searchMetrics,edgeSunProvider:options.edgeSunProvider,timeBucketSec:options.timeBucketSec,shadeTimeBucketSec:options.shadeTimeBucketSec,shadeSampleSpacingM:options.shadeSampleSpacingM,shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,shadeConcurrency:options.shadeConcurrency,shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency,sharedShadeCache,buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,maxExpandedStates:options.maxExpandedStates,maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,cooperativeYieldMs:options.cooperativeYieldMs,yieldEveryExpanded:options.yieldEveryExpanded,onProgress:options.onProgress,shouldCancel:options.shouldCancel}).catch(error=>{if(options.shouldCancel?.())throw error;searchFailure=String(error.message||error);return {path:null,reason:searchFailure,expanded:searchMetrics.expandedStates||0,shadeEvals:searchMetrics.shadeEdgeEvaluations||0};});
     perf.minSunMs=nowMs()-t; perf.totalMs=nowMs()-totalStarted;
     lastRouteEdges.fastest=new Set(fastestPath.edgeIds||[]); lastRouteEdges.minSun=new Set(minSun.path?.edgeIds||[]);
     const candidateLifecycle=[];
@@ -7271,7 +7288,7 @@
       edgeSunProvider:options.edgeSunProvider,
       timeBucketSec:options.timeBucketSec, shadeTimeBucketSec:options.shadeTimeBucketSec,
       shadeSampleSpacingM:options.shadeSampleSpacingM, shadeMaxSamplesPerEdge:options.shadeMaxSamplesPerEdge,
-      shadeConcurrency:options.shadeConcurrency, shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency, sharedShadeCache:options.sharedShadeCache, canopyTimeoutMs:options.canopyTimeoutMs,
+      shadeConcurrency:options.shadeConcurrency, shadeEdgeBatchConcurrency:options.shadeEdgeBatchConcurrency, sharedShadeCache:options.sharedShadeCache, buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,
       maxExpandedStates:options.maxExpandedStates, maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,
       cooperativeYieldMs:options.cooperativeYieldMs, yieldEveryExpanded:options.yieldEveryExpanded,
       onProgress:options.onProgress, shouldCancel:options.shouldCancel
@@ -7430,7 +7447,7 @@
       shadeSampleSpacingM: options.shadeSampleSpacingM,
       shadeMaxSamplesPerEdge: options.shadeMaxSamplesPerEdge,
       shadeConcurrency: options.shadeConcurrency,
-      canopyTimeoutMs: options.canopyTimeoutMs,
+      buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs,
       maxExpandedStates: options.maxExpandedStates,
       maxShadeEdgeEvaluations: options.maxShadeEdgeEvaluations,
       cooperativeYieldMs: options.cooperativeYieldMs,
@@ -7605,6 +7622,7 @@
     runAutoLocalNodingRescue,
     runInteriorNodingRescue,
     runCrossSourceCorridorRescue,
+    mappedWalkCandidate,
     runPedestrianRealmRescue,
     preparePedestrianRealmOpportunity,
     pedestrianRealmOpportunityEligible,
@@ -7717,7 +7735,8 @@
       collectRealmObstacleVisibilityNodes,
       buildPedestrianRealmRescueGraph,
       pedestrianRealmRescueFromPayload,
-      runPedestrianRealmRescue,
+      mappedWalkCandidate,
+    runPedestrianRealmRescue,
       preparePedestrianRealmOpportunity,
       pedestrianRealmOpportunityEligible,
       collectRealmInteriorVisibilityNodes,

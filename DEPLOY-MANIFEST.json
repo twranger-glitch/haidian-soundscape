@@ -1,0 +1,794 @@
+{
+  "release": "dev37.8",
+  "scope": "all website files except this manifest",
+  "files": {
+    "RELEASE-dev37.6.md": {
+      "bytes": 626,
+      "sha256": "d98aea6d190896d55142dd90e76dde77aaf596e9b37a37ab15a341fee9bf73db"
+    },
+    "RELEASE-dev37.8.md": {
+      "bytes": 1265,
+      "sha256": "e951c7666b69f48053c7ef47f8727ad04d4fefaaeb88573a667c0aad23841421"
+    },
+    "buildings/README.md": {
+      "bytes": 2807,
+      "sha256": "fab9222a9a21485adb0baeb46562e92b6bbe0e740bd7d83d95b70d0ae1ba9ff0"
+    },
+    "buildings/dev37.7/alishan/16/54757/28362.geojson": {
+      "bytes": 6489,
+      "sha256": "8bd46684159c0a42f283630bdd970711b1be93d03602b1ad215a8e993338156d"
+    },
+    "buildings/dev37.7/alishan/16/54757/28363.geojson": {
+      "bytes": 3189,
+      "sha256": "6f7a701557a37c78d0a0722b283c693e731ff528be42795e5c829f10d4c67d3c"
+    },
+    "buildings/dev37.7/alishan/16/54759/28362.geojson": {
+      "bytes": 40616,
+      "sha256": "1e868974635f4826796288e21ed0047901cdcd434c333b0a1dbac679a55e5e4e"
+    },
+    "buildings/dev37.7/alishan/16/54759/28363.geojson": {
+      "bytes": 2718,
+      "sha256": "05ccbd4f7276014db4f2de6336e3bdd899510f45f2cb9d918dfbb9b08ad3ae51"
+    },
+    "buildings/dev37.7/alishan/16/54760/28360.geojson": {
+      "bytes": 3186,
+      "sha256": "1fd5de5bbf8a4cbfeeafd40e266aae6aad0ba1f5ef82ae905ce1175aa900363b"
+    },
+    "buildings/dev37.7/alishan/16/54760/28361.geojson": {
+      "bytes": 18056,
+      "sha256": "71d8a379e12e9c5ce4ff5c65bd8f950023c57189235806c9525534e0581bd707"
+    },
+    "buildings/dev37.7/alishan/16/54760/28362.geojson": {
+      "bytes": 2288,
+      "sha256": "71739e06fbccfc3093067b1142b77a12dbb90c96c04532d973fd47ebf4a8b593"
+    },
+    "buildings/dev37.7/alishan/16/54761/28361.geojson": {
+      "bytes": 3173,
+      "sha256": "c3692bfa9067203e8c215dd11b7688232190a883cff2cd15a26373f201889347"
+    },
+    "buildings/dev37.7/alishan/16/54761/28362.geojson": {
+      "bytes": 4637,
+      "sha256": "b1f0eabe2a1184bc85635f4d8098a22379326b7e4ff0b761b0b82ae036a84b6f"
+    },
+    "buildings/dev37.7/alishan/16/54761/28363.geojson": {
+      "bytes": 3033,
+      "sha256": "50be49494e313cc0d8dc04871a47b3db17cd4e215cf9a7456a2a03314a86afac"
+    },
+    "buildings/dev37.7/chenggong/16/54863/28443.geojson": {
+      "bytes": 3896,
+      "sha256": "c0f45375bd17ccbe443fc0c3bf0c213e9ce12c66f7bc283d60d230bf853ff7ed"
+    },
+    "buildings/dev37.7/chenggong/16/54863/28444.geojson": {
+      "bytes": 828,
+      "sha256": "f205dfbbf6d4b25ef806bd3920d217e84164026b4b597cf923b90db07b385896"
+    },
+    "buildings/dev37.7/chenggong/16/54864/28442.geojson": {
+      "bytes": 3619,
+      "sha256": "29fcbb230d97d8777aa4a18bec657500a2da792dde68c8a79699d0f2424729ee"
+    },
+    "buildings/dev37.7/chenggong/16/54864/28443.geojson": {
+      "bytes": 8859,
+      "sha256": "9fb667673507d116ea8aba3a7c2f28ad7bb013af29378cfacfaad4676f3f3bd6"
+    },
+    "buildings/dev37.7/chenggong/16/54864/28444.geojson": {
+      "bytes": 9974,
+      "sha256": "4119de764d938a44f92e5d77f3d2cbd5e701bf5e77af8465be83d0ab7f0b04b2"
+    },
+    "buildings/dev37.7/chenggong/16/54865/28441.geojson": {
+      "bytes": 848,
+      "sha256": "f77480745d2cbec7493a3820c41622373cc747b58c2e24a61f1e774b03c7eeb0"
+    },
+    "buildings/dev37.7/chenggong/16/54865/28443.geojson": {
+      "bytes": 2778,
+      "sha256": "ecc82b539ec1861534394d38f18a318a1a0372bc63e3bebb8451956cb6511597"
+    },
+    "buildings/dev37.7/chenggong/16/54866/28438.geojson": {
+      "bytes": 1409,
+      "sha256": "1c28cbc4e2953682bac3962ccb0064f2a3dd6cc77c4c143257294a1a1f9eb0ca"
+    },
+    "buildings/dev37.7/chenggong/16/54866/28439.geojson": {
+      "bytes": 1403,
+      "sha256": "e6f01f420d27f1229851d86e808b31a2fed4fb25feebc78612df67795eaa499a"
+    },
+    "buildings/dev37.7/chenggong/16/54867/28438.geojson": {
+      "bytes": 1396,
+      "sha256": "489c9d96c94e0674c44266253a09ef4928e0d8948b1c0cf3028e60191263df91"
+    },
+    "buildings/dev37.7/chenggong/16/54867/28439.geojson": {
+      "bytes": 1648,
+      "sha256": "b9a453246f172bd341c827e4e95e315b7e1061a160871314c6dbc40280bc9909"
+    },
+    "buildings/dev37.7/chenggong/16/54867/28440.geojson": {
+      "bytes": 1407,
+      "sha256": "3d65ab2b6b8366c4a0f4d5cf869c11901e7c4585279b6d29e90afcdfdcf433b7"
+    },
+    "buildings/dev37.7/chenggong/16/54868/28438.geojson": {
+      "bytes": 723,
+      "sha256": "a448545f0048427fe95d05ece8fb10b686464f16bb1a1d44b15f8f2fe628fffb"
+    },
+    "buildings/dev37.7/chenggong/16/54868/28439.geojson": {
+      "bytes": 6890,
+      "sha256": "22f7ff941196e7946a676767c3c9c57bc44e1f2119039a5274afee512f0563f0"
+    },
+    "buildings/dev37.7/chenggong/16/54868/28440.geojson": {
+      "bytes": 4880,
+      "sha256": "e9694f55ca1ca3ef4743a062d5fde298b7552ba6983b621d019db1913f9f64ec"
+    },
+    "buildings/dev37.7/hualien/16/54903/28267.geojson": {
+      "bytes": 105036,
+      "sha256": "7edc25aa16c9d20e4d68f8312ab0d0d6fe86cd6151fd1216b63223a221cd9e12"
+    },
+    "buildings/dev37.7/hualien/16/54903/28268.geojson": {
+      "bytes": 122496,
+      "sha256": "ffc027fa1ecc7fb3a935e36a1750bed2c3ea19b3fe77bd2d89899f26e89566e1"
+    },
+    "buildings/dev37.7/hualien/16/54903/28269.geojson": {
+      "bytes": 105002,
+      "sha256": "9c9f718d50050ddb246e5047d90c917058eaa4a476e69ea14ee713fca6c25f7e"
+    },
+    "buildings/dev37.7/hualien/16/54903/28270.geojson": {
+      "bytes": 353005,
+      "sha256": "f1b0cdd06f26cd699e678bf962bfd0d850ac7d3707d0c9292ff2541d2a36285c"
+    },
+    "buildings/dev37.7/hualien/16/54903/28271.geojson": {
+      "bytes": 334280,
+      "sha256": "22492cb54d8de332fcdc7f68103765b0800d32f49ec85cfd54ee72aa508aec21"
+    },
+    "buildings/dev37.7/hualien/16/54903/28272.geojson": {
+      "bytes": 287712,
+      "sha256": "8706bd23e437dc3129553b0b3218b88bb378758695b78e2ddcd8727e2fdd3c2f"
+    },
+    "buildings/dev37.7/hualien/16/54904/28267.geojson": {
+      "bytes": 57141,
+      "sha256": "3712cc8e95313c4b03d89cc41fba27bccb6374af36cd87a0400b038266e94dab"
+    },
+    "buildings/dev37.7/hualien/16/54904/28268.geojson": {
+      "bytes": 442246,
+      "sha256": "cf11e6e8da8eab7b311bbfcba091bbd1f8a61a9b53a702d97d6d164769c2799d"
+    },
+    "buildings/dev37.7/hualien/16/54904/28269.geojson": {
+      "bytes": 250124,
+      "sha256": "e995a9196ee7ea72f15020596451652c977564916f37b1ac87402f95330f98e2"
+    },
+    "buildings/dev37.7/hualien/16/54904/28270.geojson": {
+      "bytes": 355299,
+      "sha256": "a6e4183720dd29124295fbded1eb38faf45e941bbd9ecb65d4adc501e1e18fac"
+    },
+    "buildings/dev37.7/hualien/16/54904/28271.geojson": {
+      "bytes": 713605,
+      "sha256": "68233812eccd2260628952ee3681d27ad121191afa057093535c2470194c17fe"
+    },
+    "buildings/dev37.7/hualien/16/54904/28272.geojson": {
+      "bytes": 233110,
+      "sha256": "f7e4f3a4886fa9a1ba2760dba8996779eadc9fa3d236d55565e144f561fb6015"
+    },
+    "buildings/dev37.7/hualien/16/54905/28267.geojson": {
+      "bytes": 92419,
+      "sha256": "a6f412917de83b4c515d594837f961ae34e8c7d0603370a72bb2cd905ce3b6c0"
+    },
+    "buildings/dev37.7/hualien/16/54905/28268.geojson": {
+      "bytes": 386850,
+      "sha256": "9d1c5fe6a8e78e6c220f2698081ffc55e75c15bc7563c855c35aaeeba6a66c57"
+    },
+    "buildings/dev37.7/hualien/16/54905/28269.geojson": {
+      "bytes": 440796,
+      "sha256": "07f026931cca29eba21a82c36ac5da69500ddc53274114925c20bf6d20caa995"
+    },
+    "buildings/dev37.7/hualien/16/54905/28270.geojson": {
+      "bytes": 356636,
+      "sha256": "da0e54bb472e57e8205d12c5321e9dcbf0b106c0cf8d0d857f281502a4235148"
+    },
+    "buildings/dev37.7/hualien/16/54905/28271.geojson": {
+      "bytes": 258104,
+      "sha256": "4c08168dd1ec3b802bc458a53926eefdf3157d2333854621b2e88222a88b59df"
+    },
+    "buildings/dev37.7/hualien/16/54905/28272.geojson": {
+      "bytes": 17188,
+      "sha256": "999ebcdb035746aace4141764e9eced779d796acd5ccbf1578bcb5599089c518"
+    },
+    "buildings/dev37.7/hualien/16/54906/28267.geojson": {
+      "bytes": 25242,
+      "sha256": "4b407170d7e092b22c8756284f3ae4d75993880ea9eb960b4a76ac22758b0c24"
+    },
+    "buildings/dev37.7/hualien/16/54906/28268.geojson": {
+      "bytes": 226502,
+      "sha256": "3b604ff9b0a1a62970bb49ee381683db414490d249c5ab03c42efdc262d62555"
+    },
+    "buildings/dev37.7/hualien/16/54906/28269.geojson": {
+      "bytes": 567257,
+      "sha256": "03c7a1b167c4d8e1c6a0720d722b795350df0235e8b17c166cdaa535a0609c75"
+    },
+    "buildings/dev37.7/hualien/16/54906/28270.geojson": {
+      "bytes": 118812,
+      "sha256": "518c0cee8e14f9d8413af4c00e514e12063cd07794909f3e969c39e9af75748d"
+    },
+    "buildings/dev37.7/hualien/16/54906/28271.geojson": {
+      "bytes": 66704,
+      "sha256": "9eaf2247408cee35536eec105189d9f2fad7330e1151bc45334939ced30ac811"
+    },
+    "buildings/dev37.7/hualien/16/54906/28272.geojson": {
+      "bytes": 727,
+      "sha256": "25305c04052dede297e310ca9ac0d68fa7ec0a6f7d9ecde564db8a4fa3761104"
+    },
+    "buildings/dev37.7/hualien/16/54907/28267.geojson": {
+      "bytes": 41631,
+      "sha256": "b3910888eb7b873bffa3600270045c47af55492bca4dacf31b2ea008bc81f916"
+    },
+    "buildings/dev37.7/hualien/16/54907/28268.geojson": {
+      "bytes": 181481,
+      "sha256": "9c799e6efe8e4577f4d2add139c62bdc6f6e9e30e82d4c2d20f8e764e1c6ab2b"
+    },
+    "buildings/dev37.7/hualien/16/54907/28269.geojson": {
+      "bytes": 216196,
+      "sha256": "2008f9d09eab869ce452c7eef40cf732fc209a72774021a12c9671c3cfff5dc5"
+    },
+    "buildings/dev37.7/hualien/16/54907/28270.geojson": {
+      "bytes": 279722,
+      "sha256": "76462cea74511c54761de20a38d04487d83b92c32e3a6e9141f812e0df7f2e7d"
+    },
+    "buildings/dev37.7/magong/16/54532/28352.geojson": {
+      "bytes": 1976,
+      "sha256": "a8c478b2b84ffabb8e0dac61af54b8411c4f8a7f93c3cdaaaee5666f22bbd0ed"
+    },
+    "buildings/dev37.7/magong/16/54533/28350.geojson": {
+      "bytes": 16606,
+      "sha256": "21df8ed30e4c8af6e777a20d0da0f90685f1abc273a10c81226b0fe5c66375c7"
+    },
+    "buildings/dev37.7/magong/16/54533/28351.geojson": {
+      "bytes": 27456,
+      "sha256": "f55f9c052209dae430a68ef948af457f980f2463f3378a7a54b5094e71bbe756"
+    },
+    "buildings/dev37.7/magong/16/54533/28352.geojson": {
+      "bytes": 11683,
+      "sha256": "3149a8c7e56dc35f75c1b8069f5a4941f574696bbae728e4bb726edc01a2096a"
+    },
+    "buildings/dev37.7/magong/16/54533/28353.geojson": {
+      "bytes": 1405,
+      "sha256": "fda0497d1d01af7427c093fafab2469766132358845938e5de46582d93e42f95"
+    },
+    "buildings/dev37.7/magong/16/54534/28349.geojson": {
+      "bytes": 19983,
+      "sha256": "0508a9adcbcb5b66f2c37ce321a7cec0af5e326dd82554535da94ec54814b7dd"
+    },
+    "buildings/dev37.7/magong/16/54534/28350.geojson": {
+      "bytes": 38218,
+      "sha256": "e7609c1dbe7eecaca07617482b03cee9a4f6f3c122a5112c85331072f53a12a8"
+    },
+    "buildings/dev37.7/magong/16/54534/28351.geojson": {
+      "bytes": 26628,
+      "sha256": "e50557901db20e59a114bb5ffe2e25796f5e089bfeb20e0153bc19d7eb757699"
+    },
+    "buildings/dev37.7/magong/16/54534/28352.geojson": {
+      "bytes": 17664,
+      "sha256": "13212f5b7c187b0ecc72c2c11749796b33f69fb34930e58ef16891e8454ac42a"
+    },
+    "buildings/dev37.7/magong/16/54535/28349.geojson": {
+      "bytes": 40703,
+      "sha256": "616e19b723c7dbaa32de189ee5a7a92f67860a353f56114781a9919212a274ce"
+    },
+    "buildings/dev37.7/magong/16/54535/28350.geojson": {
+      "bytes": 18803,
+      "sha256": "c496465ffaeb54276381163d4a70a7e699518bfc0c2cc8c354159574d6b46eb9"
+    },
+    "buildings/dev37.7/magong/16/54535/28351.geojson": {
+      "bytes": 14546,
+      "sha256": "325da09dcb601bb4636f4f2d695e6f955ddb77cae3b25558338db2c363ca4c35"
+    },
+    "buildings/dev37.7/magong/16/54535/28352.geojson": {
+      "bytes": 4406,
+      "sha256": "cbf6fc7b108cd3227b8546d06136166a4dc44d1797c960185c7602ffc3b31b3c"
+    },
+    "buildings/dev37.7/magong/16/54535/28354.geojson": {
+      "bytes": 1407,
+      "sha256": "776a69cb7a7613f1c24d51ddb91c923b799c3f4ae7f9fbf4bac558f03e9769fe"
+    },
+    "buildings/dev37.7/magong/16/54536/28349.geojson": {
+      "bytes": 3911,
+      "sha256": "a3fe1e2987b154ca05c382e7445daa941a1a296a4ef4d2fe3eb30f05a98724b1"
+    },
+    "buildings/dev37.7/magong/16/54536/28350.geojson": {
+      "bytes": 13256,
+      "sha256": "6ad0389ed4ae3e239d4c01e1b7b1944618ba8a10f883f5a0b9c269bacefd0afd"
+    },
+    "buildings/dev37.7/magong/16/54536/28351.geojson": {
+      "bytes": 8307,
+      "sha256": "b692bcc2c9b9a749aaf49ac4b95db365fb6c367e518b7cf37e8f667ad875838b"
+    },
+    "buildings/dev37.7/magong/16/54536/28352.geojson": {
+      "bytes": 854,
+      "sha256": "e59ef16e89c49bad01701853e3841739b31e589f3abdf5e49260dd0161c6439b"
+    },
+    "buildings/dev37.7/magong/16/54536/28354.geojson": {
+      "bytes": 1477,
+      "sha256": "5edcbb3cfb1b6339379a164555678fd308241eead48ff6c1dcf3de43452c489f"
+    },
+    "buildings/dev37.7/manifest.json": {
+      "bytes": 30854,
+      "sha256": "1ea9343618b9a2d183c0135c443b9e666bcac544a4007b8a338335743120c62c"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25803.geojson": {
+      "bytes": 5257,
+      "sha256": "ad4dc86f3d7c7a599f6b296a9ec3c26a5ed76f2689fa0d3cc043c2caa878e967"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25804.geojson": {
+      "bytes": 12523,
+      "sha256": "c420dbbf16f25ced05eabb9f4857c5a0cd0937be1e78dadac6c80f215c065594"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25805.geojson": {
+      "bytes": 6062,
+      "sha256": "c6647e2d614d4e5537f8f6d94c296826cf43de61ff55b4d7dd5325399f1fb893"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25806.geojson": {
+      "bytes": 5736,
+      "sha256": "1a15f72538754ea32c420112a7dbcb0080997fe008ce3428972ada913451eb8a"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25807.geojson": {
+      "bytes": 4459,
+      "sha256": "e5336c4fe9995e29302aadebaf7ae5c22575f16df29f463fb6f662b8ac98a66b"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25808.geojson": {
+      "bytes": 4250,
+      "sha256": "28d665cf08c7a7a2821d3d6216ca3782cba9482a6716250fa65dc33fd0dac27c"
+    },
+    "buildings/dev37.7/tokyo/16/58209/25809.geojson": {
+      "bytes": 1581,
+      "sha256": "346a093f4bcb73f64641c2de36247f244ddbb46a7ef579bd92dbbcf7b7263df8"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25803.geojson": {
+      "bytes": 55611,
+      "sha256": "aa83b5256f68a16b717abe09a81d599633c48980cac6b033167f4fd4454314a3"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25804.geojson": {
+      "bytes": 114400,
+      "sha256": "b69ce8ade1e980b15a4284679c6170f1a51c09ed48f37994e47a9fc96a71bd95"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25805.geojson": {
+      "bytes": 87153,
+      "sha256": "a1f0b1fec0d6cd6325e7489836f8686dd4a06ad3f6c3d0003cc9dd535e58641a"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25806.geojson": {
+      "bytes": 24784,
+      "sha256": "da2737c813fc0945afb0746aa62c608b85345ae082085cf76650b2cb710e2c29"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25807.geojson": {
+      "bytes": 45693,
+      "sha256": "4503a19049a3bf70496ce145ef596b9802436ba41bad8017af204ab9434036f1"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25808.geojson": {
+      "bytes": 166677,
+      "sha256": "a89f94ec79332849f12efec56a90015d1e6068d657a22f0554792270898c017b"
+    },
+    "buildings/dev37.7/tokyo/16/58210/25809.geojson": {
+      "bytes": 48378,
+      "sha256": "f33d6bc0cba6b5f82ac2e6e93e0932c9e3fe68f2213014c7e0152f9ac7ea0557"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25803.geojson": {
+      "bytes": 145867,
+      "sha256": "2d620900abad6f4271e2434db89a1cb579466ab4333bae3cb59cae70fbebeeae"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25804.geojson": {
+      "bytes": 375203,
+      "sha256": "21b00f1f5a8eee395242b60d12b76e454e615cea851e9479ae3105a4f297c3f5"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25805.geojson": {
+      "bytes": 57595,
+      "sha256": "b3758b0283f8db2caf0b1a48d06a1d2704c397175a1e26dbb46aae078a88747a"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25806.geojson": {
+      "bytes": 102413,
+      "sha256": "5ee2617282b594f4696e3d0466b2842226c5e9cf51ce9b7300e4a73e2cbe935c"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25807.geojson": {
+      "bytes": 90672,
+      "sha256": "79f18437472b3dac25cd5d781ac436c395f5f4e60354675a502441e83cdd3a0a"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25808.geojson": {
+      "bytes": 381966,
+      "sha256": "13026b0afa4fbffe887b2b982332fb717636c221bfb343b8745b43fbca970b6c"
+    },
+    "buildings/dev37.7/tokyo/16/58211/25809.geojson": {
+      "bytes": 78571,
+      "sha256": "b9fc83189dd3a98bf7d3fa0d848eb5b3119c37540cdd2a1e000d6645e3a2ae4d"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25803.geojson": {
+      "bytes": 187312,
+      "sha256": "707699b8617917489bc46db34c763a283febd25b621f97e3dea0fae72fb51c64"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25804.geojson": {
+      "bytes": 621657,
+      "sha256": "19332e0321a58f43a6b3bcc348623f8944a60bb5d4171d1afb82b955031cf81b"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25805.geojson": {
+      "bytes": 77975,
+      "sha256": "ac4ca0ef84c7566d0c2ed330202d6bf46feb1414047f88a24beb7582f3170b6f"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25806.geojson": {
+      "bytes": 239524,
+      "sha256": "2ab4527366f9eec0e03dc84924d2785c535a79aca2a2ab06b4454286b7add77b"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25807.geojson": {
+      "bytes": 246859,
+      "sha256": "28a918a9450b972c16c972feb9fa6886e81f3cc46dd7b323e999c122e8621b59"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25808.geojson": {
+      "bytes": 532649,
+      "sha256": "1c8dee447e49ee63a372598581ffbfa515cc890831676a98553c66c42869ee0c"
+    },
+    "buildings/dev37.7/tokyo/16/58212/25809.geojson": {
+      "bytes": 107895,
+      "sha256": "67c7ba44a2130b278c940e4bfbd7a1fdd3cc137a0bff7ca216236fc60f3b459f"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25803.geojson": {
+      "bytes": 186720,
+      "sha256": "7bb2cb1f69a45fdf974496be63fccc26595de273bc8e6a0fa1da9f1c3103745c"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25804.geojson": {
+      "bytes": 541638,
+      "sha256": "c10dedd1bd254d022651e1a5baf41bb4da92196f6f71843601b240f0ab26e7a4"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25805.geojson": {
+      "bytes": 388390,
+      "sha256": "ff22cf1ae1d384076a594060c4a06f329521c35c64ec43b2be8b9f1ce4906a41"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25806.geojson": {
+      "bytes": 203006,
+      "sha256": "afad434cd49b1d2abd758ae289092bf461a3274caee100458fd7bc2d84b55885"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25807.geojson": {
+      "bytes": 572467,
+      "sha256": "95d335629341d5fe70705a2949dd6bbd21d2c2e301e5ca8d9c621d4cb92aecce"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25808.geojson": {
+      "bytes": 655281,
+      "sha256": "0ec757afc007e94262c4aa272f7e1a36744c64c610fbd51e8d58ef9f9469f7a7"
+    },
+    "buildings/dev37.7/tokyo/16/58213/25809.geojson": {
+      "bytes": 102420,
+      "sha256": "4a32f4bb5be1e5c8f3f0006f4f7eb0ee31ec033881508bea5752c77947b657fe"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25803.geojson": {
+      "bytes": 34743,
+      "sha256": "257b10f3cd0ac30a22e94addd7baccc9f82e1b858b9027089955f9f1c1bbdd43"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25804.geojson": {
+      "bytes": 128242,
+      "sha256": "016a39eab6e75b402b83cc2d3aa90f2cbc179cfad8449acc61e731c8c0e2791f"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25805.geojson": {
+      "bytes": 122099,
+      "sha256": "c1149651f741472638e040e972629e93f928913517995ed1fde9fd564365809b"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25806.geojson": {
+      "bytes": 44962,
+      "sha256": "86291ccfbd9e1815e9d82bbb7607d85ca387af281bbfa5b3f5964eb57b64eb97"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25807.geojson": {
+      "bytes": 105248,
+      "sha256": "f78fbf20dd6efa667533cd3e3fe54b8e4ecf5c048311ee53e26369fbdc7e4796"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25808.geojson": {
+      "bytes": 114684,
+      "sha256": "e5963d5589ffbfdcfa37db9e8570f3cd911248c2d0609987732d2ca984bd19e7"
+    },
+    "buildings/dev37.7/tokyo/16/58214/25809.geojson": {
+      "bytes": 30473,
+      "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43"
+    },
+    "config.route-exposure.js": {
+      "bytes": 12910,
+      "sha256": "a53396318b57c0f6026f905d303217db32c315a4c4c63e2880cc33d7f2fece4f"
+    },
+    "config.shademap.js": {
+      "bytes": 886,
+      "sha256": "899eed3a8066d9b4840f7301bf71d62ad24192682d4797294fc2be78912be828"
+    },
+    "data/multisource/evidence-index.json": {
+      "bytes": 55290,
+      "sha256": "37d9dbebb3631628fdab05b2e922fd332e78ccc912b08b4302318aa58d4cea72"
+    },
+    "data/multisource/nlma-bikeway.geojson": {
+      "bytes": 8413,
+      "sha256": "29dd6b9b47b4235a7095b4316872af9f83c8bfe2e7e82693000a54eaabf4a445"
+    },
+    "data/multisource/nlma-sidewalk.geojson": {
+      "bytes": 78141,
+      "sha256": "7edc6e494e868dfb17667a3db71d837a0cc1f8d0d24c95f957442809b58b34b0"
+    },
+    "data/multisource/overture-connectors.geojson": {
+      "bytes": 578980,
+      "sha256": "b1d4985d7269999af11cccd7d5436c9262fa9ed4332f1c9b83bd79d2b27f7d5e"
+    },
+    "data/multisource/overture-segments.geojson": {
+      "bytes": 854084,
+      "sha256": "4d631d4b6f999e3abd5a2d89d852ed0e6e94d41bb5dd147954c4c040f2bb8154"
+    },
+    "data/multisource/source-metadata.json": {
+      "bytes": 4047,
+      "sha256": "495a5a884b90551c6c38414b8199e993b049f06f64227171231aea6d25bca585"
+    },
+    "data/multisource/tainan-sidewalk.geojson": {
+      "bytes": 81538,
+      "sha256": "94503a6fa9bec58aa9610e892def995b094315ae05be4ac462f068d97ab5ff33"
+    },
+    "data/nationwide-sample/hgr2-manifest.json": {
+      "bytes": 7530,
+      "sha256": "c6b1bbe593a74255bfd49a034d15bd274fb71b90f42c6691a74e695ae12d8cd3"
+    },
+    "data/nationwide-sample/manifest-hgr1.json": {
+      "bytes": 12824,
+      "sha256": "7ec909320d6a125e7d09aacf45aad4ff6d1a82575585822ef2ec0464c2eaebbe"
+    },
+    "data/nationwide-sample/manifest.json": {
+      "bytes": 13868,
+      "sha256": "41a568aa42b372e16e5d8958dbd704299a775ef6e48f4af6b7c4c4f9cb748dd2"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0043_yp0038.hdt": {
+      "bytes": 497,
+      "sha256": "c59189178532aacc04926e1be65b456c320e855e8ad7b1b602735cb57d0e4806"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0043_yp0039.hdt": {
+      "bytes": 497,
+      "sha256": "6d9af90cba696450e45e2c5783a20328cc720b154bc7e3d4074bd5eef5bf3820"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0043_yp0040.hdt": {
+      "bytes": 2762,
+      "sha256": "d5df6f64b58b99852e4437dca5a118766d921687f7126858ab967845ca76052a"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0043_yp0041.hdt": {
+      "bytes": 497,
+      "sha256": "9a3f64ae236917ea33ac07f44e3102f8dc958d63d55a48ffc19bca123191342c"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0043_yp0042.hdt": {
+      "bytes": 497,
+      "sha256": "b159137800e1f3faba4657289fb5e8fc919281b3acbdeed23063d2a3002c8bff"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0044_yp0038.hdt": {
+      "bytes": 497,
+      "sha256": "153aea90b6909d59e384f906ba7a20753de6e81451b537f49cb632963c0b258a"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0044_yp0039.hdt": {
+      "bytes": 497,
+      "sha256": "0fa74cb7cf9b6a7fee4bc3961f90a61b39635eebc68d6bc007d4cf27445700db"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0044_yp0040.hdt": {
+      "bytes": 6289,
+      "sha256": "ab64f521f43306d00d75b4b6cab7e929bf11c69fe13026ba27d20573dde76cd8"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0044_yp0041.hdt": {
+      "bytes": 497,
+      "sha256": "4acc8b4ed624ef322b1fbed650f58702a4b81cde1e1d97a2b32a037a9c9acf85"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0044_yp0042.hdt": {
+      "bytes": 497,
+      "sha256": "c6fe6d44d9a3b4bcf47f11d46f9ad8d3fd6b4488ed69588f7982f34cbb124039"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0045_yp0038.hdt": {
+      "bytes": 497,
+      "sha256": "515443b680798bd256c96cc4056ef70b46062e6d6eea956f05a6c2f4df1be5a4"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0045_yp0039.hdt": {
+      "bytes": 497,
+      "sha256": "27e0512785319ee5296c3b89eacc69f3cc4ed4f5f9834f61f8e5b54b4281a261"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0045_yp0040.hdt": {
+      "bytes": 497,
+      "sha256": "fe3039b94d0ba79c36359f296dcae00ab58515f31ac914ad1fae08d9ff84f3c0"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0045_yp0041.hdt": {
+      "bytes": 497,
+      "sha256": "edb0ae53a5464afcc91b14d45a101544b164afb560964d9b1845e690e874aa3d"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0045_yp0042.hdt": {
+      "bytes": 497,
+      "sha256": "4f5d51c0ed0aa189df1b79c764c13ec358d34a98b4ffc34272cf3abc813904d2"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0046_yp0038.hdt": {
+      "bytes": 497,
+      "sha256": "e787112ae2914afc1cfa75132bfda07a645374f893660c9ad2b56ece93a0e0f7"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0046_yp0039.hdt": {
+      "bytes": 497,
+      "sha256": "1a6fe4bf8fffeea1bfafbfcee9398b1795e6ccf8c2bcb87537b3de53be0b1aea"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0046_yp0040.hdt": {
+      "bytes": 497,
+      "sha256": "77ffd3b3dcae243116450b60ab54c93f38d45bc9b273a8fdc32e44965a1da80f"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0046_yp0041.hdt": {
+      "bytes": 497,
+      "sha256": "81591b0079284629c3c5bab31edb364c920db84da7703cde4e144172f76edc36"
+    },
+    "data/nationwide-sample/runtime/evidence/xp0046_yp0042.hdt": {
+      "bytes": 497,
+      "sha256": "21e42ea48d4ecb222c5a8c2035ae00615dc061e8a46674cb1c5a3096b983353a"
+    },
+    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
+      "bytes": 27966,
+      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
+      "bytes": 72091,
+      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
+      "bytes": 1124,
+      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0173_yp0161.hgr2": {
+      "bytes": 628,
+      "sha256": "34852495598950dabf206146fd36f9e57051adf240c7439967a5abb8c102605b"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0174_yp0161.hgr2": {
+      "bytes": 384,
+      "sha256": "5ef0203dec1a8096578edfa89e13ac124430b23e30f7db484d2da60620edca90"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0174_yp0162.hgr2": {
+      "bytes": 3036,
+      "sha256": "3640f948f1118c594a860be7e2f1cd92eb8479e19fca7ac809a824ce77cf8314"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0175_yp0161.hgr2": {
+      "bytes": 7326,
+      "sha256": "81b2e124098235446e0f40e308e9704b572554c47a7c8bad00880944bc21f343"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0175_yp0162.hgr2": {
+      "bytes": 28442,
+      "sha256": "ebc2bf2a70922c1a092ec7140a40572bc92280f9ee1b69cd4ed7d6d38c6894bd"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0176_yp0161.hgr2": {
+      "bytes": 18400,
+      "sha256": "6bc1f9f4430f67d1516fc33eb86d8ecbaf1a768a561c1e10a550ae6dc2c68490"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0176_yp0162.hgr2": {
+      "bytes": 63433,
+      "sha256": "3ede49ac51bec36c0d7863a3bc6fa0f508db9df376a270faabcccf7d4bdbf074"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0177_yp0161.hgr2": {
+      "bytes": 278,
+      "sha256": "f742e4bd70026bcca921f17816b5de209179e0f8fcf50ac6cb036fdbeda2c174"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0177_yp0162.hgr2": {
+      "bytes": 7414,
+      "sha256": "02dd1458827d6d6643c8d7735478b224d8a8afbf2de8512e5f2550cc111b27d6"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0177_yp0163.hgr2": {
+      "bytes": 2103,
+      "sha256": "a4c6c75b8b51e5c34f5b92e92250d504ef6568ccb2d87d1d8f4d2f850b077ad3"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0178_yp0163.hgr2": {
+      "bytes": 2080,
+      "sha256": "da538ec49a8f83f3895d70483bea0904e8ee27640131936e54f31c7467b3c350"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0178_yp0164.hgr2": {
+      "bytes": 3078,
+      "sha256": "07ecadd07bcc8a002adc87040eb2f8455909aedb078261589370743ad3448d90"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0179_yp0164.hgr2": {
+      "bytes": 1881,
+      "sha256": "9a56bc823a09f7160cdf5f23027faa040b9532eb03a43b108a610fb0d8dd89bc"
+    },
+    "data/nationwide-sample/runtime/graph-hgr2/xp0179_yp0165.hgr2": {
+      "bytes": 872,
+      "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
+    },
+    "index.html": {
+      "bytes": 630131,
+      "sha256": "17437ce308b6dcc89a10904e1941ada8e85df2e94d24a145ee747604fc33a166"
+    },
+    "licenses/DATA-AND-COST-NOTICE.md": {
+      "bytes": 3774,
+      "sha256": "08d8aeaaffc46bd4d1a21f00e2cd40b250f139666d747bd1f2eef1a2c98873de"
+    },
+    "licenses/GeoTIFF-2.1.3-LICENSE.txt": {
+      "bytes": 1088,
+      "sha256": "da0811089f254e909f69f75fa496ca97e5167a8eaa945d9a6bffdd8499b47a49"
+    },
+    "licenses/Leaflet-1.9.4-LICENSE.txt": {
+      "bytes": 1395,
+      "sha256": "53e8dc25862014e4324741ca18fbe3611e11d42ef69f59f86ea8c5389647d4cb"
+    },
+    "licenses/building-vendor/@mapbox-point-geometry-LICENSE": {
+      "bytes": 725,
+      "sha256": "0c0ede0036a425ff8b2d49341ea9aa8eccbeeae1ac4eb59874c9dd8bcf5186d3"
+    },
+    "licenses/building-vendor/@mapbox-vector-tile-LICENSE.txt": {
+      "bytes": 1500,
+      "sha256": "5b09a507df6f21d6c2112c46dcaf2927b9dbd8b580a08b542d8ec2f9191d783d"
+    },
+    "licenses/building-vendor/fflate-LICENSE": {
+      "bytes": 1069,
+      "sha256": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551"
+    },
+    "licenses/building-vendor/pbf-LICENSE": {
+      "bytes": 1467,
+      "sha256": "fdf1d5279107d760c7df8c6edab1faab2b72ba17528273a8b417b08f1e12ebbe"
+    },
+    "licenses/building-vendor/pmtiles-LICENSE": {
+      "bytes": 1713,
+      "sha256": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3"
+    },
+    "licenses/building-vendor/polygon-clipping-LICENSE.md": {
+      "bytes": 1327,
+      "sha256": "864ae9e4ed75e1571a3bcf5dc9070264213445b32e7e2af5bf60eba46fb656d0"
+    },
+    "licenses/building-vendor/robust-predicates-LICENSE": {
+      "bytes": 1210,
+      "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd"
+    },
+    "licenses/building-vendor/splaytree-LICENSE": {
+      "bytes": 1113,
+      "sha256": "18b65eb99645589005889cdc3cd1307a79e3e29569ab0be8d406d7ccdc79b341"
+    },
+    "licenses/terrain-attribution.md": {
+      "bytes": 12300,
+      "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
+    },
+    "src/building-data-provider.js": {
+      "bytes": 22592,
+      "sha256": "c5fb9f0c7cb3eb959149fda00df0090942dc472157ee0b0b28cc16655f661e72"
+    },
+    "src/building-decode-worker.js": {
+      "bytes": 566,
+      "sha256": "90bf8475342d54369b88e57e3afdd7a8e40bd91847433e04f6d7be21df48d242"
+    },
+    "src/building-sources.js": {
+      "bytes": 5691,
+      "sha256": "e6fa065b1457c4b78a96d8170b570facc6db4590278735e6760b62a436624266"
+    },
+    "src/cwa-temperature-layer.js": {
+      "bytes": 29667,
+      "sha256": "f2ba96097d6583ad083b77dde8c8d84457fc4de65d79fc93d36dc06913648353"
+    },
+    "src/experimental-fusion-routing.js": {
+      "bytes": 23282,
+      "sha256": "38f59acdafcde5bc95d3e1e781f117c7f7b59198fe9595ffc14da8bde73e075e"
+    },
+    "src/heat-risk.js": {
+      "bytes": 52461,
+      "sha256": "926ec5159a7500903e44aa6214384dc3bd35d0849e45b1e64261296c901b13cb"
+    },
+    "src/multisource-evidence.js": {
+      "bytes": 16103,
+      "sha256": "b6e5b0a78ca8d31659e2a51eca0a2be77cc7eb039fab76c3e7da65c0af00f28f"
+    },
+    "src/nationwide-regression-suite.js": {
+      "bytes": 35652,
+      "sha256": "6be0857120247db4dafe51105d851cbfcc8519003eaa885b8cf243b3681b6742"
+    },
+    "src/nationwide-tile-loader.js": {
+      "bytes": 33542,
+      "sha256": "646cccea4eda95eb6224a544e83c100568893488453ac566cf21b90def16b633"
+    },
+    "src/official-evidence-discovery.js": {
+      "bytes": 24571,
+      "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
+    },
+    "src/own-shade-renderer.js": {
+      "bytes": 10258,
+      "sha256": "9b3ef2bba4bad73e315b6b0f012e4ed8b70a6c5b892c9561cd8b128540486e2d"
+    },
+    "src/pedestrian-graph-routing.js": {
+      "bytes": 465364,
+      "sha256": "d10ffbade8f8fa56862992866886b6c00c5d610c761225168643b1c2aa725b30"
+    },
+    "src/route-exposure.js": {
+      "bytes": 348295,
+      "sha256": "ce24546bdbd18d0a3a89b942935f7852a83493a4c6b4b1738554305e9aa92bd7"
+    },
+    "src/shademap-integration.js": {
+      "bytes": 384432,
+      "sha256": "4926dfd24c14a9865cee455a2b15c09dabc7c4283322979ecac3c04a9df6731e"
+    },
+    "src/source-clock.js": {
+      "bytes": 1656,
+      "sha256": "82bb9c21da4acb955077f8ac822050ee8b2b12979830057ba78ba0acc780cad5"
+    },
+    "vendor/building-vendor.js": {
+      "bytes": 59061,
+      "sha256": "f8d7d69b062c61169df0a45d62f88e5ad09b01e8a5d1df2d91048197eb2d0160"
+    },
+    "vendor/geotiff-2.1.3/geotiff.js": {
+      "bytes": 317520,
+      "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
+    }
+  }
+}

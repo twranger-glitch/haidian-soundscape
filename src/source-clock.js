@@ -1,0 +1,7 @@
+/* Explicit IANA clock. All engines consume Date (UTC instant); never infer a
+ * country's timezone from a city allow-list or silently accept DST gaps. */
+(function(g){'use strict';let zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+function parts(date,z=zone){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:z,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value]));return {date:`${p.year}-${p.month}-${p.day}`,time:`${p.hour}:${p.minute}`,second:p.second};}
+function parseLocal(value,z=zone){if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))throw Error('日期時間格式錯誤');const desired=Date.parse(value+':00Z');if(!Number.isFinite(desired))throw Error('日期時間無效');let guess=desired;for(let i=0;i<4;i++){const p=parts(new Date(guess),z),wall=Date.parse(p.date+'T'+p.time+':'+p.second+'Z');guess+=desired-wall;}const matches=ms=>{const p=parts(new Date(ms),z);return p.date+'T'+p.time===value;};if(!matches(guess))throw Error('此時區的夏令時間跳過此時間，請選其他時間或 UTC');if(matches(guess-3600000)||matches(guess+3600000))throw Error('此時區時間重複，請改以 UTC 指定');return new Date(guess);}
+g.ASTRAClock={get zone(){return zone;},setZone(z){new Intl.DateTimeFormat('en',{timeZone:z}).format();zone=z;return zone;},parts,parseLocal,input(date){const p=parts(date);return p.date+'T'+p.time;},label(date){const p=parts(date);return `${p.date} ${p.time} ${zone}｜${new Date(date).toISOString()}`;}};
+})(typeof window!=='undefined'?window:globalThis);

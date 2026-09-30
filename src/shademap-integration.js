@@ -1287,6 +1287,7 @@
   }
 
   function formatDateInput(date) {
+    if(window.ASTRAClock)return window.ASTRAClock.parts(date).date;
     return [
       date.getFullYear(),
       String(date.getMonth() + 1).padStart(2, "0"),
@@ -1295,15 +1296,17 @@
   }
 
   function minutesOfDay(date) {
+    if(window.ASTRAClock){const [h,m]=window.ASTRAClock.parts(date).time.split(":").map(Number);return h*60+m;}
     return date.getHours() * 60 + date.getMinutes();
   }
 
   function updateTimeLabel() {
     const el = document.getElementById("haidianShadeTimeLabel");
     if (!el) return;
+    if(window.ASTRAClock){el.textContent=window.ASTRAClock.label(state.date);return;}
     el.textContent =
       `${String(state.date.getHours()).padStart(2, "0")}:` +
-      `${String(state.date.getMinutes()).padStart(2, "0")}`;
+      `${String(state.date.getMinutes()).padStart(2, "0")} ${Intl.DateTimeFormat().resolvedOptions().timeZone}｜${state.date.toISOString()}`;
   }
 
   function setStatus(text, warning) {
@@ -1388,7 +1391,7 @@
     const minutes = Number(timeEl.value);
     if (p.length !== 3 || p.some(Number.isNaN) || Number.isNaN(minutes)) return;
 
-    state.date = new Date(
+    try{state.date = window.ASTRAClock?window.ASTRAClock.parseLocal(`${dateEl.value}T${String(Math.floor(minutes/60)).padStart(2,"0")}:${String(minutes%60).padStart(2,"0")}`):new Date(
       p[0],
       p[1] - 1,
       p[2],
@@ -1396,7 +1399,7 @@
       minutes % 60,
       0,
       0
-    );
+    );}catch(error){setStatus(error.message,true);return;}
     updateTimeLabel();
     redrawGroundCanopyShadeOverlay();
     applyShadeDate(state.date, true);
@@ -1439,6 +1442,8 @@
         <div class="haidian-shade-row" style="display:block">
           <div style="margin-bottom:5px">日期</div>
           <input id="haidianShadeDate" class="haidian-shade-date" type="date">
+          <label style="display:block;margin-top:6px">時間基準 <input id="astraTimeZone" aria-label="IANA 時區" list="astraTimeZones" value="${window.ASTRAClock?.zone||'UTC'}" style="width:150px"></label>
+          <datalist id="astraTimeZones"><option>Asia/Taipei</option><option>Asia/Tokyo</option><option>Asia/Singapore</option><option>Australia/Sydney</option><option>Europe/London</option><option>America/New_York</option><option>UTC</option></datalist>
         </div>
 
         <div class="haidian-shade-row">
@@ -1560,8 +1565,10 @@
 
     document.getElementById("haidianShadeRetryData")?.addEventListener("click",retryUnifiedData);
     dateEl.addEventListener("change", syncDateFromControls);
+    document.getElementById('astraTimeZone')?.addEventListener('change',e=>{try{window.ASTRAClock.setZone(e.target.value);dateEl.value=formatDateInput(state.date);timeEl.value=minutesOfDay(state.date);updateTimeLabel();window.dispatchEvent(new Event('astra-timezone-change'));}catch(error){setStatus('IANA 時區無效：'+e.target.value,true);}});
 
     timeEl.addEventListener("input", () => {
+      if(window.ASTRAClock){syncDateFromControls();return;}
       const minutes = Number(timeEl.value);
       state.date.setHours(
         Math.floor(minutes / 60),
@@ -3596,13 +3603,13 @@
       ? height
       : Number(config.defaultBuildingHeight) || 3.1;
     let quality = "default";
-    if (declaredQuality === "direct" || /^OSM height$/i.test(source) || /direct height/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
+    if (["direct","reported"].includes(declaredQuality) || /^OSM height$/i.test(source) || /direct height/i.test(source) || /自訂 GeoJSON/i.test(source)) quality = "measured";
     else if (declaredQuality === "floors-derived" || /building:levels|num_floors/i.test(source)) quality = "levels";
     else if (["context-inferred", "heuristic", "estimated"].includes(declaredQuality) || (source && !/預設|default/i.test(source))) quality = "estimated";
-    if(!(Number.isFinite(height)&&height>0))quality='default';
+    if(!(Number.isFinite(height)&&height>0)||['unknown','underground'].includes(declaredQuality))quality='default';
     const rawBase=parseFloat(properties.min_height ?? properties['min_height'] ?? properties.render_min_height ?? 0);
     const baseHeight=Number.isFinite(rawBase)?Math.max(0,rawBase):0;
-    return { height: safeHeight, baseHeight, roofHeight:Number(properties['roof:height']||properties.roof_height||0), source: source || "預設估計值", quality, declaredQuality };
+    return { height: properties.geometry_quality&&quality==='default'?null:safeHeight, baseHeight, roofHeight:Number(properties['roof:height']||properties.roof_height||0), source: source || "預設估計值", quality, declaredQuality };
   }
 
   function buildingHeightForFeature(feature) {
@@ -3990,7 +3997,7 @@
       return { type: "unknown", reason: "太陽接近地平線；遮蔽來源超出可靠判讀距離" };
     }
 
-    const building = findBuildingShadowEvidence(latlng, solar);
+    const building = unifiedBuildingSnapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(unifiedBuildingSnapshot.features,latlng,solar,buildingHeightMeta,unifiedBuildingSnapshot.corridor?.distanceM||1200):findBuildingShadowEvidence(latlng, solar);
     let tree = null;
     let treeError = "";
     try {
@@ -4113,7 +4120,7 @@
 
   async function shadeStatusAt(latlng, options={}) {
     if(state.visualProvider!=="shademap"){
-      const date=options.date||state.date,m=await analyzeShadeModelAt(latlng.lat,latlng.lng,date,{signal:options.signal});
+      const date=options.date||state.date,prepared=await prepareRouteModel({points:[latlng],date,purpose:'point',signal:options.signal}),m=await analyzeShadeModelAt(latlng.lat,latlng.lng,date,{signal:options.signal,buildingSnapshot:prepared.snapshot});
       const confirmedShade=m.classification==='confirmed-shade',unknown=m.state==='unknown'||(!confirmedShade&&m.reliability==='partial');
       const buildingPartial=state.mode!=='trees'&&!routeBuildingCoverageSafeAt(latlng);
       return {label:m.state==='night'?'夜間':confirmedShade?'已確認遮蔭':unknown?'資料不足／未知':'所選來源：模型日照',shaded:confirmedShade?true:unknown?null:m.shaded,night:m.state==='night',solar:m.solar,classification:m.classification,reliability:m.reliability,buildingPartial,at:new Date(date).toISOString(),modelSource:m.source,sourceType:m.sourceType};
@@ -6014,9 +6021,10 @@
       + 4;
   }
 
-  function routeBuildingCoverageSafeAt(latlng) {
+  function routeBuildingCoverageSafeAt(latlng,snapshot=null) {
     if (state.mode === "trees" || effectiveBuildingMode() === "none") return true;
-    const b = lastBuildingLoadedBounds;
+    if(snapshot&&!snapshot.complete)return false;
+    const b = snapshot?.bounds||lastBuildingLoadedBounds;
     const lat = Number(latlng?.lat), lng = Number(latlng?.lng);
     if (!b || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
     const safetyM = routeBuildingCoverageSafetyRadiusM();
@@ -6476,8 +6484,8 @@
   }
 
   async function loadPipelineBuildings(options={}) {
-    if (!mapRef || mapRef.getZoom() < config.buildingMinZoom || !config.buildingTileUrl) return [];
-    const padded = paddedBuildingBounds(mapRef.getBounds());
+    if (!mapRef || (options.zoom??mapRef.getZoom()) < config.buildingMinZoom || !config.buildingTileUrl) return [];
+    const padded = options.bbox || paddedBuildingBounds(mapRef.getBounds());
     const z = Math.max(0, Number(config.buildingTileZoom) || 16);
 
     let manifest = null;
@@ -6783,7 +6791,7 @@
   const regionalTileCache=new Map(),liveBuildingResults=new Map();
   const REGIONAL_ROOT='./buildings/dev37.7/';
   async function loadRegionalBuildings(options={}){
-    if(!window.HaidianBuildingSources||!mapRef||mapRef.getZoom()<config.buildingMinZoom)return null;
+    if(!window.HaidianBuildingSources||!mapRef||(options.zoom??mapRef.getZoom())<config.buildingMinZoom)return null;
     let manifest;
     try{
       manifest=regionalManifestCache||await buildingTileTasks.run('regional:manifest',async signal=>{
@@ -6791,7 +6799,7 @@
         const m=await r.json();if(!m.version||!Array.isArray(m.regions))throw new Error('invalid regional manifest');return regionalManifestCache=m;
       },options.signal);
     }catch(e){if(options.signal?.aborted)throw e;recordShadeError('regional-manifest',e);return null;}
-    const padded=paddedBuildingBounds(mapRef.getBounds()),center=mapRef.getCenter();
+    const padded=options.bbox||paddedBuildingBounds(mapRef.getBounds()),center={lat:(padded.south+padded.north)/2,lng:(padded.west+padded.east)/2};
     const region=manifest.regions.find(r=>center.lng>=r.aoi[0]&&center.lat>=r.aoi[1]&&center.lng<=r.aoi[2]&&center.lat<=r.aoi[3]);
     if(!region)return null;
     const a=region.aoi,b={west:Math.max(padded.west,a[0]),south:Math.max(padded.south,a[1]),east:Math.min(padded.east,a[2]),north:Math.min(padded.north,a[3])};
@@ -6821,8 +6829,8 @@
   }
   async function loadOSMBuildings(options={}){
     if(!window.HaidianBuildingSources)return legacyLoadOSMBuildings(options);
-    if(!mapRef||mapRef.getZoom()<config.buildingMinZoom)return [];
-    const padded=paddedBuildingBounds(mapRef.getBounds()),key=[padded.south,padded.west,padded.north,padded.east].map(v=>v.toFixed(4)).join(',');
+    if(!mapRef||(options.zoom??mapRef.getZoom())<config.buildingMinZoom)return [];
+    const padded=options.bbox||paddedBuildingBounds(mapRef.getBounds()),key=[padded.south,padded.west,padded.north,padded.east].map(v=>v.toFixed(4)).join(',');
     // At wide views return explicit partial instead of issuing an unbounded query.
     const tooWide=(padded.east-padded.west)>.06||(padded.north-padded.south)>.06;
     let result=liveBuildingResults.get(key);
@@ -6885,7 +6893,7 @@
     return merged;
   }
 
-  async function getBuildings(options={}) {
+  async function getPrecisionBuildings(options={}) {
     if (state.mode === "trees") return [];
 
     if (effectiveBuildingMode() === "none") return [];
@@ -6907,7 +6915,7 @@
       const pipelineComplete = !!(status.coverageComplete && status.fetchComplete);
       if (pipelineComplete || config.buildingPipelineFallbackToOsm === false) return pipeline;
 
-      const fallback = await loadOSMBuildings(options);
+      const fallback = options.allowLive===false ? [] : await loadOSMBuildings(options);
       const fallbackOk = !!lastBuildingLoadedBounds && !lastBuildingFetchError;
 
       // v8.6.3: when the viewport crosses the pilot AOI boundary, keep the
@@ -6951,7 +6959,28 @@
       return fallback;
     }
 
-    return loadOSMBuildings(options);
+    return options.allowLive===false ? [] : loadOSMBuildings(options);
+  }
+
+  let globalBuildingProvider=null,unifiedBuildingSnapshot=null,precisionQueue=Promise.resolve();
+  const unifiedSnapshotCache=new Map();
+  function globalBuildings(){return globalBuildingProvider||(globalBuildingProvider=window.ASTRABuildingData?.create(window.ASTRA_BUILDING_CONFIG||{}));}
+  async function getBuildings(options={}){
+    if(!window.ASTRABuildingData||state.mode==='trees'||effectiveBuildingMode()==='none'||effectiveBuildingMode()==='custom')return getPrecisionBuildings(options);
+    const b=options.bbox||paddedBuildingBounds(mapRef.getBounds());
+    const snapshot=await globalBuildings().load({...options,bbox:b,precisionLoader:async()=>{
+      const work=precisionQueue.catch(()=>{}).then(async()=>{
+        if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+        const features=await getPrecisionBuildings({...options,bbox:b,zoom:18,allowLive:options.purpose==='route'||options.purpose==='point'});
+        const status={...(lastBuildingPipelineStatus||{})};
+        return {features:features.slice(),complete:status.fetchComplete===true&&(status.coverageComplete===true||status.effectiveCoverageComplete===true),status};
+      });precisionQueue=work;return work;
+    }});
+    if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+    unifiedBuildingSnapshot=snapshot;lastBuildingFeatures=snapshot.features;lastBuildingLoadedBounds=snapshot.bounds;
+    lastBuildingCoverageKey=snapshot.cacheKey;lastBuildingFetchError=null;
+    lastBuildingPipelineStatus={mode:'global-overture-unified',fetchComplete:snapshot.fetchComplete,coverageComplete:snapshot.complete,sourceState:snapshot.state,featureCount:snapshot.features.length,tileCount:snapshot.stats.requestedTiles,loadedTileCount:snapshot.stats.loadedTiles,unknownHeight:snapshot.stats.heights.unknown,sourceCounts:snapshot.features.reduce((a,f)=>{const k=f.properties.building_source;a[k]=(a[k]||0)+1;return a;},{}),global:snapshot.stats,error:snapshot.errors.map(e=>e.code).join(',')||null};
+    updateBuildingRuntimeStatus();syncBuildingAttribution();syncBuildingDebugOverlay();return options.returnSnapshot?snapshot:snapshot.features;
   }
 
   function lonLatToXYZ(lat, lon, z) {
@@ -7376,6 +7405,17 @@
   // Data readiness is independent from visualization and never loads an SDK.
   let buildingFailureUntil=0,buildingFailureView='';
   async function prepareRouteModel(options={}) {
+    if(window.ASTRABuildingData&&state.mode!=='trees'&&effectiveBuildingMode()!=='none'&&effectiveBuildingMode()!=='custom'){
+      if(!mapRef)mapRef=resolveMap();if(!mapRef)return getRouteShadeCacheContext();
+      const points=options.points||[],b=options.bbox||(points.length?{south:Math.min(...points.map(p=>Number(p.lat??p[1]))),north:Math.max(...points.map(p=>Number(p.lat??p[1]))),west:Math.min(...points.map(p=>Number(p.lng??p[0]))),east:Math.max(...points.map(p=>Number(p.lng??p[0])))}:{south:mapRef.getBounds().getSouth(),north:mapRef.getBounds().getNorth(),west:mapRef.getBounds().getWest(),east:mapRef.getBounds().getEast()});
+      const date=options.date||state.date,center={lat:(b.south+b.north)/2,lng:(b.west+b.east)/2};
+      const corridor=window.ASTRABuildingData.corridor(b,solarPositionAt(center,date),window.ASTRA_BUILDING_CONFIG||{});
+      const purpose=options.purpose||'visual',key=JSON.stringify([corridor.bounds,purpose,state.mode,effectiveBuildingMode()]),hit=unifiedSnapshotCache.get(key);
+      if(hit&&Date.now()-hit.at<(hit.snapshot.fetchComplete?60000:15000))return { ...getRouteShadeCacheContext(),snapshot:hit.snapshot };
+      const snapshot=await getBuildings({...options,purpose,bbox:corridor.bounds,corridor,returnSnapshot:true});
+      unifiedSnapshotCache.set(key,{snapshot,at:Date.now()});while(unifiedSnapshotCache.size>4)unifiedSnapshotCache.delete(unifiedSnapshotCache.keys().next().value);
+      return {...getRouteShadeCacheContext(),snapshot};
+    }
     if(!mapRef)mapRef=resolveMap();
     if(!mapRef||state.mode==='trees'||effectiveBuildingMode()==='none')return getRouteShadeCacheContext();
     const bounds=mapRef.getBounds();
@@ -7409,14 +7449,14 @@
   }
   function unifiedDiagnostics(){
     const tiles=Object.values(groundCanopyShadeLayer?._tiles||{}).map(t=>t.el?.__shadeStats).filter(Boolean);
-    return {decoder:{...shadeDataState.decoder},worker:{...shadeDataState.worker},tileJobs:canopyTileTasks.diagnostics(),cogJobs:canopyCogTasks.diagnostics(),buildingJobs:buildingTileTasks.diagnostics(),demJobs:demTileTasks.diagnostics(),errors:shadeDataState.errors.slice(),errorCounts:{...shadeDataState.counts},canopyCacheTiles:canopyRasterCache.size,cogCacheEntries:metaCogCache.size,visualConsumers:visualTileControllers.size,groundActive:groundCanopyShadeActiveRenders,groundQueue:groundCanopyShadeRenderQueue.length,visibleTiles:tiles.length,partialTiles:tiles.filter(t=>t.partial).length,ground:tiles,terrain:'incomplete: distant terrain not included',minCanopyZoom:config.metaMinZoom};
+    return {globalBuildings:globalBuildingProvider?.diagnostics()||null,decoder:{...shadeDataState.decoder},worker:{...shadeDataState.worker},tileJobs:canopyTileTasks.diagnostics(),cogJobs:canopyCogTasks.diagnostics(),buildingJobs:buildingTileTasks.diagnostics(),demJobs:demTileTasks.diagnostics(),errors:shadeDataState.errors.slice(),errorCounts:{...shadeDataState.counts},canopyCacheTiles:canopyRasterCache.size,cogCacheEntries:metaCogCache.size,visualConsumers:visualTileControllers.size,groundActive:groundCanopyShadeActiveRenders,groundQueue:groundCanopyShadeRenderQueue.length,visibleTiles:tiles.length,partialTiles:tiles.filter(t=>t.partial).length,ground:tiles,terrain:'incomplete: distant terrain not included',minCanopyZoom:config.metaMinZoom};
   }
   function updateUnifiedShadeStatus(){
     if(state.visualProvider!=='own'||!state.enabled)return;
     const d=unifiedDiagnostics(),b=ownShadeLayer?.diagnostics(),low=mapRef.getZoom()<config.metaMinZoom;
     shadeReady=(state.mode==='buildings'||(!low&&d.visibleTiles>0&&!d.partialTiles))&&(state.mode==='trees'||b?.partial===false);
     const trees=state.mode==='buildings'?'樹冠未選用':low?'請放大後載入樹冠':`樹蔭 ${d.visibleTiles} 磚／${d.partialTiles} 磚來源不足`;
-    setStatus(`自有引擎｜${trees}；建築 ${b?.features||0}（估計 ${b?.estimated||0}／高度未知 ${b?.unknownHeight||0}）。遠距地形 incomplete。${d.decoder.status==='unavailable'?'解碼器未就緒，可重試資料。':''}`,low||d.partialTiles>0||b?.partial||d.decoder.status==='unavailable');
+    setStatus(`自有引擎｜${trees}；建築 ${b?.features||0}（估計 ${b?.estimated||0}／高度未知 ${b?.unknownHeight||0}）；全球來源 ${d.globalBuildings?.last?.state||'載入中'} / ${d.globalBuildings?.last?.release||'未取得'}。遠距地形 incomplete。${d.decoder.status==='unavailable'?'解碼器未就緒，可重試資料。':''}`,low||d.partialTiles>0||b?.partial||d.decoder.status==='unavailable');
   }
   function scheduleUnifiedView(isRetry=false){
     if(!isRetry)unifiedRetryBudget=2;
@@ -7435,6 +7475,7 @@
     },180);
   }
   function retryUnifiedData(){
+    globalBuildingProvider?.clear();unifiedSnapshotCache.clear();
     if(shadeDataState.decoder.status!=='ready')shadeDataState.decoder.attempts=0;
     canopyNegativeCache.clear();shadeDataState.sourceFailures.clear();buildingFailureUntil=0;
     ownShadeLayer?.request();scheduleUnifiedView();schedulePointRefresh('retry/online');
@@ -7444,7 +7485,7 @@
     if(!mapRef||!window.HaidianOwnShade){setStatus('自有陰影模組或地圖尚未就緒。',true);return;}
     state.enabled=true;syncVisualProviderControls();syncPointQueryCursor();setNavigationCanvasState(false);
     if(mapRef.attributionControl&&!mapRef.__haidianOwnAttribution){mapRef.attributionControl.addAttribution('<a href="https://registry.opendata.aws/dataforgood-fb-forestsv2/" target="_blank" rel="noopener">CHMv2 © Meta / WRI</a> · CC BY 4.0');mapRef.__haidianOwnAttribution=true;}
-    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{await prepareRouteModel({signal});return {features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false&&lastBuildingPipelineStatus?.coverageComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
+    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{const prepared=await prepareRouteModel({signal,purpose:'visual'});return prepared.snapshot||{features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false&&lastBuildingPipelineStatus?.coverageComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
     ownShadeLayer.request();scheduleUnifiedView();
   }
   async function setVisualProvider(provider){
@@ -7719,6 +7760,7 @@
       heightSource: evidence.heightSource || props.height_source || "",
       heightQuality: evidence.heightQuality || props.height_quality || "",
       buildingSource: props.building_source || "",
+      ...(props.geometry_quality?{buildingId:props.building_uid||props.source_id||null,sourceVersion:props.source_version||null,geometryQuality:props.geometry_quality,baseHeightM:Number(props.min_height||0),heightProvenance:props.height_quality||null}:{}),
       confidence: evidence.confidence || "",
       plausibleUnknownHeight: evidence.plausibleUnknownHeight === true
     };
@@ -7768,9 +7810,10 @@
     const sourceIdentityAvailable = state.mode === 'trees' || buildingMode === 'none' || (buildingMode === 'pipeline' && Boolean(
       String(config.buildingDataVersion || '').trim() || String(workerDataVersion || '').trim() || String(manifestBuiltAtUtc || '').trim()
     ));
-    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable);
+    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable && (state.mode==='trees'||buildingMode==='none'||!unifiedBuildingSnapshot||unifiedBuildingSnapshot.complete));
     const token = JSON.stringify({
-      revision: 'dev37.7-unified-shade-model-v4',
+      revision: 'dev37.8-unified-building-model-v5',
+      globalRelease:unifiedBuildingSnapshot?.release||'',
       regionalVersion:String(regionalManifestCache?.version||''),
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
@@ -7886,14 +7929,15 @@
         return result;
       }
 
-      const buildingReady = routeBuildingModelReady();
-      const buildingCoverageSafe = routeBuildingCoverageSafeAt(latlng);
+      const snapshot=effectiveBuildingMode()==='custom'?null:options.buildingSnapshot||unifiedBuildingSnapshot;
+      const buildingReady = snapshot? snapshot.fetchComplete:routeBuildingModelReady();
+      const buildingCoverageSafe = routeBuildingCoverageSafeAt(latlng,snapshot);
       let building = null;
       let tree = null;
       let canopyQueryFailed = false;
-      if (options.buildings !== false) {
+      if (options.buildings !== false && state.mode!=='trees' && effectiveBuildingMode()!=='none') {
         const buildingStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-        building = findBuildingShadowEvidence(latlng, solar);
+        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,snapshot.corridor?.distanceM||1200):findBuildingShadowEvidence(latlng, solar);
         routeModelPerf.buildingEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - buildingStarted);
       }
       if (options.canopy !== false && state.mode !== "buildings") {
@@ -7914,9 +7958,11 @@
       }
 
       if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+      const uncertainBuilding=building && (building.plausibleUnknownHeight||building.heightQuality!=='measured'||building.feature?.properties?.geometry_quality==='generalized'||building.feature?.properties?.geometry_quality==='fragment-merge-failed');
       let sourceType = "sun";
       let source = null;
-      if (building && tree) {
+      if(tree&&uncertainBuilding){sourceType='tree';source=compactRouteTreeEvidence(tree);}
+      else if (building && tree) {
         const tolerance = Math.max(1, Number(config.queryShadeSourceMixedDistanceToleranceM) || 3);
         if (Math.abs(building.distance - tree.distance) <= tolerance) {
           sourceType = "mixed";
@@ -7940,7 +7986,6 @@
       }
 
       const hasShade = sourceType !== "sun";
-      const uncertainBuilding=building && (building.plausibleUnknownHeight||building.heightQuality==='default');
       const confirmedShade=hasShade&&!!(tree||(building&&!uncertainBuilding));
       const lowSun = solar.altitudeDeg < Math.max(0, Number(config.queryShadeSourceMinAltitudeDeg) || 1.5);
       const reliability = (uncertainBuilding&&!tree)||(!buildingCoverageSafe && state.mode !== "trees" && effectiveBuildingMode() !== "none") || lowSun || canopyQueryFailed
@@ -7952,7 +7997,7 @@
       }
       if (lowSun) caveats.push("太陽接近地平線，遠距遮蔽物可能超出目前路線模型的可靠追蹤距離。");
       if (canopyQueryFailed) caveats.push("本次樹冠查詢逾時或失敗，可能低估樹蔭。");
-      if(uncertainBuilding)caveats.push("建築高度未知；投影僅為估計，不能確認遮蔭。");
+      if(uncertainBuilding)caveats.push("建築高度為推估／未知，或輪廓經概化；投影僅為候選，不能確認遮蔭。");
       caveats.push("自有 CHMv2／建築局部平坦模型；遠距地形遮蔽 incomplete。");
       const unresolved=!confirmedShade && reliability==='partial';
       const shaded=confirmedShade?true:unresolved?null:false;
@@ -7974,6 +8019,7 @@
         reliability,
         model: "route-ray-v1",
         buildingModelReady: buildingReady,
+        ...(snapshot?{buildingSnapshot:{key:snapshot.cacheKey,release:snapshot.release,state:snapshot.state,stats:snapshot.stats}}:{}),
         // dev35.2: route scoring is unchanged, but cross-analysis cache write-back
         // is permitted only for samples backed by complete local building coverage.
         routeCacheSafe: buildingCoverageSafe && reliability !== "partial",
@@ -8071,6 +8117,7 @@
     getRouteDiagnostics,
     resetRouteDiagnostics,
     getRouteShadeCacheContext,
+    getBuildingSnapshot:()=>unifiedBuildingSnapshot,
     get state() {
       return Object.assign({}, state);
     },
