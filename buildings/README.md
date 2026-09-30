@@ -19,3 +19,7 @@ The full handoff includes raw OSM responses, individual relation/way completion 
 Height `direct` means an explicit OSM tag, not independently surveyed accuracy. `floors-derived` uses mapped floors × 3.1 m. Unknown values remain unknown, even if a default column is drawn for context. `min_height` is the prism base and `height` its total top elevation above ground; do not add the base or `roof:height` again. Polygon holes, multiple outer rings and source IDs are preserved. Invalid rings are omitted with a counted, visible incomplete status; a courtyard is never filled by separately drawing its relation member ways.
 
 Files are static, same-origin assets for GitHub Pages. Runtime prioritizes these indexed regional tiles, then the existing Tainan pipeline, then a bounded OSM fallback outside coverage. Do not replace the existing `DEPLOY/data` production graph with these building files.
+
+## dev37.9.6 NLSC geometry-native pilot
+
+`nlsc-official-geometry-pilot-2026-09-30.geojson` is a bounded 104-feature official-geometry pilot used only as additive positive caster evidence. See `NLSC-OFFICIAL-GEOMETRY-PILOT.md`. It is partial: absence is not evidence of open sky and does not establish local or nationwide completeness.

@@ -6996,8 +6996,12 @@
         if(window.ASTRANLSCOfficialHeight?.enrichFeatures){
           official=await window.ASTRANLSCOfficialHeight.enrichFeatures(features,{bbox:b});
         }
-        const status={...(lastBuildingPipelineStatus||{}),officialHeightEnrichment:official.status};
-        return {features:official.features.slice(),complete:status.fetchComplete===true&&(status.coverageComplete===true||status.effectiveCoverageComplete===true),status};
+        let geometry={features:official.features.slice(),status:null};
+        if(window.ASTRANLSCOfficialGeometry?.augmentFeatures){
+          geometry=await window.ASTRANLSCOfficialGeometry.augmentFeatures(official.features,{bbox:b});
+        }
+        const status={...(lastBuildingPipelineStatus||{}),officialHeightEnrichment:official.status,officialGeometryEnrichment:geometry.status};
+        return {features:geometry.features.slice(),complete:status.fetchComplete===true&&(status.coverageComplete===true||status.effectiveCoverageComplete===true),status};
       });precisionQueue=work;return work;
     }});
     if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
