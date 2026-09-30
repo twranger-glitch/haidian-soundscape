@@ -918,18 +918,28 @@
     const models = await runPool(samples, context.shadeConcurrency, async (p) => {
       return window.HaidianShade.analyzeShadeModelAt(p.lat, p.lng, at, { buildingSnapshot:context.buildingSnapshot, canopyTimeoutMs: context.canopyTimeoutMs });
     });
-    let sun = 0, shade = 0, night = 0, partial = 0, cacheUnsafe = 0;
+    let sun = 0, shade = 0, night = 0, unknown = 0, partial = 0, cacheUnsafe = 0;
     for (const model of models) {
-      if (model?.state === "night") night += 1;
+      const unresolved = model?.state === "unknown" || model?.confirmed === false ||
+        (model?.shaded !== true && model?.state !== "night" && (model?.reliability === "partial" || model?.routeCacheSafe === false));
+      if (unresolved) {
+        const reasons = model?.unknownReasons;
+        if (!Array.isArray(reasons) || !reasons.length || !reasons.every((r) => r === "building-height-unknown" || r === "building-height-or-geometry-estimated")) {
+          throw new Error("Realm shade model incomplete: unbounded source/model failure");
+        }
+        unknown += 1;
+      } else if (model?.state === "night") night += 1;
       else if (model?.shaded === true) shade += 1;
-      else sun += 1;
+      else if (model?.state === "sun" && model?.shaded === false) sun += 1;
+      else throw new Error("Realm shade model incomplete");
       if (model?.reliability === "partial") partial += 1;
       if (model?.routeCacheSafe === false) cacheUnsafe += 1;
     }
     const total = models.length || 1;
     return {
-      directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, samples: total,
-      partialSamples: partial, cacheUnsafeSamples: cacheUnsafe, cacheSafe: partial === 0 && cacheUnsafe === 0
+      directSunFraction: sun / total, shadedFraction: shade / total, nightFraction: night / total, unknownFraction: unknown / total,
+      directSunFractionRange: [sun / total, (sun + unknown) / total], uncertaintyBounded: true, samples: total,
+      partialSamples: partial, cacheUnsafeSamples: cacheUnsafe, cacheSafe: unknown === 0 && partial === 0 && cacheUnsafe === 0
     };
   }
 
