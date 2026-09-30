@@ -671,8 +671,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630181,
-      "sha256": "280cc0d3c45bc23818c9aff3a13e3558804c744123545896c095847538756b33"
+      "bytes": 630191,
+      "sha256": "3932a101990d75c97c453774fcdaebe77396bae6b473267d02a7ca3862da67a0"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -763,8 +763,8 @@
       "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
     },
     "src/own-shade-renderer.js": {
-      "bytes": 11587,
-      "sha256": "9e65f2433b45031981be956376fc3ac73f73faa4aaeef2677867e37d34d27231"
+      "bytes": 11851,
+      "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
       "bytes": 473747,
@@ -775,8 +775,8 @@
       "sha256": "b8b823a07d8c760131b17ddc6d300d7277b22ebee630f924c4d3632d78242366"
     },
     "src/shademap-integration.js": {
-      "bytes": 389155,
-      "sha256": "cdd29765499ebcdd16ced8e65733a87d1aacc349eb7c1d38ec08ea5739e7d980"
+      "bytes": 389551,
+      "sha256": "8a3821004c22521a0a8d81d46d911c0a2769ba54b79a6d40ad6ba8cbdee31f8e"
     },
     "src/source-clock.js": {
       "bytes": 1656,

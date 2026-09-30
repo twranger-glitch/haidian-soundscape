@@ -3997,7 +3997,7 @@
       return { type: "unknown", reason: "太陽接近地平線；遮蔽來源超出可靠判讀距離" };
     }
 
-    const building = unifiedBuildingSnapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(unifiedBuildingSnapshot.features,latlng,solar,buildingHeightMeta,unifiedBuildingSnapshot.corridor?.distanceM||1200):findBuildingShadowEvidence(latlng, solar);
+    const building = unifiedBuildingSnapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(unifiedBuildingSnapshot.features,latlng,solar,buildingHeightMeta,unifiedBuildingSnapshot.corridor?.distanceM||1200,{rayWidthM:Math.max(0,Number(config.queryShadeSourceRayWidthM)||9),unknownMaxHeightM:Math.max(6,Number(config.queryShadeSourceUnknownBuildingMaxHeightM)||24),clearanceM:Math.max(0,Number(config.queryShadeSourceRayClearanceM)||0.5)}):findBuildingShadowEvidence(latlng, solar);
     let tree = null;
     let treeError = "";
     try {
@@ -7972,7 +7972,7 @@
       if (options.buildings !== false && modelMode!=='trees' && buildingMode!=='none') {
         const buildingStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         const routeBuildingRadiusM=Math.min(Math.max(20,Number(config.queryShadeSourceMaxDistanceM)||240),Math.max(20,Number(snapshot?.corridor?.distanceM)||1200));
-        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,routeBuildingRadiusM,{rayWidthM:Math.max(0,Number(config.queryShadeSourceRayWidthM)||9)}):normalizedRequired?null:findBuildingShadowEvidence(latlng, solar);
+        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,routeBuildingRadiusM,{rayWidthM:Math.max(0,Number(config.queryShadeSourceRayWidthM)||9),unknownMaxHeightM:Math.max(6,Number(config.queryShadeSourceUnknownBuildingMaxHeightM)||24),clearanceM:Math.max(0,Number(config.queryShadeSourceRayClearanceM)||0.5)}):normalizedRequired?null:findBuildingShadowEvidence(latlng, solar);
         routeModelPerf.buildingEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - buildingStarted);
       }
       if (options.canopy !== false && modelMode !== "buildings") {
