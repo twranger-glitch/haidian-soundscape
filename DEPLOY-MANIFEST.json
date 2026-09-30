@@ -1,6 +1,6 @@
 {
-  "release": "dev37.9-core",
-  "scope": "dev37.9 A/B core patch; unchanged base website files retained; not a full release certification",
+  "release": "dev37.9.3-core",
+  "scope": "dev37.9.3 uncertainty-safe comparison / Realm search core patch integrated onto dev37.9.2 diagnostic baseline; unchanged website/data files retained; live acceptance pending",
   "files": {
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -672,7 +672,7 @@
     },
     "index.html": {
       "bytes": 630191,
-      "sha256": "3932a101990d75c97c453774fcdaebe77396bae6b473267d02a7ca3862da67a0"
+      "sha256": "c6d66300693e3e8afbf7ddf059b27123f61bb2fee0e551609fd36c034a6af734"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -767,12 +767,12 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 473747,
-      "sha256": "82db1e8da2a04c42b7c48a4e6835bc597e573d3ef25ed1c01b968ae413de3cff"
+      "bytes": 479297,
+      "sha256": "678ac926b8a5a108fe7c18cab7cceb0f915a2fa51f7d760337f4ab5f0defbad5"
     },
     "src/route-exposure.js": {
-      "bytes": 351100,
-      "sha256": "b8b823a07d8c760131b17ddc6d300d7277b22ebee630f924c4d3632d78242366"
+      "bytes": 354291,
+      "sha256": "6d369d6c52da5e1cbe63d24649b1aa8b4442dbd7db8f47b1a18c8b0eb4a14670"
     },
     "src/shademap-integration.js": {
       "bytes": 389551,

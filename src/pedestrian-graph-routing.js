@@ -985,12 +985,31 @@
     const models=await runPoolNoYield(built.segments,Math.min(4,Number(context.shadeConcurrency||2)),async(seg)=>{
       const task=()=>window.HaidianShade?.analyzeShadeModelAt(seg.sample.lat,seg.sample.lng,new Date(startMs+seg.cumulativeMidM/speedMps*1000),{buildingSnapshot:context.buildingSnapshot,canopyTimeoutMs:context.canopyTimeoutMs,signal:runtime?.signal});
       const model=runtime?await runtime.sample(task):await task();
-      if(!model||!['sun','shade','night'].includes(model.state)||model.ok===false||model.reliability==='partial'||model.routeCacheSafe===false)throw new Error('Realm shade model incomplete');
+      if(!model||!['sun','shade','night','unknown'].includes(model.state)||model.ok===false||(model.state==='shade'&&model.shaded!==true)||(model.state==='sun'&&model.shaded!==false))throw new Error('Realm shade model incomplete');
+      const unresolved=model.state==='unknown'||model.confirmed===false||(model.shaded!==true&&model.state!=='night'&&(model.reliability==='partial'||model.routeCacheSafe===false));
+      const reasons=model.unknownReasons;
+      if(unresolved&&(!Array.isArray(reasons)||!reasons.length||!reasons.every(r=>r==='building-height-unknown'||r==='building-height-or-geometry-estimated')))throw new Error('Realm shade model incomplete: unbounded source/model failure');
       return model;
     });
-    let sun=0,shade=0,night=0;
-    models.forEach((m,i)=>{const len=built.segments[i].lengthM;if(m.state==='night')night+=len;else if(m.shaded===true)shade+=len;else sun+=len;});
-    return {directSunFraction:sun/built.totalDistanceM,shadedFraction:shade/built.totalDistanceM,nightFraction:night/built.totalDistanceM,samples:models.length,cacheSafe:true};
+    let sun=0,shade=0,night=0,unknown=0;
+    models.forEach((m,i)=>{const len=built.segments[i].lengthM;if(m.state==='unknown'||m.confirmed===false||(m.shaded!==true&&m.state!=='night'&&(m.reliability==='partial'||m.routeCacheSafe===false)))unknown+=len;else if(m.state==='night')night+=len;else if(m.shaded===true)shade+=len;else sun+=len;});
+    return {directSunFraction:sun/built.totalDistanceM,shadedFraction:shade/built.totalDistanceM,nightFraction:night/built.totalDistanceM,unknownFraction:unknown/built.totalDistanceM,
+      directSunFractionRange:[sun/built.totalDistanceM,(sun+unknown)/built.totalDistanceM],uncertaintyBounded:true,
+      samples:models.length,cacheSafe:unknown===0&&models.every(m=>m.routeCacheSafe!==false&&m.reliability!=='partial')};
+  }
+
+  // dev37.9.3: search minimizes an upper-bound objective. Keep it separate from
+  // confirmed direct sun; cacheSafe=false may be reused locally as an explicit
+  // interval, but never persisted as a resolved sample. Legacy exact providers
+  // retain their scalar cost. Missing/invalid providers fail closed.
+  function edgeShadeBounds(value) {
+    const lower=value?.directSunFraction,unknown=value?.unknownFraction??0;
+    if(value?.ok===false||typeof lower!=='number'||!Number.isFinite(lower)||lower<0||lower>1||typeof unknown!=='number'||!Number.isFinite(unknown)||unknown<0||lower+unknown>1+1e-9)throw new Error('Realm shade model incomplete: invalid edge bounds');
+    if(value.uncertaintyBounded===true){
+      const parts=[lower,value.shadedFraction,value.nightFraction,unknown];
+      if(parts.some(x=>typeof x!=='number'||!Number.isFinite(x)||x<0)||Math.abs(parts.reduce((a,b)=>a+b,0)-1)>1e-7)throw new Error('Realm shade model incomplete: invalid evidence partition');
+    }else if(unknown>0||value.cacheSafe===false||value.reliability==='partial')throw new Error('Realm shade model incomplete: unbounded edge evidence');
+    return {lower,upper:lower+unknown,unknown};
   }
 
   function denseShadeSegmentsForPath(graph, steps, spacingM) {
@@ -1151,7 +1170,9 @@
     }
     steps.reverse();
     const path = pathFromEdgeSteps(graph, steps);
-    return Object.assign(path, { walkSeconds: label.walkS, directSunSeconds: label.sunS });
+    const confirmed=label.confirmedSunS??label.sunS,unknown=label.unknownS??0;
+    return Object.assign(path, { walkSeconds: label.walkS, directSunSeconds: confirmed,unknownSeconds:unknown,
+      directSunSecondsRange:[confirmed,confirmed+unknown],searchCostSeconds:label.sunS,searchObjective:unknown>0?'minimum-upper-bound':'exact-sun' });
   }
 
   function shadeBucketForMs(atMs, bucketSec) {
@@ -1227,7 +1248,7 @@
   }
 
   function shadeResultSafeForWarmCache(value) {
-    return Boolean(value && typeof value === 'object' && value.cacheSafe !== false && Number.isFinite(Number(value.directSunFraction)) && Number.isFinite(Number(value.shadedFraction)));
+    return Boolean(value && typeof value === 'object' && value.cacheSafe !== false && (value.unknownFraction===undefined||value.unknownFraction===0) && Number.isFinite(Number(value.directSunFraction)) && Number.isFinite(Number(value.shadedFraction)));
   }
 
   async function commitSessionShadeWarmCache(handle, localCache) {
@@ -1411,6 +1432,7 @@
     let shadeCacheHits = 0;
     let expanded = 0;
     const metrics=options.searchMetrics;
+    let uncertaintyEncountered=Number(options.initialGoalLabel?.unknownS||0)>0;
     const updateMetrics=()=>{if(metrics)Object.assign(metrics,{expandedStates:expanded,shadeEdgeEvaluations:shadeEvals,edgeCacheHits:shadeCacheHits,edgeCacheSize:shadeCache.size});};
     let dominanceRejected = 0;
     let dominanceRemoved = 0;
@@ -1420,7 +1442,8 @@
     // Resource-constrained label-setting search.  A single "best sun" value per
     // node/time bucket can incorrectly erase a slightly sunnier-but-earlier
     // arrival that later reaches a much shadier corridor.  Keep a tiny Pareto
-    // frontier of (walk time, direct-sun time) labels instead.
+    // frontier of (walk time, sun upper-bound cost) labels instead. Confirmed
+    // sun and unknown travel alongside that optimization cost on every label.
     // A lower envelope over every feasible cached time bucket is admissible.
     // Missing cells have zero cost. This never assumes time-invariant shade.
     const lower = new Map([[String(endId),0]]), incoming = new Map();
@@ -1444,8 +1467,9 @@
             const key=options.realmDenseShadeCache?`realm-dense-v1|${edge.id}|${from}|${bucket}`:shadeCacheKey(edge,bucket);
             if(!shadeCache.has(key)){complete=false;break;}
             const value=await shadeCache.get(key);
-            if(!value||value.cacheSafe===false||!Number.isFinite(value.directSunFraction)){complete=false;break;}
-            min=Math.min(min,clamp(value.directSunFraction,0,1,0));
+            if(!value||(value.cacheSafe===false&&value.uncertaintyBounded!==true)||!Number.isFinite(value.directSunFraction)){complete=false;break;}
+            const bounds=edgeShadeBounds(value);if(bounds.unknown>0)uncertaintyEncountered=true;
+            min=Math.min(min,bounds.upper);
           }
           if(complete){cost=t*min;boundEdges++;}
         }
@@ -1471,7 +1495,7 @@
     const estimate=l=>{let remain=lower.get(l.node)||0;for(const b of resourceBounds)remain=Math.max(remain,(b.dist.get(l.node)||0)-b.lambda*(detourLimitS+0.5-l.walkS));return l.sunS+remain;};
     const compare=(a,b)=>(estimate(a)-estimate(b))||(a.walkS-b.walkS);
     let heap = new MinHeap(compare);
-    const startLabel = { node: String(startId), walkS: 0, sunS: 0, parent: null, viaEdgeId: null, active: true };
+    const startLabel = { node: String(startId), walkS: 0, sunS: 0, confirmedSunS:0, unknownS:0, parent: null, viaEdgeId: null, active: true };
     const labelsByState = new Map();
 
     function stateKey(label) {
@@ -1664,16 +1688,21 @@
       if (shadeEvals > 0 && shadeEvals % 6 === 0) await cooperativeYield();
       for (const row of shadedOutgoing) {
         const { next, edge, edgeTime, nextWalk, syntheticM } = row.item;
-        const sunFraction = clamp(row.shade?.directSunFraction, 0, 1, 0);
-        const nextSun = cur.sunS + edgeTime * sunFraction;
-        const label = { node: next, walkS: nextWalk, sunS: nextSun, syntheticM, parent: cur, viaEdgeId: edge.id, active: true };
+        const bounds=edgeShadeBounds(row.shade);
+        if(bounds.unknown>0)uncertaintyEncountered=true;
+        const nextSun = cur.sunS + edgeTime * bounds.upper;
+        const label = { node: next, walkS: nextWalk, sunS: nextSun,confirmedSunS:(cur.confirmedSunS??cur.sunS)+edgeTime*bounds.lower,unknownS:(cur.unknownS||0)+edgeTime*bounds.unknown, syntheticM, parent: cur, viaEdgeId: edge.id, active: true };
         if (insertLabel(label)) heap.push(label);
       }
     }
 
-    if(metrics)Object.assign(metrics,{terminationReason,remainingLowerBoundSunSeconds:remainingLowerBound,incumbentSunSeconds:bestGoal?.sunS??null,proofScope:'bucketed selected-source simple paths on supplied graph; no physical/global claim'});
+    const comparisonState=uncertaintyEncountered?'incomplete-source':'comparable';
+    const uncertainty={comparisonState,objective:uncertaintyEncountered?'minimum-upper-bound':'exact-sun',orderingProved:!uncertaintyEncountered&&!!bestGoal,
+      directSunSecondsRange:bestGoal?[bestGoal.confirmedSunS??bestGoal.sunS,bestGoal.sunS]:null,unknownSeconds:bestGoal?.unknownS??0,
+      reason:uncertaintyEncountered?'upper-bound optimum is a candidate, not a proof of actual sun ordering':null};
+    if(metrics)Object.assign(metrics,{terminationReason,remainingLowerBoundSunSeconds:remainingLowerBound,incumbentSunSeconds:bestGoal?.confirmedSunS??bestGoal?.sunS??null,incumbentUpperBoundSeconds:bestGoal?.sunS??null,uncertainty,proofScope:'bucketed selected-source upper-bound objective on supplied simple paths; final dense comparison required'});
     if (!bestGoal) return { path: null, expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
-    return { path: reconstructLabelPath(graph, bestGoal), expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
+    return { path: Object.assign(reconstructLabelPath(graph, bestGoal),{searchObjective:uncertainty.objective}), uncertainty, expanded, shadeEvals, shadeCacheHits, shadeCacheSize: shadeCache.size, dominanceRejected, dominanceRemoved, historyBoundRejected, admissibleBoundEdges:boundEdges };
   }
 
   function routeSignature(points) {
@@ -1731,7 +1760,8 @@
       kind,
       distanceM: Number(path?.distanceM || 0),
       durationS: Number(path?.walkSeconds || extra.durationS || 0),
-      points: path?.points || []
+      points: path?.points || [],
+      ...(path?.directSunSecondsRange?{graphDirectSunSecondsRange:path.directSunSecondsRange.slice(),graphUnknownSeconds:path.unknownSeconds||0,graphSearchObjective:path.searchObjective}:{}),
     }, extra);
   }
 
@@ -1775,7 +1805,7 @@
     const provider = options.edgeSunProvider || defaultEdgeSunProvider;
     const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || Date.now());
     const speedMps = Math.max(0.1, Number(options.speedMps) || 1.25);
-    let current = String(startId), walkS = 0, directSunSeconds = 0, evaluations = 0;
+    let current = String(startId), walkS = 0, directSunSeconds = 0, unknownSeconds=0, evaluations = 0;
     const rows = [];
     for (const edgeId of path.edgeIds) {
       const edge = graph.edges.get(String(edgeId));
@@ -1791,9 +1821,10 @@
         shadeConcurrency: options.shadeConcurrency || config.shadeConcurrency,
         buildingSnapshot:options.buildingSnapshot, canopyTimeoutMs: options.canopyTimeoutMs || config.canopyTimeoutMs
       });
-      const sunFraction = clamp(result?.directSunFraction, 0, 1, 0);
+      const bounds=edgeShadeBounds(result),sunFraction=bounds.lower;
       directSunSeconds += edgeTimeS * sunFraction;
-      rows.push({ edgeId:String(edgeId), at:new Date(atMs).toISOString(), directSunFraction:sunFraction, edgeTimeS });
+      unknownSeconds+=edgeTimeS*bounds.unknown;
+      rows.push({ edgeId:String(edgeId), at:new Date(atMs).toISOString(), directSunFraction:sunFraction,unknownFraction:bounds.unknown,directSunFractionRange:[bounds.lower,bounds.upper], edgeTimeS });
       evaluations += 1;
       walkS += edgeTimeS;
       current = to;
@@ -1801,16 +1832,21 @@
     }
     const estimated = Number(path.directSunSeconds);
     const errorSeconds = Number.isFinite(estimated) ? directSunSeconds - estimated : null;
+    const estimatedUpper=path.directSunSecondsRange?.[1]??estimated;
+    const upperErrorSeconds=Number.isFinite(estimatedUpper)?directSunSeconds+unknownSeconds-estimatedUpper:null;
     const toleranceSec = Math.max(0, Number(options.candidateCorrectnessExactReplayToleranceSec ?? config.candidateCorrectnessExactReplayToleranceSec ?? 45));
     return {
       available:true,
       evaluations,
       directSunSeconds,
+      unknownSeconds,
+      directSunSecondsRange:[directSunSeconds,directSunSeconds+unknownSeconds],
+      upperErrorSeconds,
       estimatedDirectSunSeconds:Number.isFinite(estimated) ? estimated : null,
       errorSeconds,
       absoluteErrorSeconds:Number.isFinite(errorSeconds) ? Math.abs(errorSeconds) : null,
       toleranceSec,
-      withinTolerance:Number.isFinite(errorSeconds) ? Math.abs(errorSeconds) <= toleranceSec + 1e-9 : null,
+      withinTolerance:Number.isFinite(errorSeconds)&&Number.isFinite(upperErrorSeconds) ? Math.max(Math.abs(errorSeconds),Math.abs(upperErrorSeconds)) <= toleranceSec + 1e-9 : null,
       rows
     };
   }
@@ -3645,6 +3681,7 @@
         productionGraphMutated: false,
         fastest: Object.assign({}, fastestPath, { durationS: fastestTime }),
         minSun: minSun.path ? Object.assign({}, minSun.path, { durationS: minSun.path.walkSeconds }) : null,
+        uncertainty:minSun.uncertainty||null,
         detourPct,
         detourLimitSeconds: detourLimitS,
         searchExpandedStates: minSun.expanded,
@@ -5063,7 +5100,7 @@
     const speed=clamp(options.speedMps,.5,2.5,1.25),departure=new Date(options.departure||Date.now()),toB=dijkstraTimes(graph,String(endId),speed,true);
     const limit=Number(options.experimentalBaselineSeconds||toB.dist.get(String(startId)))*(1+clamp(options.detourPct,0,60,30)/100),weight=.35;
     const q=new MinHeap((a,b)=>(a.sunS+weight*(a.walkS+(toB.dist.get(a.node)||0)))-(b.sunS+weight*(b.walkS+(toB.dist.get(b.node)||0))));
-    const start={node:String(startId),walkS:0,sunS:0,parent:null,viaEdgeId:null},best=new Map([[start.node,0]]);q.push(start);
+    const start={node:String(startId),walkS:0,sunS:0,confirmedSunS:0,unknownS:0,parent:null,viaEdgeId:null},best=new Map([[start.node,0]]);q.push(start);
     let expanded=0,evaluations=0;
     while(q.size&&nowMs()<deadline&&expanded<900&&evaluations<1100){
       if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');const cur=q.pop();
@@ -5078,10 +5115,10 @@
         const syntheticM=(cur.syntheticM||0)+(e.realmSynthetic?e.distanceM:0);if(syntheticM>Number(options.maxRealmSyntheticM||480)+.01)continue;
         const walk=cur.walkS+e.distanceM/speed,remaining=toB.dist.get(next);if(!Number.isFinite(remaining)||walk+remaining>limit+.5)continue;
         const bucket=Math.floor((departure.getTime()+(cur.walkS+e.distanceM/speed/2)*1000)/30000),key=`realm-dense-v1|${e.id}|${cur.node}|${bucket}`;
-        let cost=options.sharedShadeCache.get(key);if(!cost){evaluations++;cost=Promise.resolve(options.edgeSunProvider(e,cur.node,new Date((bucket*30+15)*1000),{}));options.sharedShadeCache.set(key,cost);}
-        const shade=await cost;if(!Number.isFinite(shade?.directSunFraction)||shade.cacheSafe===false)throw new Error('Realm candidate source incomplete');
-        const sun=cur.sunS+e.distanceM/speed*shade.directSunFraction,score=sun+weight*walk;
-        if(score<(best.get(next)??Infinity)-1e-9){best.set(next,score);q.push({node:next,walkS:walk,sunS:sun,syntheticM,parent:cur,viaEdgeId:e.id});}
+        let cost=options.sharedShadeCache.get(key);if(!cost){evaluations++;cost=Promise.resolve(options.edgeSunProvider(e,cur.node,new Date((bucket*30+15)*1000),{buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,shadeConcurrency:options.shadeConcurrency}));options.sharedShadeCache.set(key,cost);}
+        let bounds;try{bounds=edgeShadeBounds(await cost);}catch(error){options.sharedShadeCache.delete(key);throw error;}
+        const sun=cur.sunS+e.distanceM/speed*bounds.upper,score=sun+weight*walk;
+        if(score<(best.get(next)??Infinity)-1e-9){best.set(next,score);q.push({node:next,walkS:walk,sunS:sun,confirmedSunS:(cur.confirmedSunS??cur.sunS)+e.distanceM/speed*bounds.lower,unknownS:(cur.unknownS||0)+e.distanceM/speed*bounds.unknown,syntheticM,parent:cur,viaEdgeId:e.id});}
       }
     }
     return {path:null,label:null,expanded,evaluations,proof:'bounded generator exhausted its budget'};
@@ -5184,9 +5221,10 @@
         runtime.stats.phase='exact-replay';
         exactReplay=await exactReplayPathShade(topo.best.graph,searched.minSun,topo.startId,searchOptions);
         if(!exactReplay.available||exactReplay.withinTolerance!==true)return finish({candidates,shadeSearch:{attempted:true,complete:false,reason:'realm-exact-replay-mismatch',rejectedCandidates:['pedestrian-realm-shade'],profile:runtime.snapshot('exact-replay-mismatch'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0)});
-        if(!sameGraphPathGeometry(searched.minSun,searched.fastest)){if(boundedCandidate)candidates.splice(candidates.indexOf(boundedCandidate),1);candidates.push(make('pedestrian-realm-shade',searched.minSun));}
+        if(!sameGraphPathGeometry(searched.minSun,searched.fastest)){if(boundedCandidate)candidates.splice(candidates.indexOf(boundedCandidate),1);const candidate=make('pedestrian-realm-shade',searched.minSun);if(searched.uncertainty?.orderingProved===false){candidate.searchIncomplete=true;Object.assign(candidate.graphMeta,{shadeSearchComplete:false,uncertainty:searched.uncertainty});}candidates.push(candidate);}
       }
-      return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true,profile:runtime.snapshot(searched.available?'complete':'unavailable'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
+      const uncertain=searched.uncertainty?.orderingProved===false;
+      return finish({candidates,shadeSearch:{attempted:true,complete:searched.available===true&&!uncertain,searchCompleted:searched.available===true,comparisonState:uncertain?'incomplete-source':'comparable',uncertainty:searched.uncertainty,reason:uncertain?'realm-uncertain-ordering':null,profile:runtime.snapshot(uncertain?'uncertain-ordering':searched.available?'complete':'unavailable'),elapsedMs:nowMs()-searchStarted,exactReplay},searchExpandedStates:Number(searched.searchExpandedStates||0),shadeEdgeEvaluations:Number(searched.shadeEdgeEvaluations||0),productionGraphMutated:false});
     }catch(error){
       const termination=error.realmTermination||(options.shouldCancel?.()?'user-cancelled':nowMs()>=deadline?'deadline':/日照評估.*安全上限/.test(String(error?.message))?'edge-evaluation-cap':/狀態安全上限/.test(String(error?.message))?'state-cap':/model incomplete/.test(String(error?.message))?'incomplete-model':'provider-error');
       const profile=runtime.snapshot(termination);lastRealmSearchDiagnostics=Object.assign({},profile);
@@ -7159,7 +7197,8 @@
       candidate.graphMeta.sourceTopologyJoinDistanceM=joins.reduce((n,e)=>n+e.distanceM,0);
       candidate.graphMeta.sourceTopologyJoinCount=joins.length;
       candidate.graphMeta.requiresJunctionGeometryConfirmation=joins.some(e=>e.distanceM>2);
-      candidate.graphMeta.shadeSearchComplete=!searchFailure;
+      candidate.graphMeta.shadeSearchComplete=!searchFailure&&minSun.uncertainty?.orderingProved!==false;
+      if(minSun.uncertainty?.orderingProved===false){candidate.searchIncomplete=true;candidate.graphMeta.uncertainty=minSun.uncertainty;}
       if(searchFailure){candidate.searchIncomplete=true;candidate.fallbackReason=searchFailure;candidate.label='最快備援（遮蔭搜尋未完成）';}
     }
     const pruningCertificate=pruningCorrectnessCertificate(full,keptEdgeIds,fromA,toB,speedMps,detourLimitS,options);
@@ -7172,7 +7211,8 @@
     }
     lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',geometryReconciliation:sourceFull.geometryReconciliation||null,searchComplete:!searchFailure,searchFailure,searchMetrics,overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:keptEdgeIds.size,prunedEdgeRatio:full.edges.size?keptEdgeIds.size/full.edges.size:1,fineNodes:graph.nodes.size,fineEdges:graph.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:prodSnapA.distanceM,nodeId:prodSnapA.id,snapType:prodSnapA.snapType,highway:prodSnapA.sourceHighway||null,wayId:prodSnapA.sourceWayId||null},snapB:{distanceM:prodSnapB.distanceM,nodeId:prodSnapB.id,snapType:prodSnapB.snapType,highway:prodSnapB.sourceHighway||null,wayId:prodSnapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:minSun.path?.directSunSeconds??null,minSunDistanceM:minSun.path?.distanceM??null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:minSun.expanded,shadeEdgeEvaluations:minSun.shadeEvals,shadeCacheHits:minSun.shadeCacheHits||0,shadeCacheSize:minSun.shadeCacheSize||0,temporalShadeTable:temporalShade,exactReplay,pruningCertificate,candidateLifecycle,dominanceRejected:minSun.dominanceRejected||0,dominanceRemoved:minSun.dominanceRemoved||0,candidateCount:candidates.length,searchMode:'resource-constrained-history-safe-labels',labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap',responsiveScheduling:true,hgr2PreRefined:true,graphStats:graphStats(graph),performance:perf,productionGraphMutated:false};
     lastDiagnostics.searchCertificate={
-      scope:'bucketed-selected-source-graph',complete:!searchFailure,physicalGlobalOptimal:false,
+      scope:'bucketed-selected-source-graph',complete:!searchFailure&&minSun.uncertainty?.orderingProved!==false,physicalGlobalOptimal:false,
+      uncertainty:minSun.uncertainty||null,
       selectedSourceScope:'CHMv2/building local model; distant terrain incomplete',
       timeBucketSec:Number(options.shadeTimeBucketSec||config.shadeTimeBucketSec),
       prewarmOmitted:Number(temporalShade?.omittedBySafetyCap||0),missingCellLowerBoundSunSeconds:0,
@@ -7182,6 +7222,7 @@
       onDemandLimit:Number(options.maxShadeEdgeEvaluations||config.maxShadeEdgeEvaluations),
       actualArrivalReplay:exactReplay,pruningValid:pruningCertificate?.valid!==false
     };
+    if(minSun.uncertainty?.orderingProved===false)Object.assign(lastDiagnostics,{searchCompleted:!searchFailure,searchComplete:false,comparisonState:'incomplete-source',uncertainty:minSun.uncertainty});
     return topologyContext({available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false},full);
   }
 
@@ -7770,6 +7811,7 @@
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
       realmDenseEdgeSunProvider,
+      edgeShadeBounds,
       reconcileHgr2Geometry,
       pathDivergenceDiagnostics,
       getLastOrderedMapMatchFailure: () => lastOrderedMapMatchFailure,

@@ -647,6 +647,7 @@
       sourceDistanceM: { building: 0, tree: 0, mixed: 0, unknown: 0 },
       unknownDistanceM: 0,
       unknownSeconds: 0,
+      sourceFailureDistanceM: 0,
       confirmedDaylightDistanceM: 0,
       partialDistanceM: 0
     };
@@ -657,7 +658,8 @@
       const sec = len / speedMps;
       summary.totalDistanceM += len;
       const model = item.model || {};
-      if (model.state === "night") {
+      const validModel = model.ok !== false && ['sun','shade','night','unknown'].includes(model.state) && (model.state!=='shade'||model.shaded===true) && (model.state!=='sun'||model.shaded===false);
+      if (validModel && model.state === "night" && model.confirmed !== false) {
         summary.nightDistanceM += len;
         summary.nightSeconds += sec;
         currentSun = 0;
@@ -665,9 +667,13 @@
         continue;
       }
       summary.daylightDistanceM += len;
-      const unknown=model.state==='unknown'||model.ok===false||model.confirmed===false||(model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
+      const unknown=!validModel||model.state==='unknown'||model.confirmed===false||(model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
       if(unknown){
         summary.unknownDistanceM+=len;summary.unknownSeconds+=sec;summary.sourceDistanceM.unknown+=len;currentSun=0;currentShade=0;
+        // Only the supplied model's bounded caster uncertainty participates in
+        // a proof. Acquisition/model failures remain unknown and block ranking.
+        const reasons=model.unknownReasons;
+        if(!validModel||!Array.isArray(reasons)||!reasons.length||!reasons.every(r=>r==='building-height-unknown'||r==='building-height-or-geometry-estimated'))summary.sourceFailureDistanceM+=len;
       } else if (model.shaded === true) {
         summary.shadedDistanceM += len;
         summary.shadedSeconds += sec;
@@ -1438,6 +1444,32 @@
     return true;
   }
 
+  // dev37.9.3: intervals describe the existing sampled, selected-source model,
+  // not physical/global certainty. Strict separation must hold against EVERY
+  // eligible route, including those whose heights are unknown. The 0.5 s
+  // margin preserves the existing exact-score tie policy conservatively.
+  function compareExposureBounds(candidates) {
+    const rows=candidates.map(candidate=>{
+      const s=candidate.analysis?.summary||{};
+      const valid=[s.directSunSeconds,s.unknownSeconds,s.walkSeconds,s.sourceFailureDistanceM??0].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0)&&!(s.sourceFailureDistanceM>0)&&s.directSunSeconds+s.unknownSeconds<=s.walkSeconds+1e-7;
+      return {candidate,candidateId:candidate.id,valid,lowerSeconds:valid?s.directSunSeconds:null,upperSeconds:valid?s.directSunSeconds+s.unknownSeconds:null,unknownSeconds:s.unknownSeconds,sourceFailureDistanceM:s.sourceFailureDistanceM??0};
+    });
+    const allValid=rows.every(r=>r.valid),exact=allValid&&rows.every(r=>r.unknownSeconds===0);
+    let winner=null,rule='unproved';
+    if(exact&&rows.length){
+      winner=rows.slice().sort((a,b)=>Math.abs(a.lowerSeconds-b.lowerSeconds)>.5?a.lowerSeconds-b.lowerSeconds:a.candidate.analysis.summary.walkSeconds-b.candidate.analysis.summary.walkSeconds)[0];
+      rule='exact-existing-0.5s-walk-tie';
+    }else if(allValid&&rows.length>=2){
+      winner=rows.find(a=>rows.every(b=>a===b||a.upperSeconds+.5<b.lowerSeconds))||null;
+      if(winner)rule='upper-plus-0.5s-below-every-other-lower';
+    }
+    const proof={rule,scope:'eligible scored candidates; dense arrival-time selected-source model',winnerId:winner?.candidateId||null,
+      state:!allValid?'source-failure':winner?'proved':rows.length<2?'insufficient-candidates':'overlapping-or-within-tie-margin',
+      bounds:rows.map(({candidate,...row})=>row),
+      marginsSeconds:winner?rows.filter(r=>r!==winner).map(r=>({candidateId:r.candidateId,lowerMinusWinnerUpper:r.lowerSeconds-winner.upperSeconds})):[]};
+    return {selected:winner?.candidate||null,proof};
+  }
+
   async function scoreCandidates(candidates, options = {}) {
     if (!Array.isArray(candidates) || !candidates.length) throw new Error("沒有候選路線。");
     const serial = options.serial ?? analysisSerial;
@@ -1536,19 +1568,19 @@
       (done, total) => setStatus(`dev35.3：dense 候選完成 ${done}/${total}；最多 ${denseCandidateConcurrency} 條同時精算。`, "loading")
     );
     const eligibleScored = scored.filter((c) => c.eligible !== false);
-    const reliableScored=eligibleScored.filter(c=>walkabilitySafe(c)&&!(c.analysis.summary.unknownDistanceM>0.01));
-    const selected = reliableScored.slice().sort((a, b) => {
-      const sunA = a.analysis.summary.directSunSeconds;
-      const sunB = b.analysis.summary.directSunSeconds;
-      if (Math.abs(sunA - sunB) > 0.5) return sunA - sunB;
-      return a.analysis.summary.walkSeconds - b.analysis.summary.walkSeconds;
-    })[0] || null;
+    const comparison=compareExposureBounds(eligibleScored);
+    // reliableScored remains the exact-evidence count; a robust interval winner
+    // does not turn any of its unknown samples into reliable resolved samples.
+    const reliableScored=eligibleScored.filter(c=>c.analysis.summary.unknownSeconds===0&&!(c.analysis.summary.sourceFailureDistanceM>0));
+    const selected=comparison.selected;
+    const comparisonValid=eligibleScored.length>=2&&!!selected;
     if (selected && serial === analysisSerial) {
       const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || departureDateFromPanel());
       selected.analysis.heat = await maybeHeatContext(selected.points, departure, serial);
     }
     if (candidateAudit) {
-      candidateAudit.reliability=scored.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:reliableScored.includes(c)?'reliable':c.eligible===false?'ineligible':'unknown-source',unknownDistanceM:c.analysis.summary.unknownDistanceM,reasons:c.eligible===false?walkabilityReasons(c):c.analysis.summary.unknownDistanceM>.01?['unknown-shade-distance']:[],buildingSnapshot:c.analysis.buildingSnapshot}));
+      candidateAudit.comparisonProof=comparison.proof;
+      candidateAudit.reliability=scored.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:reliableScored.includes(c)?'reliable':c.eligible===false?'ineligible':c===selected?'robust-interval-winner':'unknown-source',unknownDistanceM:c.analysis.summary.unknownDistanceM,directSunSecondsRange:c.analysis.summary.directSunSecondsRange,sourceFailureDistanceM:c.analysis.summary.sourceFailureDistanceM,reasons:c.eligible===false?walkabilityReasons(c):c.analysis.summary.unknownSeconds>0?['unknown-shade-distance']:[],buildingSnapshot:c.analysis.buildingSnapshot}));
       candidateAudit.scored = scored.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, eligible:c.eligible !== false }));
       candidateAudit.displayed = candidateAudit.scored.slice();
       finalizeCandidateAudit(candidateAudit);
@@ -1559,14 +1591,15 @@
       eligibleScored,
       reliableScored,
       stageCounts:{input:candidates.length,quality:qualityValid.length,walkability:qualityValid.filter(walkabilitySafe).length,detour:detourEligible.length,scored:scored.length,eligibleScored:eligibleScored.length,reliableScored:reliableScored.length},
-      comparisonState:reliableScored.length>=2?'comparable':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
+      comparisonState:comparisonValid?'comparable':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
+      comparisonProof:comparison.proof,
       scored,
       selected,
       best: selected,
       activeCandidateId: selected?.id || scored[0]?.id || null,
       detourPct,
-      comparisonValid: reliableScored.length >= 2,
-      shadeComparisonIncomplete: reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c)),
+      comparisonValid,
+      shadeComparisonIncomplete: !comparisonValid&&(reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c))),
       rejectedQuality,
       denseScoring: {
         candidateConcurrency: denseCandidateConcurrency,
@@ -3122,7 +3155,7 @@
       if (c.kind === 'explore') badges.push('<em class="explore">探索</em>');
       if (c.kind === 'graph-shade' || c.kind === 'graph-fastest') badges.push(`<em class="graph">${c?.graphMeta?.backend === 'nationwide-hgr2' ? '全臺 HGR2' : (c?.graphMeta?.backend === 'nationwide-hgr1' ? '全臺 HGR1' : 'OSM Graph')}</em>`);
       if (c?.graphMeta?.usesConditionalPrivateAccess) badges.push('<em class="over">OSM private・需確認</em>');
-      if(s.unknownDistanceM>0.01)badges.push('<em class="over">陰影資料不足・不參與最少日曬排名</em>');
+      if(s.unknownSeconds>0)badges.push('<em class="over">含未知路段・以日曬上下界比較</em>');
       if (c.searchIncomplete) badges.push('<em class="over">搜尋未完成・備援</em>');
       if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">候選中日曬最少</em>');
       if (c.eligible === false) badges.push('<em class="over">超過上限</em>');
@@ -3136,12 +3169,12 @@
 
     let notice = '';
     if(bundle.shadeComparisonIncomplete){
-      notice='<div class="re-candidate-alert"><b>遮蔭資料不足，無法完成日照排名</b><span>未知路段未算作直接日照。候選仍可檢視，不能宣稱已找到最少日曬路線。</span></div>';
+      notice='<div class="re-candidate-alert"><b>日曬上下界重疊、差距不足或來源不足，無法證明排名</b><span>未知路段保留未知。候選仍可檢視，不能宣稱已找到最少日曬路線。</span></div>';
     } else if (!bundle.comparisonValid) {
       notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線（符合繞路上限）</b><span>已完成曝曬分析，但還不能判定真正的「最不曬」。手繪路線即使略超過上限，也會顯示在下方供你點選比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
     } else {
       const selectedName = candidateName(bundle.best, bundle);
-      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.eligibleScored?.length || bundle.eligible?.length || 0} 條符合上限的候選</b><span>目前直接日照最少的是「${escapeHtml(selectedName)}」。下方每張路線卡都可以點選切換。</span></div>`;
+      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.eligibleScored?.length || bundle.eligible?.length || 0} 條符合上限的候選</b><span>目前直接日照最少的是「${escapeHtml(selectedName)}」。${bundle.comparisonProof?.rule==='upper-plus-0.5s-below-every-other-lower'?'其日曬上界低於所有其他候選下界；未知路段仍保留未知。':''}下方每張路線卡都可以點選切換。</span></div>`;
     }
 
     let manualState = '';
@@ -5047,6 +5080,7 @@
     _internals: {
       buildSampleSegments,
       aggregateExposure,
+      compareExposureBounds,
       routeDistanceM,
       routeStretchRescueOptions,
       graphFastestCandidate,
