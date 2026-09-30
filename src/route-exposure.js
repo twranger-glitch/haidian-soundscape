@@ -4543,7 +4543,14 @@
         setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}。耗時 ${(perf.totalMs/1000).toFixed(1)} 秒。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
-        setStatus(`目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。${suffix}`, "warning");
+        if (bundle.comparisonState === "incomplete-source") {
+          const count = Number(bundle.eligibleScored?.length || bundle.stageCounts?.eligibleScored || 0);
+          setStatus(`已找到 ${count} 條可行候選，但目前陰影資料不完整，暫時無法可靠比較「最不曬」。${suffix}`, "warning");
+        } else if (bundle.comparisonState === "only-one-eligible") {
+          setStatus(`目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。${suffix}`, "warning");
+        } else {
+          setStatus(`目前沒有可可靠比較的符合條件候選。${suffix}`, "warning");
+        }
       }
     } catch (error) {
       if (error?.message !== "ROUTE_ANALYSIS_CANCELLED") setStatus(error?.message || "A→B 路線分析失敗。", "error");

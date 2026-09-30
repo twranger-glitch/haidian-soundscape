@@ -55,13 +55,22 @@
   const q=feature?.properties?.geometry_quality;
   return Number(height?.height)>0&&height?.quality==='measured'&&(!q||q==='source-footprint');
  }
- function findEvidence(features,origin,solar,height,radius=1200){
+ function findEvidence(features,origin,solar,height,radius=1200,options={}){
   if(!solar||solar.night)return null;const cos=Math.cos(origin.lat*Math.PI/180),project=p=>({x:(((p.lng-origin.lng+180)%360+360)%360-180)*111195.08*cos,y:(p.lat-origin.lat)*111195.08});let best=null;
+  const tanAlt=Math.tan(Math.max(.001,solar.altitudeRad)),rayWidth=Math.max(0,Number(options.rayWidthM)||0),bearing=Number(solar.sunBearingDeg)*Math.PI/180,right={x:Math.cos(bearing),y:-Math.sin(bearing)};
+  const uncertaintyPoints=[{x:0,y:0}];if(rayWidth>0)for(const scale of [-1,-.5,.5,1])uncertaintyPoints.push({x:right.x*rayWidth*scale,y:right.y*rayWidth*scale});
   for(const f of candidates(features,origin,radius)){
-   const meta=height(f),unknown=!(Number(meta.height)>0),h=unknown?{...meta,height:24}:meta,shape=projectBuilding(f,solar,project,h);if(!containsShadow(shape,{x:0,y:0}))continue;
+   const meta=height(f),unknown=!(Number(meta.height)>0),precise=evidenceQuality(f,meta)&&!unknown;
+   // For non-measured/generalized buildings, test only whether this footprint is a
+   // geometrically possible caster within the bounded route-ray scope. The probe
+   // height is not treated as a real height and is never returned as shade evidence.
+   // This keeps unrelated unknown buildings from poisoning the whole snapshot while
+   // preserving unknown for every uncertain building that could affect this sample.
+   const probeTop=Math.max(Number(meta.height)||0,Number(meta.baseHeight||0)+radius*tanAlt+1);
+   const h=precise?meta:{...meta,height:probeTop},shape=projectBuilding(f,solar,project,h);
+   const hits=precise?containsShadow(shape,{x:0,y:0}):uncertaintyPoints.some(pt=>containsShadow(shape,pt));if(!hits)continue;
    const b=global.ASTRABuildingData.featureBox(f),near=project({lng:Math.max(b.west,Math.min(b.east,origin.lng)),lat:Math.max(b.south,Math.min(b.north,origin.lat))}),distance=Math.hypot(near.x,near.y);if(distance>radius)continue;
-   const precise=evidenceQuality(f,meta)&&!unknown;
-   const row={type:'building',feature:f,height:unknown?null:meta.height,heightSource:meta.source,heightQuality:meta.quality,distance,requiredHeight:distance*Math.tan(solar.altitudeRad),confidence:precise?'high':'possible',plausibleUnknownHeight:unknown};
+   const row={type:'building',feature:f,height:unknown?null:meta.height,heightSource:meta.source,heightQuality:meta.quality,distance,requiredHeight:distance*tanAlt,confidence:precise?'high':'possible',plausibleUnknownHeight:unknown};
    if(!best||(precise&&!best.precise)||(precise===best.precise&&distance<best.distance))best={...row,precise};
   }return best;
  }

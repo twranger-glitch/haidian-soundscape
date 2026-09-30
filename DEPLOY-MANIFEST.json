@@ -723,8 +723,8 @@
       "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
     },
     "src/building-data-provider.js": {
-      "bytes": 23245,
-      "sha256": "e1760bc6d042ff10b1dfcf55cd750cf95643887d3df633095f585987b2abb983"
+      "bytes": 24902,
+      "sha256": "a969e116f78dbf626388ee979363479bff6b21fae2b2f9c7c1ed30fc37a9a6aa"
     },
     "src/building-decode-worker.js": {
       "bytes": 566,
@@ -763,20 +763,20 @@
       "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
     },
     "src/own-shade-renderer.js": {
-      "bytes": 10625,
-      "sha256": "2666875670c991e0685c65d6cc11641077ba20497b5cf6594c67ee3a6264d8fd"
+      "bytes": 11587,
+      "sha256": "9e65f2433b45031981be956376fc3ac73f73faa4aaeef2677867e37d34d27231"
     },
     "src/pedestrian-graph-routing.js": {
       "bytes": 473747,
       "sha256": "82db1e8da2a04c42b7c48a4e6835bc597e573d3ef25ed1c01b968ae413de3cff"
     },
     "src/route-exposure.js": {
-      "bytes": 350581,
-      "sha256": "b017e8a3f738eaf3258ca72b5057c9228a420f866c63f06720e0bc3dfeec4126"
+      "bytes": 351100,
+      "sha256": "b8b823a07d8c760131b17ddc6d300d7277b22ebee630f924c4d3632d78242366"
     },
     "src/shademap-integration.js": {
-      "bytes": 388083,
-      "sha256": "eae586c09a17f879c594cbda34b6531dd85bdc654314c1bdaafdfb67809c07cd"
+      "bytes": 389155,
+      "sha256": "cdd29765499ebcdd16ced8e65733a87d1aacc349eb7c1d38ec08ea5739e7d980"
     },
     "src/source-clock.js": {
       "bytes": 1656,

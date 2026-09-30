@@ -6028,9 +6028,20 @@
       + 4;
   }
 
+  function routeBuildingSourceCoverageComplete(snapshot=null) {
+    if (!snapshot) return false;
+    if (snapshot.coverageComplete === true) return true;
+    if (snapshot.coverageComplete === false) return false;
+    // Compatibility for older/synthetic snapshots. New provider snapshots expose
+    // coverageComplete separately from all-feature height/geometry quality.
+    if (snapshot.complete === true) return true;
+    return snapshot.fetchComplete === true && snapshot.precision?.complete === true
+      && snapshot.corridor?.capped !== true && snapshot.discovery?.stale !== true;
+  }
+
   function routeBuildingCoverageSafeAt(latlng,snapshot=null) {
     if (state.mode === "trees" || effectiveBuildingMode() === "none") return true;
-    if(snapshot&&!snapshot.complete)return false;
+    if(snapshot&&!routeBuildingSourceCoverageComplete(snapshot))return false;
     const b = snapshot?.bounds||lastBuildingLoadedBounds;
     const lat = Number(latlng?.lat), lng = Number(latlng?.lng);
     if (!b || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
@@ -7811,7 +7822,7 @@
     if(state.mode==='trees'||buildingMode==='none'||buildingMode==='custom')snapshot=null;
     const modelReady = snapshot ? snapshot.fetchComplete===true : routeBuildingModelReady();
     const pipeline = lastBuildingPipelineStatus || {};
-    const pipelineComplete = snapshot ? snapshot.complete===true : buildingMode !== 'pipeline' || (
+    const pipelineComplete = snapshot ? routeBuildingSourceCoverageComplete(snapshot) : buildingMode !== 'pipeline' || (
       pipeline.fetchComplete !== false && pipeline.coverageComplete !== false && !pipeline.error
     );
 
@@ -7828,9 +7839,11 @@
     const sourceIdentityAvailable = state.mode === 'trees' || buildingMode === 'none' || (buildingMode === 'pipeline' && Boolean(
       String(config.buildingDataVersion || '').trim() || String(workerDataVersion || '').trim() || String(manifestBuiltAtUtc || '').trim()
     ));
-    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable && (state.mode==='trees'||buildingMode==='none'||!snapshot||snapshot.complete));
+    // Namespace readiness depends on source coverage, not on every feature having
+    // measured height. Per-cell routeCacheSafe remains the local quality gate.
+    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable && (state.mode==='trees'||buildingMode==='none'||!snapshot||routeBuildingSourceCoverageComplete(snapshot)));
     const token = JSON.stringify({
-      revision: 'dev37.9-committed-snapshot-model-v6',
+      revision: 'dev37.9.1-local-caster-proof-v7',
       globalRelease:snapshot?.release||'',
       solarOrigin:snapshot?.solarOrigin||null,
       regionalVersion:String(regionalManifestCache?.version||''),
@@ -7958,7 +7971,8 @@
       let canopyQueryFailed = false;
       if (options.buildings !== false && modelMode!=='trees' && buildingMode!=='none') {
         const buildingStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,snapshot.corridor?.distanceM||1200):normalizedRequired?null:findBuildingShadowEvidence(latlng, solar);
+        const routeBuildingRadiusM=Math.min(Math.max(20,Number(config.queryShadeSourceMaxDistanceM)||240),Math.max(20,Number(snapshot?.corridor?.distanceM)||1200));
+        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,routeBuildingRadiusM,{rayWidthM:Math.max(0,Number(config.queryShadeSourceRayWidthM)||9)}):normalizedRequired?null:findBuildingShadowEvidence(latlng, solar);
         routeModelPerf.buildingEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - buildingStarted);
       }
       if (options.canopy !== false && modelMode !== "buildings") {
@@ -8014,7 +8028,7 @@
         : "model";
       const unknownReasons=[];
       if(!buildingCoverageSafe&&modelMode!=='trees'&&buildingMode!=='none'){
-        unknownReasons.push(!snapshot?'building-snapshot-unavailable':!snapshot.fetchComplete?'building-source-incomplete':!snapshot.complete?'building-coverage-or-quality-incomplete':'outside-verified-caster-coverage');
+        unknownReasons.push(!snapshot?'building-snapshot-unavailable':!snapshot.fetchComplete?'building-source-incomplete':!routeBuildingSourceCoverageComplete(snapshot)?'building-source-coverage-incomplete':'outside-verified-caster-coverage');
         for(const e of snapshot?.errors||[])unknownReasons.push('building-source:'+e.code);
         if(snapshot?.precision?.status?.fetchComplete===false)unknownReasons.push('precision:'+String(snapshot.precision.status.mode||'unavailable'));
       }
