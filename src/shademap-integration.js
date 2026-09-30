@@ -6992,8 +6992,12 @@
       const work=precisionQueue.catch(()=>{}).then(async()=>{
         if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
         const features=await getPrecisionBuildings({...options,bbox:b,zoom:18,allowLive:options.purpose==='route'||options.purpose==='point'});
-        const status={...(lastBuildingPipelineStatus||{})};
-        return {features:features.slice(),complete:status.fetchComplete===true&&(status.coverageComplete===true||status.effectiveCoverageComplete===true),status};
+        let official={features:features.slice(),status:null};
+        if(window.ASTRANLSCOfficialHeight?.enrichFeatures){
+          official=await window.ASTRANLSCOfficialHeight.enrichFeatures(features,{bbox:b});
+        }
+        const status={...(lastBuildingPipelineStatus||{}),officialHeightEnrichment:official.status};
+        return {features:official.features.slice(),complete:status.fetchComplete===true&&(status.coverageComplete===true||status.effectiveCoverageComplete===true),status};
       });precisionQueue=work;return work;
     }});
     if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});

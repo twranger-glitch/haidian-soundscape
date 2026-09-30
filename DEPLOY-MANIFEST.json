@@ -1,6 +1,6 @@
 {
-  "release": "dev37.9.4-fusion-regression-fix",
-  "scope": "dev37.9.4 diagnostic-layer repair: preserve bounded building-height uncertainty in experimental-fusion clone search; dev37.9.3 uncertainty-safe comparison/Realm core retained; live acceptance pending",
+  "release": "dev37.9.5-nlsc-official-height-pilot",
+  "scope": "diagnostic local NLSC official BUILD_H enrichment; dev37.9.4 routing/comparison/Realm core retained; no candidate-generation change",
   "files": {
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -9,6 +9,10 @@
     "RELEASE-dev37.8.md": {
       "bytes": 1265,
       "sha256": "e951c7666b69f48053c7ef47f8727ad04d4fefaaeb88573a667c0aad23841421"
+    },
+    "buildings/NLSC-OFFICIAL-HEIGHT-PILOT.md": {
+      "bytes": 1188,
+      "sha256": "795b00b00c8cdd1ab8acde213fedb46855bac6cbf06ce17443b55dfde50de7d8"
     },
     "buildings/README.md": {
       "bytes": 2807,
@@ -474,6 +478,10 @@
       "bytes": 30473,
       "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43"
     },
+    "buildings/nlsc-official-height-pilot-2026-09-30.json": {
+      "bytes": 188070,
+      "sha256": "738459e44d7ade7cbc8c4fd6ed3b16723c65b55d18a2f6bcd0bb561a227a50e2"
+    },
     "config.route-exposure.js": {
       "bytes": 12910,
       "sha256": "a53396318b57c0f6026f905d303217db32c315a4c4c63e2880cc33d7f2fece4f"
@@ -671,8 +679,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630191,
-      "sha256": "324fa34f102c810c85f5d22ee218c01f4dd05ff4240bdc35dd49ecda65ed998d"
+      "bytes": 630273,
+      "sha256": "994a6380d45cd89c80c4c41421ac9baca6020607fb431d4846d18aca16282f92"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -758,6 +766,10 @@
       "bytes": 33542,
       "sha256": "646cccea4eda95eb6224a544e83c100568893488453ac566cf21b90def16b633"
     },
+    "src/nlsc-official-height.js": {
+      "bytes": 8299,
+      "sha256": "264804078a172cb891fdebc2df8d7ec096bbf47ea999e77cc953f748a1f4484f"
+    },
     "src/official-evidence-discovery.js": {
       "bytes": 24571,
       "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
@@ -775,8 +787,8 @@
       "sha256": "6d369d6c52da5e1cbe63d24649b1aa8b4442dbd7db8f47b1a18c8b0eb4a14670"
     },
     "src/shademap-integration.js": {
-      "bytes": 389551,
-      "sha256": "8a3821004c22521a0a8d81d46d911c0a2769ba54b79a6d40ad6ba8cbdee31f8e"
+      "bytes": 389824,
+      "sha256": "433529d368db8490f291945b1fb35e9e823cff775cfe8887630cc7a4e91f7f85"
     },
     "src/source-clock.js": {
       "bytes": 1656,
@@ -790,6 +802,5 @@
       "bytes": 317520,
       "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
     }
-  },
-  "baseRelease": "dev37.8"
+  }
 }
