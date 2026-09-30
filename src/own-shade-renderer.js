@@ -51,12 +51,16 @@
  }
  // Same vertical-prism union as Canvas. Ground receiver, flat local model.
  // Missing heights are only plausible evidence, never a confirmed shadow.
+ function evidenceQuality(feature,height){
+  const q=feature?.properties?.geometry_quality;
+  return Number(height?.height)>0&&height?.quality==='measured'&&(!q||q==='source-footprint');
+ }
  function findEvidence(features,origin,solar,height,radius=1200){
   if(!solar||solar.night)return null;const cos=Math.cos(origin.lat*Math.PI/180),project=p=>({x:(((p.lng-origin.lng+180)%360+360)%360-180)*111195.08*cos,y:(p.lat-origin.lat)*111195.08});let best=null;
   for(const f of candidates(features,origin,radius)){
    const meta=height(f),unknown=!(Number(meta.height)>0),h=unknown?{...meta,height:24}:meta,shape=projectBuilding(f,solar,project,h);if(!containsShadow(shape,{x:0,y:0}))continue;
    const b=global.ASTRABuildingData.featureBox(f),near=project({lng:Math.max(b.west,Math.min(b.east,origin.lng)),lat:Math.max(b.south,Math.min(b.north,origin.lat))}),distance=Math.hypot(near.x,near.y);if(distance>radius)continue;
-   const precise=meta.quality==='measured'&&f.properties.geometry_quality==='source-footprint'&&!unknown;
+   const precise=evidenceQuality(f,meta)&&!unknown;
    const row={type:'building',feature:f,height:unknown?null:meta.height,heightSource:meta.source,heightQuality:meta.quality,distance,requiredHeight:distance*Math.tan(solar.altitudeRad),confidence:precise?'high':'possible',plausibleUnknownHeight:unknown};
    if(!best||(precise&&!best.precise)||(precise===best.precise&&distance<best.distance))best={...row,precise};
   }return best;
@@ -66,25 +70,26 @@
   Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',zIndex:'451',opacity:String(options.opacity??.5)});
   const ctx=canvas.getContext('2d'),masks=[doc.createElement('canvas'),doc.createElement('canvas')];
   const pane=map.getPane?.('overlayPane')||map.getPanes().overlayPane;pane.appendChild(canvas);
-  let disposed=false,generation=0,timer=null,controller=null,running=false,pending=false;
+  let disposed=false,generation=0,timer=null,controller=null,running=false,pending=false,frame=null;
   const stats={renders:0,completed:0,cancelled:0,features:0,measured:0,estimated:0,unknownHeight:0,faces:0,canvasCount:1,webglContexts:0,queueDepth:0,lastFrameMs:0,firstPaintMs:null,partial:true,modelPointCalls:0};
   const activated=performance.now();
-  function invalidate(){generation++;pending=false;clearTimeout(timer);controller?.abort();canvas.style.visibility='hidden';options.invalidate?.();}
+  function invalidate(){generation++;frame=null;pending=false;clearTimeout(timer);controller?.abort();canvas.style.visibility='hidden';options.invalidate?.();}
   function request(){if(disposed)return;invalidate();pending=true;stats.queueDepth=1;timer=setTimeout(pump,options.debounceMs??160);options.onRequest?.();}
   async function pump(){
    if(disposed||running||!pending)return;pending=false;stats.queueDepth=0;running=true;controller=new AbortController();const signal=controller.signal,serial=generation,start=performance.now(),valid=()=>!signal.aborted&&!disposed&&serial===generation;
    stats.renders++;
    try{
-    const mode=options.mode(),data=mode==='trees'?{features:[],complete:true}:await options.prepare(signal);
+    const mode=options.mode(),date=new Date(options.date()),center=map.getCenter();
+    const data=mode==='trees'?{features:[],complete:true}:await options.prepare(signal,{date,mode,center});
     if(!valid())return;
     const size=map.getSize(),origin=map.containerPointToLayerPoint([0,0]);canvas.width=Math.max(1,Math.min(2400,Math.ceil(size.x)));canvas.height=Math.max(1,Math.min(1800,Math.ceil(size.y)));
     canvas.style.transform=`translate(${origin.x}px,${origin.y}px)`;for(const m of masks){m.width=canvas.width;m.height=canvas.height;}
-    const solar=options.solar(map.getCenter(),options.date()),features=data?.features||[];
+    const solar=options.solar(data?.solarOrigin||center,date),features=data?.features||[];
     let n=0,faces=0,measured=0,estimated=0,unknown=0,lastYield=performance.now();
     for(const feature of features){
      if(!valid())return;
      const height=options.height(feature),shape=projectBuilding(feature,solar,p=>map.latLngToContainerPoint({...p,lng:p.lng+360*Math.round((map.getCenter().lng-p.lng)/360)}),height);if(!shape){if(!solar.night)unknown++;continue;}
-     const precise=height.quality==='measured'&&feature.properties?.geometry_quality!=='generalized';
+     const precise=evidenceQuality(feature,height);
      if(precise)measured++;else if(height.quality==='default')unknown++;else estimated++;
      const mask=masks[precise?1:0].getContext('2d');mask.fillStyle='#172554';
      for(const face of shape.faces){mask.beginPath();for(const ring of face.rings){if(!ring.length)continue;mask.moveTo(ring[0].x,ring[0].y);for(let i=1;i<ring.length;i++)mask.lineTo(ring[i].x,ring[i].y);mask.closePath();}mask.fill('evenodd');faces++;}
@@ -95,12 +100,13 @@
     ctx.clearRect(0,0,canvas.width,canvas.height);ctx.globalAlpha=.48;ctx.drawImage(masks[0],0,0);ctx.globalAlpha=1;ctx.drawImage(masks[1],0,0);
     stats.features=n;stats.faces=faces;stats.measured=measured;stats.estimated=estimated;stats.unknownHeight=unknown;stats.partial=!data?.complete||unknown>0||estimated>0||size.x>2400||size.y>1800;stats.lastFrameMs=performance.now()-start;stats.completed++;
     if(n&&stats.firstPaintMs===null)stats.firstPaintMs=performance.now()-activated;
-    canvas.style.visibility='visible';options.onStatus?.({state:stats.partial?'partial':'complete',...stats});
+    frame={snapshot:data,date:new Date(date),mode,solar,center,bounds:map.getBounds?.(),generation:serial};
+    canvas.style.visibility='visible';options.onCommit?.(frame);options.onStatus?.({state:stats.partial?'partial':'complete',...stats});
    }catch(e){if(!signal.aborted){stats.partial=true;options.onStatus?.({state:'unknown',error:e.message});}}
    finally{if(signal.aborted)stats.cancelled++;running=false;if(pending&&!disposed)timer=setTimeout(pump,0);}
   }
   const start=()=>invalidate(),end=()=>request();for(const e of ['movestart','zoomstart'])map.on(e,start);for(const e of ['moveend','zoomend','resize'])map.on(e,end);
-  return {request,invalidate,setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
+  return {request,invalidate,getFrame(){return frame;},setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
  }
- global.HaidianOwnShade={version:'v9.0.0-dev37.8',create,projectBuilding,containsShadow,findEvidence,classify,terrainOcclusion,terrainTileAddress};
+ global.HaidianOwnShade={version:'v9.0.0-dev37.8',create,projectBuilding,containsShadow,findEvidence,evidenceQuality,classify,terrainOcclusion,terrainTileAddress};
 })(typeof window!=='undefined'?window:globalThis);

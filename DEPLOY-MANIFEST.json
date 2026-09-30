@@ -1,6 +1,6 @@
 {
-  "release": "dev37.8",
-  "scope": "all website files except this manifest",
+  "release": "dev37.9-core",
+  "scope": "dev37.9 A/B core patch; unchanged base website files retained; not a full release certification",
   "files": {
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -671,8 +671,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630131,
-      "sha256": "17437ce308b6dcc89a10904e1941ada8e85df2e94d24a145ee747604fc33a166"
+      "bytes": 630181,
+      "sha256": "280cc0d3c45bc23818c9aff3a13e3558804c744123545896c095847538756b33"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -723,8 +723,8 @@
       "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
     },
     "src/building-data-provider.js": {
-      "bytes": 22592,
-      "sha256": "c5fb9f0c7cb3eb959149fda00df0090942dc472157ee0b0b28cc16655f661e72"
+      "bytes": 23245,
+      "sha256": "e1760bc6d042ff10b1dfcf55cd750cf95643887d3df633095f585987b2abb983"
     },
     "src/building-decode-worker.js": {
       "bytes": 566,
@@ -763,20 +763,20 @@
       "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
     },
     "src/own-shade-renderer.js": {
-      "bytes": 10258,
-      "sha256": "9b3ef2bba4bad73e315b6b0f012e4ed8b70a6c5b892c9561cd8b128540486e2d"
+      "bytes": 10625,
+      "sha256": "2666875670c991e0685c65d6cc11641077ba20497b5cf6594c67ee3a6264d8fd"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 465364,
-      "sha256": "d10ffbade8f8fa56862992866886b6c00c5d610c761225168643b1c2aa725b30"
+      "bytes": 473747,
+      "sha256": "82db1e8da2a04c42b7c48a4e6835bc597e573d3ef25ed1c01b968ae413de3cff"
     },
     "src/route-exposure.js": {
-      "bytes": 348295,
-      "sha256": "ce24546bdbd18d0a3a89b942935f7852a83493a4c6b4b1738554305e9aa92bd7"
+      "bytes": 350581,
+      "sha256": "b017e8a3f738eaf3258ca72b5057c9228a420f866c63f06720e0bc3dfeec4126"
     },
     "src/shademap-integration.js": {
-      "bytes": 384432,
-      "sha256": "4926dfd24c14a9865cee455a2b15c09dabc7c4283322979ecac3c04a9df6731e"
+      "bytes": 388083,
+      "sha256": "eae586c09a17f879c594cbda34b6531dd85bdc654314c1bdaafdfb67809c07cd"
     },
     "src/source-clock.js": {
       "bytes": 1656,
@@ -790,5 +790,6 @@
       "bytes": 317520,
       "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
     }
-  }
+  },
+  "baseRelease": "dev37.8"
 }

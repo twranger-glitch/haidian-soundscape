@@ -5101,7 +5101,8 @@
     const partial=Math.max(gaps.aM,gaps.bM)>.5;
     const audit={state:partial?'partial':'source-supported',reason:partial?'route ends on mapped ways; endpoint access is unverified':'OSM accessible mapped ways only',endpointGaps:gaps,syntheticM:0,geometrySource:'OSM ways',scope:'mapped access tags; no field survey or guarantee of temporary restrictions'};
     const candidate={id:'graph-mapped-walk-fastest',stableCandidateId:'graph-mapped-walk-fastest:'+geometryHash(path.points),geometryHash:geometryHash(path.points),kind:'mapped-walk-fastest',points:path.points,distanceM:path.distanceM,durationS:seconds,walkability:audit,graphMeta:{backend:'osm-mapped-detached',productionGraphMutated:false,walkability:audit,realmProvenance:stats}};
-    return {available:true,candidate,walkability:audit,productionGraphMutated:false};
+    const result={available:true,candidate,walkability:audit,productionGraphMutated:false};
+    Object.defineProperty(result,'context',{value:{graph,startId:snapA.id,endId:snapB.id,path},enumerable:false});return result;
   }
 
   async function runPedestrianRealmRescue(a,b,options={}) {
@@ -7119,7 +7120,7 @@
       const fastestCandidate=makeGraphCandidate('graph-fastest',Object.assign({},fastestPath,{walkSeconds:fastestTime}),{durationS:fastestTime,graphMeta:Object.assign({edgeIds:fastestPath.edgeIds,snapA,snapB,backend:'nationwide-hgr2',topologyOnly:true},accessStats)});
       const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
       lastDiagnostics={version:VERSION,graphBackend:'nationwide-hgr2',geometryReconciliation:sourceFull.geometryReconciliation||null,searchComplete:false,overpassEndpoint:null,bbox:options.bbox||null,rawNodes:Number(externalGraph?.nodes?.size||0),rawSegments:Number(externalGraph?.edges?.size||0),coarseNodes:Number(externalGraph?.nodes?.size||0),coarseEdges:Number(externalGraph?.edges?.size||0),connectivitySnapPlan:endpointSnapPlan,prunedSourceEdges:Number(externalGraph?.edges?.size||0),prunedEdgeRatio:1,fineNodes:full.nodes.size,fineEdges:full.edges.size,maxFineEdgeM:null,pathMaxFineEdgeM:null,snapA:{distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType,highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null},snapB:{distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType,highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null},fastestSeconds:fastestTime,fastestDistanceM:fastestPath.distanceM,minSunEstimatedDirectSunSeconds:null,minSunDistanceM:null,detourPct,detourLimitSeconds:detourLimitS,searchExpandedStates:0,shadeEdgeEvaluations:0,shadeCacheHits:0,shadeCacheSize:0,temporalShadeTable:null,exactReplay:null,pruningCertificate:null,candidateLifecycle,candidateCount:1,searchMode:'topology-only-fastest',topologyOnly:true,labelPruningMode:'not-run',responsiveScheduling:true,hgr2PreRefined:true,accessStats,graphStats:graphStats(full),performance:perf,productionGraphMutated:false};
-      return {available:true,candidates:[fastestCandidate],diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false,topologyOnly:true};
+      return topologyContext({available:true,candidates:[fastestCandidate],diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false,topologyOnly:true},full);
     }
     t=nowMs(); const keptEdgeIds=detourEligibleEdgeIds(full,fromA,toB,speedMps,detourLimitS,options); perf.pruneMs=nowMs()-t;
     if(!keptEdgeIds.size) return {available:false,reason:'hgr2-prune-empty',candidates:[],diagnostics:{graphBackend:'nationwide-hgr2',performance:perf}};
@@ -7181,7 +7182,7 @@
       onDemandLimit:Number(options.maxShadeEdgeEvaluations||config.maxShadeEdgeEvaluations),
       actualArrivalReplay:exactReplay,pruningValid:pruningCertificate?.valid!==false
     };
-    return {available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false};
+    return topologyContext({available:true,candidates,diagnostics:lastDiagnostics,backend:'nationwide-hgr2',productionGraphMutated:false},full);
   }
 
   async function findRoutesOnExternalGraph(a, b, externalGraph, options = {}) {
@@ -7239,7 +7240,7 @@
       const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:coarseFastestTime }), { durationS:coarseFastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA:coarseSnapA, snapB:coarseSnapB, backend:'nationwide-hgr1', topologyOnly:true }, accessStats) });
       const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
       lastDiagnostics = { version:VERSION, graphBackend:'nationwide-hgr1', overpassEndpoint:null, bbox:options.bbox || null, connectivitySnapPlan:endpointSnapPlan, rawNodes:Number(externalGraph?.nodes?.size || 0), rawSegments:Number(externalGraph?.edges?.size || 0), coarseNodes:coarseGraph.nodes.size, coarseEdges:coarseGraph.edges.size, prunedSourceEdges:coarseGraph.edges.size, prunedEdgeRatio:1, fineNodes:coarseGraph.nodes.size, fineEdges:coarseGraph.edges.size, maxFineEdgeM:null, pathMaxFineEdgeM:null, snapA:{ distanceM:coarseSnapA.distanceM,nodeId:coarseSnapA.id,snapType:coarseSnapA.snapType,highway:coarseSnapA.sourceHighway||null,wayId:coarseSnapA.sourceWayId||null }, snapB:{ distanceM:coarseSnapB.distanceM,nodeId:coarseSnapB.id,snapType:coarseSnapB.snapType,highway:coarseSnapB.sourceHighway||null,wayId:coarseSnapB.sourceWayId||null }, fastestSeconds:coarseFastestTime, fastestDistanceM:fastestPath.distanceM, minSunEstimatedDirectSunSeconds:null, minSunDistanceM:null, detourPct, detourLimitSeconds:coarseDetourLimitS, searchExpandedStates:0, shadeEdgeEvaluations:0, shadeCacheHits:0, shadeCacheSize:0, candidateLifecycle, candidateCount:1, searchMode:'topology-only-fastest', topologyOnly:true, labelPruningMode:'not-run', responsiveScheduling:true, accessStats, graphStats:graphStats(coarseGraph), performance:perf, productionGraphMutated:false };
-      return { available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'nationwide-hgr1', productionGraphMutated:false, topologyOnly:true };
+      return topologyContext({ available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'nationwide-hgr1', productionGraphMutated:false, topologyOnly:true },coarseGraph);
     }
 
     t = nowMs();
@@ -7292,6 +7293,9 @@
       maxExpandedStates:options.maxExpandedStates, maxShadeEdgeEvaluations:options.maxShadeEdgeEvaluations,
       cooperativeYieldMs:options.cooperativeYieldMs, yieldEveryExpanded:options.yieldEveryExpanded,
       onProgress:options.onProgress, shouldCancel:options.shouldCancel
+    }).catch(error=>{
+      if(options.topologyAlternatives!==true||options.shouldCancel?.()||options.signal?.aborted||/CANCELLED/.test(String(error?.message)))throw error;
+      return {path:null,reason:'shade-source-or-search-error: '+String(error?.message||error),expanded:0,shadeEvals:0,sourceIncomplete:true};
     });
     perf.minSunMs = nowMs() - t;
     perf.totalMs = nowMs() - totalStarted;
@@ -7313,6 +7317,7 @@
       candidateLifecycle.push({stage:'generated',candidateId:'graph-min-sun',stableCandidateId:null,geometryHash:null,status:'not-generated',reason:minSun?.reason || 'min-sun-search-returned-no-path'});
     }
     lastDiagnostics = {
+      ...(minSun.sourceIncomplete?{searchComplete:false,sourceIncomplete:true,searchFailure:minSun.reason}:{}),
       version:VERSION, graphBackend:'nationwide-hgr1', overpassEndpoint:null, bbox:options.bbox || null,
       connectivitySnapPlan:endpointSnapPlan,
       rawNodes:Number(externalGraph?.nodes?.size || 0), rawSegments:Number(externalGraph?.edges?.size || 0),
@@ -7333,7 +7338,7 @@
       labelPruningMode:'equal-arrival + visited-subset dominance; no arbitrary label cap', responsiveScheduling:true,
       graphStats:graphStats(graph), performance:perf, productionGraphMutated:false
     };
-    return { available:true, candidates, diagnostics:lastDiagnostics, backend:'nationwide-hgr1', productionGraphMutated:false };
+    return topologyContext({ available:true, candidates, diagnostics:lastDiagnostics, backend:'nationwide-hgr1', productionGraphMutated:false },graph);
   }
 
   async function buildGraphForAB(a, b, options = {}) {
@@ -7433,7 +7438,7 @@
       const fastestCandidate = makeGraphCandidate('graph-fastest', Object.assign({}, fastestPath, { walkSeconds:fastestTime }), { durationS:fastestTime, graphMeta:Object.assign({ edgeIds:fastestPath.edgeIds, snapA, snapB, backend:'overpass-live', topologyOnly:true }, accessStats) });
       const candidateLifecycle=[{stage:'generated',candidateId:fastestCandidate.id,stableCandidateId:fastestCandidate.stableCandidateId,geometryHash:fastestCandidate.geometryHash,status:'kept',reason:'topology-only-fastest-probe'}];
       lastDiagnostics = { version:VERSION, graphBackend:'overpass-live', overpassEndpoint:built.endpoint, bbox:built.bbox, rawNodes:graph.rawNodeCount, rawSegments:graph.rawSegmentCount, contractedNodes:graph.contractedNodeCount || graph.nodes.size, contractedEdges:graph.contractedEdgeCount || graph.edges.size, fineNodes:graph.nodes.size, fineEdges:graph.edges.size, maxFineEdgeM:graph.refinement?.generalMaxEdgeM || config.maxFineEdgeM, pathMaxFineEdgeM:graph.refinement?.pathMaxEdgeM || config.pathMaxFineEdgeM, snapA:{ distanceM:snapA.distanceM,nodeId:snapA.id,snapType:snapA.snapType||"node",highway:snapA.sourceHighway||null,wayId:snapA.sourceWayId||null,pedestrianRank:snapA.pedestrianRank??null,pedestrianLabel:snapA.pedestrianLabel||null }, snapB:{ distanceM:snapB.distanceM,nodeId:snapB.id,snapType:snapB.snapType||"node",highway:snapB.sourceHighway||null,wayId:snapB.sourceWayId||null,pedestrianRank:snapB.pedestrianRank??null,pedestrianLabel:snapB.pedestrianLabel||null }, fastestSeconds:fastestTime, fastestDistanceM:fastestPath.distanceM, minSunEstimatedDirectSunSeconds:null, minSunDistanceM:null, detourPct, detourLimitSeconds:detourLimitS, searchExpandedStates:0, shadeEdgeEvaluations:0, candidateLifecycle, candidateCount:1, searchMode:'topology-only-fastest', topologyOnly:true, labelPruningMode:'not-run', responsiveScheduling:true, accessStats, graphStats:graphStats(graph), productionGraphMutated:false };
-      return { available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'overpass-live', productionGraphMutated:false, topologyOnly:true };
+      return topologyContext({ available:true, candidates:[fastestCandidate], diagnostics:lastDiagnostics, backend:'overpass-live', productionGraphMutated:false, topologyOnly:true },graph);
     }
     options.onProgress?.({ stage: "shade-search", message: `正在 graph 內搜尋最少直接日照路線（最多多走 ${Math.round(detourPct)}%）…` });
     const minSun = await searchMinSun(graph, snapA.id, snapB.id, {
@@ -7454,6 +7459,9 @@
       yieldEveryExpanded: options.yieldEveryExpanded,
       onProgress: options.onProgress,
       shouldCancel: options.shouldCancel
+    }).catch(error=>{
+      if(options.topologyAlternatives!==true||options.shouldCancel?.()||options.signal?.aborted||/CANCELLED/.test(String(error?.message)))throw error;
+      return {path:null,reason:'shade-source-or-search-error: '+String(error?.message||error),expanded:0,shadeEvals:0,sourceIncomplete:true};
     });
 
     lastRouteEdges.fastest = new Set(fastestPath.edgeIds || []);
@@ -7482,6 +7490,7 @@
     }
 
     lastDiagnostics = {
+      ...(minSun.sourceIncomplete?{searchComplete:false,sourceIncomplete:true,searchFailure:minSun.reason}:{}),
       version: VERSION,
       overpassEndpoint: built.endpoint,
       bbox: built.bbox,
@@ -7514,7 +7523,7 @@
       conditionalAccessProbe: options.allowPrivateFootAccess === true,
       graphStats: graphStats(graph)
     };
-    return { available: true, candidates, diagnostics: lastDiagnostics, backend:'overpass-live', productionGraphMutated:false };
+    return topologyContext({ available: true, candidates, diagnostics: lastDiagnostics, backend:'overpass-live', productionGraphMutated:false },graph);
   }
 
   async function runCandidateCorrectnessAudit(a, b, externalGraph = null, options = {}) {
@@ -7600,11 +7609,74 @@
     lastShadeDebug.clear();
   }
 
+  // dev37.9: preserve geometrically different routes even when shade costs are
+  // tied or unavailable. Read existing source edges only; never add connectors.
+  async function topologyAlternativeCandidates(graph, startId, endId, baseline, options={}) {
+    const diagnostics={attempted:true,scope:'bounded source-edge deviation candidates; not an exhaustive minimum-sun proof',probes:0,rejected:[],complete:true,reason:null,productionGraphMutated:false};
+    const output=[],speed=clamp(options.speedMps,.5,2.5,1.25),cap=baseline.distanceM*(1+clamp(options.detourPct,0,60,30)/100);
+    const maxProbes=Math.min(64,Math.max(1,Number(options.alternativeMaxProbes||48))),maxCandidates=Math.min(6,Math.max(1,Number(options.alternativeMaxCandidates||4)));
+    const deadline=nowMs()+Math.min(2500,Math.max(50,Number(options.alternativeBudgetMs||600))),seen=new Set([(baseline.graphMeta?.edgeIds||[]).join('|')]);
+    const ids=baseline.graphMeta?.edgeIds||[], probes=[];let node=String(startId);
+    for(const id of ids){const e=graph.edges.get(id);if(!e)continue;const next=String(e.a)===node?String(e.b):String(e.a);
+      if((graph.adjacency.get(node)||[]).length>2||(graph.adjacency.get(next)||[]).length>2||node===String(startId)||next===String(endId))probes.push(id);node=next;}
+    // Include degree-two parallel-edge circuits; each probe removes just one
+    // existing edge for this search, without modifying graph adjacency.
+    for(const id of ids)if(!probes.includes(id))probes.push(id);
+    for(const forbidden of probes.slice(0,maxProbes)){
+      if(options.shouldCancel?.()||options.signal?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
+      if(nowMs()>deadline){diagnostics.complete=false;diagnostics.reason='alternative-budget';break;}
+      diagnostics.probes++;const dist=new Map([[String(startId),0]]),prev=new Map(),heap=new MinHeap((a,b)=>a.t-b.t);heap.push({node:String(startId),t:0});let count=0;
+      while(heap.size){
+        if(options.shouldCancel?.()||options.signal?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
+        if(nowMs()>deadline){diagnostics.complete=false;diagnostics.reason='alternative-budget';break;}
+        const cur=heap.pop();if(cur.t!==dist.get(cur.node))continue;if(cur.node===String(endId))break;
+        for(const ref of graph.adjacency.get(cur.node)||[]){const e=graph.edges.get(ref.edgeId);if(!e||ref.edgeId===forbidden)continue;
+          if(e.realmSynthetic||e.realmPortalConnector||e.realmVisibilityEdge||e.conditionalPrivateAccess)continue;
+          const n=String(ref.to),d=cur.t+e.distanceM;if(d>cap+.01||d>=(dist.get(n)??Infinity)-1e-9)continue;
+          dist.set(n,d);prev.set(n,{node:cur.node,edgeId:e.id});heap.push({node:n,t:d});}
+        if(++count%240===0)await new Promise(r=>setTimeout(r,0));
+      }
+      if(!diagnostics.complete)break;
+      if(!dist.has(String(endId))){diagnostics.rejected.push({edgeId:forbidden,reason:'no-alternative-within-detour'});continue;}
+      const path=reconstructDijkstra(graph,prev,startId,endId),key=path?.edgeIds?.join('|');
+      if(!path?.points?.length||seen.has(key)){diagnostics.rejected.push({edgeId:forbidden,reason:'same-edge-sequence'});continue;}seen.add(key);
+      const access=pathAccessStats(graph,path.edgeIds),realm=realmPathStats(graph,path.edgeIds);
+      if(access.usesConditionalPrivateAccess||realm.syntheticM>.01){diagnostics.rejected.push({edgeId:forbidden,reason:'private-or-synthetic'});continue;}
+      const hash=geometryHash(path.points),id='graph-alternative-'+hash,joins=path.edgeIds.map(id=>graph.edges.get(id)).filter(e=>e?.sourceJunctionLink),unverified=joins.some(e=>e.distanceM>2);
+      output.push({id,stableCandidateId:id+':'+key,geometryHash:hash,kind:'graph-alternative',points:path.points,distanceM:path.distanceM,durationS:path.distanceM/speed,
+        walkability:!unverified&&baseline.walkability?baseline.walkability:{state:unverified?'partial':'source-supported',reason:unverified?'unverified source junction geometry':'existing accessible pedestrian source edges',syntheticM:0},
+        graphMeta:{...baseline.graphMeta,...access,edgeIds:path.edgeIds,productionGraphMutated:false,topologyAlternative:true,realmSyntheticDistanceM:0,realmProvenance:realm,sourceTopologyJoinDistanceM:joins.reduce((n,e)=>n+e.distanceM,0),sourceTopologyJoinCount:joins.length,requiresJunctionGeometryConfirmation:unverified,shadeSearchComplete:false}});
+      if(output.length>=maxCandidates){diagnostics.complete=false;diagnostics.reason='candidate-cap';break;}
+    }
+    if(probes.length>maxProbes&&diagnostics.complete){diagnostics.complete=false;diagnostics.reason='probe-cap';}
+    output.sort((a,b)=>a.distanceM-b.distanceM);diagnostics.candidateCount=output.length;
+    return {candidates:output,diagnostics};
+  }
+  const routeTopologyContexts=new WeakMap();
+  function topologyContext(result,graph){routeTopologyContexts.set(result,graph);return result;}
+  function withTopologyAlternatives(search){return async function(...args){
+    const options=args[args.length-1]||{},result=await search(...args);
+    if(options.topologyAlternatives!==true||!result?.available||options.allowPrivateFootAccess===true)return result;
+    const base=(result.candidates||[]).find(c=>c.kind==='graph-fastest'),graph=routeTopologyContexts.get(result);
+    const sa=base?.graphMeta?.snapA,sb=base?.graphMeta?.snapB;
+    // An overlapping/cancelled search must not use a newer search's debug graph.
+    const match=base&&graph&&sa&&sb&&graph.nodes.has(String(sa.id))&&graph.nodes.has(String(sb.id))&&(base.graphMeta.edgeIds||[]).every(id=>graph.edges.has(id))&&haversineM(graph.nodes.get(String(sa.id)),base.points[0])<.1&&haversineM(graph.nodes.get(String(sb.id)),base.points.at(-1))<.1;
+    if(!match)return {...result,diagnostics:{...result.diagnostics,topologyAlternatives:{attempted:false,reason:'source-context-unavailable'}}};
+    const alt=await topologyAlternativeCandidates(graph,sa.id,sb.id,base,options),candidates=result.candidates.slice(),lifecycle=(result.diagnostics?.candidateLifecycle||[]).slice();
+    for(const c of alt.candidates){if(candidates.some(x=>(x.graphMeta?.edgeIds||[]).join('|')===c.graphMeta.edgeIds.join('|')))continue;candidates.push(c);lifecycle.push({stage:'generated',candidateId:c.id,stableCandidateId:c.stableCandidateId,geometryHash:c.geometryHash,status:'kept',reason:'existing-source-topology-alternative'});}
+    return {...result,candidates,diagnostics:{...result.diagnostics,topologyAlternatives:alt.diagnostics,candidateLifecycle:lifecycle,candidateCount:candidates.length}};
+  };}
+  async function mappedWalkCandidates(payload,a,b,options={}){
+    const first=mappedWalkCandidate(payload,a,b,options);if(!first.available)return {...first,candidates:[]};
+    const c=first.context,alt=await topologyAlternativeCandidates(c.graph,c.startId,c.endId,{...first.candidate,graphMeta:{...first.candidate.graphMeta,edgeIds:c.path.edgeIds}},options);
+    return {...first,candidates:[first.candidate,...alt.candidates],alternativeDiagnostics:alt.diagnostics};
+  }
+
   window.HaidianPedestrianGraph = {
     version: VERSION,
     get config() { return Object.assign({}, config); },
-    findRoutes,
-    findRoutesOnExternalGraph,
+    findRoutes:withTopologyAlternatives(findRoutes),
+    findRoutesOnExternalGraph:withTopologyAlternatives(findRoutesOnExternalGraph),
     buildGraphForAB,
     createExperimentalGraphClone,
     runExperimentalSearchOnClone,
@@ -7623,6 +7695,8 @@
     runInteriorNodingRescue,
     runCrossSourceCorridorRescue,
     mappedWalkCandidate,
+    mappedWalkCandidates,
+    topologyAlternativeCandidates,
     runPedestrianRealmRescue,
     preparePedestrianRealmOpportunity,
     pedestrianRealmOpportunityEligible,
@@ -7736,6 +7810,8 @@
       buildPedestrianRealmRescueGraph,
       pedestrianRealmRescueFromPayload,
       mappedWalkCandidate,
+    mappedWalkCandidates,
+    topologyAlternativeCandidates,
     runPedestrianRealmRescue,
       preparePedestrianRealmOpportunity,
       pedestrianRealmOpportunityEligible,

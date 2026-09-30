@@ -1,0 +1,14 @@
+ASTRA dev37.9 core RC — GitHub changed-only
+
+Upload/overwrite these 7 production files in the site root:
+- DEPLOY-MANIFEST.json
+- index.html
+- src/building-data-provider.js
+- src/own-shade-renderer.js
+- src/pedestrian-graph-routing.js
+- src/route-exposure.js
+- src/shademap-integration.js
+
+UPLOAD-NOTE.txt itself does NOT need to be uploaded.
+
+After deployment, hard-refresh the site and perform live acceptance tests before calling dev37.9 complete.

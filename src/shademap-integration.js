@@ -4120,10 +4120,13 @@
 
   async function shadeStatusAt(latlng, options={}) {
     if(state.visualProvider!=="shademap"){
-      const date=options.date||state.date,prepared=await prepareRouteModel({points:[latlng],date,purpose:'point',signal:options.signal}),m=await analyzeShadeModelAt(latlng.lat,latlng.lng,date,{signal:options.signal,buildingSnapshot:prepared.snapshot});
+      const date=new Date(options.date||state.date),frame=ownShadeLayer?.getFrame?.();
+      const useFrame=frame&&frame.date.getTime()===date.getTime()&&frame.mode===state.mode&&frame.bounds?.contains?.(latlng);
+      const prepared=useFrame?{snapshot:frame.snapshot}:await prepareRouteModel({points:[latlng],date,purpose:'point',signal:options.signal});
+      const m=await analyzeShadeModelAt(latlng.lat,latlng.lng,date,{signal:options.signal,buildingSnapshot:prepared.snapshot});
       const confirmedShade=m.classification==='confirmed-shade',unknown=m.state==='unknown'||(!confirmedShade&&m.reliability==='partial');
-      const buildingPartial=state.mode!=='trees'&&!routeBuildingCoverageSafeAt(latlng);
-      return {label:m.state==='night'?'夜間':confirmedShade?'已確認遮蔭':unknown?'資料不足／未知':'所選來源：模型日照',shaded:confirmedShade?true:unknown?null:m.shaded,night:m.state==='night',solar:m.solar,classification:m.classification,reliability:m.reliability,buildingPartial,at:new Date(date).toISOString(),modelSource:m.source,sourceType:m.sourceType};
+      const buildingPartial=!!m.unknownReasons?.some(r=>r.startsWith('building-')||r.startsWith('precision:'));
+      return {label:m.state==='night'?'夜間':confirmedShade?'已確認遮蔭':unknown?'資料不足／未知':'所選來源：模型日照',shaded:confirmedShade?true:unknown?null:m.shaded,night:m.state==='night',solar:m.solar,classification:m.classification,reliability:m.reliability,buildingPartial,at:date.toISOString(),modelSource:m.source,sourceType:m.sourceType,buildingSnapshot:m.buildingSnapshot,buildingEvidence:m.buildingEvidence,unknownReasons:m.unknownReasons,caveat:m.caveat,sourceEvidence:m.sourceEvidence};
     }
     const solar = solarPositionAt(latlng, state.date);
     if (solar && solar.night) {
@@ -5240,7 +5243,11 @@
       if (serial !== pointQuerySerial) return;
       model.shade = shade;model.navigationUpdating=false;pointLifecycle.completed++;pointLifecycle.lastStatus=shade.classification||'complete';
       model.solar = shade && shade.solar ? shade.solar : model.solar;
-      if (shade && shade.shaded === true && !shade.night) {
+      if (state.visualProvider!=='shademap'&&shade?.sourceEvidence) {
+        const e=shade.sourceEvidence,toBuilding=e.building?{...e.building,height:e.building.heightM,distance:e.building.distanceM}:null,toTree=e.tree?{...e.tree,height:e.tree.heightM,distance:e.tree.distanceM}:null;
+        model.shadeSource={type:shade.sourceType,building:toBuilding,tree:toTree,confidence:shade.classification==='confirmed-shade'?'high':'possible',reason:(shade.unknownReasons||[]).join('; '),method:'same source snapshot and solar prism'};
+        model.shadeSourceResolving=false;
+      } else if (shade && shade.shaded === true && !shade.night) {
         if (shade.groundCanopy && shade.groundCanopyTree) {
           model.shadeSource = {
             type: "tree",
@@ -6964,6 +6971,8 @@
 
   let globalBuildingProvider=null,unifiedBuildingSnapshot=null,precisionQueue=Promise.resolve();
   const unifiedSnapshotCache=new Map();
+  let unifiedPreparationJobs=null,unifiedDataEpoch=0;
+  function preparationJobs(){return unifiedPreparationJobs||(unifiedPreparationJobs=new window.ASTRABuildingData.Jobs({concurrency:2,maxQueued:8}));}
   function globalBuildings(){return globalBuildingProvider||(globalBuildingProvider=window.ASTRABuildingData?.create(window.ASTRA_BUILDING_CONFIG||{}));}
   async function getBuildings(options={}){
     if(!window.ASTRABuildingData||state.mode==='trees'||effectiveBuildingMode()==='none'||effectiveBuildingMode()==='custom')return getPrecisionBuildings(options);
@@ -6977,10 +6986,10 @@
       });precisionQueue=work;return work;
     }});
     if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
-    unifiedBuildingSnapshot=snapshot;lastBuildingFeatures=snapshot.features;lastBuildingLoadedBounds=snapshot.bounds;
-    lastBuildingCoverageKey=snapshot.cacheKey;lastBuildingFetchError=null;
-    lastBuildingPipelineStatus={mode:'global-overture-unified',fetchComplete:snapshot.fetchComplete,coverageComplete:snapshot.complete,sourceState:snapshot.state,featureCount:snapshot.features.length,tileCount:snapshot.stats.requestedTiles,loadedTileCount:snapshot.stats.loadedTiles,unknownHeight:snapshot.stats.heights.unknown,sourceCounts:snapshot.features.reduce((a,f)=>{const k=f.properties.building_source;a[k]=(a[k]||0)+1;return a;},{}),global:snapshot.stats,error:snapshot.errors.map(e=>e.code).join(',')||null};
-    updateBuildingRuntimeStatus();syncBuildingAttribution();syncBuildingDebugOverlay();return options.returnSnapshot?snapshot:snapshot.features;
+    // Data acquisition must not publish into another consumer's rendered frame,
+    // nor replace the precision provider's cache with merged PMTiles features.
+    if(state.visualProvider==='shademap')unifiedBuildingSnapshot=snapshot;
+    return options.returnSnapshot?snapshot:snapshot.features;
   }
 
   function lonLatToXYZ(lat, lon, z) {
@@ -7410,11 +7419,19 @@
       const points=options.points||[],b=options.bbox||(points.length?{south:Math.min(...points.map(p=>Number(p.lat??p[1]))),north:Math.max(...points.map(p=>Number(p.lat??p[1]))),west:Math.min(...points.map(p=>Number(p.lng??p[0]))),east:Math.max(...points.map(p=>Number(p.lng??p[0])))}:{south:mapRef.getBounds().getSouth(),north:mapRef.getBounds().getNorth(),west:mapRef.getBounds().getWest(),east:mapRef.getBounds().getEast()});
       const date=options.date||state.date,center={lat:(b.south+b.north)/2,lng:(b.west+b.east)/2};
       const corridor=window.ASTRABuildingData.corridor(b,solarPositionAt(center,date),window.ASTRA_BUILDING_CONFIG||{});
-      const purpose=options.purpose||'visual',key=JSON.stringify([corridor.bounds,purpose,state.mode,effectiveBuildingMode()]),hit=unifiedSnapshotCache.get(key);
-      if(hit&&Date.now()-hit.at<(hit.snapshot.fetchComplete?60000:15000))return { ...getRouteShadeCacheContext(),snapshot:hit.snapshot };
-      const snapshot=await getBuildings({...options,purpose,bbox:corridor.bounds,corridor,returnSnapshot:true});
-      unifiedSnapshotCache.set(key,{snapshot,at:Date.now()});while(unifiedSnapshotCache.size>4)unifiedSnapshotCache.delete(unifiedSnapshotCache.keys().next().value);
-      return {...getRouteShadeCacheContext(),snapshot};
+      if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+      const purpose=options.purpose||'visual',key=JSON.stringify([corridor.bounds,purpose==='visual'?'cached-precision':'live-precision',state.mode,effectiveBuildingMode()]),hit=unifiedSnapshotCache.get(key);
+      const ttl=hit?.snapshot.fetchComplete&&hit.snapshot.precision?.status?.fetchComplete!==false?60000:15000;
+      if(hit&&Date.now()-hit.at<ttl)return {...getRouteShadeCacheContext(hit.snapshot),snapshot:hit.snapshot};
+      const epoch=unifiedDataEpoch,modelMode=state.mode,buildingMode=effectiveBuildingMode();
+      const snapshot=await preparationJobs().run(key,async signal=>{
+        const data=await getBuildings({...options,signal,purpose,bbox:corridor.bounds,corridor,returnSnapshot:true});
+        if(signal.aborted||epoch!==unifiedDataEpoch||modelMode!==state.mode||buildingMode!==effectiveBuildingMode())throw Object.assign(new Error('cancelled'),{name:'AbortError'});
+        const value={...data,solarOrigin:{...center},queryBounds:{...b}};
+        unifiedSnapshotCache.set(key,{snapshot:value,at:Date.now()});while(unifiedSnapshotCache.size>4)unifiedSnapshotCache.delete(unifiedSnapshotCache.keys().next().value);
+        return value;
+      },options.signal);
+      return {...getRouteShadeCacheContext(snapshot),snapshot};
     }
     if(!mapRef)mapRef=resolveMap();
     if(!mapRef||state.mode==='trees'||effectiveBuildingMode()==='none')return getRouteShadeCacheContext();
@@ -7453,10 +7470,10 @@
   }
   function updateUnifiedShadeStatus(){
     if(state.visualProvider!=='own'||!state.enabled)return;
-    const d=unifiedDiagnostics(),b=ownShadeLayer?.diagnostics(),low=mapRef.getZoom()<config.metaMinZoom;
+    const d=unifiedDiagnostics(),b=ownShadeLayer?.diagnostics(),view=ownShadeLayer?.getFrame?.()?.snapshot,low=mapRef.getZoom()<config.metaMinZoom;
     shadeReady=(state.mode==='buildings'||(!low&&d.visibleTiles>0&&!d.partialTiles))&&(state.mode==='trees'||b?.partial===false);
     const trees=state.mode==='buildings'?'樹冠未選用':low?'請放大後載入樹冠':`樹蔭 ${d.visibleTiles} 磚／${d.partialTiles} 磚來源不足`;
-    setStatus(`自有引擎｜${trees}；建築 ${b?.features||0}（估計 ${b?.estimated||0}／高度未知 ${b?.unknownHeight||0}）；全球來源 ${d.globalBuildings?.last?.state||'載入中'} / ${d.globalBuildings?.last?.release||'未取得'}。遠距地形 incomplete。${d.decoder.status==='unavailable'?'解碼器未就緒，可重試資料。':''}`,low||d.partialTiles>0||b?.partial||d.decoder.status==='unavailable');
+    setStatus(`自有引擎｜${trees}；建築 ${b?.features||0}（估計 ${b?.estimated||0}／高度未知 ${b?.unknownHeight||0}）；全球來源 ${view?.state||'載入中'} / ${view?.release||'未取得'}。遠距地形 incomplete。${d.decoder.status==='unavailable'?'解碼器未就緒，可重試資料。':''}`,low||d.partialTiles>0||b?.partial||d.decoder.status==='unavailable');
   }
   function scheduleUnifiedView(isRetry=false){
     if(!isRetry)unifiedRetryBudget=2;
@@ -7475,7 +7492,7 @@
     },180);
   }
   function retryUnifiedData(){
-    globalBuildingProvider?.clear();unifiedSnapshotCache.clear();
+    unifiedDataEpoch++;unifiedPreparationJobs?.cancelAll();globalBuildingProvider?.clear();unifiedSnapshotCache.clear();
     if(shadeDataState.decoder.status!=='ready')shadeDataState.decoder.attempts=0;
     canopyNegativeCache.clear();shadeDataState.sourceFailures.clear();buildingFailureUntil=0;
     ownShadeLayer?.request();scheduleUnifiedView();schedulePointRefresh('retry/online');
@@ -7485,7 +7502,7 @@
     if(!mapRef||!window.HaidianOwnShade){setStatus('自有陰影模組或地圖尚未就緒。',true);return;}
     state.enabled=true;syncVisualProviderControls();syncPointQueryCursor();setNavigationCanvasState(false);
     if(mapRef.attributionControl&&!mapRef.__haidianOwnAttribution){mapRef.attributionControl.addAttribution('<a href="https://registry.opendata.aws/dataforgood-fb-forestsv2/" target="_blank" rel="noopener">CHMv2 © Meta / WRI</a> · CC BY 4.0');mapRef.__haidianOwnAttribution=true;}
-    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async signal=>{const prepared=await prepareRouteModel({signal,purpose:'visual'});return prepared.snapshot||{features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false&&lastBuildingPipelineStatus?.coverageComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onStatus:updateUnifiedShadeStatus});
+    if(!ownShadeLayer)ownShadeLayer=window.HaidianOwnShade.create({map:mapRef,prepare:async(signal,frame)=>{const prepared=await prepareRouteModel({signal,date:frame.date,purpose:'visual'});return prepared.snapshot||{features:lastBuildingFeatures||[],complete:routeBuildingModelReady()&&lastBuildingPipelineStatus?.fetchComplete!==false&&lastBuildingPipelineStatus?.coverageComplete!==false};},solar:solarPositionAt,height:buildingHeightMeta,date:()=>state.date,mode:()=>state.mode,opacity:state.opacity,invalidate:cancelUnifiedTiles,onRequest:scheduleUnifiedView,onCommit:frame=>{unifiedBuildingSnapshot=frame.snapshot;schedulePointRefresh('visual-snapshot-ready');},onStatus:updateUnifiedShadeStatus});
     ownShadeLayer.request();scheduleUnifiedView();
   }
   async function setVisualProvider(provider){
@@ -7789,11 +7806,12 @@
     return false;
   }
 
-  function getRouteShadeCacheContext() {
+  function getRouteShadeCacheContext(snapshot=unifiedBuildingSnapshot) {
     const buildingMode = effectiveBuildingMode();
-    const modelReady = routeBuildingModelReady();
+    if(state.mode==='trees'||buildingMode==='none'||buildingMode==='custom')snapshot=null;
+    const modelReady = snapshot ? snapshot.fetchComplete===true : routeBuildingModelReady();
     const pipeline = lastBuildingPipelineStatus || {};
-    const pipelineComplete = buildingMode !== 'pipeline' || (
+    const pipelineComplete = snapshot ? snapshot.complete===true : buildingMode !== 'pipeline' || (
       pipeline.fetchComplete !== false && pipeline.coverageComplete !== false && !pipeline.error
     );
 
@@ -7810,10 +7828,11 @@
     const sourceIdentityAvailable = state.mode === 'trees' || buildingMode === 'none' || (buildingMode === 'pipeline' && Boolean(
       String(config.buildingDataVersion || '').trim() || String(workerDataVersion || '').trim() || String(manifestBuiltAtUtc || '').trim()
     ));
-    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable && (state.mode==='trees'||buildingMode==='none'||!unifiedBuildingSnapshot||unifiedBuildingSnapshot.complete));
+    const cacheable = Boolean(modelReady && pipelineComplete && sourceIdentityAvailable && (state.mode==='trees'||buildingMode==='none'||!snapshot||snapshot.complete));
     const token = JSON.stringify({
-      revision: 'dev37.8-unified-building-model-v5',
-      globalRelease:unifiedBuildingSnapshot?.release||'',
+      revision: 'dev37.9-committed-snapshot-model-v6',
+      globalRelease:snapshot?.release||'',
+      solarOrigin:snapshot?.solarOrigin||null,
       regionalVersion:String(regionalManifestCache?.version||''),
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
@@ -7844,9 +7863,9 @@
       fetchPaddingMaxM: Number(config.buildingShadowFetchPaddingMaxM || 0)
     });
     const coverageToken = JSON.stringify({
-      coverageKey: String(lastBuildingCoverageKey || ''),
-      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
-      loadedBounds: lastBuildingLoadedBounds || null,
+      coverageKey: String(snapshot?.cacheKey||lastBuildingCoverageKey||''),
+      buildingFeatureCount: snapshot?.features?.length??(Array.isArray(lastBuildingFeatures)?lastBuildingFeatures.length:0),
+      loadedBounds: snapshot?.bounds||lastBuildingLoadedBounds||null,
       pipelineMode: String(pipeline.mode || '')
     });
     return {
@@ -7858,9 +7877,9 @@
       coverageToken,
       mode: String(state.mode || ''),
       buildingMode: String(buildingMode || ''),
-      coverageKey: lastBuildingCoverageKey || null,
-      buildingFeatureCount: Array.isArray(lastBuildingFeatures) ? lastBuildingFeatures.length : 0,
-      loadedBounds: lastBuildingLoadedBounds ? Object.assign({}, lastBuildingLoadedBounds) : null,
+      coverageKey: snapshot?.cacheKey||lastBuildingCoverageKey||null,
+      buildingFeatureCount: snapshot?.features?.length??(Array.isArray(lastBuildingFeatures)?lastBuildingFeatures.length:0),
+      loadedBounds: snapshot?.bounds|| (lastBuildingLoadedBounds ? Object.assign({},lastBuildingLoadedBounds) : null),
       coverageSafetyRadiusM: routeBuildingCoverageSafetyRadiusM(),
       workerDataVersion: String(workerDataVersion || ''),
       manifestBuiltAtUtc: String(manifestBuiltAtUtc || ''),
@@ -7908,7 +7927,9 @@
         throw new Error("Invalid route shade coordinate/date");
       }
 
-      const solar = solarPositionAt(latlng, when);
+      const snapshot=effectiveBuildingMode()==='custom'?null:Object.prototype.hasOwnProperty.call(options,'buildingSnapshot')?options.buildingSnapshot:unifiedBuildingSnapshot;
+      const modelMode=state.mode,buildingMode=effectiveBuildingMode();
+      const solar = solarPositionAt(snapshot?.solarOrigin||latlng, when);
       if (!solar) throw new Error("Solar position unavailable");
       if (solar.night) {
         const result = {
@@ -7929,25 +7950,25 @@
         return result;
       }
 
-      const snapshot=effectiveBuildingMode()==='custom'?null:options.buildingSnapshot||unifiedBuildingSnapshot;
       const buildingReady = snapshot? snapshot.fetchComplete:routeBuildingModelReady();
-      const buildingCoverageSafe = routeBuildingCoverageSafeAt(latlng,snapshot);
+      const normalizedRequired=!!window.ASTRABuildingData&&buildingMode!=='custom'&&buildingMode!=='none'&&modelMode!=='trees';
+      const buildingCoverageSafe = normalizedRequired&&!snapshot?false:routeBuildingCoverageSafeAt(latlng,snapshot);
       let building = null;
       let tree = null;
       let canopyQueryFailed = false;
-      if (options.buildings !== false && state.mode!=='trees' && effectiveBuildingMode()!=='none') {
+      if (options.buildings !== false && modelMode!=='trees' && buildingMode!=='none') {
         const buildingStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,snapshot.corridor?.distanceM||1200):findBuildingShadowEvidence(latlng, solar);
+        building = snapshot&&window.HaidianOwnShade?.findEvidence ? window.HaidianOwnShade.findEvidence(snapshot.features,latlng,solar,buildingHeightMeta,snapshot.corridor?.distanceM||1200):normalizedRequired?null:findBuildingShadowEvidence(latlng, solar);
         routeModelPerf.buildingEvalMs += Math.max(0, (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()) - buildingStarted);
       }
-      if (options.canopy !== false && state.mode !== "buildings") {
+      if (options.canopy !== false && modelMode !== "buildings") {
         const timeoutMs = Math.max(700, Number(options.canopyTimeoutMs) || 4200);
         const canopyStarted = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         const canopyController=new AbortController(),cancelCanopy=()=>canopyController.abort();
         options.signal?.addEventListener('abort',cancelCanopy,{once:true});
         const canopyTimer=setTimeout(cancelCanopy,timeoutMs);
         try {
-          tree = await findCanopyShadowEvidence(latlng, solar,{requireComplete:true,signal:canopyController.signal});
+          tree = await findCanopyShadowEvidence(latlng, snapshot?.solarOrigin?solarPositionAt(latlng,when):solar,{requireComplete:true,signal:canopyController.signal});
         } catch (_) {
           tree = null;
           canopyQueryFailed = true;
@@ -7958,7 +7979,7 @@
       }
 
       if(options.signal?.aborted)throw Object.assign(new Error('cancelled'),{name:'AbortError'});
-      const uncertainBuilding=building && (building.plausibleUnknownHeight||building.heightQuality!=='measured'||building.feature?.properties?.geometry_quality==='generalized'||building.feature?.properties?.geometry_quality==='fragment-merge-failed');
+      const uncertainBuilding=building && (building.plausibleUnknownHeight||building.heightQuality!=='measured'||building.precise===false||building.feature?.properties?.geometry_quality==='generalized'||building.feature?.properties?.geometry_quality==='fragment-merge-failed');
       let sourceType = "sun";
       let source = null;
       if(tree&&uncertainBuilding){sourceType='tree';source=compactRouteTreeEvidence(tree);}
@@ -7988,17 +8009,27 @@
       const hasShade = sourceType !== "sun";
       const confirmedShade=hasShade&&!!(tree||(building&&!uncertainBuilding));
       const lowSun = solar.altitudeDeg < Math.max(0, Number(config.queryShadeSourceMinAltitudeDeg) || 1.5);
-      const reliability = (uncertainBuilding&&!tree)||(!buildingCoverageSafe && state.mode !== "trees" && effectiveBuildingMode() !== "none") || lowSun || canopyQueryFailed
+      const reliability = (uncertainBuilding&&!tree)||(!buildingCoverageSafe && modelMode !== "trees" && buildingMode !== "none") || lowSun || canopyQueryFailed
         ? "partial"
         : "model";
+      const unknownReasons=[];
+      if(!buildingCoverageSafe&&modelMode!=='trees'&&buildingMode!=='none'){
+        unknownReasons.push(!snapshot?'building-snapshot-unavailable':!snapshot.fetchComplete?'building-source-incomplete':!snapshot.complete?'building-coverage-or-quality-incomplete':'outside-verified-caster-coverage');
+        for(const e of snapshot?.errors||[])unknownReasons.push('building-source:'+e.code);
+        if(snapshot?.precision?.status?.fetchComplete===false)unknownReasons.push('precision:'+String(snapshot.precision.status.mode||'unavailable'));
+      }
+      if(uncertainBuilding)unknownReasons.push(building.plausibleUnknownHeight?'building-height-unknown':'building-height-or-geometry-estimated');
+      if(lowSun)unknownReasons.push('low-sun-caster-range');
+      if(canopyQueryFailed)unknownReasons.push('canopy-query-failed-or-timeout');
       const caveats = [];
-      if (!buildingReady && state.mode !== "trees" && effectiveBuildingMode() !== "none") {
+      if (!buildingReady && modelMode !== "trees" && buildingMode !== "none") {
         caveats.push("目前建築快取尚未就緒，結果可能低估建築陰影；請先讓目前視窗的建築資料完成載入。");
       }
       if (lowSun) caveats.push("太陽接近地平線，遠距遮蔽物可能超出目前路線模型的可靠追蹤距離。");
       if (canopyQueryFailed) caveats.push("本次樹冠查詢逾時或失敗，可能低估樹蔭。");
       if(uncertainBuilding)caveats.push("建築高度為推估／未知，或輪廓經概化；投影僅為候選，不能確認遮蔭。");
       caveats.push("自有 CHMv2／建築局部平坦模型；遠距地形遮蔽 incomplete。");
+      if(!buildingCoverageSafe&&snapshot)caveats.push(`建築資料範圍／品質未完整：${unknownReasons.filter(r=>r.startsWith('building-')||r.startsWith('precision:')).join('；')}。`);
       const unresolved=!confirmedShade && reliability==='partial';
       const shaded=confirmedShade?true:unresolved?null:false;
 
@@ -8019,7 +8050,10 @@
         reliability,
         model: "route-ray-v1",
         buildingModelReady: buildingReady,
-        ...(snapshot?{buildingSnapshot:{key:snapshot.cacheKey,release:snapshot.release,state:snapshot.state,stats:snapshot.stats}}:{}),
+        unknownReasons,
+        buildingEvidence:building?{hit:true,confirmed:!uncertainBuilding,...compactRouteBuildingEvidence(building)}:{hit:false,confirmed:false},
+        sourceEvidence:{building:building?compactRouteBuildingEvidence(building):null,tree:tree?compactRouteTreeEvidence(tree):null},
+        ...(snapshot?{buildingSnapshot:{key:snapshot.cacheKey,id:snapshot.snapshotId||snapshot.cacheKey,release:snapshot.release,state:snapshot.state,stats:snapshot.stats}}:{}),
         // dev35.2: route scoring is unchanged, but cross-analysis cache write-back
         // is permitted only for samples backed by complete local building coverage.
         routeCacheSafe: buildingCoverageSafe && reliability !== "partial",

@@ -144,10 +144,10 @@
     return (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
   }
 
-  function routeShadeWarmCacheContext() {
+  function routeShadeWarmCacheContext(snapshot) {
     const graphCfg = config.graphRouting || {};
     let model = null;
-    try { model = window.HaidianShade?.getRouteShadeCacheContext?.() || null; } catch (_) { model = null; }
+    try { model = window.HaidianShade?.getRouteShadeCacheContext?.(snapshot) || null; } catch (_) { model = null; }
     const cacheable = Boolean(model?.cacheable);
     return {
       enabled: graphCfg.sessionShadeWarmCacheEnabled !== false && cacheable,
@@ -732,7 +732,7 @@
     const departure = options.departure instanceof Date ? new Date(options.departure.getTime()) : new Date(options.departure || departureDateFromPanel());
     if (Number.isNaN(departure.getTime())) throw new Error("出發時間不正確。");
     const signal=options.signal||analysisController.signal;
-    const prepared=await ensureShadeReady({points:route,date:departure,purpose:'route',signal});
+    const prepared=options.preparedModel||await ensureShadeReady({points:route,date:departure,purpose:'route',signal});
     const buildingSnapshot=prepared?.snapshot;
     const segments = buildSampleSegments(route, spacingM);
     if (!segments.length) throw new Error("路線長度不足。");
@@ -1444,7 +1444,14 @@
     const candidateAudit = options.candidateAudit || null;
     const qualityChecked = applyRouteQuality(candidates).map(withCandidateIdentity);
     if (candidateAudit) candidateAudit.quality = qualityChecked.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:c?.routeQuality?.valid === false ? 'rejected' : 'kept', reasons:c?.routeQuality?.reasons || [] }));
-    const walkabilitySafe=c=>c?.kind!=='manual'&&c?.walkability?.state!=='partial'&&!(Number(c?.graphMeta?.realmSyntheticDistanceM||0)>.01)&&c?.graphMeta?.conditionalAccess!==true;
+    const walkabilityReasons=c=>[
+      ...(c?.kind==='manual'?['manual-unverified']:[]),
+      ...(c?.walkability?.state==='partial'?['walkability-partial']:[]),
+      ...(Number(c?.graphMeta?.realmSyntheticDistanceM||0)>.01?['synthetic-segments']:[]),
+      ...(c?.graphMeta?.conditionalAccess===true||c?.graphMeta?.usesConditionalPrivateAccess===true?['conditional-private-access']:[])
+    ];
+    const walkabilitySafe=c=>walkabilityReasons(c).length===0;
+    if(candidateAudit)candidateAudit.walkability=qualityChecked.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:walkabilitySafe(c)?'source-supported':'blocked',reasons:walkabilityReasons(c)}));
     const qualityValid = qualityChecked.filter((c) => c?.routeQuality?.valid !== false);
     const rejectedQuality = qualityChecked.filter((c) => c?.routeQuality?.valid === false);
     if (!qualityValid.length) throw new Error("候選路線都有明顯折返或重複走廊，已全部淘汰。請重新設定 A、B。");
@@ -1456,7 +1463,8 @@
       return d < bestD ? c : best;
     }, null);
     const detourPct = clamp(options.detourPct, 0, 60, detourCapFromPanel());
-    let eligible = qualityValid.filter((c) => walkabilitySafe(c)&&candidateWithinDetour(c, fastest, detourPct));
+    const detourEligible=qualityValid.filter(c=>walkabilitySafe(c)&&candidateWithinDetour(c,fastest,detourPct));
+    let eligible=detourEligible.slice();
     const maxScored = clamp(config.maxScoredCandidates, 2, 14, 10);
     if (eligible.length > maxScored) {
       const mustKeep = new Set([fastest?.id, ...eligible.filter((c) => c.kind === "manual" || c.kind === "experimental-fused" || c.kind === "pedestrian-realm-shade").map((c) => c.id)].filter(Boolean));
@@ -1469,7 +1477,7 @@
       eligible = chosen;
     }
     const eligibleIds = new Set(eligible.map((c) => c.id));
-    if (candidateAudit) candidateAudit.detour = qualityValid.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:eligibleIds.has(c.id) ? 'eligible' : 'outside-detour-or-score-cap' }));
+    if (candidateAudit) candidateAudit.detour = qualityValid.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, status:eligibleIds.has(c.id)?'eligible':!walkabilitySafe(c)?'walkability-blocked':!candidateWithinDetour(c,fastest,detourPct)?'outside-detour':'score-cap', reasons:!walkabilitySafe(c)?walkabilityReasons(c):[], distanceM:c.distanceM, limitM:Number(fastest.distanceM)*(1+detourPct/100) }));
     // Even when a user-drawn or verified-fusion route is just outside the detour
     // cap, score it once so the user can inspect the trade-off instead of having
     // an evidence-backed comparison silently disappear from the UI.
@@ -1502,6 +1510,8 @@
       const suffix = expected > 0 ? `；陰影採樣 ${finished}/${expected}` : '';
       setStatus(`dev35.3：並行精算 ${scoringPool.length} 條候選（最多 ${denseCandidateConcurrency} 條同時）${suffix}`, "loading");
     };
+    // Compare every candidate against one immutable source snapshot.
+    const preparedModel=scoringPool.length?await ensureShadeReady({points:scoringPool.flatMap(c=>c.points),date:options.departure||departureDateFromPanel(),purpose:'route',signal:options.signal||analysisController.signal}):null;
     const scored = await runPool(
       scoringPool,
       denseCandidateConcurrency,
@@ -1509,6 +1519,7 @@
         if (serial !== analysisSerial) throw new Error("ROUTE_ANALYSIS_CANCELLED");
         const analysis = await analyzeRoute(candidate.points, {
           departure: options.departure,
+          preparedModel,signal:options.signal,
           sampleSpacingM: Math.min(5, Number(options.sampleSpacingM || config.sampleSpacingM || 10)),
           speedMps: options.speedMps,
           serial,
@@ -1537,6 +1548,7 @@
       selected.analysis.heat = await maybeHeatContext(selected.points, departure, serial);
     }
     if (candidateAudit) {
+      candidateAudit.reliability=scored.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:reliableScored.includes(c)?'reliable':c.eligible===false?'ineligible':'unknown-source',unknownDistanceM:c.analysis.summary.unknownDistanceM,reasons:c.eligible===false?walkabilityReasons(c):c.analysis.summary.unknownDistanceM>.01?['unknown-shade-distance']:[],buildingSnapshot:c.analysis.buildingSnapshot}));
       candidateAudit.scored = scored.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, eligible:c.eligible !== false }));
       candidateAudit.displayed = candidateAudit.scored.slice();
       finalizeCandidateAudit(candidateAudit);
@@ -1545,6 +1557,9 @@
       fastest,
       eligible,
       eligibleScored,
+      reliableScored,
+      stageCounts:{input:candidates.length,quality:qualityValid.length,walkability:qualityValid.filter(walkabilitySafe).length,detour:detourEligible.length,scored:scored.length,eligibleScored:eligibleScored.length,reliableScored:reliableScored.length},
+      comparisonState:reliableScored.length>=2?'comparable':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
       scored,
       selected,
       best: selected,
@@ -3390,14 +3405,14 @@
     }
   }
 
-  async function finalizeShadeWarmCacheLifecycle(handle, initialModelToken, sharedCache, perfState) {
+  async function finalizeShadeWarmCacheLifecycle(handle, initialModelToken, sharedCache, perfState, snapshot) {
     const state = perfState || {};
     const prior = Object.assign({}, state.shadeWarmCache || {});
     const graphApi = window.HaidianPedestrianGraph;
     if (!graphApi?.commitSessionShadeWarmCache) return prior;
 
     let finalModel = null;
-    try { finalModel = routeShadeWarmCacheContext(); }
+    try { finalModel = routeShadeWarmCacheContext(snapshot); }
     catch (error) {
       state.shadeWarmCache = Object.assign({}, prior, { commitError:error?.message || String(error) });
       return state.shadeWarmCache;
@@ -3548,7 +3563,7 @@
       if (config.graphRouting?.enabled !== false && window.HaidianPedestrianGraph?.findRoutes) {
         await ensureShadeReady({points:[aPoint,bPoint],date:departure,purpose:'route',signal:analysisController.signal});
         try {
-          const warmContext = routeShadeWarmCacheContext();
+          const warmContext = routeShadeWarmCacheContext(graphBuildingSnapshot);
           shadeWarmCacheModelToken = warmContext.modelToken || null;
           if (window.HaidianPedestrianGraph?.acquireSessionShadeWarmCache) {
             shadeWarmCacheHandle = window.HaidianPedestrianGraph.acquireSessionShadeWarmCache(warmContext);
@@ -3586,6 +3601,7 @@
           const routeLoadedNationwideStage = async (loaded, attempt, stage, fastestOnly = false) => {
             if (!loaded?.available || !loaded?.graph?.edges?.size) return [];
             graphResult = await window.HaidianPedestrianGraph.findRoutesOnExternalGraph(aPoint, bPoint, loaded.graph, {
+              topologyAlternatives:true,
               departure, speedMps, detourPct,
               fastestOnly: fastestOnly === true,
               bbox: loaded.bbox,
@@ -3818,7 +3834,8 @@
             const overpassResult = await window.HaidianPedestrianGraph.findRoutes(
               aPoint,
               bPoint,
-              overpassBaseOptions({ fastestOnly: needsOverpassRescue && topologyProbeFastestOnly })
+              overpassBaseOptions({
+                topologyAlternatives:true, fastestOnly: needsOverpassRescue && topologyProbeFastestOnly })
             );
             const overpassCandidates = Array.isArray(overpassResult?.candidates) ? overpassResult.candidates : [];
             const overpassDistanceM = graphFastestDistanceM(overpassCandidates);
@@ -4279,6 +4296,7 @@
               aPoint,
               bPoint,
               overpassBaseOptions({
+                topologyAlternatives:true,
                 fastestOnly:false,
                 allowPrivateFootAccess:selectedOverpassAllowPrivate === true,
                 conditionalPrivateTerminalBufferM: stretchOpts.conditionalPrivateTerminalBufferM
@@ -4360,7 +4378,7 @@
       }
 
       const mappedSource=await realmSourcePromise;
-      if(mappedSource.available&&window.HaidianPedestrianGraph.mappedWalkCandidate){const mapped=window.HaidianPedestrianGraph.mappedWalkCandidate(mappedSource.payload,aPoint,bPoint,{speedMps});perf.mappedWalkAudit=mapped.walkability||{state:'unavailable',reason:mapped.reason};if(mapped.candidate)stretchRescueCandidates.push(mapped.candidate);}
+      if(mappedSource.available&&window.HaidianPedestrianGraph.mappedWalkCandidates){const mapped=await window.HaidianPedestrianGraph.mappedWalkCandidates(mappedSource.payload,aPoint,bPoint,{speedMps,detourPct,shouldCancel:()=>serial!==analysisSerial});perf.mappedWalkAudit={...mapped.walkability,reason:mapped.reason||mapped.walkability?.reason,alternatives:mapped.alternativeDiagnostics};stretchRescueCandidates.push(...mapped.candidates||[]);}
       const providerCandidates = await providerPromise;
       if (serial !== analysisSerial) return;
       let exploratoryCandidates = [];
@@ -4495,7 +4513,7 @@
       // dev29: forensic manual-route diagnostics are explicitly on-demand.  The
       // automatic O(samples×edges) scan was a major latency source on nationwide graphs.
       lastManualGraphDiagnosis = null;
-      await finalizeShadeWarmCacheLifecycle(shadeWarmCacheHandle, shadeWarmCacheModelToken, sharedGraphShadeCache, perf);
+      await finalizeShadeWarmCacheLifecycle(shadeWarmCacheHandle, shadeWarmCacheModelToken, sharedGraphShadeCache, perf, graphBuildingSnapshot);
       perf.totalMs = nowMs() - perfStart;
       bundle.performance = Object.assign({}, perf, {
         graphSearch: bundle.graphDiagnostics?.performance || null,
