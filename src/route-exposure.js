@@ -1151,6 +1151,13 @@
     const detour = firstByKey(audit.detour);
     const scored = firstByKey(audit.scored);
     const displayed = firstByKey(audit.displayed);
+    // dev37.9.9.6.1: endpoint normalization is a later lifecycle stage than
+    // ordinary dedupe. Keep a dedicated exact-reason index so a prior
+    // `dedupe: kept` event cannot mask the later intentional rejection.
+    const endpointNormalizationRejectedIds = new Set((audit.dedupe || [])
+      .filter((x) => x?.stage === 'endpoint-normalization' && x?.status === 'rejected' && x?.reason === 'does-not-reach-user-confirmed-routing-endpoint')
+      .map((x) => x?.candidateId)
+      .filter(Boolean));
     const outcomes = [], unexplained = [];
 
     for (const generated of audit.generated || []) {
@@ -1165,6 +1172,8 @@
           result = d?.proof?.duplicate
             ? { status:'hidden', reason:'proven-duplicate', duplicateOf:d.duplicateOf || null }
             : { status:'unexplained', reason:'dedupe-without-positive-proof' };
+        } else if (generated?.candidateId && endpointNormalizationRejectedIds.has(generated.candidateId)) {
+          result = { status:'hidden', reason:'endpoint-normalization-rejected' };
         } else if (d?.status === 'dropped' && d?.reason === 'missing-geometry') {
           result = { status:'hidden', reason:'missing-geometry' };
         } else if (q?.status === 'rejected') {
@@ -4640,7 +4649,7 @@
       if(Object.keys(endpointNormalizationReferences).length){
         for(let i=candidates.length-1;i>=0;i--){
           if(normalizedCandidateEndpointsMatch(candidates[i]))continue;
-          candidateAudit.dedupe.push({stage:'endpoint-normalization',candidateId:candidates[i].id,status:'rejected',reason:'does-not-reach-user-confirmed-routing-endpoint'});
+          candidateAudit.dedupe.push({stage:'endpoint-normalization',candidateId:candidates[i].id,stableCandidateId:candidates[i].stableCandidateId,geometryHash:candidates[i].geometryHash,status:'rejected',reason:'does-not-reach-user-confirmed-routing-endpoint'});
           candidates.splice(i,1);
         }
       }

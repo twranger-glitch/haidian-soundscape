@@ -1,13 +1,13 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.6-terminal-handoff-continuity",
-  "createdAt": "2026-10-01T15:20:00Z",
+  "release": "dev37.9.9.6.1-endpoint-normalization-loss-ledger-hotfix",
+  "createdAt": "2026-10-01T16:05:00Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "live dev37.9.8.5 + reviewed dev37.9.9.4 development baseline",
-  "scope": "deploy reviewed dev37.9.9.4 terminal safety together with dev37.9.9.6 explicit user-confirmed endpoint normalization; no terminal gate, boundary tolerance, shade, unknown, NLSC, comparator or general candidate-generation semantic change",
+  "integrationBaseline": "deployed dev37.9.9.6 terminal handoff continuity",
+  "scope": "diagnostic lifecycle-ledger hotfix only: explain exact user-confirmed endpoint-normalization candidate rejections; no candidate-generation, route, terminal-gate, boundary-tolerance, shade, unknown, NLSC or comparator semantic change",
   "cacheWiring": {
     "src/pedestrian-graph-routing.js": "core=37.9.9.6",
-    "src/route-exposure.js": "core=37.9.9.6",
+    "src/route-exposure.js": "core=37.9.9.6.1",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
     "src/own-shade-renderer.js": "core=37.9.7",
@@ -37,6 +37,10 @@
     "RELEASE-dev37.9.8.5.md": {
       "bytes": 1804,
       "sha256": "9324e4b64ff764ddf7e3e95a7c5d59fd87960c936069f3ba430af2b4f24e41f4"
+    },
+    "RELEASE-dev37.9.9.6.1.md": {
+      "bytes": 3147,
+      "sha256": "bf339c8725ecff7b16d0e017fefcebcdfc171c4092d50c9648a2db38b126a76a"
     },
     "RELEASE-dev37.9.9.6.md": {
       "bytes": 2787,
@@ -650,6 +654,18 @@
       "bytes": 497,
       "sha256": "21e42ea48d4ecb222c5a8c2035ae00615dc061e8a46674cb1c5a3096b983353a"
     },
+    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
+      "bytes": 27966,
+      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
+      "bytes": 72091,
+      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
+      "bytes": 1124,
+      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
+    },
     "data/nationwide-sample/runtime/graph-hgr2/xp0173_yp0161.hgr2": {
       "bytes": 628,
       "sha256": "34852495598950dabf206146fd36f9e57051adf240c7439967a5abb8c102605b"
@@ -706,21 +722,9 @@
       "bytes": 872,
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
-    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
-      "bytes": 27966,
-      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
-      "bytes": 72091,
-      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
-      "bytes": 1124,
-      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
-    },
     "index.html": {
-      "bytes": 630363,
-      "sha256": "63db93b1de98fe4d12d37cae50dbbd632a5f3e5104c4f45b6daa2d7bc2c6e653"
+      "bytes": 630365,
+      "sha256": "f35ae8b0447de51fc30b08adc4f682ed1919d50925e87de4d8936917e93fd97f"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -827,8 +831,8 @@
       "sha256": "38b73624ba09fdf3954523fa5c2ad8580525faf729cab88aaf698f36fa7c0d01"
     },
     "src/route-exposure.js": {
-      "bytes": 364146,
-      "sha256": "8f31e13150281a74132186be4b0a446613b2f9b4ca8406f6bc42f31e51ac8fb2"
+      "bytes": 364934,
+      "sha256": "59d9f44bb7f700e32295b70305707a2549895a198c23a35cd0ff6eae869509d2"
     },
     "src/shademap-integration.js": {
       "bytes": 390114,
