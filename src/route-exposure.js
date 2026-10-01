@@ -1596,7 +1596,10 @@
       scored,
       selected,
       best: selected,
-      activeCandidateId: selected?.id || scored[0]?.id || null,
+      // Display fallback is intentionally separate from comparator selection.
+      // When uncertainty prevents a proven winner, keep selected/best null but
+      // still show one eligible candidate so the map remains usable.
+      activeCandidateId: selected?.id || eligibleScored[0]?.id || scored[0]?.id || null,
       detourPct,
       comparisonValid,
       shadeComparisonIncomplete: !comparisonValid&&(reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c))),
@@ -3291,16 +3294,28 @@
     }
   }
 
+  function pickDisplayCandidate(bundle) {
+    const scored = Array.isArray(bundle?.scored) ? bundle.scored : [];
+    if (!scored.length) return null;
+    const preferredId = bundle?.activeCandidateId || bundle?.best?.id || bundle?.selected?.id || null;
+    const preferred = preferredId ? scored.find((c) => c?.id === preferredId) : null;
+    if (preferred) return preferred;
+    return scored.find((c) => c?.eligible !== false) || scored[0] || null;
+  }
+
   function renderCandidateBundle(bundle, options = {}) {
     const el = panel?.querySelector('[data-re-results]');
-    if (!el || !bundle.best) return;
-    const activeId = bundle.activeCandidateId || bundle.best.id;
-    const active = bundle.scored.find((c) => c.id === activeId) || bundle.best;
+    if (!el) return;
+    const active = pickDisplayCandidate(bundle);
+    if (!active) return;
     bundle.activeCandidateId = active.id;
     const activeName = candidateName(active, bundle);
-    const isBest = active.id === bundle.best.id && bundle.comparisonValid;
+    const provenBest = bundle.best || bundle.selected || null;
+    const isBest = Boolean(bundle.comparisonValid && provenBest && active.id === provenBest.id);
     const title = isBest ? `已比較候選中日照較少：${activeName}` : `正在查看：${activeName}`;
-    const eyebrow = bundle.comparisonValid ? `已分析 ${bundle.scored.length} 條路線 · 點下方卡片切換` : '候選不足，先顯示曝曬分析';
+    const eyebrow = bundle.comparisonValid
+      ? `已分析 ${bundle.scored.length} 條路線 · 點下方卡片切換`
+      : `尚無法證明「最不曬」 · 已先顯示可行候選，可切換其他 ${Math.max(0, bundle.scored.length - 1)} 條路線`;
     el.innerHTML = resultHtml(active.analysis, { title, eyebrow }) + candidatesHtml(bundle);
     try { window.HaidianExperimentalFusionRouter?.clearMapLayer?.(); } catch (_) {}
     clearLayer(drawLayer);
@@ -4563,7 +4578,8 @@
       // compete with graph fetch/decode/search on the critical path.
       if (!fusionEvidenceLoad?.available) {
         if (config.nationwideTiles?.deferEvidenceUntilRouteReady !== false) {
-          const evidenceSeed = bundle.best?.points?.length ? bundle.best.points : nationwideSeed;
+          const displayCandidate = pickDisplayCandidate(bundle);
+          const evidenceSeed = displayCandidate?.points?.length ? displayCandidate.points : nationwideSeed;
           void prefetchNationwideEvidence(evidenceSeed).then(() => { if (serial === analysisSerial && lastCandidateBundle === bundle) renderCandidateBundle(bundle, { fit:false }); });
         } else {
           void prefetchNationwideEvidence(nationwideSeed);
@@ -4578,7 +4594,7 @@
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
         if (bundle.comparisonState === "incomplete-source") {
           const count = Number(bundle.eligibleScored?.length || bundle.stageCounts?.eligibleScored || 0);
-          setStatus(`已找到 ${count} 條可行候選，但目前陰影資料不完整，暫時無法可靠比較「最不曬」。${suffix}`, "warning");
+          setStatus(`已找到 ${count} 條可行候選，但目前陰影資料不完整，暫時無法可靠比較「最不曬」；已先顯示一條可行候選，可在結果卡切換其他路線。${suffix}`, "warning");
         } else if (bundle.comparisonState === "only-one-eligible") {
           setStatus(`目前只有 1 條符合條件的候選；已完成曝曬分析，但尚不能判定真正的「最不曬」。${suffix}`, "warning");
         } else {
@@ -5105,7 +5121,8 @@
       experimentalFusionCandidateFromRun,
       buildFusionManualComparison,
       finalizeShadeWarmCacheLifecycle,
-      routeShadeWarmCacheContext
+      routeShadeWarmCacheContext,
+      pickDisplayCandidate
     }
   };
 

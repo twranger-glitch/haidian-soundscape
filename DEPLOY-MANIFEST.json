@@ -1,7 +1,6 @@
 {
   "schema": "astra-deploy-manifest-v1",
-  "release": "dev37.9.8.4",
-  "baseline": "dev37.9.7",
+  "release": "dev37.9.8.5",
   "files": {
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -22,6 +21,10 @@
     "RELEASE-dev37.9.8.4.md": {
       "bytes": 1313,
       "sha256": "b05ce93e4f70e8f8719859daf05e7dac56bac51518cc5d55e6c60812c81febbb"
+    },
+    "RELEASE-dev37.9.8.5.md": {
+      "bytes": 1804,
+      "sha256": "9324e4b64ff764ddf7e3e95a7c5d59fd87960c936069f3ba430af2b4f24e41f4"
     },
     "buildings/NLSC-OFFICIAL-GEOMETRY-PILOT.md": {
       "bytes": 549,
@@ -700,8 +703,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630359,
-      "sha256": "806a421f659a8aa8665a9ce2d9f6b1faa88932e87ac52804823cb63a31413756"
+      "bytes": 630361,
+      "sha256": "200c9339dcaff6ee0b908f30cdbbf3f2680679c09633272dd7e7299cafe1316c"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -808,8 +811,8 @@
       "sha256": "9efe7e6d0af4a4ce367b09a6d476d6b0edf715ad597336543a13a6b1c4877c9e"
     },
     "src/route-exposure.js": {
-      "bytes": 354291,
-      "sha256": "6d369d6c52da5e1cbe63d24649b1aa8b4442dbd7db8f47b1a18c8b0eb4a14670"
+      "bytes": 355274,
+      "sha256": "0540acb77d4963935858f266134f15e995511ed773674b82721b092d7212b47f"
     },
     "src/shademap-integration.js": {
       "bytes": 390114,
