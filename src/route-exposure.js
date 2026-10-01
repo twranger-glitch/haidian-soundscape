@@ -118,6 +118,8 @@
   let drawPoints = [];
   let aPoint = null;
   let bPoint = null;
+  let endpointNormalizationOffers = [];
+  let endpointNormalizationReferences = {};
   let analysisSerial = 0;
   let analysisController=new AbortController();
   let doubleClickWasEnabled = null;
@@ -567,6 +569,7 @@
     const exports = panel.querySelector("[data-re-export]");
     const hasRenderedResult = !!panel.querySelector("[data-re-results]")?.innerHTML.trim();
     if (exports) exports.hidden = !lastAnalysis || !hasRenderedResult;
+    renderEndpointNormalization();
   }
 
   function advanceFromTime() {
@@ -3347,6 +3350,100 @@
     }).bindTooltip(label, { permanent: true, direction: "top", offset: [0, -8] }).addTo(endpointsLayer);
   }
 
+  function sameEndpoint(a,b) {
+    return !!a&&!!b&&Number(a.lat)===Number(b.lat)&&Number(a.lng)===Number(b.lng);
+  }
+
+  function endpointNormalizationNote(row) {
+    return `原${row.side==='a'?'起':'終'}點距路線${row.side==='a'?'起':'終'}點 ${Number(row.gapM).toFixed(1)} m；此段未驗證，不納入路線、曝曬或「最不曬」比較。`;
+  }
+
+  function renderEndpointNormalization() {
+    const el=panel?.querySelector('[data-re-endpoint-normalization]');
+    if(!el)return;
+    const references=Object.values(endpointNormalizationReferences);
+    el.innerHTML=references.map((row)=>`<div class="re-note"><b>${escapeHtml(row.side.toUpperCase())} 路線端點已依你的確認改用映射步行點</b><p>${escapeHtml(endpointNormalizationNote(row))}</p></div>`).join('')+
+      endpointNormalizationOffers.map((row)=>`<div class="re-note"><b>${row.side.toUpperCase()} 原點銜接未通過通行驗證</b><p>附近來源線網有可步行映射點；原點至該點的 ${row.gapM.toFixed(1)} m 空隙未驗證。只有你確認後才會改路線端點，並重新分析。</p><button type="button" data-re-normalize-endpoint="${row.side}" ${busy?'disabled':''}>改用附近映射步行點（距原${row.side==='a'?'起':'終'}點 ${row.gapM.toFixed(1)} m）</button><button type="button" data-re-decline-normalization="${row.side}" ${busy?'disabled':''}>保留原點</button></div>`).join('');
+    el.hidden=uiMode!=='ab'||(!references.length&&!endpointNormalizationOffers.length);
+  }
+
+  function redrawEndpointMarkers() {
+    clearLayer(endpointsLayer);
+    for(const [side,point,color] of [['a',aPoint,'#2563eb'],['b',bPoint,'#e11d48']]){
+      if(!point)continue;
+      const row=endpointNormalizationReferences[side];
+      setEndpointMarker(point,row?`${side.toUpperCase()} 路線端點`:side.toUpperCase(),color);
+      if(!row)continue;
+      window.L.circleMarker(row.original,{radius:7,weight:2,color:'#64748b',fillOpacity:.2,dashArray:'3 3'})
+        .bindTooltip(`原 ${side.toUpperCase()}（參考點；${side==='a'?'起點銜接':'最後一段'}未驗證）`,{permanent:true,direction:'bottom'}).addTo(endpointsLayer);
+      // Reference-only layer: never supplied to routing, route samples or score.
+      window.L.polyline([row.original,row.anchor],{color:'#64748b',weight:2,dashArray:'5 6',opacity:.8})
+        .bindTooltip(endpointNormalizationNote(row)).addTo(endpointsLayer);
+    }
+  }
+
+  function collectEndpointNormalizationOffers(realm,serial) {
+    if(serial!==analysisSerial||realm?.reason!=='unmapped-terminal-access')return;
+    for(const offer of realm.endpointCoverage?.normalizationOffers||[]){
+      const point=offer.side==='a'?aPoint:offer.side==='b'?bPoint:null;
+      if(!point||!sameEndpoint(point,offer.original)||endpointNormalizationReferences[offer.side]||
+        offer.source!=='realm-mapped-line'||offer.sourceAccessChecked!==true||offer.sourceGeometryComplete!==true||
+        offer.requiresExplicitConsent!==true||offer.connectorVerified!==false||offer.referenceExcludedFromRoute!==true||
+        !Number.isFinite(offer.anchor?.lat)||!Number.isFinite(offer.anchor?.lng)||
+        Math.abs(offer.anchor.lat)>90||Math.abs(offer.anchor.lng)>180||
+        !Number.isFinite(offer.gapM)||offer.gapM<=8||offer.gapM>10||
+        Math.abs(haversineM(point,offer.anchor)-offer.gapM)>.001)continue;
+      if(endpointNormalizationOffers.some((row)=>row.side===offer.side))continue;
+      endpointNormalizationOffers.push({...offer,original:{...offer.original},anchor:{...offer.anchor},serial});
+    }
+    renderEndpointNormalization();
+  }
+
+  function acceptEndpointNormalization(side,explicitConsent=false) {
+    const row=endpointNormalizationOffers.find((x)=>x.side===side),point=side==='a'?aPoint:side==='b'?bPoint:null;
+    if(explicitConsent!==true||busy||!row||row.serial!==analysisSerial||!sameEndpoint(point,row.original))return false;
+    endpointNormalizationReferences[side]={...row,original:{...row.original},anchor:{...row.anchor},userConfirmed:true};
+    if(side==='a')aPoint={...row.anchor};else bPoint={...row.anchor};
+    endpointNormalizationOffers=[];
+    // A changed endpoint invalidates every old result, even before the rerun.
+    lastAnalysis=null;lastCandidates=[];lastSelectedCandidate=null;lastCandidateBundle=null;
+    clearLayer(resultLayer);clearLayer(comparisonLayer);clearLayer(drawLayer);
+    const results=panel?.querySelector('[data-re-results]');if(results)results.innerHTML='';
+    redrawEndpointMarkers();renderEndpointNormalization();syncUiState();
+    return true;
+  }
+
+  async function requestEndpointNormalization(side) {
+    const row=endpointNormalizationOffers.find((x)=>x.side===side);
+    if(!row||busy)return;
+    const consent=window.confirm(`要將 ${side.toUpperCase()} 路線端點改為距原點 ${row.gapM.toFixed(1)} m 的映射步行點嗎？\n${endpointNormalizationNote(row)}\n原點會保留在地圖上。`);
+    if(consent!==true)return;
+    if(acceptEndpointNormalization(side,true))await analyzeAB();
+  }
+
+  function normalizedCandidateEndpointsMatch(candidate) {
+    const points=candidate?.points||[];
+    // A normalized trip may not reuse a provider/manual line ending at the old
+    // marker. Only routes reaching the new endpoint itself are scored.
+    return Object.entries(endpointNormalizationReferences).every(([side,row])=>{
+      if(!sameEndpoint(side==='a'?points[0]:points.at(-1),row.anchor))return false;
+      // Reject a stale/manual/provider geometry that embeds the excluded
+      // reference segment internally too. 1 mm is numerical collinearity only,
+      // not an access corridor or permission to walk near that segment.
+      for(let i=1;i<points.length;i++){
+        const p=points[i-1],q=points[i],positions=[];
+        for(const r of [row.original,row.anchor]){
+          const hit=projectPointToSegment(r,p,q);if(hit&&hit.distanceM<=.001)positions.push(hit.t);
+        }
+        for(const [r,t] of [[p,0],[q,1]]){
+          const hit=projectPointToSegment(r,row.original,row.anchor);if(hit&&hit.distanceM<=.001)positions.push(t);
+        }
+        if(positions.length>1&&(Math.max(...positions)-Math.min(...positions))*haversineM(p,q)>.001)return false;
+      }
+      return true;
+    });
+  }
+
   function stopDrawMode() {
     drawMode = "idle";
     if (map) map.getContainer().classList.remove("route-exposure-drawing");
@@ -3386,6 +3483,7 @@
     uiMode = "ab";
     aPoint = null;
     bPoint = null;
+    endpointNormalizationOffers=[];endpointNormalizationReferences={};renderEndpointNormalization();
     if (!endpointsLayer) endpointsLayer = createLayerGroup();
     clearLayer(endpointsLayer);
     clearLayer(resultLayer);
@@ -3404,6 +3502,7 @@
     savedDrawnAnalysis = null;
     aPoint = null;
     bPoint = null;
+    endpointNormalizationOffers=[];endpointNormalizationReferences={};renderEndpointNormalization();
     lastAnalysis = null;
     lastCandidates = [];
     lastSelectedCandidate = null;
@@ -3560,6 +3659,7 @@
     stopDrawMode();
     analysisController.abort();analysisController=new AbortController();analysisSerial += 1;
     const serial = analysisSerial;
+    endpointNormalizationOffers=[];renderEndpointNormalization();
     setBusy(true);
     const perfStart = nowMs();
     const perf = { providerMs: 0, graphMs: 0, fusionMs: 0, denseScoreMs: 0, totalMs: 0 };
@@ -4168,6 +4268,7 @@
             }));
             perf.graphMs = Number(perf.graphMs || 0) + (nowMs() - realmStarted);
             const realmCandidates = Array.isArray(realm?.candidates) ? realm.candidates : [];
+            collectEndpointNormalizationOffers(realm,serial);
             const realmDistanceM = realmCandidates.length
               ? Math.min(...realmCandidates.map((c)=>Number(c.distanceM||Infinity)))
               : Number(realm?.best?.distanceM ?? realm?.distanceM);
@@ -4416,6 +4517,7 @@
             });
             if(serial!==analysisSerial)return;
             const candidates=realm.accepted?realm.candidates||[]:[];
+            collectEndpointNormalizationOffers(realm,serial);
             stretchRescueCandidates.push(...candidates);
             Object.assign(perf.realmOpportunity,{accepted:candidates.length>0,reason:realm.reason||null,candidateCount:candidates.length,areaCount:realm.areaCount||0,autoAreaCount:realm.autoAreaCount||0,source:realm.realmEndpoint,sourceDiagnostics:realm.sourceDiagnostics,endpointCoverage:realm.endpointCoverage,shadeSearch:realm.shadeSearch||null,searchExpandedStates:realm.searchExpandedStates||0,shadeEdgeEvaluations:realm.shadeEdgeEvaluations||0});
           }catch(error){
@@ -4533,6 +4635,15 @@
         candidateAudit.generated.push({ candidateId:fusionCandidate.id, kind:fusionCandidate.kind, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, source:'verified-fusion' });
         candidateAudit.dedupe.push({ stage:'dedupe', status:'kept', candidateId:fusionCandidate.id, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, reason:'protected-verified-fusion' });
       }
+      // Restrict only explicit normalized trips. Ordinary candidate generation
+      // and comparison rules are unchanged. The reference gap is never appended.
+      if(Object.keys(endpointNormalizationReferences).length){
+        for(let i=candidates.length-1;i>=0;i--){
+          if(normalizedCandidateEndpointsMatch(candidates[i]))continue;
+          candidateAudit.dedupe.push({stage:'endpoint-normalization',candidateId:candidates[i].id,status:'rejected',reason:'does-not-reach-user-confirmed-routing-endpoint'});
+          candidates.splice(i,1);
+        }
+      }
       lastCandidates = candidates;
 
       setStatus(`dev33：candidate lifecycle 已保留 ${candidates.length} 條；正在用同一套 dense ShadeMap 精算曝曬…`, "loading");
@@ -4568,6 +4679,8 @@
         shadeEngine: window.HaidianShade?.getRouteDiagnostics?.() || null,
         sharedGraphShadeCacheSize: sharedGraphShadeCache.size
       });
+      bundle.endpointNormalization={routingEndpoints:{a:{...aPoint},b:{...bPoint}},
+        references:JSON.parse(JSON.stringify(endpointNormalizationReferences)),referenceIncludedInMetrics:false};
       lastCandidateBundle = bundle;
       lastSelectedCandidate = bundle.best;
       lastAnalysis = bundle.best?.analysis || null;
@@ -4604,7 +4717,7 @@
     } catch (error) {
       if (error?.message !== "ROUTE_ANALYSIS_CANCELLED") setStatus(error?.message || "A→B 路線分析失敗。", "error");
     } finally {
-      if (serial === analysisSerial) setBusy(false);
+      if (serial === analysisSerial) {setBusy(false);renderEndpointNormalization();}
     }
   }
 
@@ -4635,6 +4748,7 @@
       })),
       dev37RealmProvider:{endpoints:{a:aPoint,b:bPoint},opportunity:lastCandidateBundle?.performance?.realmOpportunity||null,rescue:lastCandidateBundle?.performance?.routeStretchRescue||null,selectedCandidateId:lastSelectedCandidate?.id||null,candidates:(lastCandidateBundle?.scored||[]).filter((c)=>c.graphMeta?.pedestrianRealmRescue).map((c)=>({id:c.id,kind:c.kind,distanceM:c.distanceM,points:c.points,graphMeta:c.graphMeta}))},
       dev32CandidateAudit: lastCandidateBundle?.candidateAudit || null,
+      endpointNormalization:lastCandidateBundle?.endpointNormalization||null,
       dev32GraphDiagnostics: lastCandidateBundle?.graphDiagnostics || null,
       dev32TemporalVsOnDemandAudit: lastCandidateCorrectnessAudit || null,
       dev33OfficialEvidenceDiscovery: lastCandidateBundle?.officialEvidenceDiscovery || lastOfficialDiscovery || null
@@ -4873,6 +4987,7 @@
 
           <div class="re-status" data-re-status hidden></div>
           <div class="re-cancel-wrap" data-re-cancel-wrap hidden>正在運算中… <button type="button" data-re-cancel>取消分析</button></div>
+          <div data-re-endpoint-normalization hidden role="region" aria-label="路線端點調整與未驗證參考段"></div>
           <div class="re-results" data-re-results></div>
           <details class="re-export" data-re-export hidden><summary>匯出研究資料</summary><div><button type="button" data-re-json>匯出 JSON</button><button type="button" data-re-csv>匯出 CSV</button></div></details>
           <div class="re-bottom-actions"><button type="button" class="re-link-btn" data-re-reset>重新開始</button></div>
@@ -4896,10 +5011,14 @@
     node.querySelectorAll("[data-re-detour-chip]").forEach((chip) => chip.addEventListener("click", () => setDetourPct(Number(chip.dataset.reDetourChip))));
     node.querySelector("[data-re-detour]").addEventListener("input", syncUiState);
     node.querySelector("[data-re-reset]").addEventListener("click", () => clearAll(true));
-    node.querySelector("[data-re-cancel]").addEventListener("click", () => { analysisController.abort();analysisController=new AbortController();analysisSerial += 1; setBusy(false); setStatus("已取消目前運算。", ""); });
+    node.querySelector("[data-re-cancel]").addEventListener("click", () => { analysisController.abort();analysisController=new AbortController();analysisSerial += 1; endpointNormalizationOffers=[];setBusy(false);renderEndpointNormalization();setStatus("已取消目前運算。", ""); });
     node.querySelector("[data-re-json]").addEventListener("click", exportJson);
     node.querySelector("[data-re-csv]").addEventListener("click", exportCsv);
     node.addEventListener("click", (event) => {
+      const normalize=event.target?.closest?.('[data-re-normalize-endpoint]');
+      if(normalize){void requestEndpointNormalization(normalize.dataset.reNormalizeEndpoint);return;}
+      const decline=event.target?.closest?.('[data-re-decline-normalization]');
+      if(decline){endpointNormalizationOffers=endpointNormalizationOffers.filter((x)=>x.side!==decline.dataset.reDeclineNormalization);renderEndpointNormalization();return;}
       const candidate = event.target?.closest?.("[data-re-candidate-id]");
       if (candidate) {
         selectCandidate(candidate.dataset.reCandidateId);
@@ -5036,6 +5155,7 @@
       return;
     }
     if (drawMode === "a") {
+      endpointNormalizationOffers=[];endpointNormalizationReferences={};renderEndpointNormalization();
       aPoint = point;
       if (!endpointsLayer) endpointsLayer = createLayerGroup();
       clearLayer(endpointsLayer);
@@ -5046,6 +5166,7 @@
       return;
     }
     if (drawMode === "b") {
+      endpointNormalizationOffers=[];endpointNormalizationReferences={};renderEndpointNormalization();
       bPoint = point;
       setEndpointMarker(bPoint, "B", "#e11d48");
       drawMode = "idle";
@@ -5122,7 +5243,11 @@
       buildFusionManualComparison,
       finalizeShadeWarmCacheLifecycle,
       routeShadeWarmCacheContext,
-      pickDisplayCandidate
+      pickDisplayCandidate,
+      collectEndpointNormalizationOffers,acceptEndpointNormalization,requestEndpointNormalization,
+      normalizedCandidateEndpointsMatch,endpointNormalizationNote,
+      getEndpointNormalizationState(){return JSON.parse(JSON.stringify({a:aPoint,b:bPoint,offers:endpointNormalizationOffers,references:endpointNormalizationReferences,serial:analysisSerial,busy}));},
+      onMapClick,startABMode,analyzeAB
     }
   };
 

@@ -4804,7 +4804,9 @@
   function addRealmEdge(graph,aId,bId,geometry,meta={}) {
     const a=String(aId),b=String(bId); if(a===b||!graph.nodes.has(a)||!graph.nodes.has(b)) return null;
     const g=(geometry||[]).map(asLatLng).filter(Boolean); if(g.length<2) return null;
-    const distanceM=routeDistanceM(g); if(!(distanceM>0.05)) return null;
+    // Terminal access must retain even a sub-0.2 m exact endpoint displacement.
+    // Keep the existing degeneracy floor for all other synthetic Realm edges.
+    const distanceM=routeDistanceM(g); if(!(distanceM>(meta.terminalConnector===true?0:0.05))) return null;
     let id=`dev37-realm:${meta.serial||1}`,serial=1; while(graph.edges.has(id)) id=`dev37-realm:${meta.serial||1}:${++serial}`;
     const edge={id,a,b,distanceM,geometry:g.map((p)=>({lat:p.lat,lng:p.lng})),wayIds:[],tagsSummary:{highway:['pedestrian'],foot:['yes'],diagnostic:['dev37-pedestrian-realm'],realm:[String(meta.realmKind||'public-realm')]},realmSynthetic:true,realmAreaId:meta.realmAreaId||null,realmKind:meta.realmKind||null,realmConfidence:meta.realmConfidence||'medium',realmTerminalConnector:meta.terminalConnector===true,realmPortalConnector:meta.portalConnector===true,realmOpenBoundaryPortal:meta.openBoundaryPortal===true,productionGraphMutated:false};
     graph.edges.set(id,edge); if(!graph.adjacency.has(a))graph.adjacency.set(a,[]);if(!graph.adjacency.has(b))graph.adjacency.set(b,[]);
@@ -5012,6 +5014,23 @@
     return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,walkability:{state:Number(meta.realmSyntheticDistanceM||0)>.01?'partial':'source-supported',reason:Number(meta.realmSyntheticDistanceM||0)>.01?'synthetic park chords have no mapped walking surface':'mapped paths',syntheticM:Number(meta.realmSyntheticDistanceM||0)},graphMeta:Object.assign({backend:'osm-pedestrian-realm',pedestrianRealmRescue:true,productionGraphMutated:false,requiresOnSitePathConfirmation:true},meta)};
   }
 
+  // A distance knob is not a surface/access witness. Keep the accepted <=8 m
+  // policy (or an explicitly tighter limit), but do not turn the existing 10 m
+  // counterfactual cap into production permission without independent evidence.
+  function realmTerminalAccessDecision(point,anchor,insideRealm,gapM,realm,options={}) {
+    const raw=Number(options.realmTerminalMaxGapM||8);
+    const requestedLimitM=Math.min(10,Math.max(1,Number.isFinite(raw)?raw:8));
+    const effectiveLimitM=Math.min(8,requestedLimitM),distance=Number(gapM);
+    const valid=!!asLatLng(point)&&!!asLatLng(anchor)&&typeof gapM==='number'&&Number.isFinite(distance)&&distance>=0;
+    const blocked=valid&&!insideRealm&&!segmentClearOfRealmObstacles(point,anchor,null,realm,options);
+    const accepted=valid&&!blocked&&(insideRealm||distance<=effectiveLimitM);
+    const reason=!valid?'invalid-terminal-attachment':blocked?'blocked-terminal-segment':accepted?'within-existing-terminal-policy':distance>10?'beyond-terminal-hard-maximum':distance>8?'terminal-surface-access-unproven':'configured-terminal-limit';
+    return {accepted,reason,gapM:valid?distance:null,insideRealm:!!insideRealm,blocked,
+      requestedLimitM,effectiveLimitM,hardMaximumM:10,extensionEnabled:false,
+      obstacleCheckIsAccessProof:false,
+      missingEvidence:reason==='terminal-surface-access-unproven'?['independent mapped/surveyed walking surface covering the exact connector','pedestrian-compatible access and level/entrance continuity for that surface']:[]};
+  }
+
   function buildPedestrianRealmRescueGraph(payload,a,b,options={}) {
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',productionGraphMutated:false};
     const realm=parsePedestrianRealm(payload),corridorM=Math.max(40,Number(options.corridorM||180));
@@ -5053,9 +5072,36 @@
     // Snap locations are diagnostics, not permission to invent a 29 m final
     // sidewalk. A route via a public area must begin/end in that area or near
     // a mapped accessible line; the production snap tolerance is unchanged.
-    const terminalLimitM=Math.min(10,Math.max(1,Number(options.realmTerminalMaxGapM||8)));
-    const terminalBlocked=(!areaForA&&!segmentClearOfRealmObstacles(A,graph.nodes.get(String(startId)),null,realm,options))||(!areaForB&&!segmentClearOfRealmObstacles(B,graph.nodes.get(String(endId)),null,realm,options));
-    if(terminalBlocked||(!areaForA&&Number(snapA.distanceM)>terminalLimitM)||(!areaForB&&Number(snapB.distanceM)>terminalLimitM)){
+    const terminalAccess={
+      a:realmTerminalAccessDecision(A,graph.nodes.get(String(startId)),!!areaForA,snapA.distanceM,realm,options),
+      b:realmTerminalAccessDecision(B,graph.nodes.get(String(endId)),!!areaForB,snapB.distanceM,realm,options)
+    };
+    const terminalLimitM=terminalAccess.a.effectiveLimitM,terminalBlocked=terminalAccess.a.blocked||terminalAccess.b.blocked;
+    endpointCoverage.terminalAccess=terminalAccess;
+    // An offer changes the requested endpoint only after UI consent. It never
+    // authorizes the original connector, nor takes a provider route endpoint.
+    endpointCoverage.normalizationOffers=[];
+    const sourceComplete=!payload?.remark&&!realm.sourceDiagnostics.wayMissingGeometry&&
+      !realm.sourceDiagnostics.relationMissingMemberWays&&!realm.sourceDiagnostics.relationUnclosedRings&&
+      !realm.sourceDiagnostics.relationNestedMembers;
+    for(const [side,point,snap,decision] of [['a',A,snapA,terminalAccess.a],['b',B,snapB,terminalAccess.b]]){
+      if(!sourceComplete||decision.accepted||decision.blocked||decision.reason!=='terminal-surface-access-unproven')continue;
+      const anchor=asLatLng(snap?.node),way=linear.ways.find((w)=>String(w.id)===String(snap?.sourceWayId));
+      if(!anchor||Math.abs(anchor.lat)>90||Math.abs(anchor.lng)>180||Math.abs(point.lat)>90||Math.abs(point.lng)>180||
+        !way||!way.nodes.every((id)=>linear.nodes.has(String(id)))||
+        ['no','private'].includes(normalizedTag(way.tags?.access))||
+        ['no','private'].includes(normalizedTag(way.tags?.foot))||!isPedestrianWay(way.tags))continue;
+      const gapM=haversineM(point,anchor);
+      const mappedHit=nearestPointOnGeometry(anchor,way.nodes.map((id)=>linear.nodes.get(String(id))));
+      if(!Number.isFinite(gapM)||gapM<=decision.effectiveLimitM||gapM>decision.hardMaximumM||
+        !mappedHit||mappedHit.distanceM>0.001||
+        !segmentClearOfRealmObstacles(anchor,anchor,null,realm,options))continue;
+      endpointCoverage.normalizationOffers.push({side,original:{lat:point.lat,lng:point.lng},anchor,gapM,
+        source:'realm-mapped-line',sourceWayId:String(way.id),snapType:snap.snapType,
+        sourceAccessChecked:true,sourceGeometryComplete:true,requiresExplicitConsent:true,
+        connectorVerified:false,referenceExcludedFromRoute:true,hardMaximumM:decision.hardMaximumM});
+    }
+    if(!terminalAccess.a.accepted||!terminalAccess.b.accepted){
       const lineSearch=dijkstraTimes(graph,startId,1.25,false);
       const linePath=Number.isFinite(lineSearch.dist.get(String(endId)))?reconstructDijkstra(graph,lineSearch.prev,startId,endId):null;
       return Object.assign({available:true,accepted:false,reason:'unmapped-terminal-access',terminalBlocked,endpointCoverage,sourceLinePathDistanceM:linePath?.distanceM??null,terminalLimitM},shared);
@@ -5074,9 +5120,13 @@
       portalRowsByArea.set(area.id,rows);
       const vis=addRealmVisibilityForArea(graph,area,realm,rows,A,B,options,counters);visibilityEdgeCount+=Number(vis.visibilityEdgesAdded||0);realmNodeCount+=Number(vis.nodeCount||0);
     }
-    if(options.providerMode==='opportunity'){
+    // Both Realm modes must count/label the already-approved endpoint access.
+    // Topology rescue previously stopped at the snapped line and omitted its
+    // terminal gap, while opportunity mode included the exact terminal edge.
+    {
       const attachTerminal=(point,nodeId,label,inside)=>{
-        if(inside||haversineM(point,graph.nodes.get(String(nodeId)))<=0.2)return nodeId;
+        const anchor=graph.nodes.get(String(nodeId));
+        if(inside||(Number(point.lat)===Number(anchor.lat)&&Number(point.lng)===Number(anchor.lng)))return nodeId;
         const id=addRealmNode(graph,point,`dev37-exact-terminal:${label}`,{realmEndpoint:label});
         addRealmEdge(graph,nodeId,id,[graph.nodes.get(String(nodeId)),point],{serial:`terminal-${label}`,realmKind:'unmapped-terminal-connector',terminalConnector:true,realmConfidence:'requires-on-site-confirmation'});
         return id;
@@ -5170,6 +5220,12 @@
     topo.realmEndpoint=fetched.endpoint||null;topo.realmBbox=bbox;topo.sourceErrors=sourceErrors;topo.containmentAttempted=containmentAttempted;
     topo.relationCompletion=fetched.relationCompletion||null;
     topo.sourceAcquisition=fetched.acquisition||null;
+    // Public offers require a complete acquired bbox, not merely a partial
+    // payload which happens to contain a nearby line. Test payloads are explicit.
+    if(!options.realmPayload&&(fetched.acquisition?.coverage!=='complete-requested-bbox'||
+      fetched.relationCompletion?.skipped>0||fetched.relationCompletion?.errors?.length)){
+      if(topo.endpointCoverage)topo.endpointCoverage.normalizationOffers=[];
+    }
     if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
     const make=(kind,path)=>{
@@ -7860,6 +7916,7 @@
       collectRealmCorridorVisibilityNodes,
       collectRealmObstacleVisibilityNodes,
       buildPedestrianRealmRescueGraph,
+      realmTerminalAccessDecision,
       pedestrianRealmRescueFromPayload,
       mappedWalkCandidate,
     mappedWalkCandidates,
