@@ -1,11 +1,11 @@
-/* ASTRA dev37.9.6 pilot: additive NLSC official geometry + reported-height caster evidence.
+/* ASTRA dev37.9.7 expanded pilot: additive NLSC official geometry + reported-height caster evidence.
  * Local positive-evidence pilot only. Absence is never evidence of open sky and the
  * dataset is never used as a completeness proof. Existing Overture/OSM features stay.
  */
 (function(g){
 'use strict';
-const VERSION='dev37.9.6-nlsc-geometry-pilot';
-const DEFAULT_URL='./buildings/nlsc-official-geometry-pilot-2026-09-30.geojson?core=37.9.6';
+const VERSION='dev37.9.7-nlsc-geometry-pilot-expanded';
+const DEFAULT_URL='./buildings/nlsc-official-geometry-pilot-2026-10-01.geojson?core=37.9.7';
 let cachedUrl=null,cachedPromise=null,last=null;
 const finite=v=>{if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null;};
 function featureBox(f){const c=f?.geometry?.coordinates;if(!c)return null;let west=Infinity,south=Infinity,east=-Infinity,north=-Infinity,count=0;function walk(a){if(Array.isArray(a)&&typeof a[0]==='number'){const x=Number(a[0]),y=Number(a[1]);if(!Number.isFinite(x)||!Number.isFinite(y))return;west=Math.min(west,x);south=Math.min(south,y);east=Math.max(east,x);north=Math.max(north,y);count++;}else if(Array.isArray(a))for(const p of a)walk(p);}walk(c);return count>=4&&east>west&&north>south?{west,south,east,north}:null;}
