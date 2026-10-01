@@ -1,4 +1,7 @@
 {
+  "schema": "astra-deploy-manifest-v1",
+  "release": "dev37.9.8.4",
+  "baseline": "dev37.9.7",
   "files": {
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -12,9 +15,17 @@
       "bytes": 1056,
       "sha256": "3d6c3c91714f69b9a5dc4fe7d3cfe5ff681bfa47821f9e0f77d75e3d20eab746"
     },
+    "RELEASE-dev37.9.7.md": {
+      "bytes": 1651,
+      "sha256": "4f75597562e0409a6a088c8246a41b910aee3d9fbe1f2a97d7590938f11d21bf"
+    },
+    "RELEASE-dev37.9.8.4.md": {
+      "bytes": 1313,
+      "sha256": "b05ce93e4f70e8f8719859daf05e7dac56bac51518cc5d55e6c60812c81febbb"
+    },
     "buildings/NLSC-OFFICIAL-GEOMETRY-PILOT.md": {
-      "bytes": 1650,
-      "sha256": "f45fccc0856ff38f85fa8e1004e317f8fd4a851dff191e51331b4ffd23a06714"
+      "bytes": 549,
+      "sha256": "c1dddcaced9c7ae8026f52d66253c897c130efc81ee830fedb146a6d189b0c72"
     },
     "buildings/NLSC-OFFICIAL-HEIGHT-PILOT.md": {
       "bytes": 1188,
@@ -484,9 +495,9 @@
       "bytes": 30473,
       "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43"
     },
-    "buildings/nlsc-official-geometry-pilot-2026-09-30.geojson": {
-      "bytes": 106480,
-      "sha256": "93037fa2055a1f002dcaa2e2002df1e643f9c701083ac50d81c80d1c86f482b6"
+    "buildings/nlsc-official-geometry-pilot-2026-10-01.geojson": {
+      "bytes": 683046,
+      "sha256": "ba9dd74f30b867b3a3765bc481ef6e345efaac1515afc6c11901e60dc9d60d29"
     },
     "buildings/nlsc-official-height-pilot-2026-09-30.json": {
       "bytes": 188070,
@@ -620,6 +631,18 @@
       "bytes": 497,
       "sha256": "21e42ea48d4ecb222c5a8c2035ae00615dc061e8a46674cb1c5a3096b983353a"
     },
+    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
+      "bytes": 27966,
+      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
+      "bytes": 72091,
+      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
+      "bytes": 1124,
+      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
+    },
     "data/nationwide-sample/runtime/graph-hgr2/xp0173_yp0161.hgr2": {
       "bytes": 628,
       "sha256": "34852495598950dabf206146fd36f9e57051adf240c7439967a5abb8c102605b"
@@ -676,21 +699,9 @@
       "bytes": 872,
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
-    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
-      "bytes": 27966,
-      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
-      "bytes": 72091,
-      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
-      "bytes": 1124,
-      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
-    },
     "index.html": {
-      "bytes": 630357,
-      "sha256": "dd57d0eaaaf5f48a92946bb8b9df6434fb79cec8326470c2360bc5ee46a2e69d"
+      "bytes": 630359,
+      "sha256": "806a421f659a8aa8665a9ce2d9f6b1faa88932e87ac52804823cb63a31413756"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -741,8 +752,8 @@
       "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
     },
     "src/building-data-provider.js": {
-      "bytes": 24902,
-      "sha256": "a969e116f78dbf626388ee979363479bff6b21fae2b2f9c7c1ed30fc37a9a6aa"
+      "bytes": 25524,
+      "sha256": "f001cc231864c7ec19f1788d0e7042cb320d312ef8c46b97c752210fef8f03d1"
     },
     "src/building-decode-worker.js": {
       "bytes": 566,
@@ -777,8 +788,8 @@
       "sha256": "646cccea4eda95eb6224a544e83c100568893488453ac566cf21b90def16b633"
     },
     "src/nlsc-official-geometry.js": {
-      "bytes": 4799,
-      "sha256": "d983d67f7ff759dfc073182b1466e794d0c35f072effd798e67835e2b18a6875"
+      "bytes": 4817,
+      "sha256": "98a1aea7d808e7ff4c3eb425a7a2e94f01697c24dec9cf6e2b138a752b03b614"
     },
     "src/nlsc-official-height.js": {
       "bytes": 8299,
@@ -816,7 +827,5 @@
       "bytes": 317520,
       "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
     }
-  },
-  "release": "dev37.9.6-nlsc-geometry-native-positive-evidence-pilot",
-  "scope": "additive local NLSC official geometry + BUILD_H positive caster evidence; dev37.9.5 routing/comparison/Realm core retained; no candidate-generation algorithm change; no completeness claim"
+  }
 }
