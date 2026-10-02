@@ -1,12 +1,12 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.6.1-endpoint-normalization-loss-ledger-hotfix",
-  "createdAt": "2026-10-01T16:05:00Z",
+  "release": "dev37.9.9.6.2-realm-shade-seed-reproducibility",
+  "createdAt": "2026-10-01T23:24:27Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "deployed dev37.9.9.6 terminal handoff continuity",
-  "scope": "diagnostic lifecycle-ledger hotfix only: explain exact user-confirmed endpoint-normalization candidate rejections; no candidate-generation, route, terminal-gate, boundary-tolerance, shade, unknown, NLSC or comparator semantic change",
+  "integrationBaseline": "deployed dev37.9.9.6.1 with live terminal acceptance completed",
+  "scope": "bounded Realm weighted-shade seed concurrency only: parallelize independent outgoing seed edge shade evaluations with deterministic apply order; no exact search, comparator, terminal, detour, shade evidence, unknown, NLSC, Realm admission or production-graph semantic change",
   "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.6",
+    "src/pedestrian-graph-routing.js": "core=37.9.9.6.2",
     "src/route-exposure.js": "core=37.9.9.6.1",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
@@ -41,6 +41,10 @@
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
       "sha256": "bf339c8725ecff7b16d0e017fefcebcdfc171c4092d50c9648a2db38b126a76a"
+    },
+    "RELEASE-dev37.9.9.6.2.md": {
+      "bytes": 2865,
+      "sha256": "0cb6776598f4e025ea7b6c430ae81e562bfbef02cc0ded7888790d358fda4bee"
     },
     "RELEASE-dev37.9.9.6.md": {
       "bytes": 2787,
@@ -723,8 +727,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630365,
-      "sha256": "f35ae8b0447de51fc30b08adc4f682ed1919d50925e87de4d8936917e93fd97f"
+      "bytes": 630367,
+      "sha256": "9019512558eec2823abe6972e057fdd1175b006080c609762994c32c85e39346"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -827,8 +831,8 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 484589,
-      "sha256": "38b73624ba09fdf3954523fa5c2ad8580525faf729cab88aaf698f36fa7c0d01"
+      "bytes": 485661,
+      "sha256": "bf45de9e7dae3fd88d520cc6e02d0b0fa875fbfe244d3b28c92f9ac13e7a38ff"
     },
     "src/route-exposure.js": {
       "bytes": 364934,

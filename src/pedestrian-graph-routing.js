@@ -5161,12 +5161,17 @@
     const limit=Number(options.experimentalBaselineSeconds||toB.dist.get(String(startId)))*(1+clamp(options.detourPct,0,60,30)/100),weight=.35;
     const q=new MinHeap((a,b)=>(a.sunS+weight*(a.walkS+(toB.dist.get(a.node)||0)))-(b.sunS+weight*(b.walkS+(toB.dist.get(b.node)||0))));
     const start={node:String(startId),walkS:0,sunS:0,confirmedSunS:0,unknownS:0,parent:null,viaEdgeId:null},best=new Map([[start.node,0]]);q.push(start);
-    let expanded=0,evaluations=0;
+    // Seed-only performance fix: evaluate independent outgoing shade costs in
+    // a bounded batch, then apply results in adjacency order. This changes no
+    // proof/search semantics; the exact label search below remains authoritative.
+    const edgeBatchConcurrency=Math.min(4,Math.max(1,Number(options.shadeEdgeBatchConcurrency||config.shadeEdgeBatchConcurrency||4)));
+    let expanded=0,evaluations=0,maxBatch=0;
     while(q.size&&nowMs()<deadline&&expanded<900&&evaluations<1100){
       if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');const cur=q.pop();
       if(cur.sunS+weight*cur.walkS>(best.get(cur.node)??Infinity)+1e-9)continue;
-      if(cur.node===String(endId))return {path:reconstructLabelPath(graph,cur),label:cur,expanded,evaluations,proof:'bounded weighted candidate only'};
+      if(cur.node===String(endId))return {path:reconstructLabelPath(graph,cur),label:cur,expanded,evaluations,edgeBatchConcurrency,maxBatch,proof:'bounded weighted candidate only'};
       expanded++;if(expanded%8===0)await new Promise(r=>setTimeout(r,0));
+      const feasible=[];
       for(const ref of graph.adjacency.get(cur.node)||[]){
         if(nowMs()>=deadline)break;const next=String(ref.to),e=graph.edges.get(ref.edgeId);if(!e||pathHasNode(cur,next))continue;
         if(graph.edges.get(cur.viaEdgeId)?.sourceJunctionLink&&e.sourceJunctionLink)continue;
@@ -5175,13 +5180,27 @@
         const syntheticM=(cur.syntheticM||0)+(e.realmSynthetic?e.distanceM:0);if(syntheticM>Number(options.maxRealmSyntheticM||480)+.01)continue;
         const walk=cur.walkS+e.distanceM/speed,remaining=toB.dist.get(next);if(!Number.isFinite(remaining)||walk+remaining>limit+.5)continue;
         const bucket=Math.floor((departure.getTime()+(cur.walkS+e.distanceM/speed/2)*1000)/30000),key=`realm-dense-v1|${e.id}|${cur.node}|${bucket}`;
-        let cost=options.sharedShadeCache.get(key);if(!cost){evaluations++;cost=Promise.resolve(options.edgeSunProvider(e,cur.node,new Date((bucket*30+15)*1000),{buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,shadeConcurrency:options.shadeConcurrency}));options.sharedShadeCache.set(key,cost);}
-        let bounds;try{bounds=edgeShadeBounds(await cost);}catch(error){options.sharedShadeCache.delete(key);throw error;}
+        feasible.push({next,e,syntheticM,walk,bucket,key});
+      }
+      maxBatch=Math.max(maxBatch,feasible.length);
+      const shaded=await runPoolNoYield(feasible,edgeBatchConcurrency,async(item)=>{
+        if(nowMs()>=deadline)return null;
+        let cost=options.sharedShadeCache.get(item.key);
+        if(!cost){
+          if(evaluations>=1100)return null;
+          evaluations++;
+          cost=Promise.resolve(options.edgeSunProvider(item.e,cur.node,new Date((item.bucket*30+15)*1000),{buildingSnapshot:options.buildingSnapshot,canopyTimeoutMs:options.canopyTimeoutMs,shadeConcurrency:options.shadeConcurrency}));
+          options.sharedShadeCache.set(item.key,cost);
+        }
+        try{return {item,bounds:edgeShadeBounds(await cost)};}catch(error){options.sharedShadeCache.delete(item.key);throw error;}
+      });
+      for(const row of shaded){
+        if(!row)continue;const {next,e,syntheticM,walk}=row.item,bounds=row.bounds;
         const sun=cur.sunS+e.distanceM/speed*bounds.upper,score=sun+weight*walk;
         if(score<(best.get(next)??Infinity)-1e-9){best.set(next,score);q.push({node:next,walkS:walk,sunS:sun,confirmedSunS:(cur.confirmedSunS??cur.sunS)+e.distanceM/speed*bounds.lower,unknownS:(cur.unknownS||0)+e.distanceM/speed*bounds.unknown,syntheticM,parent:cur,viaEdgeId:e.id});}
       }
     }
-    return {path:null,label:null,expanded,evaluations,proof:'bounded generator exhausted its budget'};
+    return {path:null,label:null,expanded,evaluations,edgeBatchConcurrency,maxBatch,proof:'bounded generator exhausted its budget'};
   }
 
   function mappedWalkCandidate(payload,a,b,options={}){
@@ -5267,7 +5286,7 @@
       if(!options.edgeSunProvider&&searchBudgetMs>=4000&&Number(options.maxExpandedStates||8000)>=8000&&Number(options.maxShadeEdgeEvaluations||1500)>=1500){
         runtime.stats.phase='weighted-shade-candidate';
         seed=await realmWeightedShadeCandidate(topo.best.graph,topo.startId,topo.endId,searchOptions,Math.min(deadline-1500,searchStarted+4200));
-        runtime.stats.seed={expanded:seed.expanded,evaluations:seed.evaluations,found:!!seed.path,distanceM:seed.path?.distanceM,syntheticM:seed.label?.syntheticM,qualifies:pathQualifies(seed.path),proof:seed.proof};
+        runtime.stats.seed={expanded:seed.expanded,evaluations:seed.evaluations,edgeBatchConcurrency:seed.edgeBatchConcurrency,maxBatch:seed.maxBatch,found:!!seed.path,distanceM:seed.path?.distanceM,syntheticM:seed.label?.syntheticM,qualifies:pathQualifies(seed.path),proof:seed.proof};
         if(pathQualifies(seed.path)){
           seedReplay=await exactReplayPathShade(topo.best.graph,seed.path,topo.startId,searchOptions);
           if(seedReplay.available&&seedReplay.withinTolerance===true){
@@ -7877,6 +7896,7 @@
       reconcilePathShadeCost,
       denseShadeSegmentsForPath,
       realmDenseEdgeSunProvider,
+      realmWeightedShadeCandidate,
       edgeShadeBounds,
       reconcileHgr2Geometry,
       pathDivergenceDiagnostics,
