@@ -1597,18 +1597,37 @@
     );
     const eligibleScored = scored.filter((c) => c.eligible !== false);
     const comparison=compareExposureBounds(eligibleScored);
+    // dev37.9.9.9: a strict interval winner among generated candidates is not
+    // automatically a global Realm-search proof.  A Realm shade candidate can
+    // be exact-replayed yet still carry searchIncomplete=true when the search
+    // has not established complete ordering over the remaining frontier.
+    // Preserve that useful candidate for display, but do not promote the
+    // candidate-set proof into comparisonValid/global winner semantics.
+    const searchIncompleteCandidates=eligibleScored.filter(c=>c?.searchIncomplete===true||c?.graphMeta?.shadeSearchComplete===false);
+    const searchCoverageComplete=searchIncompleteCandidates.length===0;
+    const candidateSetSelected=comparison.selected;
+    const candidateSetComparisonValid=eligibleScored.length>=2&&!!candidateSetSelected;
+    const comparisonValid=candidateSetComparisonValid&&searchCoverageComplete;
+    const selected=comparisonValid?candidateSetSelected:null;
+    const provisionalSelected=!comparisonValid&&candidateSetComparisonValid?candidateSetSelected:null;
+    const comparisonProof=Object.assign({},comparison.proof,{
+      candidateSetWinnerId:candidateSetSelected?.id||null,
+      candidateSetComparisonValid,
+      searchCoverageComplete,
+      searchIncompleteCandidateIds:searchIncompleteCandidates.map(c=>c.id),
+      scopeStatus:comparisonValid?'complete-for-reported-comparison':candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-proved-search-incomplete':comparison.proof?.state||'unproved'
+    });
     // reliableScored remains the exact-evidence count; a robust interval winner
     // does not turn any of its unknown samples into reliable resolved samples.
     const reliableScored=eligibleScored.filter(c=>c.analysis.summary.unknownSeconds===0&&!(c.analysis.summary.sourceFailureDistanceM>0));
-    const selected=comparison.selected;
-    const comparisonValid=eligibleScored.length>=2&&!!selected;
-    if (selected && serial === analysisSerial) {
+    if ((selected||provisionalSelected) && serial === analysisSerial) {
+      const heatTarget=selected||provisionalSelected;
       const departure = options.departure instanceof Date ? options.departure : new Date(options.departure || departureDateFromPanel());
-      selected.analysis.heat = await maybeHeatContext(selected.points, departure, serial);
+      heatTarget.analysis.heat = await maybeHeatContext(heatTarget.points, departure, serial);
     }
     if (candidateAudit) {
-      candidateAudit.comparisonProof=comparison.proof;
-      candidateAudit.reliability=scored.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:reliableScored.includes(c)?'reliable':c.eligible===false?'ineligible':c===selected?'robust-interval-winner':'unknown-source',walkabilityTier:candidateWalkabilityTier(c),requiresOnSitePathConfirmation:c?.graphMeta?.requiresOnSitePathConfirmation===true,unknownDistanceM:c.analysis.summary.unknownDistanceM,directSunSecondsRange:c.analysis.summary.directSunSecondsRange,sourceFailureDistanceM:c.analysis.summary.sourceFailureDistanceM,reasons:c.eligible===false?walkabilityReasons(c):c.analysis.summary.unknownSeconds>0?['unknown-shade-distance']:[],buildingSnapshot:c.analysis.buildingSnapshot}));
+      candidateAudit.comparisonProof=comparisonProof;
+      candidateAudit.reliability=scored.map(c=>({candidateId:c.id,stableCandidateId:c.stableCandidateId,status:c.eligible===false?'ineligible':c===selected?'robust-interval-winner':c===provisionalSelected?'candidate-set-interval-winner-search-incomplete':reliableScored.includes(c)?'reliable':'unknown-source',walkabilityTier:candidateWalkabilityTier(c),requiresOnSitePathConfirmation:c?.graphMeta?.requiresOnSitePathConfirmation===true,unknownDistanceM:c.analysis.summary.unknownDistanceM,directSunSecondsRange:c.analysis.summary.directSunSecondsRange,sourceFailureDistanceM:c.analysis.summary.sourceFailureDistanceM,reasons:c.eligible===false?walkabilityReasons(c):c.analysis.summary.unknownSeconds>0?['unknown-shade-distance']:[],buildingSnapshot:c.analysis.buildingSnapshot}));
       candidateAudit.scored = scored.map((c) => ({ candidateId:c.id, stableCandidateId:c.stableCandidateId, geometryHash:c.geometryHash, eligible:c.eligible !== false }));
       candidateAudit.displayed = candidateAudit.scored.slice();
       finalizeCandidateAudit(candidateAudit);
@@ -1619,19 +1638,23 @@
       eligibleScored,
       reliableScored,
       stageCounts:{input:candidates.length,quality:qualityValid.length,walkability:qualityValid.filter(walkabilitySafe).length,detour:detourEligible.length,scored:scored.length,eligibleScored:eligibleScored.length,reliableScored:reliableScored.length},
-      comparisonState:comparisonValid?'comparable':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
-      comparisonProof:comparison.proof,
-      comparisonWalkability:{selectedTier:selected?candidateWalkabilityTier(selected):null,includesInferredCandidates:eligibleScored.some(c=>candidateWalkabilityTier(c)==='inferred-open-space'),requiresOnSitePathConfirmation:selected?.graphMeta?.requiresOnSitePathConfirmation===true,policy:'source-supported and inferred-open-space candidates may be exposure-compared; unresolved synthetic candidates remain excluded'},
+      comparisonState:comparisonValid?'comparable':candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-only':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
+      comparisonProof,
+      comparisonWalkability:{selectedTier:selected?candidateWalkabilityTier(selected):null,provisionalTier:provisionalSelected?candidateWalkabilityTier(provisionalSelected):null,includesInferredCandidates:eligibleScored.some(c=>candidateWalkabilityTier(c)==='inferred-open-space'),requiresOnSitePathConfirmation:(selected||provisionalSelected)?.graphMeta?.requiresOnSitePathConfirmation===true,searchCoverageComplete,policy:'source-supported and inferred-open-space candidates may be exposure-compared; unresolved synthetic candidates remain excluded; candidate-set winners remain provisional while Realm search coverage is incomplete'},
       scored,
       selected,
       best: selected,
+      provisionalSelected,
+      candidateSetSelected,
+      candidateSetComparisonValid,
+      searchCoverageComplete,
       // Display fallback is intentionally separate from comparator selection.
-      // When uncertainty prevents a proven winner, keep selected/best null but
-      // still show one eligible candidate so the map remains usable.
-      activeCandidateId: selected?.id || eligibleScored[0]?.id || scored[0]?.id || null,
+      // When search coverage is incomplete, keep selected/best null but display
+      // the proven candidate-set winner as a provisional candidate.
+      activeCandidateId: selected?.id || provisionalSelected?.id || eligibleScored[0]?.id || scored[0]?.id || null,
       detourPct,
       comparisonValid,
-      shadeComparisonIncomplete: !comparisonValid&&(reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c))),
+      shadeComparisonIncomplete: !comparisonValid&&(!searchCoverageComplete||reliableScored.length !== eligibleScored.length || qualityValid.some(c=>!walkabilitySafe(c))),
       rejectedQuality,
       denseScoring: {
         candidateConcurrency: denseCandidateConcurrency,
@@ -3171,8 +3194,9 @@
   }
 
   function candidatesHtml(bundle) {
-    const activeId = bundle.activeCandidateId || bundle.best?.id || bundle.selected?.id;
+    const activeId = bundle.activeCandidateId || bundle.best?.id || bundle.selected?.id || bundle.provisionalSelected?.id;
     const bestId = bundle.best?.id || bundle.selected?.id;
+    const provisionalBestId = bundle.provisionalSelected?.id || null;
     const rows = bundle.scored.map((c) => {
       const s = c.analysis.summary;
       const detour = candidateDetourPct(c, bundle);
@@ -3190,7 +3214,8 @@
       if (c?.graphMeta?.usesConditionalPrivateAccess) badges.push('<em class="over">OSM private・需確認</em>');
       if(s.unknownSeconds>0)badges.push('<em class="over">含未知路段・以日曬上下界比較</em>');
       if (c.searchIncomplete) badges.push('<em class="over">搜尋未完成・備援</em>');
-      if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">候選中日曬最少</em>');
+      if (c.id === bestId && bundle.comparisonValid) badges.push('<em class="best">已證明日曬最少</em>');
+      else if (c.id === provisionalBestId && bundle.candidateSetComparisonValid) badges.push('<em class="best">目前候選中日曬最少</em>');
       if (c.eligible === false) {
         const blocked=candidateWalkabilityTier(c)==='blocked';
         badges.push(blocked?'<em class="over">通行性未證實</em>':detour>Number(bundle.detourPct||0)+0.05?'<em class="over">超過上限</em>':'<em class="over">未納入比較</em>');
@@ -3204,14 +3229,17 @@
     }).join('');
 
     let notice = '';
-    if(bundle.shadeComparisonIncomplete){
-      notice='<div class="re-candidate-alert"><b>日曬上下界重疊、差距不足或來源不足，無法證明排名</b><span>未知路段保留未知。候選仍可檢視，不能宣稱已找到最少日曬路線。</span></div>';
+    if(bundle.comparisonState==='candidate-set-only'&&bundle.provisionalSelected){
+      const provisionalName=candidateName(bundle.provisionalSelected,bundle);
+      notice=`<div class="re-candidate-alert"><b>目前候選中已證明「${escapeHtml(provisionalName)}」日照較少，但搜尋範圍尚未完成</b><span>已生成候選之間的日曬上下界可分離；然而 Realm 搜尋仍標示未完成，因此這是候選集內的結果，不宣稱現實或搜尋空間的全域最不曬。路線仍可顯示，推定開放空間仍需現場確認。</span></div>`;
+    } else if(bundle.shadeComparisonIncomplete){
+      notice='<div class="re-candidate-alert"><b>日曬上下界重疊、差距不足、搜尋未完成或來源不足，無法證明全域排名</b><span>未知路段保留未知。候選仍可檢視；若只有候選集內的證明，會另外標示，不能宣稱已找到全域最少日曬路線。</span></div>';
     } else if (!bundle.comparisonValid) {
       notice = `<div class="re-candidate-alert"><b>目前只有 1 條可比較路線（符合繞路上限）</b><span>已完成曝曬分析，但還不能判定真正的「最不曬」。手繪路線即使略超過上限，也會顯示在下方供你點選比較。</span><button type="button" data-re-result-draw>畫一條我的路線</button></div>`;
     } else {
       const selectedName = candidateName(bundle.best, bundle);
       const inferredWinner=bundle.best?.walkability?.state==='inferred-open-space';
-      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.eligibleScored?.length || bundle.eligible?.length || 0} 條符合上限的候選</b><span>目前直接日照最少的是「${escapeHtml(selectedName)}」。${bundle.comparisonProof?.rule==='upper-plus-0.5s-below-every-other-lower'?'其日曬上界低於所有其他候選下界；未知路段仍保留未知。':''}${inferredWinner?' 此路線含「推定可走」公園開放空間；曝曬排序可比較，但通行性仍需現場確認。':''}下方每張路線卡都可以點選切換。</span></div>`;
+      notice = `<div class="re-candidate-success"><b>已比較 ${bundle.eligibleScored?.length || bundle.eligible?.length || 0} 條符合上限的候選</b><span>在本次已完整納入的候選比較中，直接日照最少的是「${escapeHtml(selectedName)}」。${bundle.comparisonProof?.rule==='upper-plus-0.5s-below-every-other-lower'?'其日曬上界低於所有其他候選下界；未知路段仍保留未知。':''}${inferredWinner?' 此路線含「推定可走」公園開放空間；曝曬排序可比較，但通行性仍需現場確認。':''}下方每張路線卡都可以點選切換。</span></div>`;
     }
 
     let manualState = '';
