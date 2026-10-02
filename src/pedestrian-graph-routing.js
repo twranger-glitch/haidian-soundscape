@@ -5186,9 +5186,58 @@
     }
     return unresolved('no-full-continuous-pedestrian-source-coverage');
   }
+  function realmEvidencePartitionCuts(a,b,context) {
+    const cuts=[0,1],bounds=realmProofBounds([a,b]);
+    if(!context||context.incomplete)return cuts;
+    const add=t=>{if(Number.isFinite(t)&&t>1e-12&&t<1-1e-12)cuts.push(Math.max(0,Math.min(1,t)));};
+    for(const source of context.sources||[]){
+      if(!realmProofBoundsMeet(bounds,source.bounds))continue;
+      const line=source.kind?.endsWith('-line');
+      for(const component of source.components||[]){
+        if(line){
+          for(const p of component||[]){const h=projectPointToSegmentM(p,a,b);if(h?.distanceM<=REALM_PROOF_EPS_M)add(h.t);}
+          for(let i=1;i<(component?.length||0);i++)for(const t of realmProofCutParameters(a,b,component[i-1],component[i]))add(t);
+        }else{
+          for(const ring of component||[])for(let i=1;i<(ring?.length||0);i++)for(const t of realmProofCutParameters(a,b,ring[i-1],ring[i]))add(t);
+        }
+      }
+      if(cuts.length>512)return [0,1]; // fail closed on pathological source density
+    }
+    cuts.sort((x,y)=>x-y);const out=[];
+    for(const t of cuts)if(!out.length||Math.abs(t-out.at(-1))>1e-10)out.push(t);
+    return out;
+  }
+  function realmRawEvidenceSegment(s) {
+    const originalProvenance=s.originalProvenance||(s.provenance==='source-supported-pedestrian-geometry'?'synthetic-realm':s.provenance);
+    return {edgeId:String(s.parentEdgeId||s.edgeId),provenance:originalProvenance,distanceM:Number((s.parentDistanceM??s.distanceM)||0),sourceWayIds:[...(s.sourceWayIds||[])],realmAreaId:s.realmAreaId||null,geometry:(s.parentGeometry||s.geometry||[]).map(p=>({lat:p.lat,lng:p.lng}))};
+  }
+  function partitionRealmSegmentForEvidence(segment,context) {
+    const raw=realmRawEvidenceSegment(segment),geometry=realmProofLine(raw.geometry);
+    if(raw.provenance!=='synthetic-realm'||!geometry||!context||context.incomplete)return [raw];
+    const legLengths=[];let geometryM=0;
+    for(let i=1;i<geometry.length;i++){const d=haversineM(geometry[i-1],geometry[i]);legLengths.push(d);geometryM+=d;}
+    if(!(geometryM>REALM_PROOF_EPS_M))return [raw];
+    const pieces=[];
+    for(let i=1;i<geometry.length;i++){
+      const a=geometry[i-1],b=geometry[i],legM=legLengths[i-1],cuts=realmEvidencePartitionCuts(a,b,context);
+      for(let j=1;j<cuts.length;j++){
+        const t0=cuts[j-1],t1=cuts[j];if(t1<=t0+1e-12)continue;
+        const p0={lat:a.lat+(b.lat-a.lat)*t0,lng:a.lng+(b.lng-a.lng)*t0},p1={lat:a.lat+(b.lat-a.lat)*t1,lng:a.lng+(b.lng-a.lng)*t1};
+        const share=legM*(t1-t0)/geometryM;
+        pieces.push({...raw,edgeId:`${raw.edgeId}:evidence-part-${pieces.length+1}`,parentEdgeId:raw.edgeId,parentDistanceM:raw.distanceM,parentGeometry:raw.geometry,distanceM:raw.distanceM*share,geometry:[p0,p1],evidencePartition:{legIndex:i-1,t0,t1}});
+      }
+    }
+    if(pieces.length<=geometry.length-1)return [raw];
+    const total=pieces.reduce((n,p)=>n+p.distanceM,0),delta=raw.distanceM-total;
+    if(pieces.length&&Math.abs(delta)>1e-12)pieces.at(-1).distanceM+=delta;
+    const partCount=pieces.length;for(let i=0;i<partCount;i++)pieces[i].evidencePartition={...pieces[i].evidencePartition,partIndex:i,partCount};
+    return pieces;
+  }
   function reduceRealmPathProvenance(stats,context) {
     let sourceSupportedM=0,sourceSupportedMappedLineM=0,sourceSupportedSurfaceM=0;
-    const segments=(stats.segments||[]).map(s=>{
+    const originalSegments=(stats.evidenceReduction?.originalSegments||stats.segments||[]).map(realmRawEvidenceSegment),partitioned=[];
+    for(const s of originalSegments)partitioned.push(...partitionRealmSegmentForEvidence(s,context));
+    const segments=partitioned.map(s=>{
       const originalProvenance=s.originalProvenance||(s.provenance==='source-supported-pedestrian-geometry'?'synthetic-realm':s.provenance);
       if(originalProvenance==='mapped-path')return {...s,provenance:originalProvenance,originalProvenance,walkabilityEvidence:{state:'existing-mapped-path',sourceId:s.sourceWayIds,sourceType:'existing-osm-graph',sourceConfidence:'unchanged-existing-access-policy',reason:null}};
       const proof=classifyRealmSegmentProvenance({...s,provenance:originalProvenance},context),supported=proof.state==='source-supported';
@@ -5198,8 +5247,9 @@
     const originalSyntheticM=stats.originalSyntheticM??stats.syntheticM,syntheticM=Math.max(0,originalSyntheticM-sourceSupportedM);
     return {...stats,sourceSupportedM,sourceSupportedRealmM:sourceSupportedM,sourceSupportedMappedLineM,sourceSupportedSurfaceM,
       originalSyntheticM,syntheticM,syntheticRatio:stats.totalM>0?syntheticM/stats.totalM:0,segments,
-      requiresOnSitePathConfirmation:syntheticM>.01,evidenceReduction:{schema:'astra-realm-segment-evidence-v1',sourceGeometryIncomplete:!context||context.incomplete===true,sourceCount:context?.sources?.length||0,inventoryCompletenessClaimed:false}};
+      requiresOnSitePathConfirmation:syntheticM>.01,evidenceReduction:{schema:'astra-realm-segment-evidence-v1.1',sourceGeometryIncomplete:!context||context.incomplete===true,sourceCount:context?.sources?.length||0,inventoryCompletenessClaimed:false,partialCoveragePartitioning:true,originalSegments}};
   }
+
   async function collectRealmOfficialPedestrianSources(a,b,options={}) {
     if(options.realmPedestrianSources)return {groups:options.realmPedestrianSources,errors:[],origin:'explicit-source-collections'};
     const groups={},errors=[];

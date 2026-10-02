@@ -1,12 +1,12 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.7-realm-provenance-walkability-evidence-reduction",
-  "createdAt": "2026-10-02T12:30:00Z",
+  "release": "dev37.9.9.7.1-exact-partial-provenance-accounting",
+  "createdAt": "2026-10-02T12:55:51Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "dev37.9.9.6.2 live-accepted Realm weighted-seed reproducibility",
-  "scope": "post-search Realm segment provenance reduction only; explicit OSM pedestrian geometry and official pedestrianAllowed+officialInventory full-coverage evidence may reduce synthetic distance; search, terminal, shade, unknown, detour and comparator semantics preserved",
+  "integrationBaseline": "dev37.9.9.7 live-reproduced min-sun geometry g12a3dbe9",
+  "scope": "post-search exact evidence partitioning for partial source-supported Realm segments; source trust policy unchanged; route remains partial unless every walking interval is proven",
   "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.7",
+    "src/pedestrian-graph-routing.js": "core=37.9.9.7.1",
     "src/route-exposure.js": "core=37.9.9.6.1",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
@@ -50,9 +50,25 @@
       "bytes": 2787,
       "sha256": "22d7cd27605f1902ae1106aaa4d4194fb80c3d0681ec8c0835a21dfd43819ba8"
     },
+    "RELEASE-dev37.9.9.7.1.md": {
+      "bytes": 1894,
+      "sha256": "d4b2439bab2dc22c4dc6d00940aa733fd23f501ef2037bfb6c0242a8d3f4a244"
+    },
     "RELEASE-dev37.9.9.7.md": {
       "bytes": 2168,
       "sha256": "0ae43d0f266a22d5452412a3702faf0c609ff05dd144b88951df24ce815ae9f2"
+    },
+    "config.route-exposure.js": {
+      "bytes": 12910,
+      "sha256": "a53396318b57c0f6026f905d303217db32c315a4c4c63e2880cc33d7f2fece4f"
+    },
+    "config.shademap.js": {
+      "bytes": 886,
+      "sha256": "899eed3a8066d9b4840f7301bf71d62ad24192682d4797294fc2be78912be828"
+    },
+    "index.html": {
+      "bytes": 630367,
+      "sha256": "4b6e928b38c17df263d4d248960cd7d95c6db8fe26763c953334a7f8e57a8760"
     },
     "buildings/NLSC-OFFICIAL-GEOMETRY-PILOT.md": {
       "bytes": 549,
@@ -65,6 +81,18 @@
     "buildings/README.md": {
       "bytes": 3143,
       "sha256": "7254046cf723164eb0dc406ee35b7fa331c1860c25eb8b7b0d666e4e20b53e1b"
+    },
+    "buildings/nlsc-official-geometry-pilot-2026-10-01.geojson": {
+      "bytes": 683046,
+      "sha256": "ba9dd74f30b867b3a3765bc481ef6e345efaac1515afc6c11901e60dc9d60d29"
+    },
+    "buildings/nlsc-official-height-pilot-2026-09-30.json": {
+      "bytes": 188070,
+      "sha256": "738459e44d7ade7cbc8c4fd6ed3b16723c65b55d18a2f6bcd0bb561a227a50e2"
+    },
+    "buildings/dev37.7/manifest.json": {
+      "bytes": 30854,
+      "sha256": "1ea9343618b9a2d183c0135c443b9e666bcac544a4007b8a338335743120c62c"
     },
     "buildings/dev37.7/alishan/16/54757/28362.geojson": {
       "bytes": 6489,
@@ -354,10 +382,6 @@
       "bytes": 1477,
       "sha256": "5edcbb3cfb1b6339379a164555678fd308241eead48ff6c1dcf3de43452c489f"
     },
-    "buildings/dev37.7/manifest.json": {
-      "bytes": 30854,
-      "sha256": "1ea9343618b9a2d183c0135c443b9e666bcac544a4007b8a338335743120c62c"
-    },
     "buildings/dev37.7/tokyo/16/58209/25803.geojson": {
       "bytes": 5257,
       "sha256": "ad4dc86f3d7c7a599f6b296a9ec3c26a5ed76f2689fa0d3cc043c2caa878e967"
@@ -525,22 +549,6 @@
     "buildings/dev37.7/tokyo/16/58214/25809.geojson": {
       "bytes": 30473,
       "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43"
-    },
-    "buildings/nlsc-official-geometry-pilot-2026-10-01.geojson": {
-      "bytes": 683046,
-      "sha256": "ba9dd74f30b867b3a3765bc481ef6e345efaac1515afc6c11901e60dc9d60d29"
-    },
-    "buildings/nlsc-official-height-pilot-2026-09-30.json": {
-      "bytes": 188070,
-      "sha256": "738459e44d7ade7cbc8c4fd6ed3b16723c65b55d18a2f6bcd0bb561a227a50e2"
-    },
-    "config.route-exposure.js": {
-      "bytes": 12910,
-      "sha256": "a53396318b57c0f6026f905d303217db32c315a4c4c63e2880cc33d7f2fece4f"
-    },
-    "config.shademap.js": {
-      "bytes": 886,
-      "sha256": "899eed3a8066d9b4840f7301bf71d62ad24192682d4797294fc2be78912be828"
     },
     "data/multisource/evidence-index.json": {
       "bytes": 55290,
@@ -730,10 +738,6 @@
       "bytes": 872,
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
-    "index.html": {
-      "bytes": 630365,
-      "sha256": "c6e9971ab69cacd4d1f09817a336707faab0c9096853783353e1edc04c19a2d8"
-    },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
       "sha256": "08d8aeaaffc46bd4d1a21f00e2cd40b250f139666d747bd1f2eef1a2c98873de"
@@ -745,6 +749,10 @@
     "licenses/Leaflet-1.9.4-LICENSE.txt": {
       "bytes": 1395,
       "sha256": "53e8dc25862014e4324741ca18fbe3611e11d42ef69f59f86ea8c5389647d4cb"
+    },
+    "licenses/terrain-attribution.md": {
+      "bytes": 12300,
+      "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
     },
     "licenses/building-vendor/@mapbox-point-geometry-LICENSE": {
       "bytes": 725,
@@ -777,10 +785,6 @@
     "licenses/building-vendor/splaytree-LICENSE": {
       "bytes": 1113,
       "sha256": "18b65eb99645589005889cdc3cd1307a79e3e29569ab0be8d406d7ccdc79b341"
-    },
-    "licenses/terrain-attribution.md": {
-      "bytes": 12300,
-      "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
     },
     "src/building-data-provider.js": {
       "bytes": 25524,
@@ -835,8 +839,8 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 504534,
-      "sha256": "547ad5d310b7a1fa3d3285da92e5b92930f078b5c59c94ba54023fe8aebe1253"
+      "bytes": 507993,
+      "sha256": "c53e69854b8b21bfc7c11254673b2a7673909a77d7cd71ecc19a018722ad6758"
     },
     "src/route-exposure.js": {
       "bytes": 364934,
