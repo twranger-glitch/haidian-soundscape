@@ -5009,6 +5009,215 @@
     return {totalM,terminalConnectorM,mappedPathM,sourceSupportedRealmM:0,syntheticM,syntheticRatio:totalM>0?syntheticM/totalM:0,portalM,areaIds:Array.from(areaIds),kinds:Array.from(kinds),segments};
   }
 
+  // dev37.9.9.7: evidence reduction is a post-search audit, never a graph edge
+  // permission or a shade cost. 1 mm below is numerical coincidence only; it
+  // is not a walking corridor, snap radius or an overlap acceptance threshold.
+  const REALM_PROOF_EPS_M=0.001;
+  function realmProofPoint(p) {
+    if(!p||typeof (p.lat??p[1])!=='number'||typeof (p.lng??p.lon??p[0])!=='number')return null;
+    const q=asLatLng(p);
+    return q&&Math.abs(q.lat)<=90&&Math.abs(q.lng)<=180?q:null;
+  }
+  function realmProofLine(input,closed=false) {
+    if(!Array.isArray(input)||input.length<(closed?4:2))return null;
+    const line=input.map(realmProofPoint);
+    if(line.some(p=>!p))return null;
+    if(closed&&haversineM(line[0],line.at(-1))>REALM_PROOF_EPS_M)return null;
+    if(!line.some((p,i)=>i&&haversineM(p,line[i-1])>REALM_PROOF_EPS_M))return null;
+    if(closed){
+      let area=0;const origin=line[0];for(let i=1;i<line.length;i++)area+=(line[i-1].lng-origin.lng)*(line[i].lat-origin.lat)-(line[i].lng-origin.lng)*(line[i-1].lat-origin.lat);if(Math.abs(area)<1e-16)return null;
+      for(let i=1;i<line.length;i++)for(let j=i+2;j<line.length;j++){
+        if(i===1&&j===line.length-1)continue;
+        if(realmProofCutParameters(line[i-1],line[i],line[j-1],line[j]).length)return null;
+      }
+    }
+    return line;
+  }
+  function realmProofAccess(tags={}) {
+    const denied=['no','private','customers','permit','delivery','destination'];
+    if(denied.includes(normalizedTag(tags.access))||denied.includes(normalizedTag(tags.foot))||
+      Object.keys(tags).some(k=>/^(access|foot):conditional$/.test(k)&&tags[k]))return false;
+    if(['foot:forward','foot:backward'].some(k=>denied.includes(normalizedTag(tags[k])))||
+      ['yes','1','-1','true'].includes(normalizedTag(tags['oneway:foot'])))return false;
+    if(['layer','level'].some(k=>tags[k]!=null&&String(tags[k]).trim()!==''&&Number(tags[k])!==0)||
+      ['bridge','tunnel'].some(k=>tags[k]!=null&&!['no','false','0',''].includes(normalizedTag(tags[k]))))return false;
+    return true;
+  }
+  function realmProofBounds(points) {
+    return {west:Math.min(...points.map(p=>p.lng)),east:Math.max(...points.map(p=>p.lng)),south:Math.min(...points.map(p=>p.lat)),north:Math.max(...points.map(p=>p.lat))};
+  }
+  function realmProofBoundsMeet(a,b) {
+    const eps=1e-8;return a.west<=b.east+eps&&a.east>=b.west-eps&&a.south<=b.north+eps&&a.north>=b.south-eps;
+  }
+  function realmProofCutParameters(a,b,c,d) {
+    if(!realmProofBoundsMeet(realmProofBounds([a,b]),realmProofBounds([c,d])))return [];
+    const hits=[],hit=segmentIntersectionInclusive(a,b,c,d);
+    if(hit)hits.push(Math.max(0,Math.min(1,hit.t)));
+    // Inclusive intersection also needs collinear/tangent/zero-length cases.
+    for(const p of [c,d]){const h=projectPointToSegmentM(p,a,b);if(h?.distanceM<=REALM_PROOF_EPS_M)hits.push(h.t);}
+    for(const [p,t] of [[a,0],[b,1]]){const h=projectPointToSegmentM(p,c,d);if(h?.distanceM<=REALM_PROOF_EPS_M)hits.push(t);}
+    return hits;
+  }
+  function realmProofTouchesLine(a,b,line) {
+    for(let i=1;i<line.length;i++)if(realmProofCutParameters(a,b,line[i-1],line[i]).length)return true;
+    return false;
+  }
+  function realmProofPolygonCovers(a,b,polygon) {
+    const outer=polygon[0],holes=polygon.slice(1),cuts=[0,1];
+    // Hole boundaries are not assumed to be a usable walking surface.
+    for(const hole of holes)if(pointInRingInclusive(a,hole,REALM_PROOF_EPS_M)||pointInRingInclusive(b,hole,REALM_PROOF_EPS_M)||realmProofTouchesLine(a,b,hole))return false;
+    for(let i=1;i<outer.length;i++)cuts.push(...realmProofCutParameters(a,b,outer[i-1],outer[i]));
+    cuts.sort((x,y)=>x-y);
+    const at=t=>({lat:a.lat+(b.lat-a.lat)*t,lng:a.lng+(b.lng-a.lng)*t});
+    if(!pointInRingInclusive(a,outer,REALM_PROOF_EPS_M)||!pointInRingInclusive(b,outer,REALM_PROOF_EPS_M))return false;
+    // Test each exact boundary-partition interval, not sparse route samples.
+    for(let i=1;i<cuts.length;i++)if(cuts[i]>cuts[i-1]+1e-12&&!pointInRingInclusive(at((cuts[i]+cuts[i-1])/2),outer,REALM_PROOF_EPS_M))return false;
+    return true;
+  }
+  function realmProofLineCovers(a,b,line) {
+    const intervals=[];
+    for(let i=1;i<line.length;i++){
+      const c=line[i-1],d=line[i],hc=projectPointToSegmentM(c,a,b),hd=projectPointToSegmentM(d,a,b);
+      // Both source vertices must lie on the same supporting line, including
+      // extension beyond the target. Projection of target ends covers that case.
+      const ha=projectPointToSegmentM(a,c,d),hb=projectPointToSegmentM(b,c,d);
+      if(ha?.distanceM<=REALM_PROOF_EPS_M&&hb?.distanceM<=REALM_PROOF_EPS_M)return true;
+      const ts=[];
+      if(hc?.distanceM<=REALM_PROOF_EPS_M)ts.push(hc.t);
+      if(hd?.distanceM<=REALM_PROOF_EPS_M)ts.push(hd.t);
+      if(ha?.distanceM<=REALM_PROOF_EPS_M)ts.push(0);
+      if(hb?.distanceM<=REALM_PROOF_EPS_M)ts.push(1);
+      if(ts.length>=2)intervals.push([Math.min(...ts),Math.max(...ts)]);
+    }
+    intervals.sort((x,y)=>x[0]-y[0]);let end=0;
+    for(const [lo,hi] of intervals){if(lo>end+1e-12)return false;end=Math.max(end,hi);if(end>=1-1e-12)return true;}
+    return false;
+  }
+  function createRealmProvenanceContext(payload,officialGroups={},sourceComplete=true,coverageBounds=null) {
+    const realm=parsePedestrianRealm(payload),sources=[],rejectedSources=[],d=realm.sourceDiagnostics;
+    let incomplete=!sourceComplete||!!payload?.remark||['incompleteObstacleCount','incompleteBarrierCount','wayMissingGeometry','relationMissingMemberWays','relationUnclosedRings','relationNestedMembers'].some(k=>d[k]>0);
+    const add=(id,type,kind,components,accessProof,confidence)=>{
+      const points=components.flat(2).filter(p=>p?.lat!=null);
+      sources.push({id,type,kind,components,accessProof,confidence,bounds:realmProofBounds(points)});
+    };
+    for(const way of realm.wayById.values()){
+      const tags=way.tags||{},highway=normalizedTag(tags.highway);
+      if(!['footway','path','pedestrian'].includes(highway)||normalizedTag(tags.area)==='yes'||tags['area:highway'])continue;
+      const nodeRows=way.nodes.map(id=>realm.nodes.get(String(id))),line=realmProofLine(nodeRows);
+      if(!line){incomplete=true;rejectedSources.push({id:'way:'+way.id,reason:'incomplete-source-geometry'});continue;}
+      if(!realmProofAccess(tags)||nodeRows.some(n=>!realmProofAccess(n.tags)||n.tags?.barrier)){
+        rejectedSources.push({id:'way:'+way.id,reason:'access-level-or-barrier-unproven'});continue;
+      }
+      add('way:'+way.id,'osm-way','mapped-pedestrian-line',[line],{highway,access:tags.access||null,foot:tags.foot||null,levelBasis:'OSM ground tagging defaults; non-ground/conditional tags rejected'},'explicit-osm-pedestrian-geometry');
+    }
+    for(const area of realm.areas){
+      const t=area.tags||{},pedestrian=(normalizedTag(t.highway)==='pedestrian'&&normalizedTag(t.area)==='yes')||['footway','path','pedestrian'].includes(normalizedTag(t['area:highway']));
+      if(!pedestrian)continue; // leisure=park, squares and free-space are NOT proof.
+      const polygon=[area.polygon,...(area.holes||[])].map(r=>realmProofLine(r,true));
+      if(area.incompleteRelation||polygon.some(r=>!r)){incomplete=true;continue;}
+      if(!realmProofAccess(t)){rejectedSources.push({id:area.id,reason:'access-level-unproven'});continue;}
+      add(area.id,'osm-'+area.sourceType,'pedestrian-surface',[polygon],{highway:t.highway||null,areaHighway:t['area:highway']||null,access:t.access||null,foot:t.foot||null,levelBasis:'OSM ground tagging defaults; non-ground/conditional tags rejected'},'explicit-osm-pedestrian-surface');
+    }
+    const vetoLines=[],vetoPolygons=(realm.obstacles||[]).map(o=>o.polygon),vetoPoints=[];
+    for(const [key,fc] of Object.entries(officialGroups||{})){
+      for(const f of Array.isArray(fc?.features)?fc.features:[]){
+        const p=f?.properties||{},id=String(p.sourceFeatureId||f?.id||''),sourceKey=String(p.sourceKey||p.source||key||'');
+        if(p.officialInventory!==true||!id||!sourceKey)continue;
+        const restricted=!realmProofAccess({...p,...p.tags});
+        if(p.pedestrianAllowed!==true&&!restricted)continue;
+        if(p.incomplete===true||p.geometryComplete===false||fc.metadata?.geometryComplete===false||String(p.originalCrs||'').startsWith('assumed:')||fc.metadata?.crsAssumption){if(restricted)incomplete=true;rejectedSources.push({id:sourceKey+':'+id,reason:'official-access-geometry-or-crs-unproven'});continue;}
+        const g=f?.geometry,convert=coords=>Array.isArray(coords)?coords.map(v=>Array.isArray(v)?{lng:v[0],lat:v[1]}:null):null;
+        let components=null,kind=null;
+        if(g?.type==='LineString'){kind='official-pedestrian-line';components=[realmProofLine(convert(g.coordinates))];}
+        if(g?.type==='MultiLineString'&&Array.isArray(g.coordinates)){kind='official-pedestrian-line';components=g.coordinates.map(c=>realmProofLine(convert(c)));}
+        if(g?.type==='Polygon'&&Array.isArray(g.coordinates)){kind='official-pedestrian-surface';components=[g.coordinates.map(c=>realmProofLine(convert(c),true))];}
+        if(g?.type==='MultiPolygon'&&Array.isArray(g.coordinates)){kind='official-pedestrian-surface';components=g.coordinates.map(poly=>Array.isArray(poly)?poly.map(c=>realmProofLine(convert(c),true)):null);}
+        if(!components?.length||components.some(c=>!c||!c.length||c.some?.(x=>x===null))){if(restricted)incomplete=true;rejectedSources.push({id:sourceKey+':'+id,reason:'incomplete-source-geometry'});continue;}
+        if(kind.endsWith('-surface')&&components.some(poly=>poly.slice(1).some(hole=>hole.some(p=>!pointInRingStrict(p,poly[0]))||hole.slice(1).some((p,i)=>realmProofTouchesLine(hole[i],p,poly[0]))))){if(restricted)incomplete=true;rejectedSources.push({id:sourceKey+':'+id,reason:'invalid-polygon-holes'});continue;}
+        if(restricted){
+          for(const component of components)if(kind.endsWith('-line'))vetoLines.push(component);else vetoPolygons.push(component[0]);
+          rejectedSources.push({id:sourceKey+':'+id,reason:'official-access-level-unproven'});continue;
+        }
+        add(sourceKey+':'+id,sourceKey,kind,components,{pedestrianAllowed:true,officialInventory:true,sourceFeatureId:id,sourceVersion:p.sourceVersion||fc.metadata?.sourceVersion||null,levelBasis:'one connected inventory walking surface; conflicting grade/access tags rejected'},'official-inventory-explicit-pedestrian-access');
+      }
+    }
+    // Restricted source polygons, barrier nodes and collinear fence contacts
+    // are vetoes too; the audit does not reuse the Realm's 3m gate proximity.
+    for(const way of realm.wayById.values()){
+      if(!realmProofAccess(way.tags)){
+        const closed=way.nodes[0]===way.nodes.at(-1),shape=realmProofLine(way.nodes.map(id=>realm.nodes.get(String(id))),closed);
+        if(shape){if(closed)vetoPolygons.push(shape);else vetoLines.push(shape);}else incomplete=true;
+      }
+    }
+    for(const b of realm.barriers||[])vetoLines.push(b.geometry);
+    for(const n of realm.nodes.values())if(n.tags?.barrier)vetoPoints.push(n);
+    if(sources.length>4000){sources.length=0;incomplete=true;rejectedSources.push({reason:'evidence-source-budget'});}
+    return {schema:'astra-realm-segment-evidence-v1',realm,sources,rejectedSources,incomplete,vetoLines,vetoPolygons,vetoPoints,coverageBounds,
+      vetoPolygonBounds:vetoPolygons.map(realmProofBounds),vetoLineBounds:vetoLines.map(realmProofBounds),
+      inventoryCompletenessClaimed:false};
+  }
+  function classifyRealmSegmentProvenance(segment,context) {
+    const unresolved=reason=>({state:'unresolved',reason,sourceId:null,sourceType:null,geometryCoverageProof:null,pedestrianAccessProof:null,continuityProof:null,sourceConfidence:null});
+    if(segment?.provenance==='unmapped-terminal-connector')return unresolved('terminal-permission-is-not-surface-evidence');
+    const geometry=realmProofLine(segment?.geometry);
+    if(!geometry)return unresolved('invalid-or-incomplete-segment-geometry');
+    if(!context||context.incomplete)return unresolved('incomplete-source-or-safety-geometry');
+    if(context.coverageBounds&&geometry.some(p=>p.lat<context.coverageBounds.south||p.lat>context.coverageBounds.north||p.lng<context.coverageBounds.west||p.lng>context.coverageBounds.east))return unresolved('outside-acquired-safety-bbox');
+    for(let i=1;i<geometry.length;i++){
+      const a=geometry[i-1],b=geometry[i];
+      const bounds=realmProofBounds([a,b]);
+      for(let j=0;j<context.vetoPolygons.length;j++){
+        if(!realmProofBoundsMeet(bounds,context.vetoPolygonBounds[j]))continue;
+        const poly=context.vetoPolygons[j];if(pointInRingInclusive(a,poly,REALM_PROOF_EPS_M)||pointInRingInclusive(b,poly,REALM_PROOF_EPS_M)||realmProofTouchesLine(a,b,poly))return unresolved('obstacle-or-restricted-surface');
+      }
+      for(let j=0;j<context.vetoLines.length;j++)if(realmProofBoundsMeet(bounds,context.vetoLineBounds[j])&&realmProofTouchesLine(a,b,context.vetoLines[j]))return unresolved('barrier-continuity-unproven');
+      for(const p of context.vetoPoints)if(projectPointToSegmentM(p,a,b)?.distanceM<=REALM_PROOF_EPS_M)return unresolved('barrier-node-continuity-unproven');
+    }
+    const bounds=realmProofBounds(geometry);
+    for(const source of context.sources){
+      if(!realmProofBoundsMeet(bounds,source.bounds))continue;
+      for(let ci=0;ci<source.components.length;ci++){
+        const component=source.components[ci],line=source.kind.endsWith('-line');
+        if(!geometry.slice(1).every((b,i)=>line?realmProofLineCovers(geometry[i],b,component):realmProofPolygonCovers(geometry[i],b,component)))continue;
+        return {state:'source-supported',reason:null,sourceId:source.id,sourceType:source.type,supportKind:source.kind,
+          geometryCoverageProof:{method:line?'continuous-collinear-interval-cover':'exact-boundary-partition-containment',complete:true,componentIndex:ci,numericalToleranceM:REALM_PROOF_EPS_M,proximityPermission:false},
+          pedestrianAccessProof:{...source.accessProof},continuityProof:{method:'one-source-connected-component-covers-every-leg',complete:true,obstacleAndBarrierVetoChecked:true,inventoryCompletenessClaimed:false},sourceConfidence:source.confidence};
+      }
+    }
+    return unresolved('no-full-continuous-pedestrian-source-coverage');
+  }
+  function reduceRealmPathProvenance(stats,context) {
+    let sourceSupportedM=0,sourceSupportedMappedLineM=0,sourceSupportedSurfaceM=0;
+    const segments=(stats.segments||[]).map(s=>{
+      const originalProvenance=s.originalProvenance||(s.provenance==='source-supported-pedestrian-geometry'?'synthetic-realm':s.provenance);
+      if(originalProvenance==='mapped-path')return {...s,provenance:originalProvenance,originalProvenance,walkabilityEvidence:{state:'existing-mapped-path',sourceId:s.sourceWayIds,sourceType:'existing-osm-graph',sourceConfidence:'unchanged-existing-access-policy',reason:null}};
+      const proof=classifyRealmSegmentProvenance({...s,provenance:originalProvenance},context),supported=proof.state==='source-supported';
+      if(supported){sourceSupportedM+=s.distanceM;if(proof.supportKind.endsWith('-line'))sourceSupportedMappedLineM+=s.distanceM;else sourceSupportedSurfaceM+=s.distanceM;}
+      return {...s,originalProvenance,provenance:supported?'source-supported-pedestrian-geometry':originalProvenance,walkabilityEvidence:proof};
+    });
+    const originalSyntheticM=stats.originalSyntheticM??stats.syntheticM,syntheticM=Math.max(0,originalSyntheticM-sourceSupportedM);
+    return {...stats,sourceSupportedM,sourceSupportedRealmM:sourceSupportedM,sourceSupportedMappedLineM,sourceSupportedSurfaceM,
+      originalSyntheticM,syntheticM,syntheticRatio:stats.totalM>0?syntheticM/stats.totalM:0,segments,
+      requiresOnSitePathConfirmation:syntheticM>.01,evidenceReduction:{schema:'astra-realm-segment-evidence-v1',sourceGeometryIncomplete:!context||context.incomplete===true,sourceCount:context?.sources?.length||0,inventoryCompletenessClaimed:false}};
+  }
+  async function collectRealmOfficialPedestrianSources(a,b,options={}) {
+    if(options.realmPedestrianSources)return {groups:options.realmPedestrianSources,errors:[],origin:'explicit-source-collections'};
+    const groups={},errors=[];
+    if(window.HaidianNationwideTiles?.loadEvidenceForPolyline)try{
+      const r=await window.HaidianNationwideTiles.loadEvidenceForPolyline([a,b],{marginM:80,ring:0,maxTiles:4,attach:false});
+      if(r?.available)Object.assign(groups,r.bySource||{});
+    }catch(e){errors.push({source:'nationwide-pedestrian-evidence',message:String(e?.message||e)});}
+    if(options.shouldCancel?.())throw new Error('ROUTE_ANALYSIS_CANCELLED');
+    // Inspect already-bound/cached providers. An unbound source remains unknown;
+    // no global archive download or new city-specific pipeline is introduced.
+    const api=window.HaidianMultiSourceEvidence;
+    if(api?._internals?.loadSourceGeojson)for(const key of ['nlma-sidewalk','nlma-bikeway','tainan-sidewalk','tainan-bikeway']){
+      if(groups[key])continue;
+      try{if(api.getState?.().sources?.[key]?.status!=='ready')continue;const fc=await api._internals.loadSourceGeojson(key);if(fc)groups[key]=fc;}catch(e){errors.push({source:key,message:String(e?.message||e)});}
+    }
+    return {groups,errors,origin:'existing-official-pedestrian-providers'};
+  }
+
   function makePedestrianRealmCandidate(kind,path,meta={}) {
     const shade=kind==='pedestrian-realm-shade',id=shade?'graph-pedestrian-realm-min-sun':'graph-pedestrian-realm-fastest',hash=geometryHash(path?.points||[]);
     return {id,stableCandidateId:`${id}:${hash}`,geometryHash:hash,kind,distanceM:Number(path?.distanceM||0),durationS:Number(path?.walkSeconds||path?.durationS||0),points:path?.points||[],graphEstimatedDirectSunSeconds:Number.isFinite(Number(path?.directSunSeconds))?Number(path.directSunSeconds):null,walkability:{state:Number(meta.realmSyntheticDistanceM||0)>.01?'partial':'source-supported',reason:Number(meta.realmSyntheticDistanceM||0)>.01?'synthetic park chords have no mapped walking surface':'mapped paths',syntheticM:Number(meta.realmSyntheticDistanceM||0)},graphMeta:Object.assign({backend:'osm-pedestrian-realm',pedestrianRealmRescue:true,productionGraphMutated:false,requiresOnSitePathConfirmation:true},meta)};
@@ -5246,10 +5455,21 @@
       if(topo.endpointCoverage)topo.endpointCoverage.normalizationOffers=[];
     }
     if(!topo?.accepted||!topo.best)return Object.assign({candidates:[]},topo||{available:false,reason:'not-accepted'},{productionGraphMutated:false});
+    const official=await collectRealmOfficialPedestrianSources(A,B,options);
+    const evidenceBounds=fetched.acquisition?.bbox;
+    const validEvidenceBounds=evidenceBounds&&['south','north','west','east'].every(k=>Number.isFinite(evidenceBounds[k]))&&evidenceBounds.south<evidenceBounds.north&&evidenceBounds.west<evidenceBounds.east;
+    const evidenceSourceComplete=!!options.realmPayload||(validEvidenceBounds&&fetched.acquisition?.coverage==='complete-requested-bbox'&&
+      !(fetched.relationCompletion?.skipped>0)&&!fetched.relationCompletion?.errors?.length);
+    const provenanceContext=createRealmProvenanceContext(fetched.payload,official.groups,evidenceSourceComplete,options.realmPayload?null:evidenceBounds);
+    const officialSources={origin:official.origin,errors:official.errors,featureCounts:Object.fromEntries(Object.entries(official.groups).map(([key,fc])=>[key,fc?.features?.length||0]))};
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
     const make=(kind,path)=>{
       const stats=realmPathStats(topo.best.graph,path.edgeIds||[]);
-      return makePedestrianRealmCandidate(kind,path,Object.assign({},commonMeta,{providerMode:options.providerMode||'topology-rescue',realmSyntheticDistanceM:stats.syntheticM,realmSyntheticRatio:stats.syntheticRatio,realmPortalDistanceM:stats.portalM,realmAreaKinds:stats.kinds,realmAreaIds:stats.areaIds,realmProvenance:stats,shadeSearchComplete:kind==='pedestrian-realm-shade'}));
+      const reduced=reduceRealmPathProvenance(stats,provenanceContext);
+      const candidate=makePedestrianRealmCandidate(kind,path,Object.assign({},commonMeta,{providerMode:options.providerMode||'topology-rescue',realmSyntheticDistanceM:reduced.syntheticM,realmSyntheticRatio:reduced.syntheticRatio,realmSourceSupportedDistanceM:reduced.sourceSupportedM,realmPortalDistanceM:stats.portalM,realmAreaKinds:stats.kinds,realmAreaIds:stats.areaIds,realmProvenance:reduced,requiresOnSitePathConfirmation:reduced.requiresOnSitePathConfirmation,provenanceSources:officialSources,shadeSearchComplete:kind==='pedestrian-realm-shade'}));
+      candidate.walkability.sourceSupportedM=reduced.sourceSupportedM;
+      if(reduced.sourceSupportedM>0&&reduced.syntheticM<=.01)candidate.walkability.reason='fully source-covered pedestrian geometry';
+      return candidate;
     };
     const pathQualifies=(path)=>{
       if(!path?.points?.length)return false;
@@ -7946,6 +8166,10 @@
       pedestrianRealmOpportunityEligible,
       collectRealmInteriorVisibilityNodes,
       realmPathStats,
+      createRealmProvenanceContext,
+      classifyRealmSegmentProvenance,
+      reduceRealmPathProvenance,
+      collectRealmOfficialPedestrianSources,
       pedestrianSnapRank,
       pedestrianSnapLabel,
       graphStats,
