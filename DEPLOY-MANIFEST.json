@@ -1,12 +1,12 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.9-search-comparator-proof-scope",
-  "createdAt": "2026-10-02T15:01:12.720791Z",
+  "release": "dev37.9.9.10-generic-realm-cross-site-hardening",
+  "createdAt": "2026-10-02T16:37:22Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "dev37.9.9.8 live-accepted generic Realm walkability baseline",
-  "scope": "separate generated-candidate exposure proof from Realm search-coverage/global proof; incomplete Realm search keeps candidate-set winner provisional while preserving display and on-site-confirmation semantics",
+  "integrationBaseline": "dev37.9.9.9 live-accepted proof-scope baseline",
+  "scope": "generic inferred-open-space false-positive hardening across roads, waterways, railways, barriers and nested non-free-space areas; no route/search/shade/comparator policy change",
   "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.8",
+    "src/pedestrian-graph-routing.js": "core=37.9.9.10",
     "src/route-exposure.js": "core=37.9.9.9",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
@@ -14,10 +14,11 @@
     "src/shademap-integration.js": "core=37.9.7"
   },
   "verification": {
-    "regressionPassed": 215,
+    "regressionPassed": 256,
     "regressionFailed": 0,
-    "syntaxPassed": 14,
+    "syntaxPassed": 13,
     "syntaxFailed": 0,
+    "freshApply": "PASS",
     "publicWebsite": "NOT RUN — deploy required",
     "liveBrowser": "NOT RUN — deploy required"
   },
@@ -45,6 +46,10 @@
     "RELEASE-dev37.9.8.5.md": {
       "bytes": 1804,
       "sha256": "9324e4b64ff764ddf7e3e95a7c5d59fd87960c936069f3ba430af2b4f24e41f4"
+    },
+    "RELEASE-dev37.9.9.10.md": {
+      "bytes": 3109,
+      "sha256": "b706341ef0abe3554aceb47a02afddf6a43bbb103d52bce958719ce03116a521"
     },
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
@@ -751,8 +756,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630363,
-      "sha256": "cd27fd47c4d80e63b42ffc18046e11abe15e76e31afefca1a927478053099fa7"
+      "bytes": 630364,
+      "sha256": "bc964d6937c91362c70282193e6f6d205ebc21f6919c17403bde5102e9a2e959"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -855,8 +860,8 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 517947,
-      "sha256": "3d459bc73eb56020e9b0c584cfb1ed5655255f3d74087c1178d2f32f6bfab3ae"
+      "bytes": 525280,
+      "sha256": "df16d12110b2fe552a2377aa8f956526bd61b6adc76cf8b79b9319da6e28d67d"
     },
     "src/route-exposure.js": {
       "bytes": 370416,

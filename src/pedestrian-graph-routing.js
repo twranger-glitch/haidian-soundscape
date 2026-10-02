@@ -4569,6 +4569,31 @@
     return ['fence','wall','hedge','retaining_wall'].includes(barrier) ? barrier : null;
   }
 
+  // dev37.9.9.10: inferred-open-space is useful only if it does not silently
+  // treat every object inside a park as walkable free-space. These blockers are
+  // inference-only: they do not mutate the production graph and do not turn an
+  // unmapped route into verified pedestrian geometry. The allow-list remains
+  // deliberately narrower than ordinary pedestrian access.
+  function classifyRealmInferenceAreaExclusion(tags = {}) {
+    const leisure=normalizedTag(tags.leisure),landuse=normalizedTag(tags.landuse),natural=normalizedTag(tags.natural),amenity=normalizedTag(tags.amenity),areaHighway=normalizedTag(tags['area:highway']);
+    if(realmAccessBlocked(tags))return 'restricted-access-area';
+    if(['pitch','garden','dog_park'].includes(leisure))return `leisure-${leisure}`;
+    if(['construction','cemetery','industrial','military'].includes(landuse))return `landuse-${landuse}`;
+    if(['wood','wetland'].includes(natural))return `natural-${natural}`;
+    if(areaHighway&&!['pedestrian','footway','path'].includes(areaHighway))return `area-highway-${areaHighway}`;
+    return null;
+  }
+
+  function classifyRealmInferenceSeparator(tags = {}) {
+    const highway=normalizedTag(tags.highway),waterway=normalizedTag(tags.waterway),natural=normalizedTag(tags.natural),railway=normalizedTag(tags.railway),barrier=normalizedTag(tags.barrier);
+    if(['motorway','motorway_link','trunk','trunk_link','primary','primary_link','secondary','secondary_link','tertiary','tertiary_link','unclassified','residential'].includes(highway))return `motor-road-${highway}`;
+    if(['river','stream','canal','ditch','drain'].includes(waterway))return `waterway-${waterway}`;
+    if(natural==='cliff')return 'natural-cliff';
+    if(['rail','light_rail','subway','tram'].includes(railway))return `railway-${railway}`;
+    if(['ditch','guard_rail','jersey_barrier'].includes(barrier))return `barrier-${barrier}`;
+    return null;
+  }
+
   function isRealmPortalNode(tags = {}) {
     const entrance = normalizedTag(tags.entrance), barrier = normalizedTag(tags.barrier);
     if (realmAccessBlocked(tags)) return false;
@@ -4638,11 +4663,11 @@
         relationElements.push(element);
       }
     }
-    const areas = [], obstacles = [], barriers = [], portals = [];
+    const areas = [], obstacles = [], barriers = [], portals = [], inferenceExclusions = [], inferenceSeparators = [];
     const seenArea = new Set(), seenObstacle = new Set();
     const sourceDiagnostics={elementCount:(payload?.elements||[]).length,nodeCount:nodes.size,wayCount:wayById.size,relationCount:relationElements.length,
       candidateWayCount:0,candidateRelationCount:0,sourceTagKinds:{},relationMissingMemberWays:0,relationUnclosedRings:0,relationNestedMembers:0,
-      incompleteObstacleCount:0,incompleteBarrierCount:0,wayMissingGeometry:0,relationFailureExamples:[]};
+      incompleteObstacleCount:0,incompleteBarrierCount:0,incompleteInferenceExclusionCount:0,incompleteInferenceSeparatorCount:0,wayMissingGeometry:0,relationFailureExamples:[]};
     const countTags=(tags)=>{for(const tag of ['leisure','landuse','place','amenity','area:highway'])if(tags?.[tag]){
       const key=`${tag}=${String(tags[tag]).slice(0,40)}`;sourceDiagnostics.sourceTagKinds[key]=(sourceDiagnostics.sourceTagKinds[key]||0)+1;
     }};
@@ -4653,9 +4678,16 @@
       countTags(way.tags);
       const ring = wayRingFromNodeIds(way.nodes, nodes);
       const realm = classifyPedestrianRealm(way.tags);
+      const inferenceExclusionKind=classifyRealmInferenceAreaExclusion(way.tags);
+      const inferenceSeparatorKind=classifyRealmInferenceSeparator(way.tags);
       if(realm)sourceDiagnostics.candidateWayCount+=1;
       const obstacleKind = classifyRealmObstacle(way.tags)||(realmAccessBlocked(way.tags)&&classifyPedestrianRealm(Object.assign({},way.tags,{access:'yes',foot:'yes'}))?'restricted-realm':null);
-      if((realm||obstacleKind)&&!ring.length){sourceDiagnostics.wayMissingGeometry+=1;if(obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;}
+      if((realm||obstacleKind||inferenceExclusionKind)&&!ring.length){sourceDiagnostics.wayMissingGeometry+=1;if(obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;if(inferenceExclusionKind)sourceDiagnostics.incompleteInferenceExclusionCount+=1;}
+      if(inferenceExclusionKind&&ring.length)inferenceExclusions.push({id:`way:${way.id}`,kind:inferenceExclusionKind,sourceType:'way',sourceId:way.id,polygon:ring,holes:[],tags:Object.assign({},way.tags)});
+      if(inferenceSeparatorKind){
+        if(way.nodes.some((id)=>!nodes.has(String(id))))sourceDiagnostics.incompleteInferenceSeparatorCount+=1;
+        else {const geom=(way.nodes||[]).map((id)=>nodes.get(String(id))).filter(Boolean).map((p)=>({lat:p.lat,lng:p.lng}));if(geom.length>=2)inferenceSeparators.push({id:`way:${way.id}`,kind:inferenceSeparatorKind,geometry:geom,tags:Object.assign({},way.tags)});else sourceDiagnostics.incompleteInferenceSeparatorCount+=1;}
+      }
       if (realm && ring.length && !realmMemberWays.has(way.id)) {
         const key=`way:${way.id}`; seenArea.add(key);
         areas.push(Object.assign({ id:key, sourceType:'way', sourceId:way.id, polygon:ring, holes:[], tags:Object.assign({},way.tags) }, realm));
@@ -4673,9 +4705,9 @@
     }
 
     for (const rel of relationElements) {
-      const realm=classifyPedestrianRealm(rel.tags || {}),obstacleKind=classifyRealmObstacle(rel.tags || {})||(realmAccessBlocked(rel.tags||{})&&classifyPedestrianRealm(Object.assign({},rel.tags,{access:'yes',foot:'yes'}))?'restricted-realm':null);
+      const realm=classifyPedestrianRealm(rel.tags || {}),obstacleKind=classifyRealmObstacle(rel.tags || {})||(realmAccessBlocked(rel.tags||{})&&classifyPedestrianRealm(Object.assign({},rel.tags,{access:'yes',foot:'yes'}))?'restricted-realm':null),inferenceExclusionKind=classifyRealmInferenceAreaExclusion(rel.tags||{});
       countTags(rel.tags);
-      if(!realm&&!obstacleKind)continue;
+      if(!realm&&!obstacleKind&&!inferenceExclusionKind)continue;
       sourceDiagnostics.candidateRelationCount+=1;
       const beforeMissing=sourceDiagnostics.relationMissingMemberWays,beforeOpen=sourceDiagnostics.relationUnclosedRings,beforeNested=sourceDiagnostics.relationNestedMembers;
       const outerIds=[], innerIds=[];
@@ -4687,6 +4719,10 @@
       const outers=stitchRelationRings(outerIds,wayById,nodes,sourceDiagnostics,rel.id), inners=stitchRelationRings(innerIds,wayById,nodes,sourceDiagnostics,rel.id);
       const incomplete=sourceDiagnostics.relationMissingMemberWays>beforeMissing||sourceDiagnostics.relationUnclosedRings>beforeOpen||sourceDiagnostics.relationNestedMembers>beforeNested;
       if(incomplete&&obstacleKind)sourceDiagnostics.incompleteObstacleCount+=1;
+      if(incomplete&&inferenceExclusionKind)sourceDiagnostics.incompleteInferenceExclusionCount+=1;
+      if(inferenceExclusionKind&&!incomplete){
+        for(let i=0;i<outers.length;i+=1){const holes=inners.filter((x)=>pointInRingStrict(x[0],outers[i]));inferenceExclusions.push({id:`relation:${rel.id}:outer:${i}`,kind:inferenceExclusionKind,sourceType:'relation',sourceId:String(rel.id),polygon:outers[i],holes:holes.map(x=>x.slice()),tags:Object.assign({},rel.tags||{})});}
+      }
       if (realm) {
         for (let i=0;i<outers.length;i+=1) {
           const key=`relation:${rel.id}:outer:${i}`;
@@ -4710,7 +4746,7 @@
 
     const reviewOnlyAreas=areas.filter((a)=>a.autoEligible!==true);
     const autoAreas=areas.filter((a)=>a.autoEligible===true);
-    return { nodes, wayById, areas, autoAreas, reviewOnlyAreas, obstacles, barriers, portals, sourceDiagnostics };
+    return { nodes, wayById, areas, autoAreas, reviewOnlyAreas, obstacles, barriers, portals, inferenceExclusions, inferenceSeparators, sourceDiagnostics };
   }
 
   function pointInRingStrict(point, ring) {
@@ -5095,7 +5131,7 @@
   }
   function createRealmProvenanceContext(payload,officialGroups={},sourceComplete=true,coverageBounds=null) {
     const realm=parsePedestrianRealm(payload),sources=[],rejectedSources=[],d=realm.sourceDiagnostics;
-    let incomplete=!sourceComplete||!!payload?.remark||['incompleteObstacleCount','incompleteBarrierCount','wayMissingGeometry','relationMissingMemberWays','relationUnclosedRings','relationNestedMembers'].some(k=>d[k]>0);
+    let incomplete=!sourceComplete||!!payload?.remark||['incompleteObstacleCount','incompleteBarrierCount','incompleteInferenceExclusionCount','incompleteInferenceSeparatorCount','wayMissingGeometry','relationMissingMemberWays','relationUnclosedRings','relationNestedMembers'].some(k=>d[k]>0);
     const add=(id,type,kind,components,accessProof,confidence)=>{
       const points=components.flat(2).filter(p=>p?.lat!=null);
       sources.push({id,type,kind,components,accessProof,confidence,bounds:realmProofBounds(points)});
@@ -5152,8 +5188,10 @@
     for(const b of realm.barriers||[])vetoLines.push(b.geometry);
     for(const n of realm.nodes.values())if(n.tags?.barrier)vetoPoints.push(n);
     if(sources.length>4000){sources.length=0;incomplete=true;rejectedSources.push({reason:'evidence-source-budget'});}
+    const inferenceExclusions=(realm.inferenceExclusions||[]).map(x=>({...x,bounds:realmProofBounds([...(x.polygon||[]),...(x.holes||[]).flat()])}));
+    const inferenceSeparators=(realm.inferenceSeparators||[]).map(x=>({...x,bounds:realmProofBounds(x.geometry||[])}));
     return {schema:'astra-realm-segment-evidence-v1',realm,sources,rejectedSources,incomplete,vetoLines,vetoPolygons,vetoPoints,coverageBounds,
-      vetoPolygonBounds:vetoPolygons.map(realmProofBounds),vetoLineBounds:vetoLines.map(realmProofBounds),
+      vetoPolygonBounds:vetoPolygons.map(realmProofBounds),vetoLineBounds:vetoLines.map(realmProofBounds),inferenceExclusions,inferenceSeparators,
       inventoryCompletenessClaimed:false};
   }
   function classifyRealmSegmentProvenance(segment,context) {
@@ -5239,6 +5277,42 @@
   // confirmation. Only obstacle-checked internal chords in a conservative
   // allow-list of public open-space realms qualify.
   const REALM_INFERRED_OPEN_SPACE_KINDS=new Set(['public-park','public-village-green']);
+  function realmInferenceLegCrossesSeparator(a,b,separator) {
+    const A=realmProofPoint(a),B=realmProofPoint(b),line=realmProofLine(separator?.geometry);if(!A||!B||!line)return true;
+    const epsT=1e-6,mid={lat:(A.lat+B.lat)/2,lng:(A.lng+B.lng)/2};
+    for(let i=1;i<line.length;i++){
+      const hit=segmentIntersectionInclusive(A,B,line[i-1],line[i]);
+      if(hit&&hit.t>epsT&&hit.t<1-epsT)return true;
+      // Parallel/collinear overlap is not reported by segmentIntersectionInclusive.
+      // If the leg midpoint lies on the separator segment, it is an interior
+      // overlap rather than a harmless endpoint touch.
+      const h=projectPointToSegmentM(mid,line[i-1],line[i]);if(h&&h.distanceM<=REALM_PROOF_EPS_M)return true;
+    }
+    return false;
+  }
+  function realmInferenceLegCrossesExclusion(a,b,exclusion) {
+    const A=realmProofPoint(a),B=realmProofPoint(b),outer=realmProofLine(exclusion?.polygon,true),holes=(exclusion?.holes||[]).map(h=>realmProofLine(h,true));
+    if(!A||!B||!outer||holes.some(h=>!h))return true;
+    const area={polygon:outer,holes};
+    // Endpoint containment is a direct conflict. For the interior, partition at
+    // exact polygon boundaries so even a narrow flower bed/pitch/parking strip
+    // cannot be skipped by coarse sampling. Boundary-only contact remains okay.
+    if(pointInRealmArea(A,area,0)||pointInRealmArea(B,area,0))return true;
+    const cuts=[0,1],add=t=>{if(Number.isFinite(t)&&t>=0&&t<=1)cuts.push(Math.max(0,Math.min(1,t)));};
+    for(let i=1;i<outer.length;i++)for(const t of realmProofCutParameters(A,B,outer[i-1],outer[i]))add(t);
+    for(const hole of holes)for(let i=1;i<hole.length;i++)for(const t of realmProofCutParameters(A,B,hole[i-1],hole[i]))add(t);
+    cuts.sort((x,y)=>x-y);const uniq=[];for(const t of cuts)if(!uniq.length||Math.abs(t-uniq.at(-1))>1e-10)uniq.push(t);
+    const at=t=>({lat:A.lat+(B.lat-A.lat)*t,lng:A.lng+(B.lng-A.lng)*t});
+    for(let i=1;i<uniq.length;i++){const lo=uniq[i-1],hi=uniq[i];if(hi<=lo+1e-12)continue;const mid=at((lo+hi)/2);if(pointInRealmArea(mid,area,0))return true;}
+    return false;
+  }
+  function segmentClearOfRealmInferenceHazards(a,b,context) {
+    const A=realmProofPoint(a),B=realmProofPoint(b);if(!A||!B||!context||context.incomplete)return false;
+    const bounds=realmProofBounds([A,B]);
+    for(const x of context.inferenceExclusions||[]){if(x.bounds&&realmProofBoundsMeet(bounds,x.bounds)&&realmInferenceLegCrossesExclusion(A,B,x))return false;}
+    for(const x of context.inferenceSeparators||[]){if(x.bounds&&realmProofBoundsMeet(bounds,x.bounds)&&realmInferenceLegCrossesSeparator(A,B,x))return false;}
+    return true;
+  }
   function realmInferenceAreaCoversLeg(a,b,area,toleranceM=1.8) {
     const A=realmProofPoint(a),B=realmProofPoint(b),outer=realmProofLine(area?.polygon,true),holes=(area?.holes||[]).map(h=>realmProofLine(h,true));
     if(!A||!B||!outer||holes.some(h=>!h))return false;
@@ -5283,11 +5357,14 @@
       if(!(maxPortalM>0&&Number.isFinite(maxPortalM)))return unresolved('realm-portal-policy-limit-missing');
       if(Number(segment.distanceM||0)>maxPortalM+1e-6)return unresolved('realm-portal-transition-too-long-for-inference');
       if(!geometry.some(p=>pointInRealmArea(p,area,1.8)))return unresolved('realm-portal-does-not-touch-public-realm');
-      for(let i=1;i<geometry.length;i++)if(!segmentClearOfRealmObstacles(geometry[i-1],geometry[i],null,context.realm,{visibilitySampleM:2,gateToleranceM:3}))return unresolved('realm-portal-obstacle-or-barrier-continuity-failed');
+      for(let i=1;i<geometry.length;i++){
+        if(!segmentClearOfRealmObstacles(geometry[i-1],geometry[i],null,context.realm,{visibilitySampleM:2,gateToleranceM:3}))return unresolved('realm-portal-obstacle-or-barrier-continuity-failed');
+        if(!segmentClearOfRealmInferenceHazards(geometry[i-1],geometry[i],context))return unresolved('realm-inference-hazard-continuity-failed');
+      }
       return {state:'inferred-open-space',reason:null,sourceId:String(area.id),sourceType:'osm-public-realm',supportKind:segment.realmOpenBoundaryPortal===true?'inferred-open-boundary-transition':'inferred-explicit-portal-transition',
         geometryCoverageProof:{method:'bounded-realm-to-mapped-network-transition',complete:true,realmAreaId:String(area.id),realmKind:String(area.kind),maxTransitionM:maxPortalM,proximityPermission:'inference-only-not-source-proof'},
         pedestrianAccessProof:{pedestrianAllowed:'inferred-not-source-verified',publicRealmAutoEligible:true,accessBlocked:false,sourceTags:{leisure:area.tags?.leisure||null,landuse:area.tags?.landuse||null}},
-        continuityProof:{method:'realm-portal-connector-rechecked-against-obstacles-and-barriers',complete:true,portalOrTerminalConnector:true,openBoundary:segment.realmOpenBoundaryPortal===true,obstacleAndBarrierVetoChecked:true},
+        continuityProof:{method:'realm-portal-connector-rechecked-against-obstacles-and-barriers',complete:true,portalOrTerminalConnector:true,openBoundary:segment.realmOpenBoundaryPortal===true,obstacleAndBarrierVetoChecked:true,inferenceHazardVetoChecked:true},
         sourceConfidence:'inferred-public-open-space-transition-medium',walkabilityTier:'inferred',requiresOnSitePathConfirmation:true};
     }
     // Reuse the established 1.8 m Realm boundary-membership tolerance, but no
@@ -5297,11 +5374,12 @@
     for(let i=1;i<geometry.length;i++){
       if(!realmInferenceAreaCoversLeg(geometry[i-1],geometry[i],area,1.8))return unresolved('segment-not-contained-in-same-public-realm-policy');
       if(!segmentClearOfRealmObstacles(geometry[i-1],geometry[i],area,context.realm,{visibilitySampleM:2,gateToleranceM:3}))return unresolved('realm-visibility-or-obstacle-continuity-failed');
+      if(!segmentClearOfRealmInferenceHazards(geometry[i-1],geometry[i],context))return unresolved('realm-inference-hazard-continuity-failed');
     }
     return {state:'inferred-open-space',reason:null,sourceId:String(area.id),sourceType:'osm-public-realm',supportKind:'inferred-public-open-space',
       geometryCoverageProof:{method:'exact-boundary-partitions-with-existing-realm-membership-tolerance',complete:true,realmAreaId:String(area.id),realmKind:String(area.kind),boundaryToleranceM:1.8,proximityPermission:false},
       pedestrianAccessProof:{pedestrianAllowed:'inferred-not-source-verified',publicRealmAutoEligible:true,accessBlocked:false,sourceTags:{leisure:area.tags?.leisure||null,landuse:area.tags?.landuse||null}},
-      continuityProof:{method:'generated-realm-visibility-edge-rechecked-against-area-obstacles-and-barriers',complete:true,portalOrTerminalConnector:false,obstacleAndBarrierVetoChecked:true},
+      continuityProof:{method:'generated-realm-visibility-edge-rechecked-against-area-obstacles-and-barriers',complete:true,portalOrTerminalConnector:false,obstacleAndBarrierVetoChecked:true,inferenceHazardVetoChecked:true},
       sourceConfidence:'inferred-public-open-space-medium',walkabilityTier:'inferred',requiresOnSitePathConfirmation:true};
   }
   function reduceRealmPathProvenance(stats,context) {
@@ -5322,7 +5400,7 @@
     const walkabilityClass=syntheticM>.01?'partial':inferredOpenSpaceM>.01?'inferred-open-space':'verified';
     return {...stats,sourceSupportedM,sourceSupportedRealmM:sourceSupportedM,sourceSupportedMappedLineM,sourceSupportedSurfaceM,inferredOpenSpaceM,inferredOpenSpaceRatio,unresolvedSyntheticM:syntheticM,
       originalSyntheticM,syntheticM,syntheticRatio,walkabilityClass,segments,
-      requiresOnSitePathConfirmation:inferredOpenSpaceM>.01||syntheticM>.01,evidenceReduction:{schema:'astra-realm-segment-evidence-v2',sourceGeometryIncomplete:!context||context.incomplete===true,sourceCount:context?.sources?.length||0,inventoryCompletenessClaimed:false,partialCoveragePartitioning:true,openSpaceInference:true,inferenceKinds:Array.from(REALM_INFERRED_OPEN_SPACE_KINDS),originalSegments}};
+      requiresOnSitePathConfirmation:inferredOpenSpaceM>.01||syntheticM>.01,evidenceReduction:{schema:'astra-realm-segment-evidence-v3',sourceGeometryIncomplete:!context||context.incomplete===true,sourceCount:context?.sources?.length||0,inventoryCompletenessClaimed:false,partialCoveragePartitioning:true,openSpaceInference:true,inferenceKinds:Array.from(REALM_INFERRED_OPEN_SPACE_KINDS),inferenceExclusionCount:context?.inferenceExclusions?.length||0,inferenceSeparatorCount:context?.inferenceSeparators?.length||0,crossSiteFalsePositiveHardening:true,originalSegments}};
   }
 
   async function collectRealmOfficialPedestrianSources(a,b,options={}) {
@@ -8275,6 +8353,8 @@
       fetchPedestrianRealmOsmMap,
       classifyPedestrianRealm,
       classifyRealmObstacle,
+      classifyRealmInferenceAreaExclusion,
+      classifyRealmInferenceSeparator,
       parsePedestrianRealm,
       pointInRingStrict,
       pointInRingInclusive,
@@ -8298,6 +8378,7 @@
       createRealmProvenanceContext,
       classifyRealmSegmentProvenance,
       classifyRealmOpenSpaceInference,
+      segmentClearOfRealmInferenceHazards,
       reduceRealmPathProvenance,
       collectRealmOfficialPedestrianSources,
       pedestrianSnapRank,
