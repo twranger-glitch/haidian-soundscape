@@ -370,6 +370,14 @@
     return points;
   }
 
+  // dev37.9.9.11: dense exposure sampling must preserve the physical route
+  // distance ledger. The old 5 cm geometry cutoff silently dropped legitimate
+  // short route edges (including admitted terminal connectors), so
+  // analysis.summary.totalDistanceM could be shorter than candidate.distanceM
+  // and provenance.totalM. Keep only a numerical zero epsilon here; duplicate
+  // coordinates still collapse, while centimetre/millimetre geometry remains
+  // part of both walking time and exposure sampling.
+  const ROUTE_SAMPLE_ZERO_EPSILON_M = 1e-6;
   function buildSampleSegments(points, spacingM) {
     const source = (points || []).map(asLatLng).filter(Boolean);
     if (source.length < 2) return [];
@@ -380,7 +388,7 @@
       const a = source[i - 1];
       const b = source[i];
       const length = haversineM(a, b);
-      if (!(length > 0.05)) continue;
+      if (!(length > ROUTE_SAMPLE_ZERO_EPSILON_M)) continue;
       const chunks = Math.max(1, Math.ceil(length / spacing));
       const chunkLength = length / chunks;
       for (let c = 0; c < chunks; c += 1) {

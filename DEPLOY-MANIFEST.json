@@ -1,22 +1,22 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.10-generic-realm-cross-site-hardening",
-  "createdAt": "2026-10-02T16:37:22Z",
+  "release": "dev37.9.9.11-dense-route-distance-accounting",
+  "createdAt": "2026-10-03T01:20:00Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "dev37.9.9.9 live-accepted proof-scope baseline",
-  "scope": "generic inferred-open-space false-positive hardening across roads, waterways, railways, barriers and nested non-free-space areas; no route/search/shade/comparator policy change",
+  "integrationBaseline": "dev37.9.9.10 live-accepted cross-site hardening baseline",
+  "scope": "dense route-exposure distance accounting alignment for legitimate sub-5cm geometry; no terminal permission, Realm inference, shade search, detour, or comparator policy change",
   "cacheWiring": {
     "src/pedestrian-graph-routing.js": "core=37.9.9.10",
-    "src/route-exposure.js": "core=37.9.9.9",
+    "src/route-exposure.js": "core=37.9.9.11",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
     "src/own-shade-renderer.js": "core=37.9.7",
     "src/shademap-integration.js": "core=37.9.7"
   },
   "verification": {
-    "regressionPassed": 256,
+    "regressionPassed": 258,
     "regressionFailed": 0,
-    "syntaxPassed": 13,
+    "syntaxPassed": 24,
     "syntaxFailed": 0,
     "freshApply": "PASS",
     "publicWebsite": "NOT RUN — deploy required",
@@ -50,6 +50,10 @@
     "RELEASE-dev37.9.9.10.md": {
       "bytes": 3109,
       "sha256": "b706341ef0abe3554aceb47a02afddf6a43bbb103d52bce958719ce03116a521"
+    },
+    "RELEASE-dev37.9.9.11.md": {
+      "bytes": 1232,
+      "sha256": "c55cdfb2de07eaa667fe03098acc38775758d9b6b95091496a2ac3500f65853f"
     },
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
@@ -756,8 +760,8 @@
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
     "index.html": {
-      "bytes": 630364,
-      "sha256": "bc964d6937c91362c70282193e6f6d205ebc21f6919c17403bde5102e9a2e959"
+      "bytes": 630365,
+      "sha256": "72203c08be17d23a45b48c76e16afb6d03f524afd4f8b1e2e94c5285d008c9e5"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -864,8 +868,8 @@
       "sha256": "df16d12110b2fe552a2377aa8f956526bd61b6adc76cf8b79b9319da6e28d67d"
     },
     "src/route-exposure.js": {
-      "bytes": 370416,
-      "sha256": "6f9e09364500fa2efbd70d5c272051004ee76cbe4c42a2bfae80c46bccbdd36b"
+      "bytes": 370996,
+      "sha256": "a60b2184151947f62db451df879938339d1cde0312f396e28ef6ae3ea74fc602"
     },
     "src/shademap-integration.js": {
       "bytes": 390114,
