@@ -8165,45 +8165,135 @@
   // dev37.9: preserve geometrically different routes even when shade costs are
   // tied or unavailable. Read existing source edges only; never add connectors.
   async function topologyAlternativeCandidates(graph, startId, endId, baseline, options={}) {
-    const diagnostics={attempted:true,scope:'bounded source-edge deviation candidates; not an exhaustive minimum-sun proof',probes:0,rejected:[],complete:true,reason:null,productionGraphMutated:false};
-    const output=[],speed=clamp(options.speedMps,.5,2.5,1.25),cap=baseline.distanceM*(1+clamp(options.detourPct,0,60,30)/100);
-    const maxProbes=Math.min(64,Math.max(1,Number(options.alternativeMaxProbes||48))),maxCandidates=Math.min(6,Math.max(1,Number(options.alternativeMaxCandidates||4)));
-    const deadline=nowMs()+Math.min(2500,Math.max(50,Number(options.alternativeBudgetMs||600))),seen=new Set([(baseline.graphMeta?.edgeIds||[]).join('|')]);
-    const ids=baseline.graphMeta?.edgeIds||[], probes=[];let node=String(startId);
-    for(const id of ids){const e=graph.edges.get(id);if(!e)continue;const next=String(e.a)===node?String(e.b):String(e.a);
-      if((graph.adjacency.get(node)||[]).length>2||(graph.adjacency.get(next)||[]).length>2||node===String(startId)||next===String(endId))probes.push(id);node=next;}
-    // Include degree-two parallel-edge circuits; each probe removes just one
-    // existing edge for this search, without modifying graph adjacency.
-    for(const id of ids)if(!probes.includes(id))probes.push(id);
-    for(const forbidden of probes.slice(0,maxProbes)){
-      if(options.shouldCancel?.()||options.signal?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
-      if(nowMs()>deadline){diagnostics.complete=false;diagnostics.reason='alternative-budget';break;}
-      diagnostics.probes++;const dist=new Map([[String(startId),0]]),prev=new Map(),heap=new MinHeap((a,b)=>a.t-b.t);heap.push({node:String(startId),t:0});let count=0;
-      while(heap.size){
-        if(options.shouldCancel?.()||options.signal?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
-        if(nowMs()>deadline){diagnostics.complete=false;diagnostics.reason='alternative-budget';break;}
-        const cur=heap.pop();if(cur.t!==dist.get(cur.node))continue;if(cur.node===String(endId))break;
-        for(const ref of graph.adjacency.get(cur.node)||[]){const e=graph.edges.get(ref.edgeId);if(!e||ref.edgeId===forbidden)continue;
-          if(e.realmSynthetic||e.realmPortalConnector||e.realmVisibilityEdge||e.conditionalPrivateAccess)continue;
-          const n=String(ref.to),d=cur.t+e.distanceM;if(d>cap+.01||d>=(dist.get(n)??Infinity)-1e-9)continue;
-          dist.set(n,d);prev.set(n,{node:cur.node,edgeId:e.id});heap.push({node:n,t:d});}
-        if(++count%240===0)await new Promise(r=>setTimeout(r,0));
+    const started=nowMs(), start=String(startId), end=String(endId);
+    const integer=(value,fallback,max)=>Number.isFinite(Number(value))?Math.min(max,Math.max(1,Math.floor(Number(value)))):fallback;
+    const limits={maxProbes:integer(options.alternativeMaxProbes,48,64),maxCandidates:integer(options.alternativeMaxCandidates,4,6),
+      budgetMs:Math.min(2500,Math.max(50,Number.isFinite(Number(options.alternativeBudgetMs))?Number(options.alternativeBudgetMs):600)),
+      maxExpandedStates:integer(options.alternativeMaxExpandedStates,6000,12000),maxEdgeScans:integer(options.alternativeMaxEdgeScans,30000,120000),
+      maxPathEdges:integer(options.alternativeMaxPathEdges,1024,2048),maxGeometryPoints:integer(options.alternativeMaxGeometryPoints,20000,30000)};
+    const speed=clamp(options.speedMps,.5,2.5,1.25),cap=Number(baseline?.distanceM)*(1+clamp(options.detourPct,0,60,30)/100);
+    const diagnostics={attempted:true,method:'bounded-yen-spur',scope:'loopless paths on existing safe directed source adjacency, source-fastest distance cap; not a minimum-sun proof',
+      limits,detourLimitM:cap,detourSlackM:.01,probes:0,pathsConsidered:0,distinctPathsAccepted:0,sameEdgeSequenceRejects:0,
+      detourRejects:0,detourEdgePrunes:0,safetyEdgeRejects:0,expandedStates:0,edgeScans:0,rejected:[],accepted:[],
+      complete:true,exhaustive:false,physicalGlobalOptimal:false,shadeSearchProof:false,reason:null,termination:null,productionGraphMutated:false};
+    const output=[],pending=new Map(),ranked=[],discovered=new Set(),sortedRefs=new Map(),usedIds=new Set();
+    const textCompare=(a,b)=>a<b?-1:a>b?1:0, pathKey=p=>JSON.stringify(p.edgeIds),arcKey=(from,id,to)=>JSON.stringify([from,String(id),to]);
+    const reject=(reason,extra={})=>{if(diagnostics.rejected.length<128)diagnostics.rejected.push({reason,...extra});};
+    const stop=reason=>{if(!diagnostics.reason){diagnostics.reason=reason;diagnostics.complete=false;}};
+    const cancelled=()=>{if(options.shouldCancel?.()||options.signal?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');};
+    const check=()=>{cancelled();if(!diagnostics.reason&&nowMs()-started>limits.budgetMs)stop('alternative-budget');return !diagnostics.reason;};
+    const edgeAllowed=e=>e&&!e.realmSynthetic&&!e.realmPortalConnector&&!e.realmVisibilityEdge&&!e.conditionalPrivateAccess&&Number.isFinite(e.distanceM)&&e.distanceM>0;
+    const validPoint=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180;
+    const routeFromSteps=steps=>{
+      if(steps.length>limits.maxPathEdges){stop('path-size-cap');return null;}
+      const nodes=[start],visited=new Set(nodes);let distance=0,pointCount=0,lastPoint=null;
+      for(const step of steps){
+        if(!check())return null;
+        const edge=graph.edges.get(step.edgeId),from=nodes.at(-1),to=String(step.to);
+        if(step.from!==from||!edgeAllowed(edge)||!graph.nodes.has(to)||visited.has(to)||
+           !((String(edge.a)===from&&String(edge.b)===to)||(String(edge.b)===from&&String(edge.a)===to))||
+           !(graph.adjacency.get(from)||[]).some(ref=>ref.edgeId===step.edgeId&&String(ref.to)===to)){
+          reject('invalid-or-non-loopless-source-path');return null;
+        }
+        if(!Array.isArray(edge.geometry)||edge.geometry.length<2){reject('incomplete-or-discontinuous-source-geometry');return null;}
+        pointCount+=edge.geometry.length;if(pointCount>limits.maxGeometryPoints){stop('geometry-size-cap');return null;}
+        const geometry=edgeGeometryFor(edge,from);
+        if(!validPoint(graph.nodes.get(from))||!validPoint(graph.nodes.get(to))||geometry.some(p=>!validPoint(p))||
+           haversineM(geometry[0],graph.nodes.get(from))>1e-6||haversineM(geometry.at(-1),graph.nodes.get(to))>1e-6||
+           lastPoint&&haversineM(lastPoint,geometry[0])>1e-6){reject('incomplete-or-discontinuous-source-geometry');return null;}
+        lastPoint=geometry.at(-1);distance+=edge.distanceM;nodes.push(to);visited.add(to);
       }
-      if(!diagnostics.complete)break;
-      if(!dist.has(String(endId))){diagnostics.rejected.push({edgeId:forbidden,reason:'no-alternative-within-detour'});continue;}
-      const path=reconstructDijkstra(graph,prev,startId,endId),key=path?.edgeIds?.join('|');
-      if(!path?.points?.length||seen.has(key)){diagnostics.rejected.push({edgeId:forbidden,reason:'same-edge-sequence'});continue;}seen.add(key);
-      const access=pathAccessStats(graph,path.edgeIds),realm=realmPathStats(graph,path.edgeIds);
-      if(access.usesConditionalPrivateAccess||realm.syntheticM>.01){diagnostics.rejected.push({edgeId:forbidden,reason:'private-or-synthetic'});continue;}
-      const hash=geometryHash(path.points),id='graph-alternative-'+hash,joins=path.edgeIds.map(id=>graph.edges.get(id)).filter(e=>e?.sourceJunctionLink),unverified=joins.some(e=>e.distanceM>2);
+      if(nodes.at(-1)!==end||!steps.length){reject('incomplete-source-path');return null;}
+      if(distance>cap+.01){diagnostics.detourRejects++;reject('detour-reject',{distanceM:distance});return null;}
+      const path=pathFromEdgeSteps(graph,steps),access=pathAccessStats(graph,path.edgeIds),realm=realmPathStats(graph,path.edgeIds);
+      if(access.usesConditionalPrivateAccess||realm.syntheticM>.01){reject('private-or-synthetic');return null;}
+      return {...path,steps,nodes,access,realm};
+    };
+    const finish=()=>{
+      diagnostics.candidateCount=output.length;diagnostics.distinctPathsAccepted=output.length;
+      diagnostics.termination=diagnostics.reason||'frontier-exhausted';diagnostics.elapsedMs=Math.max(0,nowMs()-started);
+      diagnostics.pendingPaths=pending.size;return {candidates:output,diagnostics};
+    };
+    if(!graph?.nodes?.has(start)||!graph.nodes.has(end)||!Number.isFinite(cap)||cap<=0||start===end){stop('invalid-baseline');return finish();}
+    const baseSteps=[];let node=start;
+    for(const id of baseline?.graphMeta?.edgeIds||[]){
+      const edge=graph.edges.get(id),to=edge&&(String(edge.a)===node?String(edge.b):String(edge.b)===node?String(edge.a):null);
+      if(!to){stop('invalid-baseline');return finish();}baseSteps.push({edgeId:id,from:node,to});node=to;
+      if(baseSteps.length>limits.maxPathEdges){stop('path-size-cap');return finish();}
+    }
+    const seed=routeFromSteps(baseSteps);if(!seed){stop('invalid-baseline');return finish();}
+    ranked.push(seed);discovered.add(pathKey(seed));
+    const shortestSpur=async(spur,rootDistance,bannedNodes,bannedArcs)=>{
+      if(!check())return null;if(diagnostics.probes>=limits.maxProbes){stop('probe-cap');return null;}diagnostics.probes++;
+      const dist=new Map([[spur,0]]),prev=new Map(),settled=new Set(),heap=new MinHeap((a,b)=>a.t-b.t||textCompare(a.node,b.node));heap.push({node:spur,t:0});
+      while(heap.size){
+        if(!check())return null;const cur=heap.pop();if(settled.has(cur.node)||cur.t!==dist.get(cur.node))continue;
+        if(diagnostics.expandedStates>=limits.maxExpandedStates){stop('expanded-state-cap');return null;}diagnostics.expandedStates++;settled.add(cur.node);
+        if(cur.node===end){
+          const steps=[];let at=end;
+          while(at!==spur){const p=prev.get(at);if(!p||steps.length>=limits.maxPathEdges){stop('path-size-cap');return null;}steps.push({edgeId:p.edgeId,from:p.node,to:at});at=p.node;}
+          return steps.reverse();
+        }
+        let refs=sortedRefs.get(cur.node);
+        if(!refs){
+          const raw=graph.adjacency.get(cur.node)||[];
+          if(raw.length>limits.maxEdgeScans-diagnostics.edgeScans){stop('edge-scan-cap');return null;}
+          refs=raw.slice().sort((a,b)=>textCompare(String(a.edgeId),String(b.edgeId))||textCompare(String(a.to),String(b.to)));sortedRefs.set(cur.node,refs);
+        }
+        for(const ref of refs){
+          if(!check())return null;if(diagnostics.edgeScans>=limits.maxEdgeScans){stop('edge-scan-cap');return null;}diagnostics.edgeScans++;
+          const next=String(ref.to),edge=graph.edges.get(ref.edgeId);
+          if(!edgeAllowed(edge)||!graph.nodes.has(next)||next===cur.node||
+             !((String(edge.a)===cur.node&&String(edge.b)===next)||(String(edge.b)===cur.node&&String(edge.a)===next))){diagnostics.safetyEdgeRejects++;continue;}
+          if(bannedNodes.has(next)||bannedArcs.has(arcKey(cur.node,ref.edgeId,next))||settled.has(next))continue;
+          const distance=cur.t+edge.distanceM;
+          if(rootDistance+distance>cap+.01){diagnostics.detourEdgePrunes++;diagnostics.detourRejects++;
+            reject('detour-reject',{stage:'spur-prefix',prefixDistanceM:rootDistance+distance,edgeId:edge.id});continue;}
+          if(distance>=(dist.get(next)??Infinity)-1e-9)continue;
+          dist.set(next,distance);prev.set(next,{node:cur.node,edgeId:ref.edgeId});heap.push({node:next,t:distance});
+        }
+        if(diagnostics.expandedStates%120===0)await new Promise(resolve=>setTimeout(resolve,0));
+      }
+      reject('no-spur-path-within-scope',{spurNode:spur});return null;
+    };
+    const accept=path=>{
+      const hash=geometryHash(path.points),stem='graph-alternative-'+hash,id=usedIds.has(stem)?stem+'-'+(output.length+1):stem;usedIds.add(id);
+      const joins=path.edgeIds.map(id=>graph.edges.get(id)).filter(e=>e?.sourceJunctionLink),unverified=joins.some(e=>e.distanceM>2),key=pathKey(path);
       output.push({id,stableCandidateId:id+':'+key,geometryHash:hash,kind:'graph-alternative',points:path.points,distanceM:path.distanceM,durationS:path.distanceM/speed,
         walkability:!unverified&&baseline.walkability?baseline.walkability:{state:unverified?'partial':'source-supported',reason:unverified?'unverified source junction geometry':'existing accessible pedestrian source edges',syntheticM:0},
-        graphMeta:{...baseline.graphMeta,...access,edgeIds:path.edgeIds,productionGraphMutated:false,topologyAlternative:true,realmSyntheticDistanceM:0,realmProvenance:realm,sourceTopologyJoinDistanceM:joins.reduce((n,e)=>n+e.distanceM,0),sourceTopologyJoinCount:joins.length,requiresJunctionGeometryConfirmation:unverified,shadeSearchComplete:false}});
-      if(output.length>=maxCandidates){diagnostics.complete=false;diagnostics.reason='candidate-cap';break;}
+        graphMeta:{...baseline.graphMeta,...path.access,edgeIds:path.edgeIds,productionGraphMutated:false,topologyAlternative:true,realmSyntheticDistanceM:0,realmProvenance:path.realm,
+          sourceTopologyJoinDistanceM:joins.reduce((n,e)=>n+e.distanceM,0),sourceTopologyJoinCount:joins.length,requiresJunctionGeometryConfirmation:unverified,shadeSearchComplete:false}});
+      diagnostics.accepted.push({edgeIds:path.edgeIds.slice(),distanceM:path.distanceM,loopless:true,sourceGeometryOnly:true});
+    };
+    while(output.length<limits.maxCandidates&&check()){
+      const previous=ranked.at(-1);let rootDistance=0;
+      for(let i=0;i<previous.steps.length;i++){
+        if(!check())break;
+        const root=previous.steps.slice(0,i),bannedNodes=new Set(previous.nodes.slice(0,i)),bannedArcs=new Set();
+        for(const path of ranked)if(path.steps.length>i&&root.every((s,j)=>s.edgeId===path.steps[j].edgeId&&s.from===path.steps[j].from&&s.to===path.steps[j].to)){
+          const s=path.steps[i];bannedArcs.add(arcKey(s.from,s.edgeId,s.to));
+        }
+        const spur=await shortestSpur(previous.nodes[i],rootDistance,bannedNodes,bannedArcs);
+        if(spur){
+          diagnostics.pathsConsidered++;const path=routeFromSteps(root.concat(spur));
+          if(path){const key=pathKey(path);if(discovered.has(key)){diagnostics.sameEdgeSequenceRejects++;reject('same-edge-sequence',{edgeIds:path.edgeIds.slice()});}
+            else{discovered.add(key);pending.set(key,path);}}
+        }
+        rootDistance+=graph.edges.get(previous.steps[i].edgeId).distanceM;
+      }
+      if(!pending.size)break;
+      const choices=Array.from(pending.values()).sort((a,b)=>a.distanceM-b.distanceM||textCompare(pathKey(a),pathKey(b)));
+      const next=choices[0];pending.delete(pathKey(next));ranked.push(next);accept(next);
+      if(output.length>=limits.maxCandidates){stop('candidate-cap');break;}
     }
-    if(probes.length>maxProbes&&diagnostics.complete){diagnostics.complete=false;diagnostics.reason='probe-cap';}
-    output.sort((a,b)=>a.distanceM-b.distanceM);diagnostics.candidateCount=output.length;
-    return {candidates:output,diagnostics};
+    // A truncated spur round may already contain fully validated paths. Keep
+    // them as bounded candidates; never promote partial work to search proof.
+    if(diagnostics.reason&&output.length<limits.maxCandidates){
+      for(const path of Array.from(pending.values()).sort((a,b)=>a.distanceM-b.distanceM||textCompare(pathKey(a),pathKey(b)))){
+        if(output.length>=limits.maxCandidates)break;accept(path);pending.delete(pathKey(path));
+      }
+    }
+    return finish();
   }
   const routeTopologyContexts=new WeakMap();
   function topologyContext(result,graph){routeTopologyContexts.set(result,graph);return result;}
