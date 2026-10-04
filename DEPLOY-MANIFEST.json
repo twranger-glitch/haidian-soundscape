@@ -1,12 +1,12 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.12-bounded-topology-candidate-diversity-prelive",
-  "createdAt": "2026-10-04T06:30:00Z",
+  "release": "dev37.9.9.13-pedestrian-direction-preservation-prelive",
+  "createdAt": "2026-10-04T11:29:50.736769Z",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "dev37.9.9.11 Realm-safety-sealed production baseline",
-  "scope": "bounded Yen/spur-style topology alternative enumeration on existing safe directed source graph; no Realm, terminal, provenance, shade, comparator, route-exposure dedupe, or graph acquisition policy change",
+  "integrationBaseline": "dev37.9.9.12 bounded-topology candidate diversity + route core dev37.9.9.11",
+  "scope": "preserve walking-specific directed adjacency through graph transforms and use true incoming traversal for reverse distance bounds; no Realm, terminal, shade, comparator, source-scope, dedupe, or Yen-policy change",
   "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.12",
+    "src/pedestrian-graph-routing.js": "core=37.9.9.13",
     "src/route-exposure.js": "core=37.9.9.11",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
@@ -14,12 +14,13 @@
     "src/shademap-integration.js": "core=37.9.7"
   },
   "verification": {
-    "regressionPassed": 294,
+    "regressionPassed": 384,
     "regressionFailed": 0,
-    "testSuitesExitZero": "14/14",
-    "syntaxPassed": 21,
-    "syntaxFailed": 0,
-    "freshApply": "PASS",
+    "testSuitesExitZero": "17/17",
+    "directionCases": "38/38 PASS",
+    "mappedHandoffCases": "18/18 PASS",
+    "sourceScopeCases": "34/34 PASS",
+    "topologyDiversityCases": "38/38 PASS",
     "publicWebsite": "NOT RUN — deploy required",
     "liveBrowser": "NOT RUN — deploy required"
   },
@@ -59,6 +60,10 @@
     "RELEASE-dev37.9.9.12.md": {
       "bytes": 1978,
       "sha256": "5f3ed87de52fdcfa8cf3969a9a82be6402d9afe5a9ea3da9321a921cced9cd31"
+    },
+    "RELEASE-dev37.9.9.13.md": {
+      "bytes": 2549,
+      "sha256": "10114df7f225b595371f1ef983a5f9d12e682758a24ee4aa86dc7eebc61d42e9"
     },
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
@@ -696,6 +701,18 @@
       "bytes": 497,
       "sha256": "21e42ea48d4ecb222c5a8c2035ae00615dc061e8a46674cb1c5a3096b983353a"
     },
+    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
+      "bytes": 27966,
+      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
+      "bytes": 72091,
+      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
+    },
+    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
+      "bytes": 1124,
+      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
+    },
     "data/nationwide-sample/runtime/graph-hgr2/xp0173_yp0161.hgr2": {
       "bytes": 628,
       "sha256": "34852495598950dabf206146fd36f9e57051adf240c7439967a5abb8c102605b"
@@ -752,21 +769,9 @@
       "bytes": 872,
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
-    "data/nationwide-sample/runtime/graph/xp0043_yp0040.hgr": {
-      "bytes": 27966,
-      "sha256": "8d96eb93b056730defa502d3cfd34e83cb2dda1509c2917490fd8dcaad5c09ca"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0040.hgr": {
-      "bytes": 72091,
-      "sha256": "cfcc3cedf7ad3a54c3bdad819b6ed8b15a270e6836913b7cb98069896b15195a"
-    },
-    "data/nationwide-sample/runtime/graph/xp0044_yp0041.hgr": {
-      "bytes": 1124,
-      "sha256": "f1debe29282b40debdc79b4213b6a8782a0d96ce3d1f549ecbb40165a7684e4c"
-    },
     "index.html": {
       "bytes": 630365,
-      "sha256": "ca253695cbcfa4fb7c48881ca0a15fb70b4362390fad5ef717364326af6ff9df"
+      "sha256": "f4b037df2db1b1bc909ffb0d7d912c558304ee1db8990ee9f4edcb11f6a08672"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -869,8 +874,8 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 532023,
-      "sha256": "83bad519905b980f0da42bc83f4b2367ae674c7bcd3d1acd4737245c0454daa6"
+      "bytes": 536563,
+      "sha256": "b830e06ac7ca4f7f223f07c8c865f6af4d39ffdfe4c87c9139f71f63c7fd026d"
     },
     "src/route-exposure.js": {
       "bytes": 370996,

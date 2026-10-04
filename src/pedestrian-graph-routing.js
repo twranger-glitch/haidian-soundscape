@@ -466,6 +466,8 @@
 
   function addRawNeighbor(adjacency, a, b, meta) {
     if (!adjacency.has(a)) adjacency.set(a, new Map());
+    // Sinks still belong to the directed source graph; no reverse arc is added.
+    if (!adjacency.has(b)) adjacency.set(b, new Map());
     const map = adjacency.get(a);
     const existing = map.get(b);
     if (!existing || meta.distanceM < existing.distanceM) map.set(b, meta);
@@ -518,6 +520,52 @@
     return String(a) < String(b) ? `${a}|${b}` : `${b}|${a}`;
   }
 
+  // Actual adjacency is the pedestrian permission source of truth. Masks are
+  // local to a transformation: 1 = edge.a -> edge.b, 2 = edge.b -> edge.a.
+  // Never infer permission from motor tags or fabricate a missing reverse arc.
+  function fineEdgeDirectionIndex(graph) {
+    const masks = new Map();
+    for (const [id] of graph?.edges || []) masks.set(String(id), 0);
+    for (const [from, refs] of graph?.adjacency || []) for (const ref of refs || []) {
+      const id = String(ref.edgeId), edge = graph.edges.get(id);
+      if (!edge) continue;
+      const a = String(edge.a), b = String(edge.b), to = String(ref.to);
+      if (String(from) === a && to === b) masks.set(id, masks.get(id) | 1);
+      if (String(from) === b && to === a) masks.set(id, masks.get(id) | 2);
+    }
+    return masks;
+  }
+
+  function fineEdgeDirectionMask(graph, edge) {
+    const id = String(edge.id), a = String(edge.a), b = String(edge.b);
+    const has = (from, to) => (graph.adjacency.get(from) || []).some(ref => String(ref.edgeId) === id && String(ref.to) === to);
+    return (has(a, b) ? 1 : 0) | (has(b, a) ? 2 : 0);
+  }
+
+  function addFineTraversalRefs(adjacency, edge, mask) {
+    const a = String(edge.a), b = String(edge.b), edgeId = String(edge.id);
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    if (!adjacency.has(b)) adjacency.set(b, []);
+    if (mask & 1) adjacency.get(a).push({ edgeId, to:b });
+    if (mask & 2) adjacency.get(b).push({ edgeId, to:a });
+  }
+
+  function distanceTraversalAdjacency(graph, reverse, options = {}) {
+    if (!reverse) return graph.adjacency;
+    // Transposed traversal index for bounds only, not new routable graph arcs.
+    const incoming = new Map();
+    let scanned = 0;
+    if (options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
+    for (const [from, refs] of graph.adjacency) for (const ref of refs || []) {
+      if (++scanned % 600 === 0 && options.shouldCancel?.()) throw new Error('ROUTE_ANALYSIS_CANCELLED');
+      const to = String(ref.to), edge = graph.edges.get(ref.edgeId);
+      if (!edge) continue;
+      if (!incoming.has(to)) incoming.set(to, []);
+      incoming.get(to).push({ edgeId:ref.edgeId, to:String(from) });
+    }
+    return incoming;
+  }
+
   function contractGraph(raw, forcedTerminals = []) {
     // v9.0.0-dev4: build the undirected topology once.  The old code scanned
     // every adjacency list for every node to discover incoming links (O(V²)),
@@ -536,6 +584,14 @@
     const terminals = new Set(forcedTerminals.map(String));
     for (const [id, neighbors] of undirectedAdj) {
       if (neighbors.size !== 2) terminals.add(id);
+      else {
+        const [left, right] = neighbors;
+        // A change of permission inside a degree-2 chain is a real boundary.
+        // Keep partial legal movements at that node instead of intersecting
+        // away their geometry or creating a forbidden through movement.
+        const has = (a, b) => raw.adjacency.get(a)?.has(b) === true;
+        if (has(left, id) !== has(id, right) || has(right, id) !== has(id, left)) terminals.add(id);
+      }
     }
 
     // Pure cycles have no degree != 2 nodes. Seed one terminal per component.
@@ -568,7 +624,7 @@
       if (!adjacency.has(id)) adjacency.set(id, []);
     }
 
-    function addEdge(aId, bId, geometry, wayIds) {
+    function addEdge(aId, bId, geometry, wayIds, mask) {
       if (aId === bId || geometry.length < 2) return;
       let distanceM = 0;
       for (let i = 1; i < geometry.length; i += 1) distanceM += haversineM(geometry[i - 1], geometry[i]);
@@ -579,8 +635,7 @@
       const ids = Array.from(wayIds || []);
       const edge = { id, a: aId, b: bId, geometry, distanceM, wayIds: ids, tagsSummary: mergeWayTagSummaries(ids, raw.wayMeta) };
       edges.set(id, edge);
-      adjacency.get(aId).push({ edgeId: id, to: bId });
-      adjacency.get(bId).push({ edgeId: id, to: aId });
+      addFineTraversalRefs(adjacency, edge, mask);
     }
 
     for (const start of terminals) {
@@ -590,6 +645,8 @@
         if (visitedRaw.has(firstKey)) continue;
         const geometry = [raw.nodes.get(start), raw.nodes.get(first)].filter(Boolean).map((p) => ({ lat: p.lat, lng: p.lng }));
         const wayIds = new Set();
+        let forward = raw.adjacency.get(start)?.has(first) === true;
+        let backward = raw.adjacency.get(first)?.has(start) === true;
         const directMeta = raw.adjacency.get(start)?.get(first) || raw.adjacency.get(first)?.get(start);
         if (directMeta?.wayId) wayIds.add(directMeta.wayId);
         visitedRaw.add(firstKey);
@@ -602,6 +659,8 @@
           const next = choices[0];
           const key = undirectedKey(cur, next);
           if (visitedRaw.has(key)) break;
+          forward = forward && raw.adjacency.get(cur)?.has(next) === true;
+          backward = backward && raw.adjacency.get(next)?.has(cur) === true;
           const meta = raw.adjacency.get(cur)?.get(next) || raw.adjacency.get(next)?.get(cur);
           if (meta?.wayId) wayIds.add(meta.wayId);
           visitedRaw.add(key);
@@ -610,7 +669,7 @@
           prev = cur;
           cur = next;
         }
-        if (terminals.has(cur)) addEdge(start, cur, geometry, wayIds);
+        if (terminals.has(cur)) addEdge(start, cur, geometry, wayIds, (forward ? 1 : 0) | (backward ? 2 : 0));
       }
     }
 
@@ -663,6 +722,7 @@
     const nodes = new Map();
     const adjacency = new Map();
     const edges = new Map();
+    const directions = fineEdgeDirectionIndex(contracted);
     let virtualCounter = 0;
     let edgeCounter = 0;
 
@@ -682,8 +742,7 @@
         sourceEdgeId: source.id, sourceDistanceM: source.distanceM
       };
       edges.set(id, edge);
-      adjacency.get(String(aId)).push({ edgeId: id, to: String(bId) });
-      adjacency.get(String(bId)).push({ edgeId: id, to: String(aId) });
+      addFineTraversalRefs(adjacency, edge, directions.get(String(source.id)) || 0);
     }
 
     for (const [id, node] of contracted.nodes) addNode(id, node, { sourceNodeId: id });
@@ -751,12 +810,13 @@
   function dijkstraTimes(graph, startId, speedMps, reverse = false) {
     const dist = new Map([[String(startId), 0]]);
     const prev = new Map();
+    const traversal = distanceTraversalAdjacency(graph, reverse);
     const heap = new MinHeap((a, b) => a.t - b.t);
     heap.push({ node: String(startId), t: 0 });
     while (heap.size) {
       const cur = heap.pop();
       if (cur.t !== dist.get(cur.node)) continue;
-      for (const ref of graph.adjacency.get(cur.node) || []) {
+      for (const ref of traversal.get(cur.node) || []) {
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
         const next = ref.to;
@@ -774,6 +834,7 @@
   async function dijkstraTimesResponsive(graph, startId, speedMps, reverse = false, options = {}) {
     const dist = new Map([[String(startId), 0]]);
     const prev = new Map();
+    const traversal = distanceTraversalAdjacency(graph, reverse, options);
     const heap = new MinHeap((a, b) => a.t - b.t);
     const cooperativeYield = makeCooperativeYielder(options);
     const every = Math.max(40, Number(options.yieldEveryDijkstra || config.yieldEveryDijkstra || 180));
@@ -794,7 +855,7 @@
           yieldWaitMs += Math.max(0, nowMs() - yieldStarted);
         }
       }
-      for (const ref of graph.adjacency.get(cur.node) || []) {
+      for (const ref of traversal.get(cur.node) || []) {
         const edge = graph.edges.get(ref.edgeId);
         if (!edge) continue;
         const next = ref.to;
@@ -1783,14 +1844,16 @@
     const slackS = Math.max(0, Number(options.externalGraphPruneSlackSec ?? config.externalGraphPruneSlackSec ?? 3));
     let omittedEdges = 0, minimumOmittedLowerBoundS = Infinity;
     const violations = [];
+    const directions = fineEdgeDirectionIndex(graph);
     for (const [id, edge] of graph?.edges || []) {
       const key = String(id);
       if (keep.has(key)) continue;
       omittedEdges += 1;
       const a = String(edge.a), b = String(edge.b);
       const edgeS = Number(edge.distanceM || 0) / Math.max(0.1, Number(speedMps) || 1.25);
-      const ab = Number(distA.get(a)) + edgeS + Number(distB.get(b));
-      const ba = Number(distA.get(b)) + edgeS + Number(distB.get(a));
+      const mask = directions.get(key) || 0;
+      const ab = mask & 1 ? Number(distA.get(a)) + edgeS + Number(distB.get(b)) : Infinity;
+      const ba = mask & 2 ? Number(distA.get(b)) + edgeS + Number(distB.get(a)) : Infinity;
       const lowerBoundS = Math.min(Number.isFinite(ab) ? ab : Infinity, Number.isFinite(ba) ? ba : Infinity);
       minimumOmittedLowerBoundS = Math.min(minimumOmittedLowerBoundS, lowerBoundS);
       if (Number.isFinite(lowerBoundS) && lowerBoundS <= limitS + 1e-9) {
@@ -2244,6 +2307,24 @@
   function fineGraphComponentIndex(graph) {
     const byNode = new Map();
     const components = new Map();
+    // Component selection is weak connectivity, not traversal permission.
+    // Include incoming incidences so a sink's insertion order cannot detach
+    // it from its source component. Routing still uses directed adjacency.
+    const weakNeighbors = new Map();
+    const ensureWeak = id => { if (!weakNeighbors.has(id)) weakNeighbors.set(id, new Set()); };
+    for (const [rawId, refs] of graph?.adjacency || []) {
+      const nodeId = String(rawId); ensureWeak(nodeId);
+      for (const ref of refs || []) {
+        const next = String(typeof ref === 'string' ? (() => {
+          const e = graph?.edges?.get?.(ref);
+          if (!e) return '';
+          const a = String(e.a ?? e.from ?? ''), b = String(e.b ?? e.to ?? '');
+          return a === nodeId ? b : (b === nodeId ? a : '');
+        })() : ref?.to ?? '');
+        if (!next || !graph?.nodes?.has?.(next)) continue;
+        ensureWeak(next); weakNeighbors.get(nodeId).add(next); weakNeighbors.get(next).add(nodeId);
+      }
+    }
     let serial = 0;
     for (const rawId of graph?.nodes?.keys?.() || []) {
       const start = String(rawId);
@@ -2255,13 +2336,7 @@
       for (let qi = 0; qi < queue.length; qi += 1) {
         const nodeId = queue[qi];
         component.nodeCount += 1;
-        for (const ref of graph?.adjacency?.get?.(nodeId) || []) {
-          const next = String(typeof ref === 'string' ? (() => {
-            const e = graph?.edges?.get?.(ref);
-            if (!e) return '';
-            const a = String(e.a ?? e.from ?? ''), b = String(e.b ?? e.to ?? '');
-            return a === nodeId ? b : (b === nodeId ? a : '');
-          })() : ref?.to ?? '');
+        for (const next of weakNeighbors.get(nodeId) || []) {
           if (!next || byNode.has(next) || !graph?.nodes?.has?.(next)) continue;
           byNode.set(next, id);
           queue.push(next);
@@ -3826,6 +3901,7 @@
 
   function splitSpecificFineEdgeAtPoint(graph, edgeId, point, label = 'repair') {
     const edge = graph?.edges?.get?.(String(edgeId));
+    const directionMask = edge ? fineEdgeDirectionMask(graph, edge) : 0;
     const P = asLatLng(point);
     if (!edge || !P) return null;
     const hit = nearestPointOnGeometry(P, edge.geometry);
@@ -3858,8 +3934,7 @@
       graph.edges.set(id, copy);
       if (!graph.adjacency.has(String(from))) graph.adjacency.set(String(from), []);
       if (!graph.adjacency.has(String(to))) graph.adjacency.set(String(to), []);
-      graph.adjacency.get(String(from)).push({ edgeId:id, to:String(to) });
-      graph.adjacency.get(String(to)).push({ edgeId:id, to:String(from) });
+      addFineTraversalRefs(graph.adjacency, copy, directionMask);
     };
     addPiece(aId, nodeId, split.before);
     addPiece(nodeId, bId, split.after);
@@ -4165,8 +4240,9 @@
 
   function copyGraphIntoRescueUnion(union,graph,prefix,source){
     const nodeMap=new Map();
+    const directions=fineEdgeDirectionIndex(graph);
     for(const [id0,node] of graph?.nodes||[]){const id=`${prefix}${String(id0)}`;nodeMap.set(String(id0),id);union.nodes.set(id,Object.assign({},node,{id,rescueSource:source,sourceNodeId:String(id0)}));union.adjacency.set(id,[]);}
-    for(const [eid0,e0] of graph?.edges||[]){const a=nodeMap.get(String(e0.a)),b=nodeMap.get(String(e0.b));if(!a||!b) continue;const id=`${prefix}e:${String(eid0)}`;const e=Object.assign({},e0,{id,a,b,geometry:(e0.geometry||[]).map((q)=>({lat:Number(q.lat),lng:Number(q.lng)})),wayIds:(e0.wayIds||[]).slice(),tagsSummary:e0.tagsSummary?JSON.parse(JSON.stringify(e0.tagsSummary)):{},rescueSource:source,sourceEdgeIdOriginal:String(eid0),productionGraphMutated:false});union.edges.set(id,e);union.adjacency.get(a).push({edgeId:id,to:b});union.adjacency.get(b).push({edgeId:id,to:a});}
+    for(const [eid0,e0] of graph?.edges||[]){const a=nodeMap.get(String(e0.a)),b=nodeMap.get(String(e0.b));if(!a||!b) continue;const id=`${prefix}e:${String(eid0)}`;const e=Object.assign({},e0,{id,a,b,geometry:(e0.geometry||[]).map((q)=>({lat:Number(q.lat),lng:Number(q.lng)})),wayIds:(e0.wayIds||[]).slice(),tagsSummary:e0.tagsSummary?JSON.parse(JSON.stringify(e0.tagsSummary)):{},rescueSource:source,sourceEdgeIdOriginal:String(eid0),productionGraphMutated:false});union.edges.set(id,e);addFineTraversalRefs(union.adjacency,e,directions.get(String(eid0))||0);}
     return nodeMap;
   }
 
@@ -7459,11 +7535,13 @@
     const limit = Number(detourLimitS) + slackS;
     const out = new Set();
     const distA = fromA?.dist || new Map(), distB = toB?.dist || new Map();
+    const directions = fineEdgeDirectionIndex(graph);
     for (const [id, edge] of graph?.edges || []) {
       const a = String(edge.a), b = String(edge.b);
       const edgeS = Number(edge.distanceM || 0) / Math.max(0.1, Number(speedMps) || 1.25);
-      const ab = Number(distA.get(a)) + edgeS + Number(distB.get(b));
-      const ba = Number(distA.get(b)) + edgeS + Number(distB.get(a));
+      const mask = directions.get(String(id)) || 0;
+      const ab = mask & 1 ? Number(distA.get(a)) + edgeS + Number(distB.get(b)) : Infinity;
+      const ba = mask & 2 ? Number(distA.get(b)) + edgeS + Number(distB.get(a)) : Infinity;
       if ((Number.isFinite(ab) && ab <= limit + 1e-9) || (Number.isFinite(ba) && ba <= limit + 1e-9)) out.add(String(id));
     }
     return out;
@@ -7475,6 +7553,7 @@
     const pathMax = Math.max(25, Number(options.pathMaxFineEdgeM || config.pathMaxFineEdgeM || 55));
     const keep = keepEdgeIds instanceof Set ? keepEdgeIds : new Set(graph.edges.keys());
     const nodes = new Map(), adjacency = new Map(), edges = new Map();
+    const directions = fineEdgeDirectionIndex(graph);
     let virtualCounter = 0, edgeCounter = 0;
     function addNode(id, point, meta = {}) {
       const key = String(id);
@@ -7495,8 +7574,7 @@
         nationwideSource: source?.nationwideSource === true
       });
       edges.set(id, edge);
-      adjacency.get(String(aId)).push({ edgeId:id, to:String(bId) });
-      adjacency.get(String(bId)).push({ edgeId:id, to:String(aId) });
+      addFineTraversalRefs(adjacency, edge, directions.get(String(source.id)) || 0);
     }
     for (const [edgeId, edge] of graph.edges) {
       if (!keep.has(String(edgeId))) continue;
@@ -7553,6 +7631,7 @@
     const hit = nearestGraphEdge(graph, P);
     if (!hit || hit.distanceM > maxM) return null;
     const edge = hit.edge;
+    const directionMask = fineEdgeDirectionMask(graph, edge);
     const split = splitGeometryAtHit(edge.geometry, hit);
     if (!split) return null;
     const endpointToleranceM = Math.max(0.5, Number(config.snapEndpointToleranceM || 1.5));
@@ -7576,8 +7655,7 @@
       const eid = `${edge.id}:snap:${String(label || 'P')}:${++edgeSerial}`;
       const e = Object.assign({}, edge, { id: eid, a: String(aId), b: String(bId), geometry: geometry.map((q) => ({ lat: q.lat, lng: q.lng })), distanceM: d });
       graph.edges.set(eid, e);
-      graph.adjacency.get(String(aId)).push({ edgeId: eid, to: String(bId) });
-      graph.adjacency.get(String(bId)).push({ edgeId: eid, to: String(aId) });
+      addFineTraversalRefs(graph.adjacency, e, directionMask);
     }
     addPiece(edge.a, id, split.before);
     addPiece(id, edge.b, split.after);
@@ -7598,7 +7676,15 @@
       if(!keep.has(String(id))) continue;
       const a=String(e.a),b=String(e.b); if(!ensureNode(a)||!ensureNode(b)) continue;
       const copy=Object.assign({},e,{id:String(id),geometry:(e.geometry||[]).map(q=>({lat:Number(q.lat),lng:Number(q.lng)})),wayIds:(e.wayIds||[]).slice(),tagsSummary:e.tagsSummary?JSON.parse(JSON.stringify(e.tagsSummary)):{}});
-      edges.set(String(id),copy); adjacency.get(a).push({edgeId:String(id),to:b}); adjacency.get(b).push({edgeId:String(id),to:a});
+      edges.set(String(id),copy);
+    }
+    // Copy the actual retained arcs, including their order/metadata; endpoint
+    // pairs alone do not authorize either traversal direction.
+    for (const [from, refs] of graph.adjacency) {
+      const key=String(from); if(!adjacency.has(key)) continue;
+      for (const ref of refs || []) if(edges.has(String(ref.edgeId))&&nodes.has(String(ref.to))) {
+        adjacency.get(key).push(Object.assign({},ref));
+      }
     }
     return {nodes,edges,adjacency,nationwideTileGraph:graph.nationwideTileGraph===true,preRefinedFineGraph:true,hgr2:graph.hgr2===true,productionGraphMutated:false,refinement:{preRefined:true,prunedBeforeSearch:true}};
   }
@@ -7609,17 +7695,18 @@
   // explicit, without adding connectivity between different source node IDs.
   function reconcileHgr2Geometry(source) {
     const graph=cloneFineGraphForExperimentalUse(source),ports=new Map();
+    const directions=fineEdgeDirectionIndex(source);
     graph.preRefinedFineGraph=true;graph.hgr2=true;
     graph.nodes=new Map();graph.edges=new Map();graph.adjacency=new Map();
     const report={sourceEdges:source.edges.size,portNodes:0,junctionLinks:0,junctionDistanceM:0,maxJunctionGapM:0,distanceCorrectionM:0,connectivity:'same-source-node-only; inherited unsurveyed straight transitions'};
     const port=(group,p)=>{const key=String(group)+'@'+Number(p.lat).toFixed(9)+','+Number(p.lng).toFixed(9);
       if(!graph.nodes.has(key)){graph.nodes.set(key,{...source.nodes.get(String(group)),id:key,lat:p.lat,lng:p.lng,sourceJunctionGroup:String(group)});graph.adjacency.set(key,[]);if(!ports.has(String(group)))ports.set(String(group),[]);ports.get(String(group)).push(key);}
       return key;};
-    const add=e=>{graph.edges.set(e.id,e);graph.adjacency.get(e.a).push({edgeId:e.id,to:e.b});graph.adjacency.get(e.b).push({edgeId:e.id,to:e.a});};
+    const add=(e,mask=3)=>{graph.edges.set(e.id,e);addFineTraversalRefs(graph.adjacency,e,mask);};
     for(const e of source.edges.values()){
       if(!e.geometry||e.geometry.length<2)continue;
       const geometry=e.geometry.map(p=>({lat:p.lat,lng:p.lng})),a=port(e.a,geometry[0]),b=port(e.b,geometry[geometry.length-1]),distanceM=routeDistanceM(geometry);
-      report.distanceCorrectionM+=distanceM-e.distanceM;add({...e,a,b,geometry,distanceM});
+      report.distanceCorrectionM+=distanceM-e.distanceM;add({...e,a,b,geometry,distanceM},directions.get(String(e.id))||0);
     }
     for(const [group,ids] of ports)for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
       const a=ids[i],b=ids[j],geometry=[graph.nodes.get(a),graph.nodes.get(b)].map(p=>({lat:p.lat,lng:p.lng})),distanceM=routeDistanceM(geometry);
