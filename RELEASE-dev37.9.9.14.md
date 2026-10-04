@@ -1,4 +1,4 @@
-# ASTRA dev37.9.9.14 — mapped-walk cycle contraction preservation (PRE-LIVE)
+# ASTRA dev37.9.9.14 — mapped-walk cycle contraction preservation (SEALED)
 
 Date: 2026-10-04
 
@@ -35,4 +35,13 @@ The Sol 6.1 patch was independently applied to the sealed dev37.9.9.13 productio
 
 ## Live gate
 
-This package is PRE-LIVE. It must pass a browser generic cycle representation gate plus the original Xiaoqiao preservation replay before sealing.
+Browser live acceptance passed on 2026-10-04.
+
+- generic three-parallel control preserved: 6 raw segments / 3 contracted edges / 3 candidates
+- figure-eight restored: 8 raw segments / 4 contracted edges / 4 candidates
+- single ring restored: 4 raw segments / 2 contracted edges / 2 candidates
+- directed ring preserved legal direction; reverse uses the long wrap rather than an illegal chord
+- no contracted self-loop representation introduced
+- Xiaoqiao original-endpoint replay preserved 52/52 HGR2 graph, 320.40162376093997 m fastest distance, one bounded-Yen alternative, explicit 8–10 m normalization consent, Realm terminal rejection and incomplete-source comparator state
+
+This release is **SEALED**.

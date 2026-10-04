@@ -1,13 +1,13 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.14-mapped-cycle-contraction-pre-live",
-  "createdAt": "2026-10-04T20:30:00+08:00",
+  "release": "dev37.9.9.15-candidate-dedupe-vertex-coverage-pre-live",
+  "createdAt": "2026-10-04T21:35:00+08:00",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "sealed dev37.9.9.13 pedestrian direction preservation + route core dev37.9.9.11",
-  "scope": "preserve source-backed mapped cycles through contractGraph using real source cycle-break terminals; no Realm, terminal, shade, comparator, source-scope, route dedupe, or Yen-policy change",
+  "integrationBaseline": "sealed graph core dev37.9.9.14 + sealed route core dev37.9.9.11",
+  "scope": "candidate near-corridor dedupe original-vertex coverage only; graph, Realm, terminal, endpoint normalization, provenance, shade, detour, comparator and Yen semantics unchanged",
   "cacheWiring": {
     "src/pedestrian-graph-routing.js": "core=37.9.9.14",
-    "src/route-exposure.js": "core=37.9.9.11",
+    "src/route-exposure.js": "core=37.9.9.15",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
     "src/own-shade-renderer.js": "core=37.9.7",
@@ -16,7 +16,7 @@
   "verification": {
     "regressionPassed": 424,
     "regressionFailed": 0,
-    "testSuitesExitZero": "18/18",
+    "testSuitesExitZero": "19/19",
     "cycleCases": "40/40 PASS",
     "directionCases": "38/38 PASS",
     "mappedHandoffCases": "18/18 PASS",
@@ -24,12 +24,20 @@
     "topologyDiversityCases": "38/38 PASS",
     "randomDirectedCycleStress": "250 cases / 16,597 all-pairs PASS",
     "publicWebsite": "NOT YET RUN — PRE-LIVE",
-    "liveBrowser": "NOT YET RUN — PRE-LIVE"
+    "liveBrowser": "NOT YET RUN — PRE-LIVE",
+    "liveGenericCycle": "PASS — parallel 6/3/3; figure-eight 8/4/4; ring 4/2/2; directed legal long-wrap preserved",
+    "liveXiaoqiao": "PASS — 52/52 graph; fastest 320.40162376093997 m; mapped/Realm/normalization/comparator semantics preserved",
+    "dedupeBaselineRed": "12 PASS / 10 FAIL (expected RED)",
+    "dedupePatched": "22/22 PASS"
   },
   "files": {
     "LIVE-ACCEPTANCE-dev37.9.9.13.md": {
       "bytes": 2102,
       "sha256": "89d107684976b0b23337bed8e230ef7329619f7023231bdfd4fb4eb879083aa1"
+    },
+    "LIVE-ACCEPTANCE-dev37.9.9.14.md": {
+      "bytes": 2024,
+      "sha256": "30df297ee9987d01d826a183087bcfbbda48069d408f323feeb6dc79e1400d97"
     },
     "RELEASE-dev37.6.md": {
       "bytes": 626,
@@ -72,8 +80,12 @@
       "sha256": "94a02eff7e400c60ef556871732a01301b6d41c36f5278f115038f9b7c4be819"
     },
     "RELEASE-dev37.9.9.14.md": {
-      "bytes": 2447,
-      "sha256": "b6676998407ead47acbe48a62e21a48f8354de200119dee72ddc2b0395a2f183"
+      "bytes": 3009,
+      "sha256": "f74f0a0b372a3be3abdc9ea0fb465fe9936df0b2f4d88254adb0e136e32b63cf"
+    },
+    "RELEASE-dev37.9.9.15.md": {
+      "bytes": 2633,
+      "sha256": "c1902b2760099db1c85945e2ebb62c057a71ad744638d10ef35f4690909f0b9a"
     },
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
@@ -781,7 +793,7 @@
     },
     "index.html": {
       "bytes": 630365,
-      "sha256": "57da96dae805df4bed015bd34e2038871e9d5928f5a7167fca82b562e899de8d"
+      "sha256": "1329c417725f8a6babd0b099884e4395c9c24699bbeb5505213133023527a3b4"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -888,8 +900,8 @@
       "sha256": "b39e343b4b0651d3af049350308ea4ab7b589617c308e18e5c9b04aaee889492"
     },
     "src/route-exposure.js": {
-      "bytes": 370996,
-      "sha256": "a60b2184151947f62db451df879938339d1cde0312f396e28ef6ae3ea74fc602"
+      "bytes": 373230,
+      "sha256": "deab55d84822c28e32ffbdcbfbfbaea4d6588adc060cc42b8172d8cca561aa34"
     },
     "src/shademap-integration.js": {
       "bytes": 390114,

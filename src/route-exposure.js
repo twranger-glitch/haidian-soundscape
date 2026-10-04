@@ -1098,6 +1098,39 @@
     const samplesA = buildSampleSegments(A, 8).map((x) => x.sample);
     const samplesB = buildSampleSegments(B, 8).map((x) => x.sample);
     let maxOffsetM = 0, sumOffsetM = 0, count = 0;
+    // Regular midpoint samples can miss a short excursion at an original
+    // vertex. Apply the existing maximum-offset gate to every vertex too;
+    // keep the mean-offset policy on its original distance-spaced samples.
+    let maxVertexWitnessOffsetM = 0;
+    for (const [vertices, target] of [[A, B], [B, A]]) {
+      const exactVertices = new Set(target.map(p => `${p.lat},${p.lng}`));
+      const spans = target.slice(1).map((b, i) => ({ a:target[i], b,
+        minLat:Math.min(target[i].lat,b.lat), maxLat:Math.max(target[i].lat,b.lat),
+        minLng:Math.min(target[i].lng,b.lng), maxLng:Math.max(target[i].lng,b.lng) }));
+      let witnessIndex = 0;
+      for (const point of vertices) {
+        if (exactVertices.has(`${point.lat},${point.lng}`)) continue;
+        // A nearby projection is sufficient positive evidence for the 4 m
+        // gate. Bounds only accelerate witness lookup; failure always falls
+        // back to the original exhaustive nearest projection (also at seams).
+        const latPad = 4 / 110540, lngPad = 4 / (111320 * Math.max(.2,Math.cos(point.lat*Math.PI/180)));
+        let witnessed = false;
+        for (let step = 0; step < spans.length; step += 1) {
+          const index = (witnessIndex + step) % spans.length, span = spans[index];
+          if (point.lat < span.minLat-latPad || point.lat > span.maxLat+latPad ||
+              point.lng < span.minLng-lngPad || point.lng > span.maxLng+lngPad) continue;
+          const d = Number(projectPointToSegment(point,span.a,span.b)?.distanceM ?? Infinity);
+          if (d <= 4) { maxVertexWitnessOffsetM = Math.max(maxVertexWitnessOffsetM,d); witnessed = true; witnessIndex = index; break; }
+        }
+        if (witnessed) continue;
+        const hit = nearestPointOnRoute(target, point);
+        const d = Number(hit?.distanceM ?? Infinity);
+        if (!Number.isFinite(d)) return { duplicate:false, reason:'projection-failed', distanceDeltaM };
+        maxOffsetM = Math.max(maxOffsetM, d);
+        if (d > 4) return { duplicate:false, reason:'corridor-offset', distanceDeltaM, maxOffsetM };
+        maxVertexWitnessOffsetM = Math.max(maxVertexWitnessOffsetM,d);
+      }
+    }
     for (const [samples, target] of [[samplesA, B], [samplesB, A]]) {
       for (const point of samples) {
         const hit = nearestPointOnRoute(target, point);
@@ -1109,7 +1142,8 @@
     }
     const meanOffsetM = count ? sumOffsetM / count : Infinity;
     const duplicate = maxOffsetM <= 4 && meanOffsetM <= 2.5;
-    return { duplicate, reason:duplicate?'geometry-proven-duplicate':'mean-offset', distanceDeltaM, maxOffsetM, meanOffsetM };
+    return { duplicate, reason:duplicate?'geometry-proven-duplicate':'mean-offset', distanceDeltaM, maxOffsetM, meanOffsetM,
+      vertexCoverageChecked:true, maxVertexWitnessOffsetM };
   }
 
   function dedupeCandidates(candidates, audit = null) {
