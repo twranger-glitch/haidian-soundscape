@@ -1,12 +1,12 @@
 {
   "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.13-pedestrian-direction-preservation-prelive",
-  "createdAt": "2026-10-04T11:29:50.736769Z",
+  "release": "dev37.9.9.14-mapped-cycle-contraction-pre-live",
+  "createdAt": "2026-10-04T20:30:00+08:00",
   "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "dev37.9.9.12 bounded-topology candidate diversity + route core dev37.9.9.11",
-  "scope": "preserve walking-specific directed adjacency through graph transforms and use true incoming traversal for reverse distance bounds; no Realm, terminal, shade, comparator, source-scope, dedupe, or Yen-policy change",
+  "integrationBaseline": "sealed dev37.9.9.13 pedestrian direction preservation + route core dev37.9.9.11",
+  "scope": "preserve source-backed mapped cycles through contractGraph using real source cycle-break terminals; no Realm, terminal, shade, comparator, source-scope, route dedupe, or Yen-policy change",
   "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.13",
+    "src/pedestrian-graph-routing.js": "core=37.9.9.14",
     "src/route-exposure.js": "core=37.9.9.11",
     "src/building-data-provider.js": "core=37.9.8.4",
     "src/nlsc-official-geometry.js": "core=37.9.7",
@@ -14,17 +14,23 @@
     "src/shademap-integration.js": "core=37.9.7"
   },
   "verification": {
-    "regressionPassed": 384,
+    "regressionPassed": 424,
     "regressionFailed": 0,
-    "testSuitesExitZero": "17/17",
+    "testSuitesExitZero": "18/18",
+    "cycleCases": "40/40 PASS",
     "directionCases": "38/38 PASS",
     "mappedHandoffCases": "18/18 PASS",
     "sourceScopeCases": "34/34 PASS",
     "topologyDiversityCases": "38/38 PASS",
-    "publicWebsite": "NOT RUN — deploy required",
-    "liveBrowser": "NOT RUN — deploy required"
+    "randomDirectedCycleStress": "250 cases / 16,597 all-pairs PASS",
+    "publicWebsite": "NOT YET RUN — PRE-LIVE",
+    "liveBrowser": "NOT YET RUN — PRE-LIVE"
   },
   "files": {
+    "LIVE-ACCEPTANCE-dev37.9.9.13.md": {
+      "bytes": 2102,
+      "sha256": "89d107684976b0b23337bed8e230ef7329619f7023231bdfd4fb4eb879083aa1"
+    },
     "RELEASE-dev37.6.md": {
       "bytes": 626,
       "sha256": "d98aea6d190896d55142dd90e76dde77aaf596e9b37a37ab15a341fee9bf73db"
@@ -62,8 +68,12 @@
       "sha256": "5f3ed87de52fdcfa8cf3969a9a82be6402d9afe5a9ea3da9321a921cced9cd31"
     },
     "RELEASE-dev37.9.9.13.md": {
-      "bytes": 2549,
-      "sha256": "10114df7f225b595371f1ef983a5f9d12e682758a24ee4aa86dc7eebc61d42e9"
+      "bytes": 2670,
+      "sha256": "94a02eff7e400c60ef556871732a01301b6d41c36f5278f115038f9b7c4be819"
+    },
+    "RELEASE-dev37.9.9.14.md": {
+      "bytes": 2447,
+      "sha256": "b6676998407ead47acbe48a62e21a48f8354de200119dee72ddc2b0395a2f183"
     },
     "RELEASE-dev37.9.9.6.1.md": {
       "bytes": 3147,
@@ -771,7 +781,7 @@
     },
     "index.html": {
       "bytes": 630365,
-      "sha256": "f4b037df2db1b1bc909ffb0d7d912c558304ee1db8990ee9f4edcb11f6a08672"
+      "sha256": "57da96dae805df4bed015bd34e2038871e9d5928f5a7167fca82b562e899de8d"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -874,8 +884,8 @@
       "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 536563,
-      "sha256": "b830e06ac7ca4f7f223f07c8c865f6af4d39ffdfe4c87c9139f71f63c7fd026d"
+      "bytes": 538076,
+      "sha256": "b39e343b4b0651d3af049350308ea4ab7b589617c308e18e5c9b04aaee889492"
     },
     "src/route-exposure.js": {
       "bytes": 370996,

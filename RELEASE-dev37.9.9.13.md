@@ -4,7 +4,7 @@ Date: 2026-10-04
 
 ## Scope
 
-This pre-live candidate fixes a generic pedestrian-direction safety defect in `src/pedestrian-graph-routing.js`.
+This sealed release fixes a generic pedestrian-direction safety defect in `src/pedestrian-graph-routing.js`.
 
 The raw OSM graph already respected walking-specific `oneway:foot`, but several downstream graph transformations reconstructed endpoint pairs as bidirectional and reverse-distance searches traversed outgoing rather than incoming arcs. This could make an explicitly illegal reverse mapped-walk route appear available and could make asymmetric to-B detour bounds incorrect.
 
@@ -33,7 +33,7 @@ No changes to:
 - dev37.9.9.12 bounded-Yen design
 - mapped-walk figure-eight / pure-cycle contraction loss
 
-## Mainline validation before live deploy
+## Mainline validation
 
 The Sol patch was applied to the complete sealed test environment with the dev37.9.9.12 graph baseline and dev37.9.9.11 route baseline.
 
@@ -46,4 +46,9 @@ The Sol patch was applied to the complete sealed test environment with the dev37
 - complete Realm / terminal / provenance / comparator / distance suites PASS
 - the residual-caster preservation hash gate was narrowed only for the 12 intentionally modified direction-related graph functions; all unrelated frozen functions remain protected and all semantic checks pass
 
-Live website acceptance is still required. This package is a PRE-LIVE candidate and must not be treated as sealed until the direction-specific live gate and Xiaoqiao preservation replay pass.
+Live website acceptance passed on 2026-10-04. The direction-specific generic gate passed, and the original Xiaoqiao A/B preservation replay retained the same conservative topology, terminal, normalization, Realm, mapped-walk, and comparator behavior. This release is sealed.
+
+
+## Live acceptance
+
+See `LIVE-ACCEPTANCE-dev37.9.9.13.md`.

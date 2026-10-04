@@ -594,7 +594,7 @@
       }
     }
 
-    // Pure cycles have no degree != 2 nodes. Seed one terminal per component.
+    // Pure cycles have no degree != 2 nodes. Seed a source terminal per component.
     const seenComponent = new Set();
     for (const id of undirectedAdj.keys()) {
       if (seenComponent.has(id)) continue;
@@ -610,7 +610,35 @@
           if (!seenComponent.has(n)) { seenComponent.add(n); stack.push(n); }
         }
       }
-      if (!hasTerminal && component.length) terminals.add(component[0]);
+      if (!hasTerminal && component.length) terminals.add(component.reduce((a, b) => a < b ? a : b));
+    }
+
+    // A maximal degree-2 chain can return to its own terminal (a ring, or
+    // one lobe at an articulation). Downstream routing/splitting expects
+    // distinct endpoints, so retain one additional REAL source vertex on
+    // each such chain. The normal contraction pass then emits two parallel
+    // source polylines, never a self-loop or a straight replacement chord.
+    // Each undirected source segment is checked at most once; newly retained
+    // terminals cannot create another closed chain.
+    const checkedChains = new Set();
+    for (const start of Array.from(terminals)) {
+      for (const first of undirectedAdj.get(start) || []) {
+        const firstKey = undirectedKey(start, first);
+        if (checkedChains.has(firstKey)) continue;
+        checkedChains.add(firstKey);
+        let prev = start, cur = first, cycleBreak = null;
+        while (!terminals.has(cur)) {
+          if (cycleBreak === null || cur < cycleBreak) cycleBreak = cur;
+          const next = Array.from(undirectedAdj.get(cur) || []).find(n => n !== prev);
+          if (next === undefined) break;
+          const key = undirectedKey(cur, next);
+          if (checkedChains.has(key)) break;
+          checkedChains.add(key);
+          prev = cur;
+          cur = next;
+        }
+        if (cur === start && cycleBreak !== null) terminals.add(cycleBreak);
+      }
     }
 
     const nodes = new Map();
@@ -652,8 +680,9 @@
         visitedRaw.add(firstKey);
         let prev = start;
         let cur = first;
-        let guard = 0;
-        while (!terminals.has(cur) && guard++ < 10000) {
+        // visitedRaw bounds this walk by source segment count. An arbitrary
+        // step cutoff would silently drop long, otherwise valid source chains.
+        while (!terminals.has(cur)) {
           const choices = Array.from(undirectedAdj.get(cur) || []).filter((n) => n !== prev);
           if (!choices.length) break;
           const next = choices[0];
