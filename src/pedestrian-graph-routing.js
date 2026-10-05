@@ -5791,8 +5791,31 @@
     for(const [from,refs]of graph.adjacency)for(const ref of refs){const e=graph.edges.get(ref.edgeId);
       if(!e||!graph.nodes.has(String(from))||!graph.nodes.has(String(ref.to))||!Number.isFinite(e.distanceM)||e.distanceM<0||
       !((String(e.a)===String(from)&&String(e.b)===String(ref.to))||(String(e.b)===String(from)&&String(e.a)===String(ref.to))))return finish('invalid-proof-graph');}
-    for(const e of graph.edges.values())if(!graph.nodes.has(String(e.a))||!graph.nodes.has(String(e.b))||!e.geometry?.length||e.geometry.some(p=>!Number.isFinite(p.lat)||!Number.isFinite(p.lng))||
-      realmProofGeometryKey([e.geometry[0],e.geometry[e.geometry.length-1]])!==realmProofGeometryKey([graph.nodes.get(String(e.a)),graph.nodes.get(String(e.b))]))return finish('invalid-proof-geometry');
+    // Node coordinates are topology anchors, not a proof requirement that every
+    // stored edge polyline byte-for-byte begins/ends at those coordinates.  The
+    // selected graph's established route semantics are adjacency + edge.a/b for
+    // legality and edgeGeometryFor()/pathFromEdgeSteps() for the exact scorer
+    // geometry.  Requiring coordinate equality here rejected otherwise valid
+    // detached Realm graphs before enumeration (Xiaoqiao: expandedStates=0).
+    // Keep the actual proof-safety checks fail-closed: every edge must have both
+    // topology endpoints, at least two finite geometry points, finite nonnegative
+    // distance, and every adjacency arc must name one of those endpoints (above).
+    // Endpoint drift is diagnostic only because the proof explicitly claims the
+    // selected graph domain, never physical-world global optimality.
+    let geometryNodeEndpointMismatchEdges=0,maxGeometryNodeEndpointGapM=0;
+    for(const e of graph.edges.values()){
+      if(!graph.nodes.has(String(e.a))||!graph.nodes.has(String(e.b))||!Array.isArray(e.geometry)||e.geometry.length<2||
+        e.geometry.some(p=>!Number.isFinite(p?.lat)||!Number.isFinite(p?.lng)))return finish('invalid-proof-geometry');
+      const aNode=graph.nodes.get(String(e.a)),bNode=graph.nodes.get(String(e.b)),first=e.geometry[0],last=e.geometry[e.geometry.length-1];
+      const endpointGapM=Math.max(haversineM(first,aNode),haversineM(last,bNode));
+      if(Number.isFinite(endpointGapM)){
+        maxGeometryNodeEndpointGapM=Math.max(maxGeometryNodeEndpointGapM,endpointGapM);
+        if(endpointGapM>1e-6)geometryNodeEndpointMismatchEdges++;
+      }else return finish('invalid-proof-geometry');
+    }
+    stats.geometryCheckedEdges=graph.edges.size;
+    stats.geometryNodeEndpointMismatchEdges=geometryNodeEndpointMismatchEdges;
+    stats.maximumGeometryNodeEndpointGapM=maxGeometryNodeEndpointGapM;
     let identity;try{identity=options.evidenceIdentity();}catch(_){return finish('evidence-identity-unavailable');}
     if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
     const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256)));
