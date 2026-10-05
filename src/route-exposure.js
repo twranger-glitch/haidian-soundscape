@@ -1739,7 +1739,9 @@
             serial,includeHeat:false}),
           maxProofTotalMs:Math.floor(clamp(options.realmProofTotalMs,1,24000,12000)),
           maxProofSliceStates:Math.floor(clamp(options.realmProofSliceStates,1,2048,256)),
-          maxProofSliceMs:Math.floor(clamp(options.realmProofSliceMs,1,1000,100))
+          maxProofSliceMs:Math.floor(clamp(options.realmProofSliceMs,1,1000,100)),
+          supportsPrefixLowerBound:true,
+          maxProofPrefixLowerBoundRoutes:Math.floor(clamp(options.realmProofPrefixLowerBoundRoutes,1,4096,768))
         };
         const maxSlices=Math.floor(clamp(options.realmProofMaxSlices,1,128,128));
         let continuation;

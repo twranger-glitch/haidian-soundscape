@@ -5749,10 +5749,11 @@
   // dense scorer/snapshot as W. It may fail closed long before exhaustion.
   const realmGlobalProofHandle = Symbol('realm-global-proof-handle');
   const realmGlobalProofRecords = new WeakMap();
-  // dev168: only the exact yielded proof object authenticates the private DFS.
+  // dev169: exact yielded proof objects still authenticate the private DFS;
+  // this revision adds exact-geometry evidence reuse plus optional exact-prefix sun pruning.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev168-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev169-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5853,7 +5854,9 @@
     if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
     const integer=(value,fallback,maximum)=>Math.floor(Math.max(1,Math.min(maximum,Number(value)||fallback)));
     const maxStates=integer(options.maxProofStates,32000,64000),maxRoutes=integer(options.maxProofRoutes,256,256),
-      maxLowerRoutes=integer(options.maxProofLowerBoundRoutes,4000,4000),maxWitnesses=integer(options.maxProofWitnesses,128,256);
+      maxLowerRoutes=integer(options.maxProofLowerBoundRoutes,4000,4000),maxWitnesses=integer(options.maxProofWitnesses,128,256),
+      prefixLowerEnabled=options.supportsPrefixLowerBound===true,
+      maxPrefixLowerRoutes=integer(options.maxProofPrefixLowerBoundRoutes,768,4096);
     // Existing callers without an explicit cumulative budget keep their original
     // deadline. The route layer explicitly configures a bounded multi-slice run.
     const totalMs=integer(options.maxProofTotalMs,state?.totalMs||Math.max(1,Math.min(12000,scope.deadline-started)),24000);
@@ -5862,7 +5865,7 @@
       realmProofGeometryKey(candidate.points),Number(candidate.analysis?.summary?.directSunSeconds),
       Number(candidate.analysis?.summary?.unknownSeconds),Number(candidate.analysis?.summary?.directSunSeconds)+Number(candidate.analysis?.summary?.unknownSeconds),
       scope.departureMs,scope.speedMps,scope.detourLimitS,.5,scope.maxSyntheticM,scope.deadline,identity,realmFrontierProofAlgorithm,
-      maxStates,maxRoutes,maxLowerRoutes,maxWitnesses,totalMs]);
+      maxStates,maxRoutes,maxLowerRoutes,maxWitnesses,totalMs,prefixLowerEnabled,maxPrefixLowerRoutes]);
     const invariant={scope,graph,materializer:scope.materializeProofWitnessCandidate,
       evaluateRoute:options.evaluateRoute,evaluateLower:options.evaluateRouteLowerBound,signal:options.signal,
       winnerGeometry:realmProofGeometryKey(candidate.points),
@@ -5874,10 +5877,13 @@
     }else{
       if(nowMs()>=scope.deadline)return finish('deadline');
       state={invariant,stats,started,totalMs,deadline:options.maxProofTotalMs===undefined?Math.min(scope.deadline,started+totalMs):started+totalMs,
-        resumeSlices:1,workMs:0,witnessRecords:[],witnessGeometryKeys:new Set(),minimum:Infinity,initialized:false};
+        resumeSlices:1,workMs:0,witnessRecords:[],witnessGeometryKeys:new Set(),minimum:Infinity,initialized:false,
+        routeLowerByGeometry:new Map(),routeIntervalByGeometry:new Map()};
       stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.witnessCap=maxWitnesses;
       stats.totalBudgetMs=totalMs;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;
       stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;
+      stats.completeGeometryLowerCacheHits=0;stats.completeGeometryIntervalCacheHits=0;
+      stats.prefixLowerBoundRouteCap=maxPrefixLowerRoutes;stats.prefixLowerBoundRouteCalls=0;stats.prefixSunSubtreePrunes=0;
     }
     stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
     const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
@@ -5887,7 +5893,9 @@
     const check=()=>{if(options.signal?.aborted||options.shouldCancel?.())stop('cancelled');else if(nowMs()>=state.deadline)stop('deadline');else if(options.evidenceIdentity()!==identity)stop('evidence-context-changed');if(reason)throw new Error(reason);};
     const onAbort=()=>stop('cancelled');options.signal?.addEventListener('abort',onAbort,{once:true});
     timer=setTimeout(()=>stop('deadline'),Math.max(0,state.deadline-nowMs()));
-    const getInterval=async(path)=>{
+    const getInterval=async(path,allowGeometryCache=true)=>{
+      const geometryKey=realmProofGeometryKey(path.points),cached=allowGeometryCache?state.routeIntervalByGeometry.get(geometryKey):null;
+      if(cached){stats.completeGeometryIntervalCacheHits++;return cached;}
       check();if(stats.evidenceCalls>=maxRoutes)stop('evidence-cap');check();stats.evidenceCalls++;
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRoute(path.points,{signal:controller.signal})),stopped]);check();
       const s=result?.summary,lo=s?.directSunSeconds,unk=s?.unknownSeconds,walk=s?.walkSeconds,failure=s?.sourceFailureDistanceM;
@@ -5895,20 +5903,35 @@
       if(typeof lo!=='number'||!Number.isFinite(lo)||lo<0||typeof unk!=='number'||!Number.isFinite(unk)||unk<0||
         typeof walk!=='number'||!Number.isFinite(walk)||walk<0||lo+unk>walk+1e-7||
         typeof failure!=='number'||!Number.isFinite(failure)||failure!==0)return null;
-      return {lower:lo,upper:lo+unk};
+      const value={lower:lo,upper:lo+unk};if(allowGeometryCache)state.routeIntervalByGeometry.set(geometryKey,value);return value;
     };
-    const getLowerOnly=async(path)=>{
-      if(typeof options.evaluateRouteLowerBound!=='function')return null;
-      check();if(stats.lowerBoundRouteCalls>=maxLowerRoutes)stop('lower-bound-route-cap');check();stats.lowerBoundRouteCalls++;
-      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,{signal:controller.signal,stopAboveSeconds:threshold})),stopped]);check();
+    const normalizeLowerResult=result=>{
       const lo=Number(result?.lowerSeconds),processedDistanceM=Number(result?.processedDistanceM),totalDistanceM=Number(result?.totalDistanceM);
-      stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
       if(!Number.isFinite(lo)||lo<0)return null;
       const separated=result?.separated===true&&lo>threshold+1e-7;
       return {lower:lo,separated,complete:result?.complete===true,
         processedDistanceM:Number.isFinite(processedDistanceM)&&processedDistanceM>=0?processedDistanceM:null,
         totalDistanceM:Number.isFinite(totalDistanceM)&&totalDistanceM>=0?totalDistanceM:null};
     };
+    const scoreLowerOnly=async(path,kind)=>{
+      if(typeof options.evaluateRouteLowerBound!=='function')return null;
+      const geometryKey=realmProofGeometryKey(path.points);
+      if(kind==='complete'){
+        const cached=state.routeLowerByGeometry.get(geometryKey);
+        if(cached){stats.completeGeometryLowerCacheHits++;return cached;}
+        check();if(stats.lowerBoundRouteCalls>=maxLowerRoutes)stop('lower-bound-route-cap');check();stats.lowerBoundRouteCalls++;
+      }else{
+        if(!prefixLowerEnabled||stats.prefixLowerBoundRouteCalls>=maxPrefixLowerRoutes)return null;
+        stats.prefixLowerBoundRouteCalls++;
+      }
+      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,{signal:controller.signal,stopAboveSeconds:threshold})),stopped]);check();
+      stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
+      const value=normalizeLowerResult(result);
+      if(kind==='complete'&&value)state.routeLowerByGeometry.set(geometryKey,value);
+      return value;
+    };
+    const getLowerOnly=path=>scoreLowerOnly(path,'complete');
+    const getPrefixLowerOnly=path=>scoreLowerOnly(path,'prefix');
     const proofRecord=()=>({scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
       complete:stats.complete===true,frontierComplete:stats.frontierComplete===true,
       witnesses:witnessRecords.map(r=>Object.assign({},r,{witnessSteps:r.witnessSteps.map(s=>({...s}))}))});
@@ -5950,16 +5973,17 @@
       // substitute graph replay's tolerance or a bucket-center score for U(W).
       const winnerPath=pathFromEdgeSteps(graph,handle.steps);
       if(!state.initialized){
-        const initial=await getInterval(winnerPath);
+        const initial=await getInterval(winnerPath,false);
         if(!initial||Math.abs(initial.lower-lower)>1e-9||Math.abs(initial.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
-        state.toEnd=dijkstraTimes(graph,scope.endId,scope.speedMps,true).dist;
+        const toEndResult=dijkstraTimes(graph,scope.endId,scope.speedMps,true);
+        state.toEnd=toEndResult.dist;state.toEndPrev=toEndResult.prev;
         state.seen=new Set([scope.startId]);state.groups=new Set();state.steps=[];
         state.stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
         const group=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(group)state.groups.add(group);
         state.incumbentSeen=false;stats.expandedStates=1;
         stats.lowerBoundPrefixSubtreePrunes=0;stats.lowerBoundPrefixConflictChecks=0;state.initialized=true;
       }
-      const toEnd=state.toEnd;
+      const toEnd=state.toEnd,toEndPrev=state.toEndPrev;
       // `toEnd` is an admissible resource lower bound: it is the shortest
       // directed remaining walk time on the selected proof graph while
       // deliberately ignoring simple-path/history/synthetic restrictions.
@@ -6012,8 +6036,17 @@
       // continuation because it intentionally ignores source-junction and
       // synthetic restrictions; therefore it is safe only as a WALK resource
       // lower bound, never as a sun lower bound.
+      const relaxedShortestPathAvoidsSeen=node=>{
+        let cursor=String(node),guard=0;
+        while(cursor!==scope.endId&&guard++<=graph.nodes.size+1){
+          const link=toEndPrev?.get(cursor);if(!link)return false;
+          const next=String(link.node);
+          if(next!==scope.endId&&seen.has(next))return false;
+          cursor=next;
+        }
+        return cursor===scope.endId;
+      };
       const historyRemainingWalkLower=(node,prefixWalkS)=>{
-        stats.historyContinuationChecks++;
         const dist=new Map([[String(node),0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:String(node),t:0});
         while(q.size){
           const cur=q.pop();if(cur.t!==dist.get(cur.node))continue;
@@ -6083,11 +6116,37 @@
           }
           pop();continue;
         }
+        if(prefixLowerEnabled&&!cur.prefixSunChecked&&steps.length&&cur.walkS>threshold+1e-7&&
+          stats.prefixLowerBoundRouteCalls<maxPrefixLowerRoutes&&(graph.adjacency.get(cur.node)||[]).length>1){
+          cur.prefixSunChecked=true;
+          const prefixPath=pathFromEdgeSteps(graph,steps),prefixLower=await getPrefixLowerOnly(prefixPath);
+          if(prefixLower?.separated===true){
+            const prefixDepth=separatingPrefixDepth(steps,prefixLower.processedDistanceM);
+            if(prefixDepth){
+              stats.lowerBoundPrefixConflictChecks++;
+              if(incumbentHasPrefix(steps,prefixDepth)){
+                stats.witnessEdgeSequence=steps.slice(0,prefixDepth).map(s=>({...s}));
+                return finish('incumbent-prefix-lower-conflict');
+              }
+              stats.prefixSunSubtreePrunes++;
+              stats.lowerBoundPrefixSubtreePrunes++;
+              stats.lastSeparatedPrefixDepth=prefixDepth;
+              stats.lastSeparatedPrefixProcessedDistanceM=prefixLower.processedDistanceM;
+              while(stack.length&&steps.length>=prefixDepth)pop();
+              continue;
+            }
+          }
+        }
         if(!cur.historyBoundChecked&&stack.length>1){
-          cur.historyBoundChecked=true;
-          const historyRemaining=historyRemainingWalkLower(cur.node,cur.walkS);
-          if(!Number.isFinite(historyRemaining)||cur.walkS+Math.max(0,historyRemaining-detourContinuationGuardS)>cap+.5+1e-9){
-            stats.detourRejected++;stats.historyContinuationRejected++;pop();continue;
+          cur.historyBoundChecked=true;stats.historyContinuationChecks++;
+          if(relaxedShortestPathAvoidsSeen(cur.node)){
+            stats.historyContinuationShortestPathCertified=(stats.historyContinuationShortestPathCertified||0)+1;
+          }else{
+            stats.historyContinuationDijkstraChecks=(stats.historyContinuationDijkstraChecks||0)+1;
+            const historyRemaining=historyRemainingWalkLower(cur.node,cur.walkS);
+            if(!Number.isFinite(historyRemaining)||cur.walkS+Math.max(0,historyRemaining-detourContinuationGuardS)>cap+.5+1e-9){
+              stats.detourRejected++;stats.historyContinuationRejected++;pop();continue;
+            }
           }
         }
         const refs=graph.adjacency.get(cur.node)||[];if(cur.index>=refs.length){pop();continue;}
@@ -6117,7 +6176,7 @@
       }
       if(!state.incumbentSeen)return finishWithWitnesses('incumbent-not-in-domain');
       check();if(shouldYield())return yieldSlice();
-      const final=await getInterval(winnerPath);
+      const final=await getInterval(winnerPath,false);
       if(!final||Math.abs(final.lower-lower)>1e-9||Math.abs(final.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
       check();
       validateCheckpoint();
