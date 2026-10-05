@@ -5957,7 +5957,16 @@
               // Missing/unbounded evidence cannot supply a positive lower bound.
               const lo=value?value.lower:0;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;
               stats.minimumCompetingLowerSeconds=minimum;
-              if(!(lo>threshold+1e-7)){stats.witnessEdgeSequence=steps.map(s=>({...s}));return finish(value?'competitor-not-separated':'missing-exact-evidence');}
+              if(!(lo>threshold+1e-7)){
+                stats.witnessEdgeSequence=steps.map(s=>({...s}));
+                if(value){
+                  const finished=finish('competitor-not-separated');
+                  realmGlobalProofRecords.set(stats,{scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
+                    witnessSteps:steps.map(s=>({...s})),witnessGeometry:realmProofGeometryKey(path.points),incompleteWitness:true});
+                  return finished;
+                }
+                return finish('missing-exact-evidence');
+              }
             }
           }
           pop();continue;
@@ -6006,6 +6015,17 @@
     }catch(error){return finish(reason||'evidence-evaluation-failed');}
     finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);controller.abort();}
   }
+  function materializeRealmGlobalProofWitness(winner,proof) {
+    const record=realmGlobalProofRecords.get(proof),handle=winner?.[realmGlobalProofHandle];
+    if(!record||proof?.complete===true||proof?.termination!=='competitor-not-separated'||record.incompleteWitness!==true||
+      !Array.isArray(record.witnessSteps)||!record.witnessSteps.length||handle?.scope!==record.scope||
+      realmProofSequenceKey(handle.steps)!==record.winnerKey||realmProofGeometryKey(winner?.points)!==record.winnerGeometry||
+      typeof record.scope?.materializeProofWitnessCandidate!=='function')return null;
+    const candidate=record.scope.materializeProofWitnessCandidate(record.witnessSteps);
+    if(!candidate||realmProofGeometryKey(candidate.points)!==record.witnessGeometry)return null;
+    return candidate;
+  }
+
   function realmGlobalProofCoversCandidate(candidate,winner,proof) {
     const record=realmGlobalProofRecords.get(proof),handle=candidate?.[realmGlobalProofHandle],w=winner?.[realmGlobalProofHandle];
     return !!(record&&proof.complete===true&&handle?.scope===record.scope&&w?.scope===record.scope&&
@@ -6090,7 +6110,20 @@
     if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
     if(options.departure)realmProofScopeFactory=()=>{const speed=clamp(options.speedMps,.5,2.5,1.25),fastest=dijkstraTimes(topo.best.graph,topo.startId,speed).dist.get(String(topo.endId));
       const baseline=Number.isFinite(Number(searchOptions.experimentalBaselineSeconds))?Math.min(fastest,Number(searchOptions.experimentalBaselineSeconds)):fastest;
-      return createRealmGlobalProofScope(topo.best.graph,topo.startId,topo.endId,{departure:options.departure,speedMps:speed,detourLimitS:baseline*(1+clamp(options.detourPct,0,80,30)/100),maxSyntheticM:searchOptions.maxRealmSyntheticM,deadline});};
+      const scope=createRealmGlobalProofScope(topo.best.graph,topo.startId,topo.endId,{departure:options.departure,speedMps:speed,detourLimitS:baseline*(1+clamp(options.detourPct,0,80,30)/100),maxSyntheticM:searchOptions.maxRealmSyntheticM,deadline});
+      Object.defineProperty(scope,'materializeProofWitnessCandidate',{enumerable:false,value:(steps)=>{
+        const path=pathFromEdgeSteps(topo.best.graph,steps);
+        if(!pathQualifies(path))return null;
+        const candidate=make('pedestrian-realm-shade',path),hash=geometryHash(path.points||[]);
+        candidate.id=`graph-pedestrian-realm-proof-witness-${hash}`;
+        candidate.stableCandidateId=`${candidate.id}:${hash}`;
+        candidate.label='公園遮蔭競爭路線（證明區間重疊）';
+        candidate.searchIncomplete=true;
+        candidate.graphMeta=Object.assign({},candidate.graphMeta,{shadeSearchComplete:false,generation:'global-proof-unseparated-witness',realmGlobalProofWitness:true});
+        bindRealmGlobalProofCandidate(candidate,path,scope);
+        return candidate;
+      }});
+      return scope;};
     let seed=null,seedReplay=null,boundedCandidate=null;
     try{
       if(!options.edgeSunProvider&&searchBudgetMs>=4000&&Number(options.maxExpandedStates||8000)>=8000&&Number(options.maxShadeEdgeEvaluations||1500)>=1500){
@@ -8736,6 +8769,7 @@
     topologyAlternativeCandidates,
     runPedestrianRealmRescue,
     proveRealmGlobalIntervalWinner,
+    materializeRealmGlobalProofWitness,
     realmGlobalProofCoversCandidate,
     preparePedestrianRealmOpportunity,
     pedestrianRealmOpportunityEligible,
@@ -8762,6 +8796,7 @@
       createRealmGlobalProofScope,
       bindRealmGlobalProofCandidate,
       proveRealmGlobalIntervalWinner,
+      materializeRealmGlobalProofWitness,
       realmGlobalProofCoversCandidate,
       buildTemporalShadeTable,
       temporalBucketsForEdge,
