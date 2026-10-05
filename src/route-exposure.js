@@ -793,6 +793,79 @@
     };
   }
 
+  // dev37.9.9.16.3: bounded lower-only scorer for the global Realm proof.
+  // It uses the exact SAME final-dense segment partition, prepared snapshot,
+  // walking-arrival timestamps and shade model as analyzeRoute(). Only
+  // confirmed-sun samples add positive evidence; shade/night/unknown/errors
+  // contribute zero. Therefore the accumulated value is an admissible lower
+  // bound on final directSunSeconds, even when the route is not fully sampled.
+  async function analyzeRouteSunLowerBound(points, options = {}) {
+    const route = (points || []).map(asLatLng).filter(Boolean);
+    if (route.length < 2) throw new Error("路線至少需要兩個點。");
+    const spacingM = clamp(options.sampleSpacingM, 5, 25, spacingFromPanel());
+    const speedMps = clamp(options.speedMps, 0.5, 2.5, speedMpsFromPanel());
+    const departure = options.departure instanceof Date ? new Date(options.departure.getTime()) : new Date(options.departure || departureDateFromPanel());
+    if (Number.isNaN(departure.getTime())) throw new Error("出發時間不正確。");
+    const signal=options.signal||analysisController.signal;
+    const prepared=options.preparedModel||await ensureShadeReady({points:route,date:departure,purpose:'route',signal});
+    const buildingSnapshot=prepared?.snapshot;
+    const segments=buildSampleSegments(route,spacingM);
+    if(!segments.length)throw new Error("路線長度不足。");
+    if(segments.length>Number(config.maxRouteSamples||420))throw new Error(`此路線需要 ${segments.length} 個採樣段，超過目前安全上限 ${config.maxRouteSamples}。請提高採樣間距或縮短路線。`);
+    const stopAboveSeconds=Number(options.stopAboveSeconds);
+    const threshold=Number.isFinite(stopAboveSeconds)?Math.max(0,stopAboveSeconds):Infinity;
+    const serial=options.serial??analysisSerial;
+    const concurrency=clamp(options.concurrency,1,6,config.shadeConcurrency);
+    const cache=options.sampleCache instanceof Map?options.sampleCache:null;
+    let lowerSeconds=0,sampleCount=0,cacheHits=0,modelErrors=0,processedDistanceM=0;
+    const cacheKey=(segment,at)=>JSON.stringify([
+      Number(segment.sample.lat),Number(segment.sample.lng),at.getTime(),
+      buildingSnapshot?.cacheKey??null
+    ]);
+    for(let offset=0;offset<segments.length;offset+=concurrency){
+      if(serial!==analysisSerial||signal?.aborted)throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      const batch=segments.slice(offset,offset+concurrency);
+      const rows=await Promise.all(batch.map(async(segment)=>{
+        const at=new Date(departure.getTime()+(segment.cumulativeMidM/speedMps)*1000);
+        const key=cacheKey(segment,at);
+        let pending=cache?.get(key);
+        if(pending)cacheHits++;
+        else{
+          pending=Promise.resolve().then(()=>window.HaidianShade.analyzeShadeModelAt(
+            segment.sample.lat,segment.sample.lng,at,
+            {canopyTimeoutMs:config.canopyTimeoutMs,buildingSnapshot,signal}
+          ));
+          if(cache)cache.set(key,pending);
+        }
+        try{return {segment,model:await pending};}
+        catch(error){
+          if(serial!==analysisSerial||signal?.aborted||/CANCELLED/.test(String(error?.message||error)))throw error;
+          if(cache)cache.delete(key);
+          return {segment,model:null,error};
+        }
+      }));
+      if(serial!==analysisSerial||signal?.aborted)throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      for(const row of rows){
+        const segment=row.segment,model=row.model||{};
+        sampleCount++;processedDistanceM+=segment.lengthM;
+        if(row.error){modelErrors++;continue;}
+        const validModel=model.ok!==false&&['sun','shade','night','unknown'].includes(model.state)&&
+          (model.state!=='shade'||model.shaded===true)&&(model.state!=='sun'||model.shaded===false);
+        const unknown=!validModel||model.state==='unknown'||model.confirmed===false||
+          (model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
+        if(validModel&&!unknown&&model.state!=='night'&&model.shaded!==true)lowerSeconds+=segment.lengthM/speedMps;
+      }
+      if(lowerSeconds>threshold+1e-7)return {
+        lowerSeconds,separated:true,complete:false,sampleCount,cacheHits,modelErrors,
+        processedDistanceM,totalSamples:segments.length,totalDistanceM:segments[segments.length-1].cumulativeEndM
+      };
+    }
+    return {
+      lowerSeconds,separated:lowerSeconds>threshold+1e-7,complete:true,sampleCount,cacheHits,modelErrors,
+      processedDistanceM,totalSamples:segments.length,totalDistanceM:segments[segments.length-1].cumulativeEndM
+    };
+  }
+
   function createLayerGroup() {
     return window.L.layerGroup().addTo(map);
   }
@@ -1654,9 +1727,13 @@
           typeof c.token==='string'&&typeof c.coverageToken==='string'?JSON.stringify([c.token,c.coverageToken]):null;
       };
       try{
+        const proofLowerBoundSampleCache=new Map();
         realmGlobalProof=await graphProof.proveRealmGlobalIntervalWinner(proofWinner,{
           departure:options.departure,speedMps:proofWinner.analysis.walkingSpeedMps,
           signal:options.signal||analysisController.signal,shouldCancel:()=>serial!==analysisSerial,evidenceIdentity,
+          evaluateRouteLowerBound:(points,context)=>analyzeRouteSunLowerBound(points,{departure:options.departure,preparedModel,
+            signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
+            serial,stopAboveSeconds:context.stopAboveSeconds,sampleCache:proofLowerBoundSampleCache}),
           evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,includeHeat:false})
@@ -5352,6 +5429,7 @@
     get lastGraphFailure() { return lastGraphFailure; },
     _internals: {
       buildSampleSegments,
+      analyzeRouteSunLowerBound,
       aggregateExposure,
       compareExposureBounds,
       candidateWalkabilityReasons,

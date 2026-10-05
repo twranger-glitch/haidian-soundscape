@@ -5818,8 +5818,8 @@
     stats.maximumGeometryNodeEndpointGapM=maxGeometryNodeEndpointGapM;
     let identity;try{identity=options.evidenceIdentity();}catch(_){return finish('evidence-identity-unavailable');}
     if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
-    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256)));
-    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
+    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256))),maxLowerRoutes=Math.floor(Math.max(1,Math.min(4000,Number(options.maxProofLowerBoundRoutes)||2000)));
+    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
     const controller=new AbortController();let timer,stopReject,reason=null,minimum=Infinity;
     const stopped=new Promise((_,reject)=>{stopReject=reject;});stopped.catch(()=>{});
     const stop=r=>{if(reason)return;reason=r;controller.abort();stopReject(new Error(r));};
@@ -5835,6 +5835,16 @@
         typeof walk!=='number'||!Number.isFinite(walk)||walk<0||lo+unk>walk+1e-7||
         typeof failure!=='number'||!Number.isFinite(failure)||failure!==0)return null;
       return {lower:lo,upper:lo+unk};
+    };
+    const getLowerOnly=async(path)=>{
+      if(typeof options.evaluateRouteLowerBound!=='function')return null;
+      check();if(stats.lowerBoundRouteCalls>=maxLowerRoutes)stop('lower-bound-route-cap');check();stats.lowerBoundRouteCalls++;
+      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,{signal:controller.signal,stopAboveSeconds:threshold})),stopped]);check();
+      const lo=Number(result?.lowerSeconds);
+      stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
+      if(!Number.isFinite(lo)||lo<0)return null;
+      const separated=result?.separated===true&&lo>threshold+1e-7;
+      return {lower:lo,separated,complete:result?.complete===true};
     };
     try{
       check();
@@ -5882,11 +5892,17 @@
         if(cur.node===scope.endId){
           if(realmProofSequenceKey(steps)===W)incumbentSeen=true;
           else{
-            const value=await getInterval(pathFromEdgeSteps(graph,steps));
-            // Missing/unbounded evidence cannot supply a positive lower bound.
-            const lo=value?value.lower:0;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;
-            stats.minimumCompetingLowerSeconds=minimum;
-            if(!(lo>threshold+1e-7)){stats.witnessEdgeSequence=steps.map(s=>({...s}));return finish(value?'competitor-not-separated':'missing-exact-evidence');}
+            const path=pathFromEdgeSteps(graph,steps),lowerOnly=await getLowerOnly(path);
+            if(lowerOnly?.separated===true){
+              const lo=lowerOnly.lower;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;stats.lowerBoundSeparatedAlternatives++;
+              stats.minimumCompetingLowerSeconds=minimum;
+            }else{
+              const value=await getInterval(path);
+              // Missing/unbounded evidence cannot supply a positive lower bound.
+              const lo=value?value.lower:0;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;
+              stats.minimumCompetingLowerSeconds=minimum;
+              if(!(lo>threshold+1e-7)){stats.witnessEdgeSequence=steps.map(s=>({...s}));return finish(value?'competitor-not-separated':'missing-exact-evidence');}
+            }
           }
           pop();continue;
         }
