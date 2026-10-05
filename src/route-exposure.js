@@ -1728,7 +1728,7 @@
       };
       try{
         const proofLowerBoundSampleCache=new Map();
-        realmGlobalProof=await graphProof.proveRealmGlobalIntervalWinner(proofWinner,{
+        const proofOptions={
           departure:options.departure,speedMps:proofWinner.analysis.walkingSpeedMps,
           signal:options.signal||analysisController.signal,shouldCancel:()=>serial!==analysisSerial,evidenceIdentity,
           evaluateRouteLowerBound:(points,context)=>analyzeRouteSunLowerBound(points,{departure:options.departure,preparedModel,
@@ -1736,8 +1736,23 @@
             serial,stopAboveSeconds:context.stopAboveSeconds,sampleCache:proofLowerBoundSampleCache}),
           evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
-            serial,includeHeat:false})
-        });
+            serial,includeHeat:false}),
+          maxProofTotalMs:Math.floor(clamp(options.realmProofTotalMs,1,24000,12000)),
+          maxProofSliceStates:Math.floor(clamp(options.realmProofSliceStates,1,2048,256)),
+          maxProofSliceMs:Math.floor(clamp(options.realmProofSliceMs,1,1000,100))
+        };
+        const maxSlices=Math.floor(clamp(options.realmProofMaxSlices,1,128,128));
+        let continuation;
+        for(let slice=0;slice<maxSlices;slice++){
+          realmGlobalProof=await graphProof.proveRealmGlobalIntervalWinner(proofWinner,Object.assign({},proofOptions,{continuation}));
+          if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
+          if(realmGlobalProof?.continuationAvailable!==true||realmGlobalProof?.termination!=='slice-yield')break;
+          if(slice+1===maxSlices){realmGlobalProof.routeResumeTermination='resume-slice-cap';break;}
+          continuation=realmGlobalProof;
+          // Keep the exact proof object/private frontier and the same scorer +
+          // lower-bound sample cache; yield a browser task before consuming it.
+          await new Promise(resolve=>setTimeout(resolve,0));
+        }
         if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
         // dev37.9.9.16.7: a completed graph-domain proof may contain an
         // uncertainty FRONTIER rather than a single witness.  Every unique

@@ -5749,6 +5749,17 @@
   // dense scorer/snapshot as W. It may fail closed long before exhaustion.
   const realmGlobalProofHandle = Symbol('realm-global-proof-handle');
   const realmGlobalProofRecords = new WeakMap();
+  // dev168: only the exact yielded proof object authenticates the private DFS.
+  // No state/stack is serialized into a token or attached to public diagnostics.
+  const realmGlobalProofContinuations = new WeakMap();
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev168-v1';
+  function realmProofGraphInvariantKey(graph) {
+    return JSON.stringify([
+      [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
+      [...graph.edges].map(([id,e])=>[id,e.id,e.a,e.b,e.distanceM,e.realmSynthetic,e.sourceJunctionLink,e.geometry]),
+      [...graph.adjacency].map(([id,refs])=>[id,refs.map(r=>[r.edgeId,r.to])])
+    ]);
+  }
   function createRealmGlobalProofScope(graph,startId,endId,options={}) {
     return {graph:cloneFineGraphForExperimentalUse(graph),startId:String(startId),endId:String(endId),
       departureMs:new Date(options.departure).getTime(),speedMps:Number(options.speedMps),
@@ -5769,14 +5780,33 @@
   async function proveRealmGlobalIntervalWinner(candidate,options={}) {
     const handle=candidate?.[realmGlobalProofHandle],scope=handle?.scope,started=nowMs();
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
-    const threshold=upper+0.5,stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
+    const threshold=upper+0.5;let state=null,resumed=false,sliceStartStates=0;
+    let stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
       evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
       unseparatedCompetitorCount:0,uniqueUnseparatedGeometryCount:0,strictlyBetterThanIncumbentCount:0,witnessSetTruncated:false,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
       alternativeLowerBoundAtTermination:0,termination:'not-started',complete:false,frontierComplete:false,physicalGlobalOptimal:false,productionGraphMutated:false,
       proofScope:'selected Realm/source graph; legal simple ordered edge sequences; existing graph detour/synthetic/history domain; exact-arrival dense selected-source model'};
-    const finish=reason=>Object.assign(stats,{termination:reason,elapsedMs:nowMs()-started});
+    const finish=reason=>{
+      const ended=nowMs(),sliceElapsedMs=ended-started;
+      if(state)state.workMs+=sliceElapsedMs;
+      return Object.assign({},stats,{termination:reason,continuationAvailable:false,
+        proofAlgorithm:realmFrontierProofAlgorithm,resumeSlices:state?.resumeSlices||0,resumedFromContinuation:resumed,
+        sliceExpandedStates:stats.expandedStates-sliceStartStates,sliceElapsedMs,
+        cumulativeProofWorkMs:state?.workMs||sliceElapsedMs,cumulativeProofElapsedMs:ended-(state?.started||started),
+        elapsedMs:ended-(state?.started||started)});
+    };
+    if(options.continuation!==undefined){
+      const token=options.continuation;
+      state=token&&typeof token==='object'?realmGlobalProofContinuations.get(token):null;
+      if(!state)return finish('invalid-continuation');
+      // Single use, consumed synchronously before any await. Concurrent reuse,
+      // copies and retries cannot fork an authenticated enumeration.
+      realmGlobalProofContinuations.delete(token);stats=state.stats;sliceStartStates=stats.expandedStates;
+      if(token.termination!=='slice-yield'||token.continuationAvailable!==true||token.complete!==false||token.frontierComplete!==false||
+        token.proofAlgorithm!==realmFrontierProofAlgorithm)return finish('invalid-continuation');
+    }
     if(!scope||typeof options.evaluateRoute!=='function'||typeof options.evidenceIdentity!=='function')return finish('proof-context-unavailable');
     const graph=scope.graph,W=realmProofSequenceKey(handle.steps),cap=scope.detourLimitS;
     const lower=Number(candidate.analysis?.summary?.directSunSeconds),unknown=Number(candidate.analysis?.summary?.unknownSeconds);
@@ -5788,46 +5818,75 @@
     stats.domain={nodeCount:graph.nodes.size,edgeCount:graph.edges.size,startId:scope.startId,endId:scope.endId,
       detourLimitSeconds:cap,detourToleranceSeconds:.5,maxSyntheticM:scope.maxSyntheticM,departureMs:scope.departureMs,speedMps:scope.speedMps};
     if(realmProofGeometryKey(candidate.points)!==realmProofGeometryKey(pathFromEdgeSteps(graph,handle.steps).points))return finish('incumbent-geometry-mismatch');
-    // Reject invalid graph representation, never silently skip a missing arc.
-    for(const [from,refs]of graph.adjacency)for(const ref of refs){const e=graph.edges.get(ref.edgeId);
-      if(!e||!graph.nodes.has(String(from))||!graph.nodes.has(String(ref.to))||!Number.isFinite(e.distanceM)||e.distanceM<0||
-      !((String(e.a)===String(from)&&String(e.b)===String(ref.to))||(String(e.b)===String(from)&&String(e.a)===String(ref.to))))return finish('invalid-proof-graph');}
-    // Node coordinates are topology anchors, not a proof requirement that every
-    // stored edge polyline byte-for-byte begins/ends at those coordinates.  The
-    // selected graph's established route semantics are adjacency + edge.a/b for
-    // legality and edgeGeometryFor()/pathFromEdgeSteps() for the exact scorer
-    // geometry.  Requiring coordinate equality here rejected otherwise valid
-    // detached Realm graphs before enumeration (Xiaoqiao: expandedStates=0).
-    // Keep the actual proof-safety checks fail-closed: every edge must have both
-    // topology endpoints, at least two finite geometry points, finite nonnegative
-    // distance, and every adjacency arc must name one of those endpoints (above).
-    // Endpoint drift is diagnostic only because the proof explicitly claims the
-    // selected graph domain, never physical-world global optimality.
-    let geometryNodeEndpointMismatchEdges=0,maxGeometryNodeEndpointGapM=0;
-    for(const e of graph.edges.values()){
-      if(!graph.nodes.has(String(e.a))||!graph.nodes.has(String(e.b))||!Array.isArray(e.geometry)||e.geometry.length<2||
-        e.geometry.some(p=>!Number.isFinite(p?.lat)||!Number.isFinite(p?.lng)))return finish('invalid-proof-geometry');
-      const aNode=graph.nodes.get(String(e.a)),bNode=graph.nodes.get(String(e.b)),first=e.geometry[0],last=e.geometry[e.geometry.length-1];
-      const endpointGapM=Math.max(haversineM(first,aNode),haversineM(last,bNode));
-      if(Number.isFinite(endpointGapM)){
-        maxGeometryNodeEndpointGapM=Math.max(maxGeometryNodeEndpointGapM,endpointGapM);
-        if(endpointGapM>1e-6)geometryNodeEndpointMismatchEdges++;
-      }else return finish('invalid-proof-geometry');
+    if(!state){
+      // Reject invalid graph representation, never silently skip a missing arc.
+      for(const [from,refs]of graph.adjacency)for(const ref of refs){const e=graph.edges.get(ref.edgeId);
+        if(!e||!graph.nodes.has(String(from))||!graph.nodes.has(String(ref.to))||!Number.isFinite(e.distanceM)||e.distanceM<0||
+        !((String(e.a)===String(from)&&String(e.b)===String(ref.to))||(String(e.b)===String(from)&&String(e.a)===String(ref.to))))return finish('invalid-proof-graph');}
+      // Node coordinates are topology anchors, not a proof requirement that every
+      // stored edge polyline byte-for-byte begins/ends at those coordinates.  The
+      // selected graph's established route semantics are adjacency + edge.a/b for
+      // legality and edgeGeometryFor()/pathFromEdgeSteps() for the exact scorer
+      // geometry.  Requiring coordinate equality here rejected otherwise valid
+      // detached Realm graphs before enumeration (Xiaoqiao: expandedStates=0).
+      // Keep the actual proof-safety checks fail-closed: every edge must have both
+      // topology endpoints, at least two finite geometry points, finite nonnegative
+      // distance, and every adjacency arc must name one of those endpoints (above).
+      // Endpoint drift is diagnostic only because the proof explicitly claims the
+      // selected graph domain, never physical-world global optimality.
+      let geometryNodeEndpointMismatchEdges=0,maxGeometryNodeEndpointGapM=0;
+      for(const e of graph.edges.values()){
+        if(!graph.nodes.has(String(e.a))||!graph.nodes.has(String(e.b))||!Array.isArray(e.geometry)||e.geometry.length<2||
+          e.geometry.some(p=>!Number.isFinite(p?.lat)||!Number.isFinite(p?.lng)))return finish('invalid-proof-geometry');
+        const aNode=graph.nodes.get(String(e.a)),bNode=graph.nodes.get(String(e.b)),first=e.geometry[0],last=e.geometry[e.geometry.length-1];
+        const endpointGapM=Math.max(haversineM(first,aNode),haversineM(last,bNode));
+        if(Number.isFinite(endpointGapM)){
+          maxGeometryNodeEndpointGapM=Math.max(maxGeometryNodeEndpointGapM,endpointGapM);
+          if(endpointGapM>1e-6)geometryNodeEndpointMismatchEdges++;
+        }else return finish('invalid-proof-geometry');
+      }
+      stats.geometryCheckedEdges=graph.edges.size;
+      stats.geometryNodeEndpointMismatchEdges=geometryNodeEndpointMismatchEdges;
+      stats.maximumGeometryNodeEndpointGapM=maxGeometryNodeEndpointGapM;
     }
-    stats.geometryCheckedEdges=graph.edges.size;
-    stats.geometryNodeEndpointMismatchEdges=geometryNodeEndpointMismatchEdges;
-    stats.maximumGeometryNodeEndpointGapM=maxGeometryNodeEndpointGapM;
     let identity;try{identity=options.evidenceIdentity();}catch(_){return finish('evidence-identity-unavailable');}
     if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
-    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256))),maxLowerRoutes=Math.floor(Math.max(1,Math.min(4000,Number(options.maxProofLowerBoundRoutes)||2000))),maxWitnesses=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofWitnesses)||128)));
-    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.witnessCap=maxWitnesses;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
-    const witnessRecords=[],witnessGeometryKeys=new Set();
-    const controller=new AbortController();let timer,stopReject,reason=null,minimum=Infinity;
+    const integer=(value,fallback,maximum)=>Math.floor(Math.max(1,Math.min(maximum,Number(value)||fallback)));
+    const maxStates=integer(options.maxProofStates,32000,64000),maxRoutes=integer(options.maxProofRoutes,256,256),
+      maxLowerRoutes=integer(options.maxProofLowerBoundRoutes,4000,4000),maxWitnesses=integer(options.maxProofWitnesses,128,256);
+    // Existing callers without an explicit cumulative budget keep their original
+    // deadline. The route layer explicitly configures a bounded multi-slice run.
+    const totalMs=integer(options.maxProofTotalMs,state?.totalMs||Math.max(1,Math.min(12000,scope.deadline-started)),24000);
+    const sliceStates=integer(options.maxProofSliceStates,256,2048),sliceMs=integer(options.maxProofSliceMs,100,1000);
+    const currentDomainKey=()=>JSON.stringify([scope.startId,scope.endId,realmProofSequenceKey(handle.steps),
+      realmProofGeometryKey(candidate.points),Number(candidate.analysis?.summary?.directSunSeconds),
+      Number(candidate.analysis?.summary?.unknownSeconds),Number(candidate.analysis?.summary?.directSunSeconds)+Number(candidate.analysis?.summary?.unknownSeconds),
+      scope.departureMs,scope.speedMps,scope.detourLimitS,.5,scope.maxSyntheticM,scope.deadline,identity,realmFrontierProofAlgorithm,
+      maxStates,maxRoutes,maxLowerRoutes,maxWitnesses,totalMs]);
+    const invariant={scope,graph,materializer:scope.materializeProofWitnessCandidate,
+      evaluateRoute:options.evaluateRoute,evaluateLower:options.evaluateRouteLowerBound,signal:options.signal,
+      winnerGeometry:realmProofGeometryKey(candidate.points),
+      domain:currentDomainKey(),graphKey:realmProofGraphInvariantKey(graph)};
+    if(state){
+      const old=state.invariant;
+      if(Object.keys(invariant).some(k=>invariant[k]!==old[k]))return finish('continuation-invariant-mismatch');
+      resumed=true;state.resumeSlices++;
+    }else{
+      if(nowMs()>=scope.deadline)return finish('deadline');
+      state={invariant,stats,started,totalMs,deadline:options.maxProofTotalMs===undefined?Math.min(scope.deadline,started+totalMs):started+totalMs,
+        resumeSlices:1,workMs:0,witnessRecords:[],witnessGeometryKeys:new Set(),minimum:Infinity,initialized:false};
+      stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.witnessCap=maxWitnesses;
+      stats.totalBudgetMs=totalMs;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;
+      stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;
+    }
+    stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
+    const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
+    const controller=new AbortController();let timer,stopReject,reason=null,minimum=state.minimum;
     const stopped=new Promise((_,reject)=>{stopReject=reject;});stopped.catch(()=>{});
     const stop=r=>{if(reason)return;reason=r;controller.abort();stopReject(new Error(r));};
-    const check=()=>{if(options.signal?.aborted||options.shouldCancel?.())stop('cancelled');else if(nowMs()>=scope.deadline)stop('deadline');else if(options.evidenceIdentity()!==identity)stop('evidence-context-changed');if(reason)throw new Error(reason);};
+    const check=()=>{if(options.signal?.aborted||options.shouldCancel?.())stop('cancelled');else if(nowMs()>=state.deadline)stop('deadline');else if(options.evidenceIdentity()!==identity)stop('evidence-context-changed');if(reason)throw new Error(reason);};
     const onAbort=()=>stop('cancelled');options.signal?.addEventListener('abort',onAbort,{once:true});
-    timer=setTimeout(()=>stop('deadline'),Math.max(0,scope.deadline-nowMs()));
+    timer=setTimeout(()=>stop('deadline'),Math.max(0,state.deadline-nowMs()));
     const getInterval=async(path)=>{
       check();if(stats.evidenceCalls>=maxRoutes)stop('evidence-cap');check();stats.evidenceCalls++;
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRoute(path.points,{signal:controller.signal})),stopped]);check();
@@ -5851,6 +5910,7 @@
         totalDistanceM:Number.isFinite(totalDistanceM)&&totalDistanceM>=0?totalDistanceM:null};
     };
     const proofRecord=()=>({scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
+      complete:stats.complete===true,frontierComplete:stats.frontierComplete===true,
       witnesses:witnessRecords.map(r=>Object.assign({},r,{witnessSteps:r.witnessSteps.map(s=>({...s}))}))});
     const attachWitnessMaterializers=(proof,record)=>{
       realmGlobalProofRecords.set(proof,record);
@@ -5863,17 +5923,43 @@
       return proof;
     };
     const finishWithWitnesses=(reason)=>{
+      state.minimum=minimum;
       const proof=finish(reason);
       if(witnessRecords.length)attachWitnessMaterializers(proof,proofRecord());
+      return proof;
+    };
+    const shouldYield=()=>stats.expandedStates-sliceStartStates>=sliceStates||nowMs()-started>=sliceMs;
+    const validateCheckpoint=()=>{
+      if(candidate?.[realmGlobalProofHandle]!==handle||handle.scope!==scope||scope.graph!==graph||
+        currentDomainKey()!==invariant.domain||realmProofGraphInvariantKey(graph)!==invariant.graphKey||
+        scope.materializeProofWitnessCandidate!==invariant.materializer||options.signal!==invariant.signal||
+        options.evaluateRoute!==invariant.evaluateRoute||options.evaluateRouteLowerBound!==invariant.evaluateLower){
+        stop('continuation-invariant-mismatch');check();
+      }
+    };
+    const yieldSlice=()=>{
+      validateCheckpoint();
+      const proof=finishWithWitnesses('slice-yield');
+      proof.continuationAvailable=true;
+      realmGlobalProofContinuations.set(proof,state);
       return proof;
     };
     try{
       check();
       // Incumbent evidence must match the final dense-scoring partition. Do not
       // substitute graph replay's tolerance or a bucket-center score for U(W).
-      const winnerPath=pathFromEdgeSteps(graph,handle.steps),initial=await getInterval(winnerPath);
-      if(!initial||Math.abs(initial.lower-lower)>1e-9||Math.abs(initial.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
-      const toEnd=dijkstraTimes(graph,scope.endId,scope.speedMps,true).dist;
+      const winnerPath=pathFromEdgeSteps(graph,handle.steps);
+      if(!state.initialized){
+        const initial=await getInterval(winnerPath);
+        if(!initial||Math.abs(initial.lower-lower)>1e-9||Math.abs(initial.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
+        state.toEnd=dijkstraTimes(graph,scope.endId,scope.speedMps,true).dist;
+        state.seen=new Set([scope.startId]);state.groups=new Set();state.steps=[];
+        state.stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
+        const group=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(group)state.groups.add(group);
+        state.incumbentSeen=false;stats.expandedStates=1;
+        stats.lowerBoundPrefixSubtreePrunes=0;stats.lowerBoundPrefixConflictChecks=0;state.initialized=true;
+      }
+      const toEnd=state.toEnd;
       // `toEnd` is an admissible resource lower bound: it is the shortest
       // directed remaining walk time on the selected proof graph while
       // deliberately ignoring simple-path/history/synthetic restrictions.
@@ -5919,10 +6005,7 @@
         }
         return true;
       };
-      stats.lowerBoundPrefixSubtreePrunes=0;stats.lowerBoundPrefixConflictChecks=0;
-      const seen=new Set([scope.startId]),groups=new Set(),steps=[],stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
-      const startGroup=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(startGroup)groups.add(startGroup);
-      let incumbentSeen=false;stats.expandedStates=1;
+      const {seen,groups,steps,stack}=state;
       const pop=()=>{const f=stack.pop();if(stack.length){seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
       // Shortest continuation after removing the prefix's already-visited
       // vertices.  This is still a relaxation of every legal simple-path
@@ -5946,9 +6029,9 @@
         return Infinity;
       };
       while(stack.length){
-        check();const cur=stack[stack.length-1];
+        check();if(shouldYield())return yieldSlice();const cur=stack[stack.length-1];
         if(cur.node===scope.endId){
-          if(realmProofSequenceKey(steps)===W)incumbentSeen=true;
+          if(realmProofSequenceKey(steps)===W)state.incumbentSeen=true;
           else{
             const path=pathFromEdgeSteps(graph,steps),lowerOnly=await getLowerOnly(path);
             if(lowerOnly?.separated===true){
@@ -6027,23 +6110,27 @@
         const remainingLower=Math.max(0,remaining-detourContinuationGuardS);
         if(walkS+remainingLower>cap+.5+1e-9){stats.detourRejected++;stats.detourContinuationRejected++;continue;}
         if(walkS>cap+.5){stats.detourRejected++;continue;}
-        if(stats.expandedStates>=maxStates)return finish('state-cap');
+        if(stats.expandedStates>=maxStates)return finishWithWitnesses('state-cap');
         let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
         seen.add(next);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false});stats.expandedStates++;
         if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
       }
-      if(!incumbentSeen)return finish('incumbent-not-in-domain');
+      if(!state.incumbentSeen)return finishWithWitnesses('incumbent-not-in-domain');
+      check();if(shouldYield())return yieldSlice();
       const final=await getInterval(winnerPath);
       if(!final||Math.abs(final.lower-lower)>1e-9||Math.abs(final.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
-      check();stats.frontierComplete=true;stats.complete=witnessRecords.length===0;stats.minimumCompetingLowerSeconds=Number.isFinite(minimum)?minimum:null;
+      check();
+      validateCheckpoint();
+      stats.frontierComplete=true;stats.complete=witnessRecords.length===0;stats.minimumCompetingLowerSeconds=Number.isFinite(minimum)?minimum:null;
       stats.minimumCompetingLowerScope='all legal simple ordered-edge paths in selected Realm/source graph domain';
       stats.alternativeLowerBoundAtTermination=Number.isFinite(minimum)?minimum:null;
       stats.winnerEdgeSequence=handle.steps.map(s=>({...s}));stats.evidenceIdentity=identity;stats.tieMarginSeconds=.5;
       const terminal=witnessRecords.length?'all-selected-realm-simple-paths-classified':'all-selected-realm-simple-paths-separated';
+      state.minimum=minimum;
       const finished=finish(terminal);
       attachWitnessMaterializers(finished,proofRecord());
       return finished;
-    }catch(error){return finishWithWitnesses(reason||'evidence-evaluation-failed');}
+    }catch(error){return reason==='continuation-invariant-mismatch'?finish(reason):finishWithWitnesses(reason||'evidence-evaluation-failed');}
     finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);controller.abort();}
   }
   function materializeRealmGlobalProofWitnessRecords(winner,proof,record) {
@@ -6076,7 +6163,7 @@
 
   function realmGlobalProofCoversCandidate(candidate,winner,proof) {
     const record=realmGlobalProofRecords.get(proof),handle=candidate?.[realmGlobalProofHandle],w=winner?.[realmGlobalProofHandle];
-    return !!(record&&(proof.frontierComplete===true||proof.complete===true)&&handle?.scope===record.scope&&w?.scope===record.scope&&
+    return !!(record&&(record.frontierComplete===true||record.complete===true)&&(proof.frontierComplete===true||proof.complete===true)&&handle?.scope===record.scope&&w?.scope===record.scope&&
       realmProofGeometryKey(candidate.points)===realmProofGeometryKey(pathFromEdgeSteps(record.scope.graph,handle.steps).points)&&
       new Date(candidate.analysis?.departure).getTime()===record.scope.departureMs&&Number(candidate.analysis?.walkingSpeedMps)===record.scope.speedMps&&
       realmProofSequenceKey(w.steps)===record.winnerKey&&realmProofGeometryKey(winner.points)===record.winnerGeometry&&
