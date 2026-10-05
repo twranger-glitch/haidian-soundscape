@@ -5749,11 +5749,12 @@
   // dense scorer/snapshot as W. It may fail closed long before exhaustion.
   const realmGlobalProofHandle = Symbol('realm-global-proof-handle');
   const realmGlobalProofRecords = new WeakMap();
-  // dev169: exact yielded proof objects still authenticate the private DFS;
-  // this revision adds exact-geometry evidence reuse plus optional exact-prefix sun pruning.
+  // dev170: exact yielded proof objects still authenticate the private DFS;
+  // this revision also carries only immutable prefix identity into the route-side
+  // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev169-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev170-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5884,6 +5885,8 @@
       stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;
       stats.completeGeometryLowerCacheHits=0;stats.completeGeometryIntervalCacheHits=0;
       stats.prefixLowerBoundRouteCap=maxPrefixLowerRoutes;stats.prefixLowerBoundRouteCalls=0;stats.prefixSunSubtreePrunes=0;
+      stats.prefixCertificateHits=0;stats.prefixCertificateExactExtensions=0;stats.prefixIncrementalSegmentsEvaluated=0;
+      stats.prefixFullRescoreFallbacks=0;stats.prefixSampleCacheHits=0;stats.prefixCertificateConflicts=0;stats.prefixCertificateReusedSamples=0;
     }
     stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
     const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
@@ -5913,7 +5916,7 @@
         processedDistanceM:Number.isFinite(processedDistanceM)&&processedDistanceM>=0?processedDistanceM:null,
         totalDistanceM:Number.isFinite(totalDistanceM)&&totalDistanceM>=0?totalDistanceM:null};
     };
-    const scoreLowerOnly=async(path,kind)=>{
+    const scoreLowerOnly=async(path,kind,pathSteps=null)=>{
       if(typeof options.evaluateRouteLowerBound!=='function')return null;
       const geometryKey=realmProofGeometryKey(path.points);
       if(kind==='complete'){
@@ -5924,14 +5927,25 @@
         if(!prefixLowerEnabled||stats.prefixLowerBoundRouteCalls>=maxPrefixLowerRoutes)return null;
         stats.prefixLowerBoundRouteCalls++;
       }
-      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,{signal:controller.signal,stopAboveSeconds:threshold})),stopped]);check();
+      const lowerContext={signal:controller.signal,stopAboveSeconds:threshold,proofLowerKind:kind,proofDomainIdentity:invariant.domain};
+      if(kind==='prefix')lowerContext.proofPrefixSteps=(pathSteps||[]).map(step=>({edgeId:String(step.edgeId),from:String(step.from),to:String(step.to)}));
+      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,lowerContext)),stopped]);check();
       stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
+      if(kind==='prefix'){
+        stats.prefixSampleCacheHits+=Number(result?.cacheHits||0);
+        if(result?.prefixCertificateHit===true)stats.prefixCertificateHits++;
+        if(result?.prefixCertificateExactExtension===true)stats.prefixCertificateExactExtensions++;
+        stats.prefixIncrementalSegmentsEvaluated+=Math.max(0,Number(result?.prefixIncrementalSegmentsEvaluated||0));
+        if(result?.prefixFullRescoreFallback===true)stats.prefixFullRescoreFallbacks++;
+        if(result?.prefixCertificateConflict===true)stats.prefixCertificateConflicts++;
+        stats.prefixCertificateReusedSamples+=Math.max(0,Number(result?.prefixCertificateReusedSamples||0));
+      }
       const value=normalizeLowerResult(result);
       if(kind==='complete'&&value)state.routeLowerByGeometry.set(geometryKey,value);
       return value;
     };
     const getLowerOnly=path=>scoreLowerOnly(path,'complete');
-    const getPrefixLowerOnly=path=>scoreLowerOnly(path,'prefix');
+    const getPrefixLowerOnly=(path,pathSteps)=>scoreLowerOnly(path,'prefix',pathSteps);
     const proofRecord=()=>({scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
       complete:stats.complete===true,frontierComplete:stats.frontierComplete===true,
       witnesses:witnessRecords.map(r=>Object.assign({},r,{witnessSteps:r.witnessSteps.map(s=>({...s}))}))});
@@ -6119,7 +6133,7 @@
         if(prefixLowerEnabled&&!cur.prefixSunChecked&&steps.length&&cur.walkS>threshold+1e-7&&
           stats.prefixLowerBoundRouteCalls<maxPrefixLowerRoutes&&(graph.adjacency.get(cur.node)||[]).length>1){
           cur.prefixSunChecked=true;
-          const prefixPath=pathFromEdgeSteps(graph,steps),prefixLower=await getPrefixLowerOnly(prefixPath);
+          const prefixPath=pathFromEdgeSteps(graph,steps),prefixLower=await getPrefixLowerOnly(prefixPath,steps);
           if(prefixLower?.separated===true){
             const prefixDepth=separatingPrefixDepth(steps,prefixLower.processedDistanceM);
             if(prefixDepth){

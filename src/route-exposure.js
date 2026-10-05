@@ -378,12 +378,12 @@
   // coordinates still collapse, while centimetre/millimetre geometry remains
   // part of both walking time and exposure sampling.
   const ROUTE_SAMPLE_ZERO_EPSILON_M = 1e-6;
-  function buildSampleSegments(points, spacingM) {
+  function buildSampleSegments(points, spacingM, initialCumulativeM = 0) {
     const source = (points || []).map(asLatLng).filter(Boolean);
     if (source.length < 2) return [];
     const spacing = clamp(spacingM, 4, 30, 10);
     const segments = [];
-    let cumulative = 0;
+    let cumulative = Number.isFinite(Number(initialCumulativeM)) ? Number(initialCumulativeM) : 0;
     for (let i = 1; i < source.length; i += 1) {
       const a = source[i - 1];
       const b = source[i];
@@ -408,6 +408,51 @@
       }
     }
     return segments;
+  }
+
+  // dev37.9.9.16.10: private execution-local state for exact incremental
+  // lower-bound prefix scoring.  The session is never attached to a proof
+  // object and is accepted only by identity through this module's WeakSet.
+  // It owns the shared sample cache plus an ordered edge-prefix trie of exact
+  // scorer certificates.  Certificates are advisory performance state only;
+  // they never grant graph/search coverage authority.
+  const routeSunLowerBoundSessions = new WeakSet();
+  function createRouteSunLowerBoundSession() {
+    const session={sampleCache:new Map(),root:{children:new Map(),certificate:null},context:null,invalidated:false,cacheGeneration:0};
+    routeSunLowerBoundSessions.add(session);
+    return session;
+  }
+  const routeSunPrefixStepToken=(step)=>JSON.stringify([String(step?.edgeId),String(step?.from),String(step?.to)]);
+  function routeSunFindPrefixCertificate(session,steps){
+    let node=session?.root,best=null;
+    for(const step of steps||[]){
+      node=node?.children?.get(routeSunPrefixStepToken(step));
+      if(!node)break;
+      if(node.certificate)best=node.certificate;
+    }
+    return best;
+  }
+  function routeSunStorePrefixCertificate(session,steps,certificate){
+    let node=session.root;
+    for(const step of steps||[]){
+      const token=routeSunPrefixStepToken(step);
+      let child=node.children.get(token);
+      if(!child){child={children:new Map(),certificate:null};node.children.set(token,child);}
+      node=child;
+    }
+    node.certificate=certificate;
+  }
+  function routeSunExactPointPrefix(prefix,route){
+    if(!Array.isArray(prefix)||prefix.length>route.length)return false;
+    for(let i=0;i<prefix.length;i++)if(Number(prefix[i]?.lat)!==Number(route[i]?.lat)||Number(prefix[i]?.lng)!==Number(route[i]?.lng))return false;
+    return true;
+  }
+  function routeSunLowerContextMatches(a,b){
+    if(!a||!b)return false;
+    return a.preparedModel===b.preparedModel&&a.buildingSnapshot===b.buildingSnapshot&&a.modelFn===b.modelFn&&
+      a.departureMs===b.departureMs&&a.speedMps===b.speedMps&&a.spacingM===b.spacingM&&a.concurrency===b.concurrency&&
+      a.threshold===b.threshold&&a.serial===b.serial&&a.canopyTimeoutMs===b.canopyTimeoutMs&&
+      a.proofDomainIdentity===b.proofDomainIdentity&&a.evidenceIdentity===b.evidenceIdentity;
   }
 
   async function runPool(items, concurrency, worker, onProgress) {
@@ -809,29 +854,109 @@
     const signal=options.signal||analysisController.signal;
     const prepared=options.preparedModel||await ensureShadeReady({points:route,date:departure,purpose:'route',signal});
     const buildingSnapshot=prepared?.snapshot;
-    const segments=buildSampleSegments(route,spacingM);
-    if(!segments.length)throw new Error("路線長度不足。");
-    if(segments.length>Number(config.maxRouteSamples||420))throw new Error(`此路線需要 ${segments.length} 個採樣段，超過目前安全上限 ${config.maxRouteSamples}。請提高採樣間距或縮短路線。`);
     const stopAboveSeconds=Number(options.stopAboveSeconds);
     const threshold=Number.isFinite(stopAboveSeconds)?Math.max(0,stopAboveSeconds):Infinity;
     const serial=options.serial??analysisSerial;
     const concurrency=clamp(options.concurrency,1,6,config.shadeConcurrency);
-    const cache=options.sampleCache instanceof Map?options.sampleCache:null;
+    const session=routeSunLowerBoundSessions.has(options.lowerBoundSession)?options.lowerBoundSession:null;
+    const proofDomainIdentity=typeof options.proofDomainIdentity==='string'?options.proofDomainIdentity:null;
+    const evidenceIdentity=typeof options.evidenceIdentity==='string'?options.evidenceIdentity:null;
+    const modelFn=window.HaidianShade?.analyzeShadeModelAt;
+    const context={preparedModel:prepared,buildingSnapshot,modelFn,departureMs:departure.getTime(),speedMps,spacingM,concurrency,threshold,serial,
+      canopyTimeoutMs:config.canopyTimeoutMs,proofDomainIdentity,evidenceIdentity};
+    let sessionContextValid=true,contextConflict=false;
+    if(session){
+      if(session.invalidated)sessionContextValid=false;
+      else if(!session.context)session.context=context;
+      else if(!routeSunLowerContextMatches(session.context,context)){session.invalidated=true;sessionContextValid=false;contextConflict=true;}
+    }
+    let cache=session&&sessionContextValid?session.sampleCache:(options.sampleCache instanceof Map?options.sampleCache:null);
+    const prefixSteps=Array.isArray(options.proofPrefixSteps)?options.proofPrefixSteps.map(s=>({edgeId:String(s?.edgeId),from:String(s?.from),to:String(s?.to)})):[];
+    const prefixRequested=options.usePrefixCertificates===true&&!!session&&sessionContextValid&&!!proofDomainIdentity&&!!evidenceIdentity&&prefixSteps.length>0;
     let lowerSeconds=0,sampleCount=0,cacheHits=0,modelErrors=0,processedDistanceM=0;
+    let totalSamples=0,totalDistanceM=0,segmentsToEvaluate=[];
+    let certificateHit=false,certificateExactExtension=false,certificateConflict=contextConflict,incrementalUsed=false,reusedSamples=0;
+    let actualSegmentsEvaluated=0,ancestor=null;
+    if(prefixRequested){
+      ancestor=routeSunFindPrefixCertificate(session,prefixSteps);
+      if(ancestor){
+        const generationSafe=ancestor.cacheGeneration===session.cacheGeneration,errorSafe=ancestor.modelErrors===0;
+        const resultSafe=(ancestor.complete===true||ancestor.separated===true)&&
+          Number.isFinite(ancestor.lowerSeconds)&&Number.isFinite(ancestor.processedDistanceM)&&Number.isFinite(ancestor.totalDistanceM)&&
+          Number.isFinite(ancestor.sampleCount)&&Number.isFinite(ancestor.totalSamples)&&ancestor.sampleCount<=ancestor.totalSamples;
+        const geometrySafe=routeSunExactPointPrefix(ancestor.routePoints,route);
+        if(!geometrySafe||!resultSafe){
+          certificateConflict=true;session.invalidated=true;sessionContextValid=false;cache=null;
+        }else if(!generationSafe||!errorSafe){
+          certificateConflict=true;
+        }else{
+          const suffixSource=route.slice(Math.max(0,ancestor.routePoints.length-1));
+          segmentsToEvaluate=buildSampleSegments(suffixSource,spacingM,ancestor.totalDistanceM);
+          totalSamples=ancestor.totalSamples+segmentsToEvaluate.length;
+          totalDistanceM=segmentsToEvaluate.length?segmentsToEvaluate[segmentsToEvaluate.length-1].cumulativeEndM:ancestor.totalDistanceM;
+          lowerSeconds=ancestor.lowerSeconds;sampleCount=ancestor.sampleCount;cacheHits=0;
+          processedDistanceM=ancestor.processedDistanceM;modelErrors=0;reusedSamples=ancestor.sampleCount;
+          certificateHit=true;certificateExactExtension=prefixSteps.length>ancestor.stepCount;incrementalUsed=true;
+          // A threshold crossing before the end of the ancestor happened on a
+          // normal full concurrency batch and is also the first crossing in
+          // every exact extension.  Reuse it immediately.  If it happened on
+          // the ancestor's final partial batch, an extension changes that batch
+          // boundary; the suffix loop below fills the exact global batch first.
+          if(ancestor.separated===true&&
+            (ancestor.sampleCount<ancestor.totalSamples||ancestor.sampleCount%concurrency===0||segmentsToEvaluate.length===0)){
+            const result={lowerSeconds,separated:true,complete:false,sampleCount,cacheHits,modelErrors,processedDistanceM,totalSamples,totalDistanceM};
+            result.prefixCertificateHit=true;result.prefixCertificateExactExtension=certificateExactExtension;
+            result.prefixCertificateConflict=false;result.prefixIncrementalSegmentsEvaluated=0;result.prefixFullRescoreFallback=false;
+            result.prefixCertificateReusedSamples=reusedSamples;
+            if(sessionContextValid&&!session.invalidated)routeSunStorePrefixCertificate(session,prefixSteps,{
+              stepCount:prefixSteps.length,routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
+              lowerSeconds:result.lowerSeconds,separated:true,complete:false,sampleCount:result.sampleCount,modelErrors:0,
+              processedDistanceM:result.processedDistanceM,totalSamples:result.totalSamples,totalDistanceM:result.totalDistanceM
+            });
+            return result;
+          }
+        }
+      }
+    }
+    if(!incrementalUsed){
+      const segments=buildSampleSegments(route,spacingM);
+      if(!segments.length)throw new Error("路線長度不足。");
+      totalSamples=segments.length;totalDistanceM=segments[segments.length-1].cumulativeEndM;segmentsToEvaluate=segments;
+      lowerSeconds=0;sampleCount=0;cacheHits=0;modelErrors=0;processedDistanceM=0;reusedSamples=0;
+    }
+    if(totalSamples>Number(config.maxRouteSamples||420))throw new Error(`此路線需要 ${totalSamples} 個採樣段，超過目前安全上限 ${config.maxRouteSamples}。請提高採樣間距或縮短路線。`);
+    if(!totalSamples)throw new Error("路線長度不足。");
     const cacheKey=(segment,at)=>JSON.stringify([
       Number(segment.sample.lat),Number(segment.sample.lng),at.getTime(),
       buildingSnapshot?.cacheKey??null
     ]);
-    for(let offset=0;offset<segments.length;offset+=concurrency){
+    let cursor=0;
+    const finalize=(separated,complete)=>{
+      const result={lowerSeconds,separated,complete,sampleCount,cacheHits,modelErrors,processedDistanceM,totalSamples,totalDistanceM};
+      result.prefixCertificateHit=certificateHit;result.prefixCertificateExactExtension=certificateExactExtension;
+      result.prefixCertificateConflict=certificateConflict;result.prefixIncrementalSegmentsEvaluated=incrementalUsed?actualSegmentsEvaluated:0;
+      result.prefixFullRescoreFallback=options.usePrefixCertificates===true&&!incrementalUsed;
+      result.prefixCertificateReusedSamples=reusedSamples;
+      if(prefixRequested&&sessionContextValid&&!session.invalidated){
+        routeSunStorePrefixCertificate(session,prefixSteps,{stepCount:prefixSteps.length,
+          routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
+          lowerSeconds:result.lowerSeconds,separated:result.separated,complete:result.complete,sampleCount:result.sampleCount,
+          modelErrors:result.modelErrors,processedDistanceM:result.processedDistanceM,totalSamples:result.totalSamples,totalDistanceM:result.totalDistanceM});
+      }
+      return result;
+    };
+    while(cursor<segmentsToEvaluate.length){
       if(serial!==analysisSerial||signal?.aborted)throw new Error("ROUTE_ANALYSIS_CANCELLED");
-      const batch=segments.slice(offset,offset+concurrency);
+      const remainder=sampleCount%concurrency;
+      const batchSize=remainder===0?concurrency:concurrency-remainder;
+      const batch=segmentsToEvaluate.slice(cursor,cursor+batchSize);
       const rows=await Promise.all(batch.map(async(segment)=>{
         const at=new Date(departure.getTime()+(segment.cumulativeMidM/speedMps)*1000);
         const key=cacheKey(segment,at);
         let pending=cache?.get(key);
         if(pending)cacheHits++;
         else{
-          pending=Promise.resolve().then(()=>window.HaidianShade.analyzeShadeModelAt(
+          pending=Promise.resolve().then(()=>modelFn(
             segment.sample.lat,segment.sample.lng,at,
             {canopyTimeoutMs:config.canopyTimeoutMs,buildingSnapshot,signal}
           ));
@@ -841,10 +966,12 @@
         catch(error){
           if(serial!==analysisSerial||signal?.aborted||/CANCELLED/.test(String(error?.message||error)))throw error;
           if(cache)cache.delete(key);
+          if(session&&sessionContextValid)session.cacheGeneration++;
           return {segment,model:null,error};
         }
       }));
       if(serial!==analysisSerial||signal?.aborted)throw new Error("ROUTE_ANALYSIS_CANCELLED");
+      actualSegmentsEvaluated+=batch.length;cursor+=batch.length;
       for(const row of rows){
         const segment=row.segment,model=row.model||{};
         sampleCount++;processedDistanceM+=segment.lengthM;
@@ -855,15 +982,9 @@
           (model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
         if(validModel&&!unknown&&model.state!=='night'&&model.shaded!==true)lowerSeconds+=segment.lengthM/speedMps;
       }
-      if(lowerSeconds>threshold+1e-7)return {
-        lowerSeconds,separated:true,complete:false,sampleCount,cacheHits,modelErrors,
-        processedDistanceM,totalSamples:segments.length,totalDistanceM:segments[segments.length-1].cumulativeEndM
-      };
+      if(lowerSeconds>threshold+1e-7)return finalize(true,false);
     }
-    return {
-      lowerSeconds,separated:lowerSeconds>threshold+1e-7,complete:true,sampleCount,cacheHits,modelErrors,
-      processedDistanceM,totalSamples:segments.length,totalDistanceM:segments[segments.length-1].cumulativeEndM
-    };
+    return finalize(lowerSeconds>threshold+1e-7,true);
   }
 
   function createLayerGroup() {
@@ -1727,13 +1848,15 @@
           typeof c.token==='string'&&typeof c.coverageToken==='string'?JSON.stringify([c.token,c.coverageToken]):null;
       };
       try{
-        const proofLowerBoundSampleCache=new Map();
+        const proofLowerBoundSession=createRouteSunLowerBoundSession();
         const proofOptions={
           departure:options.departure,speedMps:proofWinner.analysis.walkingSpeedMps,
           signal:options.signal||analysisController.signal,shouldCancel:()=>serial!==analysisSerial,evidenceIdentity,
           evaluateRouteLowerBound:(points,context)=>analyzeRouteSunLowerBound(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
-            serial,stopAboveSeconds:context.stopAboveSeconds,sampleCache:proofLowerBoundSampleCache}),
+            serial,stopAboveSeconds:context.stopAboveSeconds,lowerBoundSession:proofLowerBoundSession,
+            proofDomainIdentity:context.proofDomainIdentity,evidenceIdentity:evidenceIdentity(),
+            usePrefixCertificates:context.proofLowerKind==='prefix',proofPrefixSteps:context.proofPrefixSteps}),
           evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,includeHeat:false}),
@@ -1752,7 +1875,7 @@
           if(slice+1===maxSlices){realmGlobalProof.routeResumeTermination='resume-slice-cap';break;}
           continuation=realmGlobalProof;
           // Keep the exact proof object/private frontier and the same scorer +
-          // lower-bound sample cache; yield a browser task before consuming it.
+          // lower-bound incremental session; yield a browser task before consuming it.
           await new Promise(resolve=>setTimeout(resolve,0));
         }
         if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
