@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev175-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev176-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -6021,7 +6021,15 @@
         const toEndResult=dijkstraTimes(graph,scope.endId,scope.speedMps,true);
         state.toEnd=toEndResult.dist;state.toEndPrev=toEndResult.prev;
         state.seen=new Set([scope.startId]);state.groups=new Set();state.steps=[];
-        state.stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
+        // dev176: reversible exact geometry for the current DFS prefix only.
+        // Every accepted edge appends once; pop restores the parent's boundary.
+        // This is private enumeration state, never evidence or proof authority.
+        state.pathPoints=[];
+        state.stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false,
+          pathPointEnd:0,pathDistanceM:0,pathPhysicalM:0}];
+        stats.proofPathEdgeAppends=0;stats.proofPathGeometryPointVisits=0;stats.proofPathHaversineCalls=0;
+        stats.proofPathSnapshots=0;stats.proofPathSnapshotPoints=0;stats.proofPathPrefixEndLookups=0;
+        stats.proofPathRestores=0;stats.proofPathPeakPoints=0;
         const group=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(group)state.groups.add(group);
         state.incumbentSeen=false;stats.expandedStates=1;
         stats.lowerBoundPrefixSubtreePrunes=0;stats.lowerBoundPrefixConflictChecks=0;state.initialized=true;
@@ -6060,7 +6068,11 @@
       };
       const separatingPrefixDepth=(pathSteps,processedDistanceM)=>{
         if(!Number.isFinite(processedDistanceM)||processedDistanceM<=0)return null;
-        const ends=prefixPhysicalEnds(pathSteps),guardM=1e-6;
+        // Same left-to-right physical accumulation and 1e-6 m dedupe as the
+        // legacy scan. Other input sequences keep the exact legacy fallback.
+        const current=pathSteps===state.steps&&state.stack.length===pathSteps.length+1;
+        const ends=current?state.stack.slice(1).map(f=>f.pathPhysicalM):prefixPhysicalEnds(pathSteps),guardM=1e-6;
+        if(current)stats.proofPathPrefixEndLookups++;
         for(let i=0;i<ends.length;i++)if(ends[i]+guardM>=processedDistanceM)return i+1;
         return ends.length||null;
       };
@@ -6073,6 +6085,31 @@
         return true;
       };
       const {seen,groups,steps,stack}=state;
+      const appendProofPath=(edge,from,frame)=>{
+        const parent=stack[stack.length-1],points=state.pathPoints,geometry=edge.geometry;
+        let physicalM=parent.pathPhysicalM;
+        const forward=String(from)===String(edge.a);
+        stats.proofPathEdgeAppends++;stats.proofPathGeometryPointVisits+=geometry.length;
+        for(let i=0;i<geometry.length;i++){
+          const p=geometry[forward?i:geometry.length-1-i],last=points[points.length-1];
+          if(!last){points.push({lat:p.lat,lng:p.lng});continue;}
+          stats.proofPathHaversineCalls++;
+          const d=haversineM(last,p);
+          if(d>1e-6){physicalM+=d;points.push({lat:p.lat,lng:p.lng});}
+        }
+        frame.pathPointEnd=points.length;
+        frame.pathDistanceM=parent.pathDistanceM+edge.distanceM;
+        frame.pathPhysicalM=physicalM;
+        stats.proofPathPeakPoints=Math.max(stats.proofPathPeakPoints,points.length);
+      };
+      const snapshotProofPath=()=>{
+        // Give external scorers fresh point objects, exactly as pathFromEdgeSteps
+        // did. Scorer mutation must never change the private prefix or siblings.
+        stats.proofPathSnapshots++;stats.proofPathSnapshotPoints+=state.pathPoints.length;
+        return {points:state.pathPoints.map(p=>({lat:p.lat,lng:p.lng})),
+          edgeIds:steps.map(s=>graph.edges.get(s.edgeId).id),distanceM:stack[stack.length-1].pathDistanceM,
+          stepPointEnds:stack.slice(1).map(f=>f.pathPointEnd)};
+      };
       // dev173: the reverse-Dijkstra `toEndPrev` relation is a canonical
       // shortest-path arborescence toward the endpoint.  A history check only
       // asks whether any already-seen vertex lies on the canonical suffix from
@@ -6138,7 +6175,10 @@
           if(bit!==undefined)historyExactCache.seenMask=delta>0?(historyExactCache.seenMask|bit):(historyExactCache.seenMask&~bit);
         }
       };
-      const pop=()=>{const f=stack.pop();if(stack.length){historySeenDelta(f.node,-1);seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
+      const pop=()=>{const f=stack.pop();if(stack.length){
+        state.pathPoints.length=stack[stack.length-1].pathPointEnd;stats.proofPathRestores++;
+        historySeenDelta(f.node,-1);seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();
+      }};
       // Shortest continuation after removing the prefix's already-visited
       // vertices.  This is still a relaxation of every legal simple-path
       // continuation because it intentionally ignores source-junction and
@@ -6235,7 +6275,7 @@
         if(cur.node===scope.endId){
           if(realmProofSequenceKey(steps)===W)state.incumbentSeen=true;
           else{
-            const path=pathFromEdgeSteps(graph,steps),lowerOnly=await getLowerOnly(path,steps);
+            const path=snapshotProofPath(),lowerOnly=await getLowerOnly(path,steps);
             if(lowerOnly?.separated===true){
               const lo=lowerOnly.lower;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;stats.lowerBoundSeparatedAlternatives++;
               stats.minimumCompetingLowerSeconds=minimum;
@@ -6288,7 +6328,7 @@
         if(prefixLowerEnabled&&!cur.prefixSunChecked&&steps.length&&cur.walkS>threshold+1e-7&&
           stats.prefixLowerBoundRouteCalls<maxPrefixLowerRoutes&&(graph.adjacency.get(cur.node)||[]).length>1){
           cur.prefixSunChecked=true;
-          const prefixPath=pathFromEdgeSteps(graph,steps),prefixLower=await getPrefixLowerOnly(prefixPath,steps);
+          const prefixPath=snapshotProofPath(),prefixLower=await getPrefixLowerOnly(prefixPath,steps);
           if(prefixLower?.separated===true){
             const prefixDepth=separatingPrefixDepth(steps,prefixLower.processedDistanceM);
             if(prefixDepth){
@@ -6340,7 +6380,9 @@
         if(walkS>cap+.5){stats.detourRejected++;continue;}
         if(stats.expandedStates>=maxStates)return finishWithWitnesses('state-cap');
         let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
-        seen.add(next);historySeenDelta(next,1);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false});stats.expandedStates++;
+        const frame={node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false};
+        appendProofPath(edge,cur.node,frame);
+        seen.add(next);historySeenDelta(next,1);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push(frame);stats.expandedStates++;
         if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
       }
       if(!state.incumbentSeen)return finishWithWitnesses('incumbent-not-in-domain');
