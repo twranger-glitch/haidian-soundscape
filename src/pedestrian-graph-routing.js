@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev174-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev175-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5790,7 +5790,7 @@
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
     const threshold=upper+0.5;let state=null,resumed=false,sliceStartStates=0;
     let stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
-      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,historyContinuationIndexedChecks:0,historyContinuationIndexedBlocked:0,historyContinuationIndexFallbacks:0,historyContinuationIndexBuildNodes:0,historyContinuationExactCacheQueries:0,historyContinuationExactCacheHits:0,historyContinuationExactCacheMisses:0,historyContinuationExactCacheStores:0,historyContinuationExactCacheEntries:0,historyContinuationExactCacheCapBreaks:0,historyContinuationDijkstraRuns:0,historyContinuationDijkstraExpandedNodes:0,historyContinuationDijkstraHeapPops:0,missingCellLowerBound:0,continuationLowerBound:0,
+      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,historyContinuationIndexedChecks:0,historyContinuationIndexedBlocked:0,historyContinuationIndexFallbacks:0,historyContinuationIndexBuildNodes:0,historyContinuationExactCacheQueries:0,historyContinuationExactCacheHits:0,historyContinuationExactCacheMisses:0,historyContinuationExactCacheStores:0,historyContinuationExactCacheEntries:0,historyContinuationExactCacheCapBreaks:0,historyContinuationDijkstraRuns:0,historyContinuationDijkstraExpandedNodes:0,historyContinuationDijkstraHeapPops:0,historyContinuationAStarRuns:0,historyContinuationAStarExpandedNodes:0,historyContinuationAStarHeapPops:0,historyContinuationAStarBoundPrunes:0,historyContinuationAStarBoundPrunedQueries:0,missingCellLowerBound:0,continuationLowerBound:0,
       unseparatedCompetitorCount:0,uniqueUnseparatedGeometryCount:0,strictlyBetterThanIncumbentCount:0,witnessSetTruncated:false,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
@@ -6176,9 +6176,28 @@
           }
           stats.historyContinuationExactCacheMisses++;
         }
+        // dev175: the blocked-history fallback is now an exact cap-bounded A*
+        // search instead of an uninformed Dijkstra.  `toEnd` is the exact
+        // relaxed directed shortest remaining WALK time on this same proof
+        // graph, so it is an admissible/consistent heuristic after removing
+        // already-seen vertices.  The caller's resource test admits a remaining
+        // distance up to (cap + 0.5 - prefixWalkS + detourContinuationGuardS),
+        // so any open label whose g+h exceeds that guarded limit cannot belong
+        // to a legal selected-Realm continuation.  Such prefix-dependent bound
+        // pruning is never cached as a no-path result.  If a goal is popped,
+        // the returned finite distance is still the exact history-avoiding
+        // shortest distance and remains safe for the exact visited-set cache.
         stats.historyContinuationDijkstraRuns++;
-        const dist=new Map([[id,0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:id,t:0});
-        let capBreak=false;
+        stats.historyContinuationAStarRuns++;
+        const remainingLimit=Math.max(0,cap+.5+1e-9-prefixWalkS)+detourContinuationGuardS;
+        const heuristic=n=>{
+          const h=Number(toEnd.get(String(n)));
+          return Number.isFinite(h)?Math.max(0,h):Infinity;
+        };
+        const h0=heuristic(id);
+        const dist=new Map([[id,0]]),q=new MinHeap((a,b)=>a.f-b.f||a.t-b.t);
+        q.push({node:id,t:0,f:h0});
+        let resourcePruned=false;
         const storeExact=value=>{
           if(!historyExactCache||typeof mask!=='bigint')return;
           if(!nodeCache){nodeCache=new Map();historyExactCache.byNode.set(id,nodeCache);}
@@ -6188,19 +6207,27 @@
           }
         };
         while(q.size){
-          const cur=q.pop();stats.historyContinuationDijkstraHeapPops++;
+          const cur=q.pop();stats.historyContinuationDijkstraHeapPops++;stats.historyContinuationAStarHeapPops++;
           if(cur.t!==dist.get(cur.node))continue;
+          if(cur.f>remainingLimit+1e-9){resourcePruned=true;stats.historyContinuationAStarBoundPrunes++;break;}
           if(cur.node===scope.endId){storeExact(cur.t);return cur.t;}
-          if(prefixWalkS+Math.max(0,cur.t-detourContinuationGuardS)>cap+.5+1e-9){capBreak=true;stats.historyContinuationExactCacheCapBreaks++;break;}
-          stats.historyContinuationDijkstraExpandedNodes++;
+          stats.historyContinuationDijkstraExpandedNodes++;stats.historyContinuationAStarExpandedNodes++;
           for(const ref of graph.adjacency.get(cur.node)||[]){
             const next=String(ref.to);if(next!==scope.endId&&seen.has(next))continue;
             const edge=graph.edges.get(ref.edgeId);if(!edge)continue;
             const t=cur.t+edge.distanceM/scope.speedMps;
-            if(t+1e-9<(dist.get(next)??Infinity)){dist.set(next,t);q.push({node:next,t});}
+            if(!(t+1e-9<(dist.get(next)??Infinity)))continue;
+            const h=heuristic(next);
+            if(!Number.isFinite(h))continue;
+            const f=t+h;
+            if(f>remainingLimit+1e-9){resourcePruned=true;stats.historyContinuationAStarBoundPrunes++;continue;}
+            dist.set(next,t);q.push({node:next,t,f});
           }
         }
-        if(!capBreak)storeExact(Infinity);
+        if(resourcePruned){
+          stats.historyContinuationAStarBoundPrunedQueries++;
+          stats.historyContinuationExactCacheCapBreaks++;
+        }else storeExact(Infinity);
         return Infinity;
       };
       while(stack.length){
