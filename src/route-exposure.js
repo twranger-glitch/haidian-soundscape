@@ -1739,60 +1739,101 @@
             serial,includeHeat:false})
         });
         if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
-        // If the conservative graph-domain proof finds one exact competitor
-        // whose interval overlaps W, surface that authenticated witness as a
-        // normal Realm candidate instead of leaving the ambiguity hidden inside
-        // proof diagnostics. This does NOT change heuristic candidate generation
-        // or the comparator: the witness is materialized only from the private
-        // proof scope, then must pass the existing quality/walkability/detour
-        // gates and the same final dense scorer before entering comparison.
-        if(realmGlobalProof?.termination==='competitor-not-separated'){
-          // dev37.9.9.16.6: use two authenticated handoff channels.  Prefer the
-          // public graph API when visible; otherwise consume the non-enumerable
-          // closure attached to the exact proof object by the graph runtime.
-          // A JSON/spread copy does not carry that closure, so this fallback does
-          // not turn serialized diagnostics into a route-injection surface.
-          const publicMaterializer=typeof graphProof?.materializeRealmGlobalProofWitness==='function'
+        // dev37.9.9.16.7: a completed graph-domain proof may contain an
+        // uncertainty FRONTIER rather than a single witness.  Every unique
+        // unseparated geometry is surfaced through the same authenticated
+        // proof scope, existing quality/walkability/detour gates and final
+        // dense scorer.  Search coverage may become complete even when the
+        // comparator still (correctly) refuses to choose a unique winner.
+        const expectedProofWitnessCount=Math.max(0,Number(realmGlobalProof?.uniqueUnseparatedGeometryCount||
+          (realmGlobalProof?.termination==='competitor-not-separated'?1:0)));
+        if(expectedProofWitnessCount>0){
+          const publicSetMaterializer=typeof graphProof?.materializeRealmGlobalProofWitnesses==='function'
+            ? ()=>graphProof.materializeRealmGlobalProofWitnesses(proofWinner,realmGlobalProof):null;
+          const publicSingleMaterializer=typeof graphProof?.materializeRealmGlobalProofWitness==='function'
             ? ()=>graphProof.materializeRealmGlobalProofWitness(proofWinner,realmGlobalProof):null;
-          const embeddedMaterializer=typeof realmGlobalProof?.materializeAuthenticatedWitness==='function'
+          const embeddedSetMaterializer=typeof realmGlobalProof?.materializeAuthenticatedWitnesses==='function'
+            ? ()=>realmGlobalProof.materializeAuthenticatedWitnesses(proofWinner):null;
+          const embeddedSingleMaterializer=typeof realmGlobalProof?.materializeAuthenticatedWitness==='function'
             ? ()=>realmGlobalProof.materializeAuthenticatedWitness(proofWinner):null;
-          let rawWitness=null,handoff=null;
-          if(publicMaterializer){rawWitness=publicMaterializer();if(rawWitness)handoff='public-graph-api';}
-          if(!rawWitness&&embeddedMaterializer){rawWitness=embeddedMaterializer();if(rawWitness)handoff='embedded-proof-object';}
-          if(rawWitness){
+          let rawWitnesses=[],handoff=null;
+          if(publicSetMaterializer){rawWitnesses=publicSetMaterializer()||[];if(rawWitnesses.length)handoff='public-graph-api';}
+          if(!rawWitnesses.length&&publicSingleMaterializer){
+            const one=publicSingleMaterializer();if(one){rawWitnesses=[one];handoff='public-graph-api';}
+          }
+          if(!rawWitnesses.length&&embeddedSetMaterializer){rawWitnesses=embeddedSetMaterializer()||[];if(rawWitnesses.length)handoff='embedded-proof-object';}
+          if(!rawWitnesses.length&&embeddedSingleMaterializer){
+            const one=embeddedSingleMaterializer();if(one){rawWitnesses=[one];handoff='embedded-proof-object';}
+          }
+          if(!Array.isArray(rawWitnesses))rawWitnesses=[];
+          const statuses=[];
+          const intervalMatches=(summary,expected)=>{
+            if(!expected)return true;
+            const lo=Number(summary?.directSunSeconds),unk=Number(summary?.unknownSeconds),up=lo+unk;
+            return Number.isFinite(lo)&&Number.isFinite(unk)&&
+              Math.abs(lo-Number(expected.lowerSeconds))<=1e-9&&
+              Math.abs(unk-Number(expected.unknownSeconds))<=1e-9&&
+              Math.abs(up-Number(expected.upperSeconds))<=1e-9;
+          };
+          for(const rawWitness of rawWitnesses){
+            if(!rawWitness)continue;
             const witness=withCandidateIdentity(Object.assign({},rawWitness,{routeQuality:evaluateRouteQuality(rawWitness)}));
-            const witnessHash=candidateGeometryHash(witness.points),duplicate=scored.some(c=>candidateGeometryHash(c.points)===witnessHash);
+            const witnessHash=candidateGeometryHash(witness.points);
+            const duplicateCandidate=scored.find(c=>candidateGeometryHash(c.points)===witnessHash)||null;
+            const duplicate=!!duplicateCandidate;
             const qualityOk=witness?.routeQuality?.valid!==false,walkabilityOk=walkabilitySafe(witness),detourOk=candidateWithinDetour(witness,fastest,detourPct);
-            realmGlobalProof.witnessMaterialization={attempted:true,handoff,duplicate,qualityOk,walkabilityOk,detourOk,candidateId:witness.id,geometryHash:witness.geometryHash||witnessHash};
-            if(!duplicate&&qualityOk&&walkabilityOk&&detourOk){
+            const expectedInterval=witness?.graphMeta?.realmGlobalProofExpectedInterval||null;
+            const status={attempted:true,handoff,duplicate,qualityOk,walkabilityOk,detourOk,candidateId:witness.id,
+              geometryHash:witness.geometryHash||witnessHash,expectedInterval,materialized:false,duplicateMatchedExisting:false,evidenceOk:false};
+            if(duplicate){
+              status.evidenceOk=intervalMatches(duplicateCandidate?.analysis?.summary,expectedInterval);
+              status.duplicateMatchedExisting=status.evidenceOk;
+              status.existingCandidateId=duplicateCandidate?.id||null;
+            }else if(qualityOk&&walkabilityOk&&detourOk){
               const analysis=await analyzeRoute(witness.points,{departure:options.departure,preparedModel,signal:options.signal,
                 sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,serial,includeHeat:false});
               if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
-              const graphSun=Number(witness.graphEstimatedDirectSunSeconds),graphDistance=Number(witness.distanceM);
-              const modelAgreement={finalSampleSpacingM:analysis.sampleSpacingM,graphCostSampleSpacingM:witness.graphMeta?.backend==='nationwide-hgr2'?5:null,
-                graphVsFinalDistanceM:Number.isFinite(graphDistance)?analysis.summary.totalDistanceM-graphDistance:null,
-                graphVsFinalSunSeconds:Number.isFinite(graphSun)?analysis.summary.directSunSeconds-graphSun:null,
-                scope:'final geometry at walking arrival times; distinct from graph exact replay'};
-              const scoredWitness=Object.assign({},witness,{analysis,modelAgreement,eligible:true,searchIncomplete:true,
-                graphMeta:Object.assign({},witness.graphMeta,{shadeSearchComplete:false,realmGlobalProofWitness:true})});
-              scored=scored.concat([scoredWitness]);
-              eligibleScored=scored.filter(c=>c.eligible!==false);
-              comparison=compareExposureBounds(eligibleScored);
-              realmGlobalProof.witnessMaterialization=Object.assign({},realmGlobalProof.witnessMaterialization,{materialized:true,
-                lowerSeconds:analysis.summary.directSunSeconds,unknownSeconds:analysis.summary.unknownSeconds,
-                upperSeconds:analysis.summary.directSunSeconds+analysis.summary.unknownSeconds});
-              if(candidateAudit){
-                candidateAudit.quality?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,geometryHash:scoredWitness.geometryHash,status:'kept',reasons:[]});
-                candidateAudit.walkability?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,status:candidateWalkabilityTier(scoredWitness),reasons:walkabilityReasons(scoredWitness),requiresOnSitePathConfirmation:scoredWitness?.graphMeta?.requiresOnSitePathConfirmation===true,inferredOpenSpaceM:Number(scoredWitness?.graphMeta?.realmInferredOpenSpaceDistanceM||0),unresolvedSyntheticM:Number(scoredWitness?.graphMeta?.realmSyntheticDistanceM||0)});
-                candidateAudit.detour?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,geometryHash:scoredWitness.geometryHash,status:'eligible',reasons:[],distanceM:scoredWitness.distanceM,limitM:Number(fastest.distanceM)*(1+detourPct/100)});
+              status.evidenceOk=intervalMatches(analysis?.summary,expectedInterval);
+              if(status.evidenceOk){
+                const graphSun=Number(witness.graphEstimatedDirectSunSeconds),graphDistance=Number(witness.distanceM);
+                const modelAgreement={finalSampleSpacingM:analysis.sampleSpacingM,graphCostSampleSpacingM:witness.graphMeta?.backend==='nationwide-hgr2'?5:null,
+                  graphVsFinalDistanceM:Number.isFinite(graphDistance)?analysis.summary.totalDistanceM-graphDistance:null,
+                  graphVsFinalSunSeconds:Number.isFinite(graphSun)?analysis.summary.directSunSeconds-graphSun:null,
+                  scope:'final geometry at walking arrival times; distinct from graph exact replay'};
+                const scoredWitness=Object.assign({},witness,{analysis,modelAgreement,eligible:true,searchIncomplete:true,
+                  graphMeta:Object.assign({},witness.graphMeta,{shadeSearchComplete:false,realmGlobalProofWitness:true})});
+                scored=scored.concat([scoredWitness]);
+                eligibleScored=scored.filter(c=>c.eligible!==false);
+                comparison=compareExposureBounds(eligibleScored);
+                Object.assign(status,{materialized:true,lowerSeconds:analysis.summary.directSunSeconds,
+                  unknownSeconds:analysis.summary.unknownSeconds,upperSeconds:analysis.summary.directSunSeconds+analysis.summary.unknownSeconds});
+                if(candidateAudit){
+                  candidateAudit.quality?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,geometryHash:scoredWitness.geometryHash,status:'kept',reasons:[]});
+                  candidateAudit.walkability?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,status:candidateWalkabilityTier(scoredWitness),reasons:walkabilityReasons(scoredWitness),requiresOnSitePathConfirmation:scoredWitness?.graphMeta?.requiresOnSitePathConfirmation===true,inferredOpenSpaceM:Number(scoredWitness?.graphMeta?.realmInferredOpenSpaceDistanceM||0),unresolvedSyntheticM:Number(scoredWitness?.graphMeta?.realmSyntheticDistanceM||0)});
+                  candidateAudit.detour?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,geometryHash:scoredWitness.geometryHash,status:'eligible',reasons:[],distanceM:scoredWitness.distanceM,limitM:Number(fastest.distanceM)*(1+detourPct/100)});
+                }
               }
             }
-          }else realmGlobalProof.witnessMaterialization={attempted:true,materialized:false,
-            publicMaterializerAvailable:!!publicMaterializer,embeddedMaterializerAvailable:!!embeddedMaterializer,
-            reason:'authenticated-witness-unavailable-or-not-policy-qualified'};
+            statuses.push(status);
+          }
+          const surfacedCount=statuses.filter(s=>s.materialized===true||s.duplicateMatchedExisting===true).length;
+          const materializedCount=statuses.filter(s=>s.materialized===true).length;
+          const duplicateCount=statuses.filter(s=>s.duplicateMatchedExisting===true).length;
+          const surfaceComplete=surfacedCount===expectedProofWitnessCount&&statuses.length===expectedProofWitnessCount;
+          realmGlobalProof.witnessMaterializations=statuses;
+          realmGlobalProof.witnessSurfaceComplete=surfaceComplete;
+          realmGlobalProof.witnessMaterialization=Object.assign({
+            attempted:true,handoff,expectedCount:expectedProofWitnessCount,receivedCount:rawWitnesses.length,
+            surfacedCount,materializedCount,duplicateCount,complete:surfaceComplete
+          },statuses.length===1?statuses[0]:{});
+        }else if(realmGlobalProof){
+          realmGlobalProof.witnessSurfaceComplete=true;
         }
-        if(realmGlobalProof?.complete===true&&evidenceIdentity()===realmGlobalProof.evidenceIdentity){
-          // Validate the whole promotion list before clearing any search flag.
+        if((realmGlobalProof?.frontierComplete===true||realmGlobalProof?.complete===true)&&realmGlobalProof?.witnessSurfaceComplete===true&&evidenceIdentity()===realmGlobalProof.evidenceIdentity){
+          // A complete graph-domain classification is promotable only after
+          // every authenticated unseparated geometry has either been surfaced
+          // or matched to an already-scored geometry with identical dense
+          // evidence.  Then every candidate bound to this proof scope is covered.
           const covered=eligibleScored.filter(c=>graphProof.realmGlobalProofCoversCandidate?.(c,proofWinner,realmGlobalProof));
           for(const c of covered){c.searchIncomplete=false;c.graphMeta=Object.assign({},c.graphMeta,{shadeSearchComplete:true,realmGlobalProof});}
         }
@@ -1819,7 +1860,9 @@
       candidateSetComparisonValid,
       searchCoverageComplete,
       searchIncompleteCandidateIds:searchIncompleteCandidates.map(c=>c.id),
-      scopeStatus:comparisonValid?'complete-for-reported-comparison':candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-proved-search-incomplete':comparison.proof?.state||'unproved'
+      scopeStatus:comparisonValid?'complete-for-reported-comparison':
+        searchCoverageComplete&&comparison.proof?.state==='overlapping-or-within-tie-margin'?'complete-search-overlapping':
+        candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-proved-search-incomplete':comparison.proof?.state||'unproved'
     });
     if(realmGlobalProof)comparisonProof.realmGlobalProof=realmGlobalProof;
     // reliableScored remains the exact-evidence count; a robust interval winner
@@ -1843,7 +1886,10 @@
       eligibleScored,
       reliableScored,
       stageCounts:{input:candidates.length,quality:qualityValid.length,walkability:qualityValid.filter(walkabilitySafe).length,detour:detourEligible.length,scored:scored.length,eligibleScored:eligibleScored.length,reliableScored:reliableScored.length},
-      comparisonState:comparisonValid?'comparable':candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-only':eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
+      comparisonState:comparisonValid?'comparable':
+        searchCoverageComplete&&eligibleScored.length>=2&&comparison.proof?.state==='overlapping-or-within-tie-margin'?'complete-uncertainty':
+        candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-only':
+        eligibleScored.length>=2?'incomplete-source':eligibleScored.length===1?'only-one-eligible':'no-eligible-route',
       comparisonProof,
       comparisonWalkability:{selectedTier:selected?candidateWalkabilityTier(selected):null,provisionalTier:provisionalSelected?candidateWalkabilityTier(provisionalSelected):null,includesInferredCandidates:eligibleScored.some(c=>candidateWalkabilityTier(c)==='inferred-open-space'),requiresOnSitePathConfirmation:(selected||provisionalSelected)?.graphMeta?.requiresOnSitePathConfirmation===true,searchCoverageComplete,policy:'source-supported and inferred-open-space candidates may be exposure-compared; unresolved synthetic candidates remain excluded; candidate-set winners remain provisional while Realm search coverage is incomplete'},
       scored,
@@ -3438,6 +3484,9 @@
     if(bundle.comparisonState==='candidate-set-only'&&bundle.provisionalSelected){
       const provisionalName=candidateName(bundle.provisionalSelected,bundle);
       notice=`<div class="re-candidate-alert"><b>目前候選中已證明「${escapeHtml(provisionalName)}」日照較少，但搜尋範圍尚未完成</b><span>已生成候選之間的日曬上下界可分離；然而 Realm 搜尋仍標示未完成，因此這是候選集內的結果，不宣稱現實或搜尋空間的全域最不曬。路線仍可顯示，推定開放空間仍需現場確認。</span></div>`;
+    } else if(bundle.comparisonState==='complete-uncertainty'){
+      const frontierCount=Number(bundle.comparisonProof?.realmGlobalProof?.uniqueUnseparatedGeometryCount||0);
+      notice=`<div class="re-candidate-alert"><b>Realm 搜尋空間已完整覆蓋，但目前證據無法證明唯一「最不曬」路線</b><span>已完整分類所選 Realm/source graph 的合法 simple paths；其中 ${frontierCount} 條不同幾何仍與基準候選的日曬上下界重疊。未知路段保持未知，因此 selected 維持空值。這是證據不確定性，不是搜尋未完成，也不代表現實世界的全域最優。</span></div>`;
     } else if(bundle.shadeComparisonIncomplete){
       notice='<div class="re-candidate-alert"><b>日曬上下界重疊、差距不足、搜尋未完成或來源不足，無法證明全域排名</b><span>未知路段保留未知。候選仍可檢視；若只有候選集內的證明，會另外標示，不能宣稱已找到全域最少日曬路線。</span></div>';
     } else if (!bundle.comparisonValid) {
@@ -4971,7 +5020,11 @@
         setStatus(`完成：已比較 ${bundle.eligibleScored.length} 條符合繞路上限的候選${graphText}${fusionText}${walkabilityNote}。耗時 ${(perf.totalMs/1000).toFixed(1)} 秒。`, "ok");
       } else {
         const suffix = bundle.graphError ? ` OSM Graph：${bundle.graphError}` : "";
-        if (bundle.comparisonState === "incomplete-source") {
+        if (bundle.comparisonState === "complete-uncertainty") {
+          const count = Number(bundle.eligibleScored?.length || bundle.stageCounts?.eligibleScored || 0);
+          const frontierCount=Number(bundle.comparisonProof?.realmGlobalProof?.uniqueUnseparatedGeometryCount||0);
+          setStatus(`已完整覆蓋所選 Realm 搜尋空間並顯示 ${count} 條可比較候選；其中 ${frontierCount} 條競爭路線的日曬區間仍重疊，因此無法證明唯一「最不曬」。未知仍保留未知。${suffix}`, "warning");
+        } else if (bundle.comparisonState === "incomplete-source") {
           const count = Number(bundle.eligibleScored?.length || bundle.stageCounts?.eligibleScored || 0);
           setStatus(`已找到 ${count} 條可行候選，但目前陰影資料不完整，暫時無法可靠比較「最不曬」；已先顯示一條可行候選，可在結果卡切換其他路線。${suffix}`, "warning");
         } else if (bundle.comparisonState === "only-one-eligible") {

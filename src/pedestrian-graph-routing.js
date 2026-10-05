@@ -5771,9 +5771,10 @@
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
     const threshold=upper+0.5,stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
       evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
+      unseparatedCompetitorCount:0,uniqueUnseparatedGeometryCount:0,strictlyBetterThanIncumbentCount:0,witnessSetTruncated:false,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
-      alternativeLowerBoundAtTermination:0,termination:'not-started',complete:false,physicalGlobalOptimal:false,productionGraphMutated:false,
+      alternativeLowerBoundAtTermination:0,termination:'not-started',complete:false,frontierComplete:false,physicalGlobalOptimal:false,productionGraphMutated:false,
       proofScope:'selected Realm/source graph; legal simple ordered edge sequences; existing graph detour/synthetic/history domain; exact-arrival dense selected-source model'};
     const finish=reason=>Object.assign(stats,{termination:reason,elapsedMs:nowMs()-started});
     if(!scope||typeof options.evaluateRoute!=='function'||typeof options.evidenceIdentity!=='function')return finish('proof-context-unavailable');
@@ -5818,8 +5819,9 @@
     stats.maximumGeometryNodeEndpointGapM=maxGeometryNodeEndpointGapM;
     let identity;try{identity=options.evidenceIdentity();}catch(_){return finish('evidence-identity-unavailable');}
     if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
-    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256))),maxLowerRoutes=Math.floor(Math.max(1,Math.min(4000,Number(options.maxProofLowerBoundRoutes)||2000)));
-    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
+    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256))),maxLowerRoutes=Math.floor(Math.max(1,Math.min(4000,Number(options.maxProofLowerBoundRoutes)||2000))),maxWitnesses=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofWitnesses)||128)));
+    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.lowerBoundRouteCap=maxLowerRoutes;stats.witnessCap=maxWitnesses;stats.lowerBoundRouteCalls=0;stats.lowerBoundSamples=0;stats.lowerBoundCacheHits=0;stats.lowerBoundModelErrors=0;stats.lowerBoundSeparatedAlternatives=0;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
+    const witnessRecords=[],witnessGeometryKeys=new Set();
     const controller=new AbortController();let timer,stopReject,reason=null,minimum=Infinity;
     const stopped=new Promise((_,reject)=>{stopReject=reject;});stopped.catch(()=>{});
     const stop=r=>{if(reason)return;reason=r;controller.abort();stopReject(new Error(r));};
@@ -5847,6 +5849,23 @@
       return {lower:lo,separated,complete:result?.complete===true,
         processedDistanceM:Number.isFinite(processedDistanceM)&&processedDistanceM>=0?processedDistanceM:null,
         totalDistanceM:Number.isFinite(totalDistanceM)&&totalDistanceM>=0?totalDistanceM:null};
+    };
+    const proofRecord=()=>({scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
+      witnesses:witnessRecords.map(r=>Object.assign({},r,{witnessSteps:r.witnessSteps.map(s=>({...s}))}))});
+    const attachWitnessMaterializers=(proof,record)=>{
+      realmGlobalProofRecords.set(proof,record);
+      if(record.witnesses.length){
+        Object.defineProperty(proof,'materializeAuthenticatedWitnesses',{enumerable:false,configurable:false,writable:false,
+          value:(winner)=>materializeRealmGlobalProofWitnessRecords(winner,proof,record)});
+        Object.defineProperty(proof,'materializeAuthenticatedWitness',{enumerable:false,configurable:false,writable:false,
+          value:(winner)=>materializeRealmGlobalProofWitnessRecord(winner,proof,record)});
+      }
+      return proof;
+    };
+    const finishWithWitnesses=(reason)=>{
+      const proof=finish(reason);
+      if(witnessRecords.length)attachWitnessMaterializers(proof,proofRecord());
+      return proof;
     };
     try{
       check();
@@ -5958,24 +5977,24 @@
               const lo=value?value.lower:0;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;
               stats.minimumCompetingLowerSeconds=minimum;
               if(!(lo>threshold+1e-7)){
-                stats.witnessEdgeSequence=steps.map(s=>({...s}));
-                if(value){
-                  const finished=finish('competitor-not-separated');
-                  const witnessRecord={scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
-                    witnessSteps:steps.map(s=>({...s})),witnessGeometry:realmProofGeometryKey(path.points),incompleteWitness:true};
-                  realmGlobalProofRecords.set(stats,witnessRecord);
-                  // dev37.9.9.16.6: carry the authenticated witness handoff on the
-                  // exact proof object as a NON-ENUMERABLE closure.  This is a
-                  // fallback for environments where the public graph materializer
-                  // is not visible to route-exposure even though this proof was
-                  // produced by the current graph runtime. JSON serialization and
-                  // object spread intentionally drop this closure, so copied or
-                  // forged proof objects cannot acquire the witness capability.
-                  Object.defineProperty(finished,'materializeAuthenticatedWitness',{enumerable:false,configurable:false,writable:false,
-                    value:(winner)=>materializeRealmGlobalProofWitnessRecord(winner,finished,witnessRecord)});
-                  return finished;
+                if(!value)return finishWithWitnesses('missing-exact-evidence');
+                stats.unseparatedCompetitorCount++;
+                if(value.upper+0.5<lower-1e-7)stats.strictlyBetterThanIncumbentCount++;
+                const witnessGeometry=realmProofGeometryKey(path.points);
+                if(!witnessGeometryKeys.has(witnessGeometry)){
+                  if(witnessRecords.length>=maxWitnesses){
+                    stats.witnessSetTruncated=true;
+                    return finishWithWitnesses('witness-cap');
+                  }
+                  witnessGeometryKeys.add(witnessGeometry);
+                  const witnessRecord={witnessSteps:steps.map(s=>({...s})),witnessGeometry,
+                    witnessSequenceKey:realmProofSequenceKey(steps),geometryHash:geometryHash(path.points||[]),
+                    lower:value.lower,upper:value.upper,unknown:Math.max(0,value.upper-value.lower),distanceM:Number(path.distanceM||0),
+                    relationToIncumbent:value.upper+0.5<lower-1e-7?'strictly-better-than-incumbent':'overlapping-or-within-tie-margin'};
+                  witnessRecords.push(witnessRecord);
+                  stats.uniqueUnseparatedGeometryCount=witnessRecords.length;
+                  if(!stats.witnessEdgeSequence)stats.witnessEdgeSequence=witnessRecord.witnessSteps.map(s=>({...s}));
                 }
-                return finish('missing-exact-evidence');
               }
             }
           }
@@ -6016,24 +6035,40 @@
       if(!incumbentSeen)return finish('incumbent-not-in-domain');
       const final=await getInterval(winnerPath);
       if(!final||Math.abs(final.lower-lower)>1e-9||Math.abs(final.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
-      check();stats.complete=true;stats.minimumCompetingLowerSeconds=Number.isFinite(minimum)?minimum:null;
+      check();stats.frontierComplete=true;stats.complete=witnessRecords.length===0;stats.minimumCompetingLowerSeconds=Number.isFinite(minimum)?minimum:null;
+      stats.minimumCompetingLowerScope='all legal simple ordered-edge paths in selected Realm/source graph domain';
       stats.alternativeLowerBoundAtTermination=Number.isFinite(minimum)?minimum:null;
       stats.winnerEdgeSequence=handle.steps.map(s=>({...s}));stats.evidenceIdentity=identity;stats.tieMarginSeconds=.5;
-      finish('all-selected-realm-simple-paths-separated');
-      realmGlobalProofRecords.set(stats,{scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity});
-      return stats;
-    }catch(error){return finish(reason||'evidence-evaluation-failed');}
+      const terminal=witnessRecords.length?'all-selected-realm-simple-paths-classified':'all-selected-realm-simple-paths-separated';
+      const finished=finish(terminal);
+      attachWitnessMaterializers(finished,proofRecord());
+      return finished;
+    }catch(error){return finishWithWitnesses(reason||'evidence-evaluation-failed');}
     finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);controller.abort();}
   }
-  function materializeRealmGlobalProofWitnessRecord(winner,proof,record) {
+  function materializeRealmGlobalProofWitnessRecords(winner,proof,record) {
     const handle=winner?.[realmGlobalProofHandle];
-    if(!record||proof?.complete===true||proof?.termination!=='competitor-not-separated'||record.incompleteWitness!==true||
-      !Array.isArray(record.witnessSteps)||!record.witnessSteps.length||handle?.scope!==record.scope||
+    if(!record||!Array.isArray(record.witnesses)||!record.witnesses.length||handle?.scope!==record.scope||
       realmProofSequenceKey(handle.steps)!==record.winnerKey||realmProofGeometryKey(winner?.points)!==record.winnerGeometry||
-      typeof record.scope?.materializeProofWitnessCandidate!=='function')return null;
-    const candidate=record.scope.materializeProofWitnessCandidate(record.witnessSteps);
-    if(!candidate||realmProofGeometryKey(candidate.points)!==record.witnessGeometry)return null;
-    return candidate;
+      typeof record.scope?.materializeProofWitnessCandidate!=='function')return [];
+    const out=[];
+    for(let i=0;i<record.witnesses.length;i++){
+      const witness=record.witnesses[i];
+      if(!Array.isArray(witness?.witnessSteps)||!witness.witnessSteps.length)continue;
+      const candidate=record.scope.materializeProofWitnessCandidate(witness.witnessSteps);
+      if(!candidate||realmProofGeometryKey(candidate.points)!==witness.witnessGeometry)continue;
+      candidate.graphMeta=Object.assign({},candidate.graphMeta,{realmGlobalProofWitness:true,realmGlobalProofWitnessIndex:i,
+        realmGlobalProofExpectedInterval:{lowerSeconds:witness.lower,unknownSeconds:witness.unknown,upperSeconds:witness.upper},
+        realmGlobalProofWitnessSequenceKey:witness.witnessSequenceKey,realmGlobalProofRelationToIncumbent:witness.relationToIncumbent});
+      out.push(candidate);
+    }
+    return out;
+  }
+  function materializeRealmGlobalProofWitnessRecord(winner,proof,record) {
+    return materializeRealmGlobalProofWitnessRecords(winner,proof,record)[0]||null;
+  }
+  function materializeRealmGlobalProofWitnesses(winner,proof) {
+    return materializeRealmGlobalProofWitnessRecords(winner,proof,realmGlobalProofRecords.get(proof));
   }
   function materializeRealmGlobalProofWitness(winner,proof) {
     return materializeRealmGlobalProofWitnessRecord(winner,proof,realmGlobalProofRecords.get(proof));
@@ -6041,7 +6076,7 @@
 
   function realmGlobalProofCoversCandidate(candidate,winner,proof) {
     const record=realmGlobalProofRecords.get(proof),handle=candidate?.[realmGlobalProofHandle],w=winner?.[realmGlobalProofHandle];
-    return !!(record&&proof.complete===true&&handle?.scope===record.scope&&w?.scope===record.scope&&
+    return !!(record&&(proof.frontierComplete===true||proof.complete===true)&&handle?.scope===record.scope&&w?.scope===record.scope&&
       realmProofGeometryKey(candidate.points)===realmProofGeometryKey(pathFromEdgeSteps(record.scope.graph,handle.steps).points)&&
       new Date(candidate.analysis?.departure).getTime()===record.scope.departureMs&&Number(candidate.analysis?.walkingSpeedMps)===record.scope.speedMps&&
       realmProofSequenceKey(w.steps)===record.winnerKey&&realmProofGeometryKey(winner.points)===record.winnerGeometry&&
@@ -8783,6 +8818,7 @@
     runPedestrianRealmRescue,
     proveRealmGlobalIntervalWinner,
     materializeRealmGlobalProofWitness,
+    materializeRealmGlobalProofWitnesses,
     realmGlobalProofCoversCandidate,
     preparePedestrianRealmOpportunity,
     pedestrianRealmOpportunityEligible,
@@ -8810,6 +8846,7 @@
       bindRealmGlobalProofCandidate,
       proveRealmGlobalIntervalWinner,
       materializeRealmGlobalProofWitness,
+      materializeRealmGlobalProofWitnesses,
       realmGlobalProofCoversCandidate,
       buildTemporalShadeTable,
       temporalBucketsForEdge,
