@@ -5840,11 +5840,13 @@
       if(typeof options.evaluateRouteLowerBound!=='function')return null;
       check();if(stats.lowerBoundRouteCalls>=maxLowerRoutes)stop('lower-bound-route-cap');check();stats.lowerBoundRouteCalls++;
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,{signal:controller.signal,stopAboveSeconds:threshold})),stopped]);check();
-      const lo=Number(result?.lowerSeconds);
+      const lo=Number(result?.lowerSeconds),processedDistanceM=Number(result?.processedDistanceM),totalDistanceM=Number(result?.totalDistanceM);
       stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
       if(!Number.isFinite(lo)||lo<0)return null;
       const separated=result?.separated===true&&lo>threshold+1e-7;
-      return {lower:lo,separated,complete:result?.complete===true};
+      return {lower:lo,separated,complete:result?.complete===true,
+        processedDistanceM:Number.isFinite(processedDistanceM)&&processedDistanceM>=0?processedDistanceM:null,
+        totalDistanceM:Number.isFinite(totalDistanceM)&&totalDistanceM>=0?totalDistanceM:null};
     };
     try{
       check();
@@ -5862,6 +5864,43 @@
       // paths inside the proof domain even under floating-point association.
       const detourContinuationGuardS=Math.max(1e-6,(graph.nodes.size+graph.edges.size+4)*1e-9);
       stats.detourContinuationGuardSeconds=detourContinuationGuardS;
+      // A lower-only full-route evaluation may cross the winner threshold
+      // before the competitor reaches its endpoint.  Because final dense
+      // sampling is prefix-stable (each consecutive geometry leg is partitioned
+      // independently and arrival times depend only on distance already walked),
+      // every continuation that shares that proven prefix inherits the same
+      // confirmed-sun lower bound.  Map the scorer's processed physical distance
+      // back to the earliest whole graph-step prefix that contains it; pruning
+      // that subtree avoids re-enumerating thousands of already-separated
+      // continuations without introducing any new shade approximation.
+      const prefixPhysicalEnds=pathSteps=>{
+        const ends=[];let last=null,total=0;
+        for(const step of pathSteps||[]){
+          const edge=graph.edges.get(step.edgeId);if(!edge){ends.push(total);continue;}
+          for(const p of edgeGeometryFor(edge,step.from)){
+            if(!last){last=p;continue;}
+            const d=haversineM(last,p);
+            if(d>1e-6){total+=d;last=p;}
+          }
+          ends.push(total);
+        }
+        return ends;
+      };
+      const separatingPrefixDepth=(pathSteps,processedDistanceM)=>{
+        if(!Number.isFinite(processedDistanceM)||processedDistanceM<=0)return null;
+        const ends=prefixPhysicalEnds(pathSteps),guardM=1e-6;
+        for(let i=0;i<ends.length;i++)if(ends[i]+guardM>=processedDistanceM)return i+1;
+        return ends.length||null;
+      };
+      const incumbentHasPrefix=(pathSteps,depth)=>{
+        if(!(depth>0)||handle.steps.length<depth||pathSteps.length<depth)return false;
+        for(let i=0;i<depth;i++){
+          const a=pathSteps[i],b=handle.steps[i];
+          if(String(a.edgeId)!==String(b.edgeId)||String(a.from)!==String(b.from)||String(a.to)!==String(b.to))return false;
+        }
+        return true;
+      };
+      stats.lowerBoundPrefixSubtreePrunes=0;stats.lowerBoundPrefixConflictChecks=0;
       const seen=new Set([scope.startId]),groups=new Set(),steps=[],stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
       const startGroup=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(startGroup)groups.add(startGroup);
       let incumbentSeen=false;stats.expandedStates=1;
@@ -5896,6 +5935,23 @@
             if(lowerOnly?.separated===true){
               const lo=lowerOnly.lower;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;stats.lowerBoundSeparatedAlternatives++;
               stats.minimumCompetingLowerSeconds=minimum;
+              const prefixDepth=separatingPrefixDepth(steps,lowerOnly.processedDistanceM);
+              if(prefixDepth){
+                stats.lowerBoundPrefixConflictChecks++;
+                // A threshold-separated prefix cannot be shared by W, whose
+                // exact dense lower bound is below the threshold.  Treat any
+                // such observation as evidence inconsistency rather than
+                // pruning through the incumbent.
+                if(incumbentHasPrefix(steps,prefixDepth)){
+                  stats.witnessEdgeSequence=steps.slice(0,prefixDepth).map(s=>({...s}));
+                  return finish('incumbent-prefix-lower-conflict');
+                }
+                stats.lowerBoundPrefixSubtreePrunes++;
+                stats.lastSeparatedPrefixDepth=prefixDepth;
+                stats.lastSeparatedPrefixProcessedDistanceM=lowerOnly.processedDistanceM;
+                while(stack.length&&steps.length>=prefixDepth)pop();
+                continue;
+              }
             }else{
               const value=await getInterval(path);
               // Missing/unbounded evidence cannot supply a positive lower bound.
