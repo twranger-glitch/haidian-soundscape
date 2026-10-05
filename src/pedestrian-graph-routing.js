@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev172-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev173-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5790,7 +5790,7 @@
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
     const threshold=upper+0.5;let state=null,resumed=false,sliceStartStates=0;
     let stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
-      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
+      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,historyContinuationIndexedChecks:0,historyContinuationIndexedBlocked:0,historyContinuationIndexFallbacks:0,historyContinuationIndexBuildNodes:0,missingCellLowerBound:0,continuationLowerBound:0,
       unseparatedCompetitorCount:0,uniqueUnseparatedGeometryCount:0,strictlyBetterThanIncumbentCount:0,witnessSetTruncated:false,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
@@ -6073,14 +6073,68 @@
         return true;
       };
       const {seen,groups,steps,stack}=state;
-      const pop=()=>{const f=stack.pop();if(stack.length){seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
+      // dev173: the reverse-Dijkstra `toEndPrev` relation is a canonical
+      // shortest-path arborescence toward the endpoint.  A history check only
+      // asks whether any already-seen vertex lies on the canonical suffix from
+      // the current node.  Maintain exact active-ancestor counts over that tree
+      // (Euler subtree range-add + point-query) so the common certified case is
+      // O(log V) instead of repeatedly chasing Map links along the same suffix.
+      // This is an enumeration-cost optimization only: any unavailable / invalid
+      // index falls back to the original chain walk, and the expensive history-
+      // avoiding Dijkstra is still used whenever the canonical suffix is blocked.
+      if(!state.historyCanonicalIndex){
+        const children=new Map();
+        for(const [child,link] of toEndPrev||[]){
+          const parent=String(link?.node),id=String(child);
+          if(!graph.nodes.has(id)||!graph.nodes.has(parent)||id===scope.endId)continue;
+          if(!children.has(parent))children.set(parent,[]);
+          children.get(parent).push(id);
+        }
+        const tin=new Map(),tout=new Map(),order=[];let tick=0;
+        const todo=[[scope.endId,0,false]];
+        while(todo.length){
+          const row=todo.pop(),node=String(row[0]),closing=row[2];
+          if(closing){tout.set(node,tick);continue;}
+          if(tin.has(node))continue;
+          tin.set(node,++tick);order.push(node);todo.push([node,0,true]);
+          const kids=children.get(node)||[];
+          for(let i=kids.length-1;i>=0;i--)todo.push([kids[i],0,false]);
+        }
+        const bit=new Int32Array(tick+3);
+        const bitAdd=(i,delta)=>{for(let n=i;n<bit.length;n+=n&-n)bit[n]+=delta;};
+        const rangeAdd=(l,r,delta)=>{if(!(l>0)||!(r>=l))return;bitAdd(l,delta);bitAdd(r+1,-delta);};
+        for(const id of seen){if(String(id)===scope.endId)continue;const l=tin.get(String(id)),r=tout.get(String(id));if(l&&r)rangeAdd(l,r,1);}
+        state.historyCanonicalIndex={tin,tout,bit,rangeAdd,buildNodes:order.length};
+        stats.historyContinuationIndexBuildNodes=order.length;
+      }
+      const historyIndex=state.historyCanonicalIndex;
+      const historyPointCount=id=>{
+        const i=historyIndex?.tin?.get(String(id));if(!(i>0))return null;
+        let sum=0;for(let n=i;n>0;n-=n&-n)sum+=historyIndex.bit[n];return sum;
+      };
+      const historySeenDelta=(id,delta)=>{
+        if(!historyIndex||String(id)===scope.endId)return;
+        const l=historyIndex.tin.get(String(id)),r=historyIndex.tout.get(String(id));
+        if(l&&r)historyIndex.rangeAdd(l,r,delta);
+      };
+      const pop=()=>{const f=stack.pop();if(stack.length){historySeenDelta(f.node,-1);seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
       // Shortest continuation after removing the prefix's already-visited
       // vertices.  This is still a relaxation of every legal simple-path
       // continuation because it intentionally ignores source-junction and
       // synthetic restrictions; therefore it is safe only as a WALK resource
       // lower bound, never as a sun lower bound.
       const relaxedShortestPathAvoidsSeen=node=>{
-        let cursor=String(node),guard=0;
+        const id=String(node),active=historyPointCount(id);
+        if(active!==null){
+          stats.historyContinuationIndexedChecks++;
+          // The current node itself is in `seen`, but the legacy chain check
+          // starts at its next hop. Remove exactly that self contribution.
+          const blocked=active-(seen.has(id)&&id!==scope.endId?1:0);
+          if(blocked>0)stats.historyContinuationIndexedBlocked++;
+          return blocked===0;
+        }
+        stats.historyContinuationIndexFallbacks++;
+        let cursor=id,guard=0;
         while(cursor!==scope.endId&&guard++<=graph.nodes.size+1){
           const link=toEndPrev?.get(cursor);if(!link)return false;
           const next=String(link.node);
@@ -6214,7 +6268,7 @@
         if(walkS>cap+.5){stats.detourRejected++;continue;}
         if(stats.expandedStates>=maxStates)return finishWithWitnesses('state-cap');
         let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
-        seen.add(next);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false});stats.expandedStates++;
+        seen.add(next);historySeenDelta(next,1);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false});stats.expandedStates++;
         if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
       }
       if(!state.incumbentSeen)return finishWithWitnesses('incumbent-not-in-domain');
