@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev173-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev174-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5790,7 +5790,7 @@
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
     const threshold=upper+0.5;let state=null,resumed=false,sliceStartStates=0;
     let stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
-      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,historyContinuationIndexedChecks:0,historyContinuationIndexedBlocked:0,historyContinuationIndexFallbacks:0,historyContinuationIndexBuildNodes:0,missingCellLowerBound:0,continuationLowerBound:0,
+      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,historyContinuationIndexedChecks:0,historyContinuationIndexedBlocked:0,historyContinuationIndexFallbacks:0,historyContinuationIndexBuildNodes:0,historyContinuationExactCacheQueries:0,historyContinuationExactCacheHits:0,historyContinuationExactCacheMisses:0,historyContinuationExactCacheStores:0,historyContinuationExactCacheEntries:0,historyContinuationExactCacheCapBreaks:0,historyContinuationDijkstraRuns:0,historyContinuationDijkstraExpandedNodes:0,historyContinuationDijkstraHeapPops:0,missingCellLowerBound:0,continuationLowerBound:0,
       unseparatedCompetitorCount:0,uniqueUnseparatedGeometryCount:0,strictlyBetterThanIncumbentCount:0,witnessSetTruncated:false,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
@@ -6108,14 +6108,35 @@
         stats.historyContinuationIndexBuildNodes=order.length;
       }
       const historyIndex=state.historyCanonicalIndex;
+      // dev174: blocked-canonical history checks still require the exact legacy
+      // history-avoiding shortest-path lower bound.  Cache only byte-exact visited
+      // sets for the same current node.  A BigInt bit-mask is collision-free for
+      // this fixed authenticated graph; finite raw shortest distances and true
+      // no-path exhaustion are reusable across prefix walk times.  Cap-triggered
+      // early exits are deliberately NOT cached because that Infinity depends on
+      // the caller's prefixWalkS.  The cache is private continuation state and is
+      // never public proof authority.
+      if(!state.historyContinuationExactCache){
+        const nodeBits=new Map();let bitIndex=0,seenMask=0n;
+        for(const id of [...graph.nodes.keys()].map(String).sort())nodeBits.set(id,1n<<BigInt(bitIndex++));
+        for(const id of seen){if(String(id)===scope.endId)continue;const bit=nodeBits.get(String(id));if(bit!==undefined)seenMask|=bit;}
+        state.historyContinuationExactCache={nodeBits,seenMask,byNode:new Map(),entries:0};
+      }
+      const historyExactCache=state.historyContinuationExactCache;
       const historyPointCount=id=>{
         const i=historyIndex?.tin?.get(String(id));if(!(i>0))return null;
         let sum=0;for(let n=i;n>0;n-=n&-n)sum+=historyIndex.bit[n];return sum;
       };
       const historySeenDelta=(id,delta)=>{
-        if(!historyIndex||String(id)===scope.endId)return;
-        const l=historyIndex.tin.get(String(id)),r=historyIndex.tout.get(String(id));
-        if(l&&r)historyIndex.rangeAdd(l,r,delta);
+        const sid=String(id);
+        if(historyIndex&&sid!==scope.endId){
+          const l=historyIndex.tin.get(sid),r=historyIndex.tout.get(sid);
+          if(l&&r)historyIndex.rangeAdd(l,r,delta);
+        }
+        if(historyExactCache&&sid!==scope.endId){
+          const bit=historyExactCache.nodeBits.get(sid);
+          if(bit!==undefined)historyExactCache.seenMask=delta>0?(historyExactCache.seenMask|bit):(historyExactCache.seenMask&~bit);
+        }
       };
       const pop=()=>{const f=stack.pop();if(stack.length){historySeenDelta(f.node,-1);seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
       // Shortest continuation after removing the prefix's already-visited
@@ -6144,11 +6165,34 @@
         return cursor===scope.endId;
       };
       const historyRemainingWalkLower=(node,prefixWalkS)=>{
-        const dist=new Map([[String(node),0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:String(node),t:0});
+        const id=String(node),mask=historyExactCache?.seenMask;
+        let nodeCache=null;
+        stats.historyContinuationExactCacheQueries++;
+        if(historyExactCache&&typeof mask==='bigint'){
+          nodeCache=historyExactCache.byNode.get(id);
+          if(nodeCache?.has(mask)){
+            stats.historyContinuationExactCacheHits++;
+            return nodeCache.get(mask);
+          }
+          stats.historyContinuationExactCacheMisses++;
+        }
+        stats.historyContinuationDijkstraRuns++;
+        const dist=new Map([[id,0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:id,t:0});
+        let capBreak=false;
+        const storeExact=value=>{
+          if(!historyExactCache||typeof mask!=='bigint')return;
+          if(!nodeCache){nodeCache=new Map();historyExactCache.byNode.set(id,nodeCache);}
+          if(!nodeCache.has(mask)){
+            nodeCache.set(mask,value);historyExactCache.entries++;stats.historyContinuationExactCacheStores++;
+            stats.historyContinuationExactCacheEntries=historyExactCache.entries;
+          }
+        };
         while(q.size){
-          const cur=q.pop();if(cur.t!==dist.get(cur.node))continue;
-          if(cur.node===scope.endId)return cur.t;
-          if(prefixWalkS+Math.max(0,cur.t-detourContinuationGuardS)>cap+.5+1e-9)break;
+          const cur=q.pop();stats.historyContinuationDijkstraHeapPops++;
+          if(cur.t!==dist.get(cur.node))continue;
+          if(cur.node===scope.endId){storeExact(cur.t);return cur.t;}
+          if(prefixWalkS+Math.max(0,cur.t-detourContinuationGuardS)>cap+.5+1e-9){capBreak=true;stats.historyContinuationExactCacheCapBreaks++;break;}
+          stats.historyContinuationDijkstraExpandedNodes++;
           for(const ref of graph.adjacency.get(cur.node)||[]){
             const next=String(ref.to);if(next!==scope.endId&&seen.has(next))continue;
             const edge=graph.edges.get(ref.edgeId);if(!edge)continue;
@@ -6156,6 +6200,7 @@
             if(t+1e-9<(dist.get(next)??Infinity)){dist.set(next,t);q.push({node:next,t});}
           }
         }
+        if(!capBreak)storeExact(Infinity);
         return Infinity;
       };
       while(stack.length){
