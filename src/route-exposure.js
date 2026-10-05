@@ -1746,13 +1746,24 @@
         // or the comparator: the witness is materialized only from the private
         // proof scope, then must pass the existing quality/walkability/detour
         // gates and the same final dense scorer before entering comparison.
-        if(realmGlobalProof?.termination==='competitor-not-separated'&&typeof graphProof?.materializeRealmGlobalProofWitness==='function'){
-          const rawWitness=graphProof.materializeRealmGlobalProofWitness(proofWinner,realmGlobalProof);
+        if(realmGlobalProof?.termination==='competitor-not-separated'){
+          // dev37.9.9.16.6: use two authenticated handoff channels.  Prefer the
+          // public graph API when visible; otherwise consume the non-enumerable
+          // closure attached to the exact proof object by the graph runtime.
+          // A JSON/spread copy does not carry that closure, so this fallback does
+          // not turn serialized diagnostics into a route-injection surface.
+          const publicMaterializer=typeof graphProof?.materializeRealmGlobalProofWitness==='function'
+            ? ()=>graphProof.materializeRealmGlobalProofWitness(proofWinner,realmGlobalProof):null;
+          const embeddedMaterializer=typeof realmGlobalProof?.materializeAuthenticatedWitness==='function'
+            ? ()=>realmGlobalProof.materializeAuthenticatedWitness(proofWinner):null;
+          let rawWitness=null,handoff=null;
+          if(publicMaterializer){rawWitness=publicMaterializer();if(rawWitness)handoff='public-graph-api';}
+          if(!rawWitness&&embeddedMaterializer){rawWitness=embeddedMaterializer();if(rawWitness)handoff='embedded-proof-object';}
           if(rawWitness){
             const witness=withCandidateIdentity(Object.assign({},rawWitness,{routeQuality:evaluateRouteQuality(rawWitness)}));
             const witnessHash=candidateGeometryHash(witness.points),duplicate=scored.some(c=>candidateGeometryHash(c.points)===witnessHash);
             const qualityOk=witness?.routeQuality?.valid!==false,walkabilityOk=walkabilitySafe(witness),detourOk=candidateWithinDetour(witness,fastest,detourPct);
-            realmGlobalProof.witnessMaterialization={attempted:true,duplicate,qualityOk,walkabilityOk,detourOk,candidateId:witness.id,geometryHash:witness.geometryHash||witnessHash};
+            realmGlobalProof.witnessMaterialization={attempted:true,handoff,duplicate,qualityOk,walkabilityOk,detourOk,candidateId:witness.id,geometryHash:witness.geometryHash||witnessHash};
             if(!duplicate&&qualityOk&&walkabilityOk&&detourOk){
               const analysis=await analyzeRoute(witness.points,{departure:options.departure,preparedModel,signal:options.signal,
                 sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,serial,includeHeat:false});
@@ -1776,7 +1787,9 @@
                 candidateAudit.detour?.push({candidateId:scoredWitness.id,stableCandidateId:scoredWitness.stableCandidateId,geometryHash:scoredWitness.geometryHash,status:'eligible',reasons:[],distanceM:scoredWitness.distanceM,limitM:Number(fastest.distanceM)*(1+detourPct/100)});
               }
             }
-          }else realmGlobalProof.witnessMaterialization={attempted:true,materialized:false,reason:'authenticated-witness-unavailable-or-not-policy-qualified'};
+          }else realmGlobalProof.witnessMaterialization={attempted:true,materialized:false,
+            publicMaterializerAvailable:!!publicMaterializer,embeddedMaterializerAvailable:!!embeddedMaterializer,
+            reason:'authenticated-witness-unavailable-or-not-policy-qualified'};
         }
         if(realmGlobalProof?.complete===true&&evidenceIdentity()===realmGlobalProof.evidenceIdentity){
           // Validate the whole promotion list before clearing any search flag.

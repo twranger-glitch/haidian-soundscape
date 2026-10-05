@@ -5961,8 +5961,18 @@
                 stats.witnessEdgeSequence=steps.map(s=>({...s}));
                 if(value){
                   const finished=finish('competitor-not-separated');
-                  realmGlobalProofRecords.set(stats,{scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
-                    witnessSteps:steps.map(s=>({...s})),witnessGeometry:realmProofGeometryKey(path.points),incompleteWitness:true});
+                  const witnessRecord={scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
+                    witnessSteps:steps.map(s=>({...s})),witnessGeometry:realmProofGeometryKey(path.points),incompleteWitness:true};
+                  realmGlobalProofRecords.set(stats,witnessRecord);
+                  // dev37.9.9.16.6: carry the authenticated witness handoff on the
+                  // exact proof object as a NON-ENUMERABLE closure.  This is a
+                  // fallback for environments where the public graph materializer
+                  // is not visible to route-exposure even though this proof was
+                  // produced by the current graph runtime. JSON serialization and
+                  // object spread intentionally drop this closure, so copied or
+                  // forged proof objects cannot acquire the witness capability.
+                  Object.defineProperty(finished,'materializeAuthenticatedWitness',{enumerable:false,configurable:false,writable:false,
+                    value:(winner)=>materializeRealmGlobalProofWitnessRecord(winner,finished,witnessRecord)});
                   return finished;
                 }
                 return finish('missing-exact-evidence');
@@ -6015,8 +6025,8 @@
     }catch(error){return finish(reason||'evidence-evaluation-failed');}
     finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);controller.abort();}
   }
-  function materializeRealmGlobalProofWitness(winner,proof) {
-    const record=realmGlobalProofRecords.get(proof),handle=winner?.[realmGlobalProofHandle];
+  function materializeRealmGlobalProofWitnessRecord(winner,proof,record) {
+    const handle=winner?.[realmGlobalProofHandle];
     if(!record||proof?.complete===true||proof?.termination!=='competitor-not-separated'||record.incompleteWitness!==true||
       !Array.isArray(record.witnessSteps)||!record.witnessSteps.length||handle?.scope!==record.scope||
       realmProofSequenceKey(handle.steps)!==record.winnerKey||realmProofGeometryKey(winner?.points)!==record.winnerGeometry||
@@ -6024,6 +6034,9 @@
     const candidate=record.scope.materializeProofWitnessCandidate(record.witnessSteps);
     if(!candidate||realmProofGeometryKey(candidate.points)!==record.witnessGeometry)return null;
     return candidate;
+  }
+  function materializeRealmGlobalProofWitness(winner,proof) {
+    return materializeRealmGlobalProofWitnessRecord(winner,proof,realmGlobalProofRecords.get(proof));
   }
 
   function realmGlobalProofCoversCandidate(candidate,winner,proof) {
