@@ -442,6 +442,14 @@
     }
     node.certificate=certificate;
   }
+  function routeSunGetExactPrefixCertificate(session,steps){
+    let node=session?.root;
+    for(const step of steps||[]){
+      node=node?.children?.get(routeSunPrefixStepToken(step));
+      if(!node)return null;
+    }
+    return node?.certificate||null;
+  }
   function routeSunExactPointPrefix(prefix,route){
     if(!Array.isArray(prefix)||prefix.length>route.length)return false;
     for(let i=0;i<prefix.length;i++)if(Number(prefix[i]?.lat)!==Number(route[i]?.lat)||Number(prefix[i]?.lng)!==Number(route[i]?.lng))return false;
@@ -872,11 +880,29 @@
     }
     let cache=session&&sessionContextValid?session.sampleCache:(options.sampleCache instanceof Map?options.sampleCache:null);
     const prefixSteps=Array.isArray(options.proofPrefixSteps)?options.proofPrefixSteps.map(s=>({edgeId:String(s?.edgeId),from:String(s?.from),to:String(s?.to)})):[];
+    const prefixPointEnds=Array.isArray(options.proofPrefixPointEnds)?options.proofPrefixPointEnds.map(Number):[];
     const prefixRequested=options.usePrefixCertificates===true&&!!session&&sessionContextValid&&!!proofDomainIdentity&&!!evidenceIdentity&&prefixSteps.length>0;
+    // dev172: a complete-route lower call can publish exact scorer state at
+    // every fully sampled graph-step boundary it traverses.  Later complete
+    // routes that share that edge prefix resume from the deepest exact state
+    // instead of replaying cached samples one-by-one.  Point boundaries come
+    // directly from pathFromEdgeSteps; malformed plumbing disables this
+    // optimization and falls back to the dev171 scorer.
+    const checkpointRequested=prefixRequested&&options.materializeIntermediatePrefixCertificates===true&&
+      prefixPointEnds.length===prefixSteps.length&&prefixPointEnds.every((n,i)=>Number.isInteger(n)&&n>=2&&n<=route.length&&(i===0||n>=prefixPointEnds[i-1]));
+    let checkpointCertificatesStored=0;
     let lowerSeconds=0,sampleCount=0,cacheHits=0,modelErrors=0,processedDistanceM=0;
     let totalSamples=0,totalDistanceM=0,segmentsToEvaluate=[];
     let certificateHit=false,certificateExactExtension=false,certificateConflict=contextConflict,incrementalUsed=false,reusedSamples=0;
     let actualSegmentsEvaluated=0,ancestor=null;
+    let checkpointCursor=0,checkpointMeta=[];
+    if(checkpointRequested){
+      const pointDistance=[0];
+      for(let i=1;i<route.length;i++)pointDistance[i]=pointDistance[i-1]+haversineM(route[i-1],route[i]);
+      checkpointMeta=prefixPointEnds.map((pointEnd,index)=>({
+        depth:index+1,pointEnd,distanceM:pointDistance[pointEnd-1]
+      }));
+    }
     if(prefixRequested){
       ancestor=routeSunFindPrefixCertificate(session,prefixSteps);
       if(ancestor){
@@ -897,6 +923,9 @@
           lowerSeconds=ancestor.lowerSeconds;sampleCount=ancestor.sampleCount;cacheHits=0;
           processedDistanceM=ancestor.processedDistanceM;modelErrors=0;reusedSamples=ancestor.sampleCount;
           certificateHit=true;certificateExactExtension=prefixSteps.length>ancestor.stepCount;incrementalUsed=true;
+          if(checkpointRequested){
+            while(checkpointCursor<checkpointMeta.length&&checkpointMeta[checkpointCursor].depth<=ancestor.stepCount)checkpointCursor++;
+          }
           // A threshold crossing before the end of the ancestor happened on a
           // normal full concurrency batch and is also the first crossing in
           // every exact extension.  Reuse it immediately.  If it happened on
@@ -907,7 +936,7 @@
             const result={lowerSeconds,separated:true,complete:false,sampleCount,cacheHits,modelErrors,processedDistanceM,totalSamples,totalDistanceM};
             result.prefixCertificateHit=true;result.prefixCertificateExactExtension=certificateExactExtension;
             result.prefixCertificateConflict=false;result.prefixIncrementalSegmentsEvaluated=0;result.prefixFullRescoreFallback=false;
-            result.prefixCertificateReusedSamples=reusedSamples;
+            result.prefixCertificateReusedSamples=reusedSamples;result.prefixIntermediateCertificatesStored=checkpointCertificatesStored;
             if(sessionContextValid&&!session.invalidated)routeSunStorePrefixCertificate(session,prefixSteps,{
               stepCount:prefixSteps.length,routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
               lowerSeconds:result.lowerSeconds,separated:true,complete:false,sampleCount:result.sampleCount,modelErrors:0,
@@ -931,12 +960,31 @@
       buildingSnapshot?.cacheKey??null
     ]);
     let cursor=0;
+    const storeCompletedCheckpoints=()=>{
+      if(!checkpointRequested||!sessionContextValid||session.invalidated)return;
+      const guardM=1e-6;
+      while(checkpointCursor<checkpointMeta.length&&processedDistanceM+guardM>=checkpointMeta[checkpointCursor].distanceM){
+        const cp=checkpointMeta[checkpointCursor++];
+        if(cp.depth>=prefixSteps.length)continue; // finalize() owns the full-route certificate.
+        const cpSteps=prefixSteps.slice(0,cp.depth);
+        const existing=routeSunGetExactPrefixCertificate(session,cpSteps);
+        if(existing&&existing.cacheGeneration===session.cacheGeneration&&existing.modelErrors===0)continue;
+        if(modelErrors!==0)continue;
+        const cpRoute=route.slice(0,cp.pointEnd).map(p=>({lat:Number(p.lat),lng:Number(p.lng)}));
+        routeSunStorePrefixCertificate(session,cpSteps,{
+          stepCount:cp.depth,routePoints:cpRoute,cacheGeneration:session.cacheGeneration,
+          lowerSeconds,separated:lowerSeconds>threshold+1e-7,complete:true,sampleCount,modelErrors,
+          processedDistanceM:cp.distanceM,totalSamples:sampleCount,totalDistanceM:cp.distanceM
+        });
+        checkpointCertificatesStored++;
+      }
+    };
     const finalize=(separated,complete)=>{
       const result={lowerSeconds,separated,complete,sampleCount,cacheHits,modelErrors,processedDistanceM,totalSamples,totalDistanceM};
       result.prefixCertificateHit=certificateHit;result.prefixCertificateExactExtension=certificateExactExtension;
       result.prefixCertificateConflict=certificateConflict;result.prefixIncrementalSegmentsEvaluated=incrementalUsed?actualSegmentsEvaluated:0;
       result.prefixFullRescoreFallback=options.usePrefixCertificates===true&&!incrementalUsed;
-      result.prefixCertificateReusedSamples=reusedSamples;
+      result.prefixCertificateReusedSamples=reusedSamples;result.prefixIntermediateCertificatesStored=checkpointCertificatesStored;
       if(prefixRequested&&sessionContextValid&&!session.invalidated){
         routeSunStorePrefixCertificate(session,prefixSteps,{stepCount:prefixSteps.length,
           routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
@@ -981,6 +1029,7 @@
         const unknown=!validModel||model.state==='unknown'||model.confirmed===false||
           (model.shaded!==true&&(model.reliability==='partial'||model.routeCacheSafe===false));
         if(validModel&&!unknown&&model.state!=='night'&&model.shaded!==true)lowerSeconds+=segment.lengthM/speedMps;
+        storeCompletedCheckpoints();
       }
       if(lowerSeconds>threshold+1e-7)return finalize(true,false);
     }
@@ -1856,9 +1905,12 @@
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,stopAboveSeconds:context.stopAboveSeconds,lowerBoundSession:proofLowerBoundSession,
             proofDomainIdentity:context.proofDomainIdentity,evidenceIdentity:evidenceIdentity(),
-            // dev171: complete-route lower-only evaluations can safely reuse the
-            // same exact private prefix certificates established by branch probes.
-            usePrefixCertificates:context.proofLowerKind==='prefix'||context.proofLowerKind==='complete',proofPrefixSteps:context.proofPrefixSteps}),
+            // dev172: complete-route lower-only evaluations reuse exact private
+            // prefix certificates and also materialize exact intermediate
+            // graph-step checkpoints for later sibling routes.
+            usePrefixCertificates:context.proofLowerKind==='prefix'||context.proofLowerKind==='complete',
+            materializeIntermediatePrefixCertificates:context.proofLowerKind==='complete',
+            proofPrefixSteps:context.proofPrefixSteps,proofPrefixPointEnds:context.proofPrefixPointEnds}),
           evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,includeHeat:false}),

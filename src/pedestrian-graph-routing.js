@@ -927,10 +927,15 @@
   function pathFromEdgeSteps(graph, steps) {
     const points = [];
     const edgeIds = [];
+    // dev172: preserve the exact route-point boundary reached after each graph
+    // step.  This is private scorer plumbing only; it lets lower-bound scoring
+    // materialize exact intermediate edge-prefix certificates without inferring
+    // graph topology from floating-point distances.
+    const stepPointEnds = [];
     let distanceM = 0;
     for (const step of steps || []) {
       const edge = graph.edges.get(step.edgeId);
-      if (!edge) continue;
+      if (!edge) { stepPointEnds.push(points.length); continue; }
       const geometry = edgeGeometryFor(edge, step.from);
       edgeIds.push(edge.id);
       distanceM += edge.distanceM;
@@ -938,8 +943,9 @@
         const last = points[points.length - 1];
         if (!last || haversineM(last, p) > 1e-6) points.push({ lat: p.lat, lng: p.lng });
       }
+      stepPointEnds.push(points.length);
     }
-    return { points, edgeIds, distanceM };
+    return { points, edgeIds, distanceM, stepPointEnds };
   }
 
   function pointAlongPolyline(points, targetM) {
@@ -5754,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev171-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev172-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5892,6 +5898,7 @@
       // this optimization is used without conflating it with branch-prefix probes.
       stats.completeLowerCertificateHits=0;stats.completeLowerCertificateExactExtensions=0;stats.completeLowerIncrementalSegmentsEvaluated=0;
       stats.completeLowerFullRescoreFallbacks=0;stats.completeLowerSampleCacheHits=0;stats.completeLowerCertificateConflicts=0;stats.completeLowerCertificateReusedSamples=0;
+      stats.completeLowerIntermediateCertificatesStored=0;
     }
     stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
     const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
@@ -5938,6 +5945,9 @@
       // fails closed unless geometry + evidence context are byte/number-equivalent.
       if((kind==='prefix'||kind==='complete')&&Array.isArray(pathSteps)&&pathSteps.length){
         lowerContext.proofPrefixSteps=pathSteps.map(step=>({edgeId:String(step.edgeId),from:String(step.from),to:String(step.to)}));
+        if(Array.isArray(path?.stepPointEnds)&&path.stepPointEnds.length===pathSteps.length){
+          lowerContext.proofPrefixPointEnds=path.stepPointEnds.map(Number);
+        }
       }
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,lowerContext)),stopped]);check();
       stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
@@ -5957,6 +5967,7 @@
         if(result?.prefixFullRescoreFallback===true)stats.completeLowerFullRescoreFallbacks++;
         if(result?.prefixCertificateConflict===true)stats.completeLowerCertificateConflicts++;
         stats.completeLowerCertificateReusedSamples+=Math.max(0,Number(result?.prefixCertificateReusedSamples||0));
+        stats.completeLowerIntermediateCertificatesStored+=Math.max(0,Number(result?.prefixIntermediateCertificatesStored||0));
       }
       const value=normalizeLowerResult(result);
       if(kind==='complete'&&value)state.routeLowerByGeometry.set(geometryKey,value);
