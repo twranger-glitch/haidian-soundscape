@@ -5754,7 +5754,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev170-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev171-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5887,6 +5887,11 @@
       stats.prefixLowerBoundRouteCap=maxPrefixLowerRoutes;stats.prefixLowerBoundRouteCalls=0;stats.prefixSunSubtreePrunes=0;
       stats.prefixCertificateHits=0;stats.prefixCertificateExactExtensions=0;stats.prefixIncrementalSegmentsEvaluated=0;
       stats.prefixFullRescoreFallbacks=0;stats.prefixSampleCacheHits=0;stats.prefixCertificateConflicts=0;stats.prefixCertificateReusedSamples=0;
+      // dev171: complete-route lower-only calls may reuse the same exact authenticated
+      // prefix certificates. Keep separate diagnostics so live evidence can prove
+      // this optimization is used without conflating it with branch-prefix probes.
+      stats.completeLowerCertificateHits=0;stats.completeLowerCertificateExactExtensions=0;stats.completeLowerIncrementalSegmentsEvaluated=0;
+      stats.completeLowerFullRescoreFallbacks=0;stats.completeLowerSampleCacheHits=0;stats.completeLowerCertificateConflicts=0;stats.completeLowerCertificateReusedSamples=0;
     }
     stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
     const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
@@ -5928,7 +5933,12 @@
         stats.prefixLowerBoundRouteCalls++;
       }
       const lowerContext={signal:controller.signal,stopAboveSeconds:threshold,proofLowerKind:kind,proofDomainIdentity:invariant.domain};
-      if(kind==='prefix')lowerContext.proofPrefixSteps=(pathSteps||[]).map(step=>({edgeId:String(step.edgeId),from:String(step.from),to:String(step.to)}));
+      // dev171: both branch-prefix probes and complete-route lower-only evaluations
+      // may consume an exact already-certified ancestor. The route scorer still
+      // fails closed unless geometry + evidence context are byte/number-equivalent.
+      if((kind==='prefix'||kind==='complete')&&Array.isArray(pathSteps)&&pathSteps.length){
+        lowerContext.proofPrefixSteps=pathSteps.map(step=>({edgeId:String(step.edgeId),from:String(step.from),to:String(step.to)}));
+      }
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,lowerContext)),stopped]);check();
       stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
       if(kind==='prefix'){
@@ -5939,12 +5949,20 @@
         if(result?.prefixFullRescoreFallback===true)stats.prefixFullRescoreFallbacks++;
         if(result?.prefixCertificateConflict===true)stats.prefixCertificateConflicts++;
         stats.prefixCertificateReusedSamples+=Math.max(0,Number(result?.prefixCertificateReusedSamples||0));
+      }else if(kind==='complete'){
+        stats.completeLowerSampleCacheHits+=Number(result?.cacheHits||0);
+        if(result?.prefixCertificateHit===true)stats.completeLowerCertificateHits++;
+        if(result?.prefixCertificateExactExtension===true)stats.completeLowerCertificateExactExtensions++;
+        stats.completeLowerIncrementalSegmentsEvaluated+=Math.max(0,Number(result?.prefixIncrementalSegmentsEvaluated||0));
+        if(result?.prefixFullRescoreFallback===true)stats.completeLowerFullRescoreFallbacks++;
+        if(result?.prefixCertificateConflict===true)stats.completeLowerCertificateConflicts++;
+        stats.completeLowerCertificateReusedSamples+=Math.max(0,Number(result?.prefixCertificateReusedSamples||0));
       }
       const value=normalizeLowerResult(result);
       if(kind==='complete'&&value)state.routeLowerByGeometry.set(geometryKey,value);
       return value;
     };
-    const getLowerOnly=path=>scoreLowerOnly(path,'complete');
+    const getLowerOnly=(path,pathSteps)=>scoreLowerOnly(path,'complete',pathSteps);
     const getPrefixLowerOnly=(path,pathSteps)=>scoreLowerOnly(path,'prefix',pathSteps);
     const proofRecord=()=>({scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity,
       complete:stats.complete===true,frontierComplete:stats.frontierComplete===true,
@@ -6080,7 +6098,7 @@
         if(cur.node===scope.endId){
           if(realmProofSequenceKey(steps)===W)state.incumbentSeen=true;
           else{
-            const path=pathFromEdgeSteps(graph,steps),lowerOnly=await getLowerOnly(path);
+            const path=pathFromEdgeSteps(graph,steps),lowerOnly=await getLowerOnly(path,steps);
             if(lowerOnly?.separated===true){
               const lo=lowerOnly.lower;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;stats.lowerBoundSeparatedAlternatives++;
               stats.minimumCompetingLowerSeconds=minimum;

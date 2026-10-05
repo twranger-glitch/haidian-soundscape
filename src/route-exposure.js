@@ -1856,7 +1856,9 @@
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,stopAboveSeconds:context.stopAboveSeconds,lowerBoundSession:proofLowerBoundSession,
             proofDomainIdentity:context.proofDomainIdentity,evidenceIdentity:evidenceIdentity(),
-            usePrefixCertificates:context.proofLowerKind==='prefix',proofPrefixSteps:context.proofPrefixSteps}),
+            // dev171: complete-route lower-only evaluations can safely reuse the
+            // same exact private prefix certificates established by branch probes.
+            usePrefixCertificates:context.proofLowerKind==='prefix'||context.proofLowerKind==='complete',proofPrefixSteps:context.proofPrefixSteps}),
           evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
             signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
             serial,includeHeat:false}),
