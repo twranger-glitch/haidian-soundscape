@@ -5741,6 +5741,143 @@
     Object.defineProperty(result,'context',{value:{graph,startId:snapA.id,endId:snapB.id,path},enumerable:false});return result;
   }
 
+  // A bucketed upper-objective search is not a robust lower-bound proof. Keep
+  // that search unchanged. This separate, bounded pass enumerates its legal
+  // simple-path domain without upper-only dominance. Prefix/continuation sun
+  // lower bounds are deliberately ZERO; positive bounds are accepted only
+  // from a complete route evaluated at exact walking arrival times by the same
+  // dense scorer/snapshot as W. It may fail closed long before exhaustion.
+  const realmGlobalProofHandle = Symbol('realm-global-proof-handle');
+  const realmGlobalProofRecords = new WeakMap();
+  function createRealmGlobalProofScope(graph,startId,endId,options={}) {
+    return {graph:cloneFineGraphForExperimentalUse(graph),startId:String(startId),endId:String(endId),
+      departureMs:new Date(options.departure).getTime(),speedMps:Number(options.speedMps),
+      detourLimitS:Number(options.detourLimitS),maxSyntheticM:Number(options.maxSyntheticM),deadline:Number(options.deadline)};
+  }
+  function bindRealmGlobalProofCandidate(candidate,path,scope) {
+    const steps=[];let node=scope.startId;
+    for(const id of path?.edgeIds||[]){
+      const ref=(scope.graph.adjacency.get(node)||[]).find(r=>String(r.edgeId)===String(id));
+      if(!ref)return candidate;
+      steps.push({edgeId:String(id),from:node,to:String(ref.to)});node=String(ref.to);
+    }
+    if(node===scope.endId&&steps.length)Object.defineProperty(candidate,realmGlobalProofHandle,{enumerable:true,value:{scope,steps}});
+    return candidate;
+  }
+  const realmProofGeometryKey=points=>JSON.stringify((points||[]).map(p=>[Number(p?.lat),Number(p?.lng)]));
+  const realmProofSequenceKey=steps=>JSON.stringify((steps||[]).map(s=>[String(s.edgeId),String(s.from),String(s.to)]));
+  async function proveRealmGlobalIntervalWinner(candidate,options={}) {
+    const handle=candidate?.[realmGlobalProofHandle],scope=handle?.scope,started=nowMs();
+    const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
+    const threshold=upper+0.5,stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
+      evaluatedAlternatives:0,detourRejected:0,historyRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
+      incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
+      minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
+      alternativeLowerBoundAtTermination:0,termination:'not-started',complete:false,physicalGlobalOptimal:false,productionGraphMutated:false,
+      proofScope:'selected Realm/source graph; legal simple ordered edge sequences; existing graph detour/synthetic/history domain; exact-arrival dense selected-source model'};
+    const finish=reason=>Object.assign(stats,{termination:reason,elapsedMs:nowMs()-started});
+    if(!scope||typeof options.evaluateRoute!=='function'||typeof options.evidenceIdentity!=='function')return finish('proof-context-unavailable');
+    const graph=scope.graph,W=realmProofSequenceKey(handle.steps),cap=scope.detourLimitS;
+    const lower=Number(candidate.analysis?.summary?.directSunSeconds),unknown=Number(candidate.analysis?.summary?.unknownSeconds);
+    if(!Number.isFinite(lower)||lower<0||!Number.isFinite(unknown)||unknown<0||!Number.isFinite(upper)||
+      !Number.isFinite(scope.departureMs)||!Number.isFinite(scope.speedMps)||scope.speedMps<=0||!Number.isFinite(cap)||cap<0||
+      !Number.isFinite(scope.maxSyntheticM)||scope.maxSyntheticM<0||!Number.isFinite(scope.deadline)||
+      new Date(options.departure).getTime()!==scope.departureMs||Number(options.speedMps)!==scope.speedMps)
+      return finish('invalid-proof-input');
+    stats.domain={nodeCount:graph.nodes.size,edgeCount:graph.edges.size,startId:scope.startId,endId:scope.endId,
+      detourLimitSeconds:cap,detourToleranceSeconds:.5,maxSyntheticM:scope.maxSyntheticM,departureMs:scope.departureMs,speedMps:scope.speedMps};
+    if(realmProofGeometryKey(candidate.points)!==realmProofGeometryKey(pathFromEdgeSteps(graph,handle.steps).points))return finish('incumbent-geometry-mismatch');
+    // Reject invalid graph representation, never silently skip a missing arc.
+    for(const [from,refs]of graph.adjacency)for(const ref of refs){const e=graph.edges.get(ref.edgeId);
+      if(!e||!graph.nodes.has(String(from))||!graph.nodes.has(String(ref.to))||!Number.isFinite(e.distanceM)||e.distanceM<0||
+      !((String(e.a)===String(from)&&String(e.b)===String(ref.to))||(String(e.b)===String(from)&&String(e.a)===String(ref.to))))return finish('invalid-proof-graph');}
+    for(const e of graph.edges.values())if(!graph.nodes.has(String(e.a))||!graph.nodes.has(String(e.b))||!e.geometry?.length||e.geometry.some(p=>!Number.isFinite(p.lat)||!Number.isFinite(p.lng))||
+      realmProofGeometryKey([e.geometry[0],e.geometry[e.geometry.length-1]])!==realmProofGeometryKey([graph.nodes.get(String(e.a)),graph.nodes.get(String(e.b))]))return finish('invalid-proof-geometry');
+    let identity;try{identity=options.evidenceIdentity();}catch(_){return finish('evidence-identity-unavailable');}
+    if(typeof identity!=='string'||!identity)return finish('evidence-identity-unavailable');
+    const maxStates=Math.floor(Math.max(1,Math.min(8000,Number(options.maxProofStates)||8000))),maxRoutes=Math.floor(Math.max(1,Math.min(256,Number(options.maxProofRoutes)||256)));
+    stats.stateCap=maxStates;stats.evidenceCap=maxRoutes;stats.deadlineRemainingMsAtStart=Math.max(0,scope.deadline-nowMs());
+    const controller=new AbortController();let timer,stopReject,reason=null,minimum=Infinity;
+    const stopped=new Promise((_,reject)=>{stopReject=reject;});stopped.catch(()=>{});
+    const stop=r=>{if(reason)return;reason=r;controller.abort();stopReject(new Error(r));};
+    const check=()=>{if(options.signal?.aborted||options.shouldCancel?.())stop('cancelled');else if(nowMs()>=scope.deadline)stop('deadline');else if(options.evidenceIdentity()!==identity)stop('evidence-context-changed');if(reason)throw new Error(reason);};
+    const onAbort=()=>stop('cancelled');options.signal?.addEventListener('abort',onAbort,{once:true});
+    timer=setTimeout(()=>stop('deadline'),Math.max(0,scope.deadline-nowMs()));
+    const getInterval=async(path)=>{
+      check();if(stats.evidenceCalls>=maxRoutes)stop('evidence-cap');check();stats.evidenceCalls++;
+      const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRoute(path.points,{signal:controller.signal})),stopped]);check();
+      const s=result?.summary,lo=s?.directSunSeconds,unk=s?.unknownSeconds,walk=s?.walkSeconds,failure=s?.sourceFailureDistanceM;
+      stats.modelSamples+=Number(result?.segments?.length||result?.sampleCount||0);
+      if(typeof lo!=='number'||!Number.isFinite(lo)||lo<0||typeof unk!=='number'||!Number.isFinite(unk)||unk<0||
+        typeof walk!=='number'||!Number.isFinite(walk)||walk<0||lo+unk>walk+1e-7||
+        typeof failure!=='number'||!Number.isFinite(failure)||failure!==0)return null;
+      return {lower:lo,upper:lo+unk};
+    };
+    try{
+      check();
+      // Incumbent evidence must match the final dense-scoring partition. Do not
+      // substitute graph replay's tolerance or a bucket-center score for U(W).
+      const winnerPath=pathFromEdgeSteps(graph,handle.steps),initial=await getInterval(winnerPath);
+      if(!initial||Math.abs(initial.lower-lower)>1e-9||Math.abs(initial.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
+      const toEnd=dijkstraTimes(graph,scope.endId,scope.speedMps,true).dist;
+      const seen=new Set([scope.startId]),groups=new Set(),steps=[],stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null}];
+      const startGroup=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(startGroup)groups.add(startGroup);
+      let incumbentSeen=false;stats.expandedStates=1;
+      const pop=()=>{const f=stack.pop();if(stack.length){seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
+      while(stack.length){
+        check();const cur=stack[stack.length-1];
+        if(cur.node===scope.endId){
+          if(realmProofSequenceKey(steps)===W)incumbentSeen=true;
+          else{
+            const value=await getInterval(pathFromEdgeSteps(graph,steps));
+            // Missing/unbounded evidence cannot supply a positive lower bound.
+            const lo=value?value.lower:0;minimum=Math.min(minimum,lo);stats.evaluatedAlternatives++;
+            stats.minimumCompetingLowerSeconds=minimum;
+            if(!(lo>threshold+1e-7)){stats.witnessEdgeSequence=steps.map(s=>({...s}));return finish(value?'competitor-not-separated':'missing-exact-evidence');}
+          }
+          pop();continue;
+        }
+        const refs=graph.adjacency.get(cur.node)||[];if(cur.index>=refs.length){pop();continue;}
+        const ref=refs[cur.index++],next=String(ref.to),edge=graph.edges.get(ref.edgeId);
+        if(seen.has(next)){stats.historyRejected++;continue;}
+        const previous=steps.length?graph.edges.get(steps[steps.length-1].edgeId):null;
+        if(previous?.sourceJunctionLink&&edge.sourceJunctionLink){stats.historyRejected++;continue;}
+        const currentGroup=graph.nodes.get(cur.node)?.sourceJunctionGroup,nextGroup=graph.nodes.get(next)?.sourceJunctionGroup;
+        if(nextGroup&&nextGroup!==currentGroup&&groups.has(nextGroup)){stats.historyRejected++;continue;}
+        const syntheticM=cur.syntheticM+(edge.realmSynthetic?edge.distanceM:0),walkS=cur.walkS+edge.distanceM/scope.speedMps;
+        if(Number.isFinite(scope.maxSyntheticM)&&syntheticM>scope.maxSyntheticM+.01){stats.historyRejected++;continue;}
+        const remaining=toEnd.get(next);
+        // Incoming distance traversal supplies reachability only. Do not prune
+        // on a differently associated floating-point sum at the exact cap.
+        // The prefix's accumulated walk uses the same additions as each full
+        // path, and is itself a safe resource lower bound.
+        if(!Number.isFinite(remaining)||walkS>cap+.5){stats.detourRejected++;continue;}
+        if(stats.expandedStates>=maxStates)return finish('state-cap');
+        let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
+        seen.add(next);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup});stats.expandedStates++;
+        if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
+      }
+      if(!incumbentSeen)return finish('incumbent-not-in-domain');
+      const final=await getInterval(winnerPath);
+      if(!final||Math.abs(final.lower-lower)>1e-9||Math.abs(final.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
+      check();stats.complete=true;stats.minimumCompetingLowerSeconds=Number.isFinite(minimum)?minimum:null;
+      stats.alternativeLowerBoundAtTermination=Number.isFinite(minimum)?minimum:null;
+      stats.winnerEdgeSequence=handle.steps.map(s=>({...s}));stats.evidenceIdentity=identity;stats.tieMarginSeconds=.5;
+      finish('all-selected-realm-simple-paths-separated');
+      realmGlobalProofRecords.set(stats,{scope,winnerKey:W,winnerGeometry:realmProofGeometryKey(candidate.points),upper,evidenceIdentity:identity});
+      return stats;
+    }catch(error){return finish(reason||'evidence-evaluation-failed');}
+    finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);controller.abort();}
+  }
+  function realmGlobalProofCoversCandidate(candidate,winner,proof) {
+    const record=realmGlobalProofRecords.get(proof),handle=candidate?.[realmGlobalProofHandle],w=winner?.[realmGlobalProofHandle];
+    return !!(record&&proof.complete===true&&handle?.scope===record.scope&&w?.scope===record.scope&&
+      realmProofGeometryKey(candidate.points)===realmProofGeometryKey(pathFromEdgeSteps(record.scope.graph,handle.steps).points)&&
+      new Date(candidate.analysis?.departure).getTime()===record.scope.departureMs&&Number(candidate.analysis?.walkingSpeedMps)===record.scope.speedMps&&
+      realmProofSequenceKey(w.steps)===record.winnerKey&&realmProofGeometryKey(winner.points)===record.winnerGeometry&&
+      Number(winner.analysis?.summary?.directSunSeconds)+Number(winner.analysis?.summary?.unknownSeconds)===record.upper);
+  }
+
   async function runPedestrianRealmRescue(a,b,options={}) {
     const A=asLatLng(a),B=asLatLng(b);if(!A||!B)return {available:false,reason:'missing-endpoints',candidates:[],productionGraphMutated:false};
     const bbox=bboxForAB(A,B,Math.max(120,Number(options.marginM||260)));
@@ -5774,6 +5911,7 @@
     const provenanceContext=createRealmProvenanceContext(fetched.payload,official.groups,evidenceSourceComplete,options.realmPayload?null:evidenceBounds);
     const officialSources={origin:official.origin,errors:official.errors,featureCounts:Object.fromEntries(Object.entries(official.groups).map(([key,fc])=>[key,fc?.features?.length||0]))};
     const commonMeta={realmAreaKinds:(topo.best.stats?.kinds||[]).slice(),realmAreaIds:(topo.best.stats?.areaIds||[]).slice(),realmSyntheticDistanceM:Number(topo.best.stats?.syntheticM||0),realmSyntheticRatio:Number(topo.best.stats?.syntheticRatio||0),realmPortalDistanceM:Number(topo.best.stats?.portalM||0),realmAreaCount:Number(topo.areaCount||0),realmAutoAreaCount:Number(topo.autoAreaCount||0),realmReviewAreaCount:Number(topo.reviewAreaCount||0),realmObstacleCount:Number(topo.obstacleCount||0),realmBarrierCount:Number(topo.barrierCount||0),realmPortalCount:Number(topo.portalCount||0),realmExplicitPortalCount:Number(topo.explicitPortalCount||0),realmOpenBoundaryPortalCount:Number(topo.openBoundaryPortalCount||0),realmVisibilityEdgeCount:Number(topo.visibilityEdgeCount||0),baselineDistanceM:Number(topo.baselineDistanceM||0),repairedFastestDistanceM:Number(topo.best.distanceM||0),improvementM:Number(topo.best.improvementM||0),repairConfidence:'public-realm-obstacle-aware-experimental',realmEndpoint:topo.realmEndpoint||null,productionGraphMutated:false,requiresOnSitePathConfirmation:true};
+    const realmProofPaths=new WeakMap();let realmProofScope=null,realmProofScopeFactory=null;
     const make=(kind,path)=>{
       const stats=realmPathStats(topo.best.graph,path.edgeIds||[]);
       const reduced=reduceRealmPathProvenance(stats,provenanceContext);
@@ -5781,7 +5919,7 @@
       candidate.walkability.sourceSupportedM=reduced.sourceSupportedM;
       candidate.walkability.inferredOpenSpaceM=reduced.inferredOpenSpaceM;
       if(reduced.sourceSupportedM>0&&reduced.inferredOpenSpaceM<=.01&&reduced.syntheticM<=.01)candidate.walkability.reason='fully source-covered pedestrian geometry';
-      return candidate;
+      realmProofPaths.set(candidate,path);return candidate;
     };
     const pathQualifies=(path)=>{
       if(!path?.points?.length)return false;
@@ -5791,7 +5929,7 @@
       return traverses&&distance<=cap+0.5&&stats.syntheticM<=Math.max(60,Number(options.maxSyntheticDistanceM||480))+.01&&distance<=topo.straightM*Math.max(1.05,Number(options.maxRouteToStraightRatio||3.2))+.01;
     };
     const fastestCandidate=pathQualifies(topo.best.path)?make('pedestrian-realm-fastest',topo.best.path):null;
-    const finish=(values)=>{if(values.shadeSearch?.profile)lastRealmSearchDiagnostics=Object.assign({},values.shadeSearch.profile);return Object.assign({},topo,values,{shadeSearch:Object.assign({},values.shadeSearch,{costModel:options.edgeSunProvider?'injected-provider':'length-weighted-along-walk',costSampleSpacingM:options.edgeSunProvider?null:Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),cacheTimeBucketSec:options.edgeSunProvider?null:30}),accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});};
+    const finish=(values)=>{if(realmProofScopeFactory&&!realmProofScope)realmProofScope=realmProofScopeFactory();if(realmProofScope)for(const c of values.candidates)bindRealmGlobalProofCandidate(c,realmProofPaths.get(c),realmProofScope);if(values.shadeSearch?.profile)lastRealmSearchDiagnostics=Object.assign({},values.shadeSearch.profile);return Object.assign({},topo,values,{shadeSearch:Object.assign({},values.shadeSearch,{costModel:options.edgeSunProvider?'injected-provider':'length-weighted-along-walk',costSampleSpacingM:options.edgeSunProvider?null:Math.min(10,Math.max(5,Number(options.realmShadeSampleSpacingM||5))),cacheTimeBucketSec:options.edgeSunProvider?null:30}),accepted:values.candidates.length>0,reason:values.candidates.length?null:'no-policy-eligible-realm-candidate',productionGraphMutated:false});};
     if(options.fastestOnly===true)return finish({candidates:fastestCandidate?[fastestCandidate]:[],shadeSearch:{attempted:false,complete:false,reason:'fastest-only'},productionGraphMutated:false});
     // Full-model control completed just under the old 6 s limit after pruning.
     // Allow explicit, bounded device headroom; exact replay shares this budget.
@@ -5813,6 +5951,9 @@
     searchOptions.edgeSunProvider=(...args)=>runtime.edge(()=>realmProvider(...args));
     // The effective budget uses the shorter of public line and realm fastest.
     if(Number.isFinite(Number(options.baselineDistanceM)))searchOptions.experimentalBaselineSeconds=Math.min(topo.best.distanceM,Number(options.baselineDistanceM))/clamp(options.speedMps,0.5,2.5,1.25);
+    if(options.departure)realmProofScopeFactory=()=>{const speed=clamp(options.speedMps,.5,2.5,1.25),fastest=dijkstraTimes(topo.best.graph,topo.startId,speed).dist.get(String(topo.endId));
+      const baseline=Number.isFinite(Number(searchOptions.experimentalBaselineSeconds))?Math.min(fastest,Number(searchOptions.experimentalBaselineSeconds)):fastest;
+      return createRealmGlobalProofScope(topo.best.graph,topo.startId,topo.endId,{departure:options.departure,speedMps:speed,detourLimitS:baseline*(1+clamp(options.detourPct,0,80,30)/100),maxSyntheticM:searchOptions.maxRealmSyntheticM,deadline});};
     let seed=null,seedReplay=null,boundedCandidate=null;
     try{
       if(!options.edgeSunProvider&&searchBudgetMs>=4000&&Number(options.maxExpandedStates||8000)>=8000&&Number(options.maxShadeEdgeEvaluations||1500)>=1500){
@@ -8457,6 +8598,8 @@
     mappedWalkCandidates,
     topologyAlternativeCandidates,
     runPedestrianRealmRescue,
+    proveRealmGlobalIntervalWinner,
+    realmGlobalProofCoversCandidate,
     preparePedestrianRealmOpportunity,
     pedestrianRealmOpportunityEligible,
     clearCache,
@@ -8479,6 +8622,10 @@
       dijkstraTimesResponsive,
       reconstructDijkstra,
       searchMinSun,
+      createRealmGlobalProofScope,
+      bindRealmGlobalProofCandidate,
+      proveRealmGlobalIntervalWinner,
+      realmGlobalProofCoversCandidate,
       buildTemporalShadeTable,
       temporalBucketsForEdge,
       shadeCacheKey,

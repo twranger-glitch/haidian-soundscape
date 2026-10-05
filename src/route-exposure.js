@@ -1639,6 +1639,39 @@
     );
     const eligibleScored = scored.filter((c) => c.eligible !== false);
     const comparison=compareExposureBounds(eligibleScored);
+    // A separate graph-domain proof may clear ONLY candidates bound to that
+    // exact Realm scope. Comparator intervals and candidate eligibility remain
+    // unchanged. Evidence is evaluated by this final dense scorer, using its
+    // immutable prepared snapshot and exact arrival times, never bucket costs.
+    let realmGlobalProof=null;
+    const proofWinner=comparison.selected,graphProof=window.HaidianPedestrianGraph;
+    if(eligibleScored.length>=2&&proofWinner?.kind==='pedestrian-realm-shade'&&
+      eligibleScored.some(c=>c.searchIncomplete===true||c.graphMeta?.shadeSearchComplete===false)&&
+      typeof graphProof?.proveRealmGlobalIntervalWinner==='function'){
+      const evidenceIdentity=()=>{
+        const c=window.HaidianShade?.getRouteShadeCacheContext?.(preparedModel?.snapshot);
+        return c?.cacheable===true&&c.modelReady===true&&c.pipelineComplete===true&&c.sourceIdentityAvailable===true&&
+          typeof c.token==='string'&&typeof c.coverageToken==='string'?JSON.stringify([c.token,c.coverageToken]):null;
+      };
+      try{
+        realmGlobalProof=await graphProof.proveRealmGlobalIntervalWinner(proofWinner,{
+          departure:options.departure,speedMps:proofWinner.analysis.walkingSpeedMps,
+          signal:options.signal||analysisController.signal,shouldCancel:()=>serial!==analysisSerial,evidenceIdentity,
+          evaluateRoute:(points,context)=>analyzeRoute(points,{departure:options.departure,preparedModel,
+            signal:context.signal,sampleSpacingM:proofWinner.analysis.sampleSpacingM,speedMps:proofWinner.analysis.walkingSpeedMps,
+            serial,includeHeat:false})
+        });
+        if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
+        if(realmGlobalProof?.complete===true&&evidenceIdentity()===realmGlobalProof.evidenceIdentity){
+          // Validate the whole promotion list before clearing any search flag.
+          const covered=eligibleScored.filter(c=>graphProof.realmGlobalProofCoversCandidate?.(c,proofWinner,realmGlobalProof));
+          for(const c of covered){c.searchIncomplete=false;c.graphMeta=Object.assign({},c.graphMeta,{shadeSearchComplete:true,realmGlobalProof});}
+        }
+      }catch(error){
+        if(serial!==analysisSerial||(options.signal||analysisController.signal)?.aborted)throw new Error('ROUTE_ANALYSIS_CANCELLED');
+        realmGlobalProof={complete:false,termination:'proof-plumbing-failed',physicalGlobalOptimal:false};
+      }
+    }
     // dev37.9.9.9: a strict interval winner among generated candidates is not
     // automatically a global Realm-search proof.  A Realm shade candidate can
     // be exact-replayed yet still carry searchIncomplete=true when the search
@@ -1659,6 +1692,7 @@
       searchIncompleteCandidateIds:searchIncompleteCandidates.map(c=>c.id),
       scopeStatus:comparisonValid?'complete-for-reported-comparison':candidateSetComparisonValid&&!searchCoverageComplete?'candidate-set-proved-search-incomplete':comparison.proof?.state||'unproved'
     });
+    if(realmGlobalProof)comparisonProof.realmGlobalProof=realmGlobalProof;
     // reliableScored remains the exact-evidence count; a robust interval winner
     // does not turn any of its unknown samples into reliable resolved samples.
     const reliableScored=eligibleScored.filter(c=>c.analysis.summary.unknownSeconds===0&&!(c.analysis.summary.sourceFailureDistanceM>0));
