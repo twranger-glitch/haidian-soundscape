@@ -5770,7 +5770,7 @@
     const handle=candidate?.[realmGlobalProofHandle],scope=handle?.scope,started=nowMs();
     const upper=Number(candidate?.analysis?.summary?.directSunSeconds)+Number(candidate?.analysis?.summary?.unknownSeconds);
     const threshold=upper+0.5,stats={expandedStates:0,evidenceCalls:0,modelSamples:0,cacheHits:0,cacheSize:0,
-      evaluatedAlternatives:0,detourRejected:0,historyRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
+      evaluatedAlternatives:0,detourRejected:0,detourContinuationRejected:0,historyRejected:0,historyContinuationChecks:0,historyContinuationRejected:0,missingCellLowerBound:0,continuationLowerBound:0,
       incumbentUpperSeconds:Number.isFinite(upper)?upper:null,frontierThresholdSeconds:Number.isFinite(threshold)?threshold:null,
       minimumCompetingLowerSeconds:null,minimumCompetingLowerScope:'observed alternatives; all-domain minimum only when complete',
       alternativeLowerBoundAtTermination:0,termination:'not-started',complete:false,physicalGlobalOptimal:false,productionGraphMutated:false,
@@ -5843,10 +5843,40 @@
       const winnerPath=pathFromEdgeSteps(graph,handle.steps),initial=await getInterval(winnerPath);
       if(!initial||Math.abs(initial.lower-lower)>1e-9||Math.abs(initial.upper-upper)>1e-9)return finish('incumbent-evidence-mismatch');
       const toEnd=dijkstraTimes(graph,scope.endId,scope.speedMps,true).dist;
-      const seen=new Set([scope.startId]),groups=new Set(),steps=[],stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null}];
+      // `toEnd` is an admissible resource lower bound: it is the shortest
+      // directed remaining walk time on the selected proof graph while
+      // deliberately ignoring simple-path/history/synthetic restrictions.
+      // Any legal continuation can only be equal or longer.  dijkstraTimes()
+      // uses a 1e-9 relaxation tolerance, so subtract a graph-size-scaled
+      // microsecond guard before pruning.  This keeps exact detour-boundary
+      // paths inside the proof domain even under floating-point association.
+      const detourContinuationGuardS=Math.max(1e-6,(graph.nodes.size+graph.edges.size+4)*1e-9);
+      stats.detourContinuationGuardSeconds=detourContinuationGuardS;
+      const seen=new Set([scope.startId]),groups=new Set(),steps=[],stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false}];
       const startGroup=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(startGroup)groups.add(startGroup);
       let incumbentSeen=false;stats.expandedStates=1;
       const pop=()=>{const f=stack.pop();if(stack.length){seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();}};
+      // Shortest continuation after removing the prefix's already-visited
+      // vertices.  This is still a relaxation of every legal simple-path
+      // continuation because it intentionally ignores source-junction and
+      // synthetic restrictions; therefore it is safe only as a WALK resource
+      // lower bound, never as a sun lower bound.
+      const historyRemainingWalkLower=(node,prefixWalkS)=>{
+        stats.historyContinuationChecks++;
+        const dist=new Map([[String(node),0]]),q=new MinHeap((a,b)=>a.t-b.t);q.push({node:String(node),t:0});
+        while(q.size){
+          const cur=q.pop();if(cur.t!==dist.get(cur.node))continue;
+          if(cur.node===scope.endId)return cur.t;
+          if(prefixWalkS+Math.max(0,cur.t-detourContinuationGuardS)>cap+.5+1e-9)break;
+          for(const ref of graph.adjacency.get(cur.node)||[]){
+            const next=String(ref.to);if(next!==scope.endId&&seen.has(next))continue;
+            const edge=graph.edges.get(ref.edgeId);if(!edge)continue;
+            const t=cur.t+edge.distanceM/scope.speedMps;
+            if(t+1e-9<(dist.get(next)??Infinity)){dist.set(next,t);q.push({node:next,t});}
+          }
+        }
+        return Infinity;
+      };
       while(stack.length){
         check();const cur=stack[stack.length-1];
         if(cur.node===scope.endId){
@@ -5860,6 +5890,13 @@
           }
           pop();continue;
         }
+        if(!cur.historyBoundChecked&&stack.length>1){
+          cur.historyBoundChecked=true;
+          const historyRemaining=historyRemainingWalkLower(cur.node,cur.walkS);
+          if(!Number.isFinite(historyRemaining)||cur.walkS+Math.max(0,historyRemaining-detourContinuationGuardS)>cap+.5+1e-9){
+            stats.detourRejected++;stats.historyContinuationRejected++;pop();continue;
+          }
+        }
         const refs=graph.adjacency.get(cur.node)||[];if(cur.index>=refs.length){pop();continue;}
         const ref=refs[cur.index++],next=String(ref.to),edge=graph.edges.get(ref.edgeId);
         if(seen.has(next)){stats.historyRejected++;continue;}
@@ -5870,14 +5907,19 @@
         const syntheticM=cur.syntheticM+(edge.realmSynthetic?edge.distanceM:0),walkS=cur.walkS+edge.distanceM/scope.speedMps;
         if(Number.isFinite(scope.maxSyntheticM)&&syntheticM>scope.maxSyntheticM+.01){stats.historyRejected++;continue;}
         const remaining=toEnd.get(next);
-        // Incoming distance traversal supplies reachability only. Do not prune
-        // on a differently associated floating-point sum at the exact cap.
-        // The prefix's accumulated walk uses the same additions as each full
-        // path, and is itself a safe resource lower bound.
-        if(!Number.isFinite(remaining)||walkS>cap+.5){stats.detourRejected++;continue;}
+        if(!Number.isFinite(remaining)){stats.detourRejected++;continue;}
+        // Resource-feasibility proof prune.  `remaining` is computed on a
+        // relaxed graph, hence it cannot exceed the duration of any legal
+        // continuation except for bounded floating-point / Dijkstra tolerance.
+        // Subtract the explicit guard rather than treating an exact-cap path
+        // as infeasible.  This changes enumeration cost only; it does not add
+        // a sun lower bound or alter the winner comparator.
+        const remainingLower=Math.max(0,remaining-detourContinuationGuardS);
+        if(walkS+remainingLower>cap+.5+1e-9){stats.detourRejected++;stats.detourContinuationRejected++;continue;}
+        if(walkS>cap+.5){stats.detourRejected++;continue;}
         if(stats.expandedStates>=maxStates)return finish('state-cap');
         let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
-        seen.add(next);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup});stats.expandedStates++;
+        seen.add(next);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push({node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false});stats.expandedStates++;
         if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
       }
       if(!incumbentSeen)return finish('incumbent-not-in-domain');
