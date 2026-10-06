@@ -81,6 +81,13 @@
   const map=options.map,doc=options.document||document,canvas=doc.createElement('canvas');canvas.className='haidian-own-shade-canvas haidian-building-shadow-canvas';
   Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',zIndex:'451',opacity:String(options.opacity??.5)});
   const ctx=canvas.getContext('2d'),masks=[doc.createElement('canvas'),doc.createElement('canvas')];
+  // Visual uncertainty only. The caster geometry and evidenceQuality gate below
+  // are unchanged; this pattern never supplies point/route shade evidence.
+  const hatch=doc.createElement('canvas');hatch.width=hatch.height=12;
+  const hatchCtx=hatch.getContext('2d');hatchCtx.fillStyle='#fef3c7';hatchCtx.fillRect(0,0,12,12);
+  hatchCtx.strokeStyle='#b45309';hatchCtx.lineWidth=2;hatchCtx.beginPath();
+  for(const offset of [-12,0,12]){hatchCtx.moveTo(offset,12);hatchCtx.lineTo(offset+12,0);}hatchCtx.stroke();
+  const uncertainFill=ctx.createPattern?.(hatch,'repeat')||'#b45309';
   const pane=map.getPane?.('overlayPane')||map.getPanes().overlayPane;pane.appendChild(canvas);
   let disposed=false,generation=0,timer=null,controller=null,running=false,pending=false,frame=null;
   const stats={renders:0,completed:0,cancelled:0,features:0,measured:0,estimated:0,unknownHeight:0,faces:0,canvasCount:1,webglContexts:0,queueDepth:0,lastFrameMs:0,firstPaintMs:null,partial:true,modelPointCalls:0};
@@ -103,7 +110,7 @@
      const height=options.height(feature),shape=projectBuilding(feature,solar,p=>map.latLngToContainerPoint({...p,lng:p.lng+360*Math.round((map.getCenter().lng-p.lng)/360)}),height);if(!shape){if(!solar.night)unknown++;continue;}
      const precise=evidenceQuality(feature,height);
      if(precise)measured++;else if(height.quality==='default')unknown++;else estimated++;
-     const mask=masks[precise?1:0].getContext('2d');mask.fillStyle='#172554';
+     const mask=masks[precise?1:0].getContext('2d');mask.fillStyle=precise?'#172554':uncertainFill;
      for(const face of shape.faces){mask.beginPath();for(const ring of face.rings){if(!ring.length)continue;mask.moveTo(ring[0].x,ring[0].y);for(let i=1;i<ring.length;i++)mask.lineTo(ring[i].x,ring[i].y);mask.closePath();}mask.fill('evenodd');faces++;}
      n++;if(performance.now()-lastYield>7){await tick();lastYield=performance.now();}
     }
@@ -118,7 +125,7 @@
    finally{if(signal.aborted)stats.cancelled++;running=false;if(pending&&!disposed)timer=setTimeout(pump,0);}
   }
   const start=()=>invalidate(),end=()=>request();for(const e of ['movestart','zoomstart'])map.on(e,start);for(const e of ['moveend','zoomend','resize'])map.on(e,end);
-  return {request,invalidate,getFrame(){return frame;},setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}stats.canvasCount=0;}};
+  return {request,invalidate,getFrame(){return frame;},setOpacity(v){canvas.style.opacity=String(v);},diagnostics(){return {...stats,generation,running,queueDepth:pending?1:0,disposed};},dispose(){if(disposed)return;disposed=true;invalidate();for(const e of ['movestart','zoomstart'])map.off(e,start);for(const e of ['moveend','zoomend','resize'])map.off(e,end);canvas.remove();for(const m of masks){m.width=0;m.height=0;}hatch.width=hatch.height=0;stats.canvasCount=0;}};
  }
  global.HaidianOwnShade={version:'v9.0.0-dev37.8',create,projectBuilding,containsShadow,findEvidence,evidenceQuality,classify,terrainOcclusion,terrainTileAddress};
 })(typeof window!=='undefined'?window:globalThis);

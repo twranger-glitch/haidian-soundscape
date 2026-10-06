@@ -4531,6 +4531,26 @@
     </div>`;
   }
 
+  // Presentation only: compact route evidence intentionally has no feature
+  // geometry. Its explicit provenance must survive the point-card handoff.
+  function pointBuildingPresentation(evidence) {
+    const props = evidence?.feature?.properties || evidence?.properties || {};
+    const source = String(evidence?.buildingSource || props.building_source || "unknown");
+    const quality = String(evidence?.heightQuality || props.height_quality || "unknown");
+    const provenance = String(evidence?.heightProvenance || props.height_quality || quality);
+    const reported = ["measured", "reported", "direct"].includes(quality.toLowerCase())
+      && ["measured", "reported", "direct"].includes(provenance.toLowerCase());
+    return {
+      label: props.name || (source === "unknown" ? "building source unknown" : `${source} building`),
+      source,
+      heightSource: String(evidence?.heightSource || props.height_source || "unknown"),
+      quality,
+      provenance,
+      geometryQuality: String(evidence?.geometryQuality || props.geometry_quality || "unknown"),
+      heightSuffix: reported ? "" : "（推估／未驗證，非實測）"
+    };
+  }
+
   function pointQueryHtmlProgress(model) {
     const latlng = model.latlng;
     const pending = '<span class="hsq-pending">讀取中…</span>';
@@ -4625,18 +4645,18 @@
 
     const secondaryRows = [];
     const sourceBuilding = source && source.building;
+    const sourceBuildingPresentation = sourceBuilding ? pointBuildingPresentation(sourceBuilding) : null;
+    const pointBuilding = building ? pointBuildingPresentation(building) : null;
     const sourceTree = source && source.tree;
     if (sourceBuilding) {
-      const feature = sourceBuilding.feature;
-      const name = feature && feature.properties && feature.properties.name;
-      secondaryRows.push(["遮蔽建築", escapeHtml(name || "OSM building")]);
+      secondaryRows.push(["遮蔽建築", escapeHtml(sourceBuildingPresentation.label)]);
       if (sourceBuilding.plausibleUnknownHeight) {
-        secondaryRows.push(["建築高度資料", "OSM 未提供"]);
+        secondaryRows.push(["建築高度資料", "來源未提供有效高度"]);
         if (Number.isFinite(sourceBuilding.inferredMinimumHeight)) {
           secondaryRows.push(["遮蔽所需最低高度", escapeHtml(`約 ${meters(sourceBuilding.inferredMinimumHeight)}`)]);
         }
       } else if (Number.isFinite(sourceBuilding.height)) {
-        secondaryRows.push(["遮蔽物高度", escapeHtml(meters(sourceBuilding.height))]);
+        secondaryRows.push(["遮蔽物高度", escapeHtml(meters(sourceBuilding.height) + sourceBuildingPresentation.heightSuffix)]);
       }
       if (Number.isFinite(sourceBuilding.distance)) {
         secondaryRows.push(["建築遮蔽距離", escapeHtml(sourceBuilding.distance < 1 ? "點位上方" : `約 ${sourceBuilding.distance.toFixed(0)} m`)]);
@@ -4655,8 +4675,8 @@
     }
 
     if (building) {
-      secondaryRows.push(["點位建築", escapeHtml(buildingName || "OSM building")]);
-      if (buildingHeightAvailable) secondaryRows.push(["點位建築高度", escapeHtml(meters(buildingHeight))]);
+      secondaryRows.push(["點位建築", escapeHtml(pointBuilding.label)]);
+      if (buildingHeightAvailable) secondaryRows.push(["點位建築高度", escapeHtml(meters(buildingHeight) + pointBuilding.heightSuffix)]);
     }
     if (canopyAvailable) {
       secondaryRows.push(["點位樹冠高度", escapeHtml(meters(model.canopy, model.canopy >= 10 ? 0 : 1))]);
@@ -4721,7 +4741,9 @@
           : source.confidence === "possible"
             ? (sourceBuilding && sourceBuilding.plausibleUnknownHeight
                 ? "可能；建築高度缺資料"
-                : "可能；需較大幾何容差")
+                : sourceBuildingPresentation && sourceBuildingPresentation.heightSuffix
+                  ? "可能；高度推估／未驗證"
+                  : "可能；需較大幾何容差")
             : source.confidence;
       detailItems.splice(2, 0, ["來源信心", sourceConfidence]);
     }
@@ -4732,9 +4754,14 @@
       detailItems.splice(detailItems.length - 2, 0, ["備援高程說明", "全球 DEM 可出現負高程；低窪區不一定是錯誤，但點位精度低於官方 DTM"]);
       if (model.groundFallbackReason) detailItems.splice(detailItems.length - 2, 0, ["備援原因", model.groundFallbackReason]);
     }
-    if (building && heightSource) detailItems.push(["點位建築高度來源", heightSource]);
-    if (sourceBuilding && sourceBuilding.feature && sourceBuilding.feature.properties && sourceBuilding.feature.properties.height_source) {
-      detailItems.push(["遮蔽建築高度來源", sourceBuilding.feature.properties.height_source]);
+    if (pointBuilding) {
+      detailItems.push(["點位建築資料源", pointBuilding.source], ["點位建築高度來源", pointBuilding.heightSource],
+        ["點位建築高度品質", pointBuilding.quality], ["點位建築高度 provenance", pointBuilding.provenance]);
+    }
+    if (sourceBuildingPresentation) {
+      detailItems.push(["遮蔽建築資料源", sourceBuildingPresentation.source], ["遮蔽建築高度來源", sourceBuildingPresentation.heightSource],
+        ["遮蔽建築高度品質", sourceBuildingPresentation.quality], ["遮蔽建築高度 provenance", sourceBuildingPresentation.provenance],
+        ["遮蔽建築輪廓品質", sourceBuildingPresentation.geometryQuality]);
     }
     if (model.canopyBenefit && model.canopyBenefit.available && model.canopyBenefit.patch) {
       const benefitPatch = model.canopyBenefit.patch;
@@ -7473,7 +7500,7 @@
     const own=state.visualProvider!=='shademap',toggle=document.getElementById('haidianShadeToggle');
     if(toggle){toggle.checked=state.enabled;toggle.disabled=state.visualProvider==='off';}
     for(const id of ['haidianShadeCanopyOverlay','haidianShadeGroundCanopy']){const el=document.getElementById(id);if(el?.parentElement)el.parentElement.style.display='';}
-    const legend=document.querySelector?.('.haidian-shade-legend');if(legend&&own)legend.innerHTML='<span>深藍：投影陰影　淡藍：估計建築　綠色：樹冠範圍　黃：來源不足</span>';
+    const legend=document.querySelector?.('.haidian-shade-legend');if(legend&&own)legend.innerHTML='<span>深藍實心：來源回報高度／精細輪廓投影　琥珀斜線：推估／概化建築候選（不能確認遮蔭）　綠色：樹冠範圍　黃：來源不足；空白不代表日照</span>';
   }
   let unifiedRetryTimer=null,unifiedRetryBudget=2;
   function cancelUnifiedTiles(){
