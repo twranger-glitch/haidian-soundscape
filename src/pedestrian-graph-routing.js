@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev177-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev178-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -5899,6 +5899,10 @@
       stats.completeLowerCertificateHits=0;stats.completeLowerCertificateExactExtensions=0;stats.completeLowerIncrementalSegmentsEvaluated=0;
       stats.completeLowerFullRescoreFallbacks=0;stats.completeLowerSampleCacheHits=0;stats.completeLowerCertificateConflicts=0;stats.completeLowerCertificateReusedSamples=0;
       stats.completeLowerIntermediateCertificatesStored=0;
+      stats.prefixLowerTrieTokenBuilds=0;stats.prefixLowerTrieChildLookups=0;
+      stats.prefixLowerTrieCheckpointReads=0;stats.prefixLowerTrieCertificateStores=0;
+      stats.completeLowerTrieTokenBuilds=0;stats.completeLowerTrieChildLookups=0;
+      stats.completeLowerTrieCheckpointReads=0;stats.completeLowerTrieCertificateStores=0;
     }
     stats.sliceStateBudget=sliceStates;stats.sliceBudgetMs=sliceMs;stats.deadlineRemainingMsAtStart=Math.max(0,state.deadline-nowMs());
     const witnessRecords=state.witnessRecords,witnessGeometryKeys=state.witnessGeometryKeys;
@@ -5950,6 +5954,10 @@
         }
       }
       const result=await Promise.race([Promise.resolve().then(()=>options.evaluateRouteLowerBound(path.points,lowerContext)),stopped]);check();
+      const trieStatsPrefix=kind==='prefix'?'prefixLower':'completeLower';
+      for(const name of ['TokenBuilds','ChildLookups','CheckpointReads','CertificateStores']){
+        stats[trieStatsPrefix+'Trie'+name]+=Math.max(0,Number(result?.['prefixTrie'+name]||0));
+      }
       stats.lowerBoundSamples+=Number(result?.sampleCount||0);stats.lowerBoundCacheHits+=Number(result?.cacheHits||0);stats.lowerBoundModelErrors+=Number(result?.modelErrors||0);
       if(kind==='prefix'){
         stats.prefixSampleCacheHits+=Number(result?.cacheHits||0);

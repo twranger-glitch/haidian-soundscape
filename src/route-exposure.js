@@ -450,6 +450,42 @@
     }
     return node?.certificate||null;
   }
+  // dev178: one private cursor per lower-only invocation. Previously every
+  // checkpoint read/store and final store walked/tokenized the same prefix
+  // from the root again. Keep the exact tokens and already-resolved trie nodes
+  // locally; certificates, geometry checks and context/generation gates are
+  // unchanged. Missing nodes are rechecked at publication (another invocation
+  // may have populated them while the model was awaited). This cursor has no
+  // public authority and is never accepted from caller options or a proof.
+  function routeSunCreatePrefixCursor(session,steps){
+    const cursor={session,tokens:steps.map(routeSunPrefixStepToken),nodes:[session.root],resolvedDepth:0,
+      certificate:null,childLookups:0,checkpointReads:0,certificateStores:0};
+    let node=session.root;
+    for(let i=0;i<cursor.tokens.length;i++){
+      cursor.childLookups++;node=node.children.get(cursor.tokens[i]);
+      if(!node)break;
+      cursor.nodes.push(node);cursor.resolvedDepth=i+1;
+      if(node.certificate)cursor.certificate=node.certificate;
+    }
+    return cursor;
+  }
+  function routeSunPrefixCursorNode(cursor,depth,create=false){
+    let i=Math.min(depth,cursor.resolvedDepth),node=cursor.nodes[i];
+    for(;i<depth;i++){
+      cursor.childLookups++;
+      const token=cursor.tokens[i];let child=node.children.get(token);
+      if(!child){
+        if(!create)return null;
+        child={children:new Map(),certificate:null};node.children.set(token,child);
+      }
+      node=child;cursor.nodes[i+1]=node;cursor.resolvedDepth=i+1;
+    }
+    return node;
+  }
+  function routeSunStoreCursorCertificate(cursor,depth,certificate){
+    routeSunPrefixCursorNode(cursor,depth,true).certificate=certificate;
+    cursor.certificateStores++;
+  }
   function routeSunExactPointPrefix(prefix,route){
     if(!Array.isArray(prefix)||prefix.length>route.length)return false;
     for(let i=0;i<prefix.length;i++)if(Number(prefix[i]?.lat)!==Number(route[i]?.lat)||Number(prefix[i]?.lng)!==Number(route[i]?.lng))return false;
@@ -882,6 +918,14 @@
     const prefixSteps=Array.isArray(options.proofPrefixSteps)?options.proofPrefixSteps.map(s=>({edgeId:String(s?.edgeId),from:String(s?.from),to:String(s?.to)})):[];
     const prefixPointEnds=Array.isArray(options.proofPrefixPointEnds)?options.proofPrefixPointEnds.map(Number):[];
     const prefixRequested=options.usePrefixCertificates===true&&!!session&&sessionContextValid&&!!proofDomainIdentity&&!!evidenceIdentity&&prefixSteps.length>0;
+    const prefixCursor=prefixRequested?routeSunCreatePrefixCursor(session,prefixSteps):null;
+    const recordPrefixTrieWork=result=>{
+      result.prefixTrieTokenBuilds=prefixCursor?.tokens.length||0;
+      result.prefixTrieChildLookups=prefixCursor?.childLookups||0;
+      result.prefixTrieCheckpointReads=prefixCursor?.checkpointReads||0;
+      result.prefixTrieCertificateStores=prefixCursor?.certificateStores||0;
+      return result;
+    };
     // dev172: a complete-route lower call can publish exact scorer state at
     // every fully sampled graph-step boundary it traverses.  Later complete
     // routes that share that edge prefix resume from the deepest exact state
@@ -904,7 +948,7 @@
       }));
     }
     if(prefixRequested){
-      ancestor=routeSunFindPrefixCertificate(session,prefixSteps);
+      ancestor=prefixCursor.certificate;
       if(ancestor){
         const generationSafe=ancestor.cacheGeneration===session.cacheGeneration,errorSafe=ancestor.modelErrors===0;
         const resultSafe=(ancestor.complete===true||ancestor.separated===true)&&
@@ -937,12 +981,12 @@
             result.prefixCertificateHit=true;result.prefixCertificateExactExtension=certificateExactExtension;
             result.prefixCertificateConflict=false;result.prefixIncrementalSegmentsEvaluated=0;result.prefixFullRescoreFallback=false;
             result.prefixCertificateReusedSamples=reusedSamples;result.prefixIntermediateCertificatesStored=checkpointCertificatesStored;
-            if(sessionContextValid&&!session.invalidated)routeSunStorePrefixCertificate(session,prefixSteps,{
+            if(sessionContextValid&&!session.invalidated)routeSunStoreCursorCertificate(prefixCursor,prefixSteps.length,{
               stepCount:prefixSteps.length,routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
               lowerSeconds:result.lowerSeconds,separated:true,complete:false,sampleCount:result.sampleCount,modelErrors:0,
               processedDistanceM:result.processedDistanceM,totalSamples:result.totalSamples,totalDistanceM:result.totalDistanceM
             });
-            return result;
+            return recordPrefixTrieWork(result);
           }
         }
       }
@@ -966,12 +1010,12 @@
       while(checkpointCursor<checkpointMeta.length&&processedDistanceM+guardM>=checkpointMeta[checkpointCursor].distanceM){
         const cp=checkpointMeta[checkpointCursor++];
         if(cp.depth>=prefixSteps.length)continue; // finalize() owns the full-route certificate.
-        const cpSteps=prefixSteps.slice(0,cp.depth);
-        const existing=routeSunGetExactPrefixCertificate(session,cpSteps);
+        prefixCursor.checkpointReads++;
+        const existing=routeSunPrefixCursorNode(prefixCursor,cp.depth)?.certificate||null;
         if(existing&&existing.cacheGeneration===session.cacheGeneration&&existing.modelErrors===0)continue;
         if(modelErrors!==0)continue;
         const cpRoute=route.slice(0,cp.pointEnd).map(p=>({lat:Number(p.lat),lng:Number(p.lng)}));
-        routeSunStorePrefixCertificate(session,cpSteps,{
+        routeSunStoreCursorCertificate(prefixCursor,cp.depth,{
           stepCount:cp.depth,routePoints:cpRoute,cacheGeneration:session.cacheGeneration,
           lowerSeconds,separated:lowerSeconds>threshold+1e-7,complete:true,sampleCount,modelErrors,
           processedDistanceM:cp.distanceM,totalSamples:sampleCount,totalDistanceM:cp.distanceM
@@ -986,12 +1030,12 @@
       result.prefixFullRescoreFallback=options.usePrefixCertificates===true&&!incrementalUsed;
       result.prefixCertificateReusedSamples=reusedSamples;result.prefixIntermediateCertificatesStored=checkpointCertificatesStored;
       if(prefixRequested&&sessionContextValid&&!session.invalidated){
-        routeSunStorePrefixCertificate(session,prefixSteps,{stepCount:prefixSteps.length,
+        routeSunStoreCursorCertificate(prefixCursor,prefixSteps.length,{stepCount:prefixSteps.length,
           routePoints:route.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})),cacheGeneration:session.cacheGeneration,
           lowerSeconds:result.lowerSeconds,separated:result.separated,complete:result.complete,sampleCount:result.sampleCount,
           modelErrors:result.modelErrors,processedDistanceM:result.processedDistanceM,totalSamples:result.totalSamples,totalDistanceM:result.totalDistanceM});
       }
-      return result;
+      return recordPrefixTrieWork(result);
     };
     while(cursor<segmentsToEvaluate.length){
       if(serial!==analysisSerial||signal?.aborted)throw new Error("ROUTE_ANALYSIS_CANCELLED");
