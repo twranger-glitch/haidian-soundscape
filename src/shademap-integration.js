@@ -6451,7 +6451,10 @@
     props.building_source = props.building_source || props.source || "unknown";
     props.height_source = props.height_source || "prebuilt building tile";
     props.height_quality = props.height_quality || (Number.isFinite(h) && h > 0 ? "estimated" : "fallback");
-    props.building_uid = props.building_uid || `${props.building_source}:${props.source_id || props.id || JSON.stringify(feature.geometry).slice(0, 80)}`;
+    // A shared geometry prefix is not identity: adjacent footprints can share
+    // their first edge. Keep the complete geometry fallback, as the normalized
+    // provider already does, so UID dedupe cannot erase a distinct footprint.
+    props.building_uid = props.building_uid || `${props.building_source}:${props.source_id || props.id || JSON.stringify(feature.geometry)}`;
     return feature;
   }
 
