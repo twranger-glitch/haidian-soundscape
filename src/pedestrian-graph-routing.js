@@ -5760,7 +5760,7 @@
   // private incremental lower-bound session. No certificate is public authority.
   // No state/stack is serialized into a token or attached to public diagnostics.
   const realmGlobalProofContinuations = new WeakMap();
-  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev176-v1';
+  const realmFrontierProofAlgorithm = 'selected-realm-frontier-dev177-v1';
   function realmProofGraphInvariantKey(graph) {
     return JSON.stringify([
       [...graph.nodes].map(([id,n])=>[id,n.lat,n.lng,n.sourceJunctionGroup]),
@@ -6021,13 +6021,18 @@
         const toEndResult=dijkstraTimes(graph,scope.endId,scope.speedMps,true);
         state.toEnd=toEndResult.dist;state.toEndPrev=toEndResult.prev;
         state.seen=new Set([scope.startId]);state.groups=new Set();state.steps=[];
-        // dev176: reversible exact geometry for the current DFS prefix only.
-        // Every accepted edge appends once; pop restores the parent's boundary.
-        // This is private enumeration state, never evidence or proof authority.
-        state.pathPoints=[];
+        // dev177: hybrid reversible exact prefix geometry. Preserve dev176's
+        // eager append while the existing prefix-lower probe budget is still
+        // available; once prefix probing is disabled/exhausted, admit DFS states
+        // with topology/scalars only and materialize an exact missing suffix on
+        // the next scorer snapshot. This keeps the complete-frontier fast path
+        // while avoiding eager trig/point work on late incomplete frontier states.
+        state.pathPoints=[];state.pathMaterializedDepth=0;
         state.stack=[{node:scope.startId,index:0,walkS:0,syntheticM:0,addedGroup:null,historyBoundChecked:false,
           pathPointEnd:0,pathDistanceM:0,pathPhysicalM:0}];
-        stats.proofPathEdgeAppends=0;stats.proofPathGeometryPointVisits=0;stats.proofPathHaversineCalls=0;
+        stats.proofPathEdgeAppends=0;stats.proofPathGeometryMaterializedEdges=0;
+        stats.proofPathEagerMaterializations=0;stats.proofPathLazyMaterializations=0;stats.proofPathDeferredGeometryPushes=0;
+        stats.proofPathGeometryPointVisits=0;stats.proofPathHaversineCalls=0;
         stats.proofPathSnapshots=0;stats.proofPathSnapshotPoints=0;stats.proofPathPrefixEndLookups=0;
         stats.proofPathRestores=0;stats.proofPathPeakPoints=0;
         const group=graph.nodes.get(scope.startId)?.sourceJunctionGroup;if(group)state.groups.add(group);
@@ -6069,8 +6074,10 @@
       const separatingPrefixDepth=(pathSteps,processedDistanceM)=>{
         if(!Number.isFinite(processedDistanceM)||processedDistanceM<=0)return null;
         // Same left-to-right physical accumulation and 1e-6 m dedupe as the
-        // legacy scan. Other input sequences keep the exact legacy fallback.
+        // legacy scan. Current DFS frames are materialized on demand before
+        // reading their exact physical ends; foreign sequences use legacy scan.
         const current=pathSteps===state.steps&&state.stack.length===pathSteps.length+1;
+        if(current)materializeProofPath(pathSteps.length);
         const ends=current?state.stack.slice(1).map(f=>f.pathPhysicalM):prefixPhysicalEnds(pathSteps),guardM=1e-6;
         if(current)stats.proofPathPrefixEndLookups++;
         for(let i=0;i<ends.length;i++)if(ends[i]+guardM>=processedDistanceM)return i+1;
@@ -6085,24 +6092,35 @@
         return true;
       };
       const {seen,groups,steps,stack}=state;
-      const appendProofPath=(edge,from,frame)=>{
-        const parent=stack[stack.length-1],points=state.pathPoints,geometry=edge.geometry;
+      const appendProofPathGeometry=(edge,step,frame,parent)=>{
+        if(!edge||!frame||!parent||!Number.isFinite(parent.pathDistanceM)||!Number.isFinite(parent.pathPhysicalM))throw new Error('proof-path-materialization-invariant');
+        const points=state.pathPoints,geometry=edge.geometry,forward=String(step.from)===String(edge.a);
         let physicalM=parent.pathPhysicalM;
-        const forward=String(from)===String(edge.a);
-        stats.proofPathEdgeAppends++;stats.proofPathGeometryPointVisits+=geometry.length;
+        stats.proofPathGeometryMaterializedEdges++;stats.proofPathGeometryPointVisits+=geometry.length;
         for(let i=0;i<geometry.length;i++){
           const p=geometry[forward?i:geometry.length-1-i],last=points[points.length-1];
           if(!last){points.push({lat:p.lat,lng:p.lng});continue;}
           stats.proofPathHaversineCalls++;
-          const d=haversineM(last,p);
-          if(d>1e-6){physicalM+=d;points.push({lat:p.lat,lng:p.lng});}
+          const distance=haversineM(last,p);
+          if(distance>1e-6){physicalM+=distance;points.push({lat:p.lat,lng:p.lng});}
         }
         frame.pathPointEnd=points.length;
         frame.pathDistanceM=parent.pathDistanceM+edge.distanceM;
         frame.pathPhysicalM=physicalM;
         stats.proofPathPeakPoints=Math.max(stats.proofPathPeakPoints,points.length);
       };
+      const materializeProofPath=(targetDepth=steps.length)=>{
+        targetDepth=Math.max(0,Math.min(steps.length,Math.floor(Number(targetDepth)||0)));
+        let depth=Math.max(0,Math.min(targetDepth,Number(state.pathMaterializedDepth)||0));
+        if(depth>=targetDepth)return;
+        stats.proofPathLazyMaterializations++;
+        for(let d=depth+1;d<=targetDepth;d++){
+          const step=steps[d-1],edge=graph.edges.get(step.edgeId),frame=stack[d],parent=stack[d-1];
+          appendProofPathGeometry(edge,step,frame,parent);state.pathMaterializedDepth=d;
+        }
+      };
       const snapshotProofPath=()=>{
+        materializeProofPath(steps.length);
         // Give external scorers fresh point objects, exactly as pathFromEdgeSteps
         // did. Scorer mutation must never change the private prefix or siblings.
         stats.proofPathSnapshots++;stats.proofPathSnapshotPoints+=state.pathPoints.length;
@@ -6176,7 +6194,11 @@
         }
       };
       const pop=()=>{const f=stack.pop();if(stack.length){
-        state.pathPoints.length=stack[stack.length-1].pathPointEnd;stats.proofPathRestores++;
+        const parentDepth=stack.length-1;
+        if((Number(state.pathMaterializedDepth)||0)>parentDepth){
+          state.pathPoints.length=stack[parentDepth].pathPointEnd;state.pathMaterializedDepth=parentDepth;
+        }
+        stats.proofPathRestores++;
         historySeenDelta(f.node,-1);seen.delete(f.node);if(f.addedGroup)groups.delete(f.addedGroup);steps.pop();
       }};
       // Shortest continuation after removing the prefix's already-visited
@@ -6380,9 +6402,22 @@
         if(walkS>cap+.5){stats.detourRejected++;continue;}
         if(stats.expandedStates>=maxStates)return finishWithWitnesses('state-cap');
         let addedGroup=null;if(nextGroup&&!groups.has(nextGroup)){groups.add(nextGroup);addedGroup=nextGroup;}
-        const frame={node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false};
-        appendProofPath(edge,cur.node,frame);
-        seen.add(next);historySeenDelta(next,1);steps.push({edgeId:String(edge.id),from:cur.node,to:next});stack.push(frame);stats.expandedStates++;
+        const frame={node:next,index:0,walkS,syntheticM,addedGroup,historyBoundChecked:false,
+          pathPointEnd:null,pathDistanceM:null,pathPhysicalM:null};
+        // dev177 hybrid: while prefix probes remain possible, preserve dev176's
+        // eager append (the same geometry is likely needed immediately and this
+        // keeps its complete-frontier win). Once prefix probing is disabled or
+        // the unchanged 768-call cap is exhausted, defer suffix geometry until
+        // an endpoint scorer actually asks for it. The phase transition is
+        // monotonic for one authenticated proof, so a deferred parent can never
+        // later be required by an eager child.
+        stats.proofPathEdgeAppends++;
+        const step={edgeId:String(edge.id),from:cur.node,to:next};
+        seen.add(next);historySeenDelta(next,1);steps.push(step);stack.push(frame);stats.expandedStates++;
+        if(prefixLowerEnabled&&stats.prefixLowerBoundRouteCalls<maxPrefixLowerRoutes){
+          if((Number(state.pathMaterializedDepth)||0)!==steps.length-1)throw new Error('proof-path-eager-parent-invariant');
+          appendProofPathGeometry(edge,step,frame,stack[stack.length-2]);state.pathMaterializedDepth=steps.length;stats.proofPathEagerMaterializations++;
+        }else stats.proofPathDeferredGeometryPushes++;
         if(stats.expandedStates%32===0){await new Promise(resolve=>setTimeout(resolve,0));check();}
       }
       if(!state.incumbentSeen)return finishWithWitnesses('incumbent-not-in-domain');
