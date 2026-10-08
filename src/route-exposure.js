@@ -13,6 +13,7 @@
   "use strict";
 
   const VERSION = "v9.0.0-dev37.8";
+  const CORE_VERSION = "37.9.9.16.11";
 
   const DEFAULTS = {
     sampleSpacingM: 10,
@@ -1450,7 +1451,20 @@
       for (const existing of out) {
         if (existing.kind === 'manual' || existing.kind === 'experimental-fused') continue;
         proof = geometryDuplicateEvidence(existing, candidate);
-        if (proof.duplicate) { duplicateOf = existing; break; }
+        if (proof.duplicate) {
+          // dev179: geometric equivalence cannot transfer admission evidence.
+          // An earlier blocked route must not erase a later walkable route.
+          // Keep both objects; scoring applies its unchanged gates separately.
+          if (candidateWalkabilityTier(existing) === 'blocked' && candidateWalkabilityTier(candidate) !== 'blocked') {
+            audit?.dedupe?.push?.({ stage:'dedupe-evidence', status:'retained',
+              candidateId:candidate.id, stableCandidateId:candidate.stableCandidateId,
+              geometryHash:candidate.geometryHash, geometricDuplicateOf:existing.stableCandidateId,
+              reason:'blocked-duplicate-cannot-suppress-walkable-candidate',
+              suppressorReasons:candidateWalkabilityReasons(existing), proof });
+            continue;
+          }
+          duplicateOf = existing; break;
+        }
       }
       if (duplicateOf) {
         audit?.dedupe?.push?.({ stage:'dedupe', status:'deduped', candidateId:candidate.id, stableCandidateId:candidate.stableCandidateId, geometryHash:candidate.geometryHash, duplicateOf:duplicateOf.stableCandidateId, proof });
@@ -1460,6 +1474,30 @@
       }
     }
     return out;
+  }
+
+  // Diagnostic metadata only: no geometry/evidence promotion or proof authority.
+  function candidateEligibilityAuditRecord(raw, generationPhase = 'unknown') {
+    const c = withCandidateIdentity(raw), meta = c?.graphMeta || {}, w = c?.walkability || {};
+    const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+    return {
+      candidateId:c?.id || null, stableCandidateId:c?.stableCandidateId || null,
+      geometryHash:c?.geometryHash || null, kind:c?.kind || null,
+      generationSource:meta.backend || c?.rescueMeta?.source || (c?.providerIndex != null ? 'routing-provider' : null),
+      generationPhase, distanceM:finite(c?.distanceM), durationS:finite(c?.durationS),
+      walkabilityState:w.state || null, walkabilityTier:candidateWalkabilityTier(c),
+      walkabilityReasons:candidateWalkabilityReasons(c),
+      realmWalkabilityClass:meta.realmWalkabilityClass || null,
+      realmInferredOpenSpaceDistanceM:finite(meta.realmInferredOpenSpaceDistanceM),
+      realmSyntheticDistanceM:finite(meta.realmSyntheticDistanceM ?? meta.realmProvenance?.syntheticM),
+      mappedPathM:finite(meta.realmProvenance?.mappedPathM),
+      sourceSupportedDistanceM:finite(meta.realmSourceSupportedDistanceM ?? w.sourceSupportedM),
+      terminalConnectorM:finite(meta.realmProvenance?.terminalConnectorM ?? meta.terminalConnectorM),
+      terminalEndpointGaps:w.endpointGaps || null, portalConnectorM:finite(meta.realmPortalDistanceM ?? meta.realmProvenance?.portalM),
+      conditionalAccess:meta.conditionalAccess === true, usesConditionalPrivateAccess:meta.usesConditionalPrivateAccess === true,
+      requiresOnSitePathConfirmation:meta.requiresOnSitePathConfirmation === true,
+      searchIncomplete:c?.searchIncomplete ?? null, shadeSearchComplete:meta.shadeSearchComplete ?? null
+    };
   }
 
   // dev32: convert lifecycle events into a machine-checkable loss ledger.
@@ -5172,19 +5210,24 @@
       if (serial !== analysisSerial) return;
       const candidateAudit = {
         version: VERSION,
-        generated: providerCandidates.concat(graphCandidates, stretchRescueCandidates, exploratoryCandidates).filter((c) => c?.points?.length).map((c) => { const x=withCandidateIdentity(c); return { candidateId:x.id, kind:x.kind || 'provider', stableCandidateId:x.stableCandidateId, geometryHash:x.geometryHash, source:'auto' }; }),
+        generated: [
+          ...providerCandidates.map(c => candidateEligibilityAuditRecord(c, 'provider')),
+          ...graphCandidates.map(c => candidateEligibilityAuditRecord(c, 'selected-graph')),
+          ...stretchRescueCandidates.map(c => candidateEligibilityAuditRecord(c, 'rescue-or-mapped')),
+          ...exploratoryCandidates.map(c => candidateEligibilityAuditRecord(c, 'exploratory'))
+        ],
         graphLifecycle: Array.isArray(graphResult?.diagnostics?.candidateLifecycle) ? graphResult.diagnostics.candidateLifecycle.slice() : [],
         dedupe: [], quality: [], detour: [], scored: [], displayed: []
       };
       const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, stretchRescueCandidates, exploratoryCandidates), candidateAudit);
       if (manualMatch?.matched && manualMatch.candidate) {
         const manualCandidate = withCandidateIdentity(manualMatch.candidate); candidates.push(manualCandidate);
-        candidateAudit.generated.push({ candidateId:manualCandidate.id, kind:manualCandidate.kind, stableCandidateId:manualCandidate.stableCandidateId, geometryHash:manualCandidate.geometryHash, source:'manual' });
+        candidateAudit.generated.push(Object.assign(candidateEligibilityAuditRecord(manualCandidate, 'manual'), {source:'manual'}));
         candidateAudit.dedupe.push({ stage:'dedupe', status:'kept', candidateId:manualCandidate.id, stableCandidateId:manualCandidate.stableCandidateId, geometryHash:manualCandidate.geometryHash, reason:'protected-manual' });
       }
       if (experimentalFusion?.candidate) {
         const fusionCandidate = withCandidateIdentity(experimentalFusion.candidate); candidates.push(fusionCandidate);
-        candidateAudit.generated.push({ candidateId:fusionCandidate.id, kind:fusionCandidate.kind, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, source:'verified-fusion' });
+        candidateAudit.generated.push(Object.assign(candidateEligibilityAuditRecord(fusionCandidate, 'verified-fusion'), {source:'verified-fusion'}));
         candidateAudit.dedupe.push({ stage:'dedupe', status:'kept', candidateId:fusionCandidate.id, stableCandidateId:fusionCandidate.stableCandidateId, geometryHash:fusionCandidate.geometryHash, reason:'protected-verified-fusion' });
       }
       // Restrict only explicit normalized trips. Ordinary candidate generation
@@ -5756,6 +5799,7 @@
 
   window.HaidianRouteExposure = {
     version: VERSION,
+    coreVersion: CORE_VERSION,
     get config() { return Object.assign({}, config); },
     analyzeRoute,
     fetchRouteCandidates,
@@ -5790,6 +5834,7 @@
       buildManualCandidate,
       buildManualCandidateFromRoute,
       dedupeCandidates,
+      candidateEligibilityAuditRecord,
       candidateGeometryHash,
       withCandidateIdentity,
       geometryDuplicateEvidence,
