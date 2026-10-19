@@ -1,33 +1,25 @@
-# ASTRA 正式首頁 GBA＋CHMv2 接入候選｜2026-10-19
+# ASTRA 建築＋CHMv2 估計接入候選｜2026-10-19.2
 
-本包把已驗收的估計引擎接入「目前正式 ASTRA 首頁」；不是再加一個 experimental 展示頁。
+沿用正式首頁、Leaflet 地圖與原路線分析；Graph 37.9.9.16.18／Route 37.9.9.16.11 原始位元組未改。本包未部署，新版 Windows Native 尚未驗收。
 
-已完成：正式 index.html 入口、同一張 Leaflet 地圖、唯讀南北 prepared、建築與精細 CHMv2 樹蔭、原路由器安全候選的估計評分與地圖顯示、取消／防止舊結果覆寫、逐頁 SHA、原核心保護及可重跑測試。
+## 使用
 
-尚未完成：新首頁的 Windows／正式網站 Native 驗收、所有訪客免本機資料的雲端供應、真實陰影準確度驗證。未發布、未更新 GitHub。不得把本包稱為已上線或 Verified Proof 完成。
+1. 開啟原 ASTRA 首頁右上的「GBA 估計」。
+2. 按「連接南北 GBA 資料」，選既有兩區 prepared 的共同上層資料夾；亦可分別選取兩區 prepared。只讀取已驗收成果，不做預處理、FULL_READBACK 或 HF 上傳。
+3. 放大至 17 級以上查看建築與精細樹蔭估計。圖層時間在此面板設定；路線採用原路線面板的出發時間與步速。
+4. 原路線分析後，只有來源通行條件合格的候選進入估計比較。全部不合格時顯示拒絕原因，不更改原分析結果。
+5. 另可按「預覽未驗證候選陰影（不作導航）」：僅沿最多兩條原生成幾何估計，不證明可通行、不導航、不排名或推薦最不曬。未驗證端點參考段不納入長度與時間。
 
-## 使用哪一包
+ML_ESTIMATED 保持估計，資料缺失或來源衝突保持 UNKNOWN。Verified Proof、原 comparator、Realm 12 秒預算、terminal 8m 及明確端點同意政策不變。Proof=INCOMPLETE；winnerId=null；unknownSafelyResolved=0。
 
-- ASTRA-GITHUB-ROOT-INTEGRATION-UPDATE.zip：上傳用。解壓後把 index.html、gba-estimated/ 及隨附的整合說明／Manifest 放在原 repository 根目錄。不要多包一層資料夾，也不要刪除原有 src、data、vendor 或 config。
-- ASTRA-GITHUB-COMPLETE-INTEGRATED-SITE.zip：目前公開 repository 的完整快照加上本次入口與模組，供完整備份／整站部署比對。原 workflow 保留；平常更新優先用前一包。
-- ASTRA-MAIN-PAGE-INTEGRATION-ENGINEERING.zip：本工程包。含完整候選站點、原公開 baseline、實際 Native 選定圖磚與樹冠樣本、測試、執行日誌、回滾資料。其資料 fixtures 供本人私人非商業工程驗證，不可整包放到公開 GitHub。
+## 資料與環境
 
-## 上傳後的正常使用
+使用 HTTPS 桌面 Chrome／Edge 的唯讀資料夾授權。私人 HF Round-trip PASS 不會讓公開網站自動讀取私人資料；本包沒有 HF Token、prepared 圖磚或 GBA 原始資料。所有訪客免本機檔案的受控雲端供應仍未完成，真實陰影準確度尚未驗證。
 
-1. 開啟原 ASTRA 網站，按地圖右上的「GBA 估計」。
-2. 按「連接南北 GBA 資料」，選含兩區資料的共同資料夾；或分別選取已存在的南區、北區 prepared。這是瀏覽器安全的唯讀權限，不重做原始預處理、不 FULL_READBACK、不上傳 HF。
-3. 放大至 17 級以上顯示估計陰影。沿用原頁面 A/B 分析後，面板會估計最多兩條既有 source-supported 候選；可按「顯示這條估計候選」。路線時間取自原路線面板，圖層時間只控制視覺圖層。
+## 更新及回滾
 
-必須使用支援 File System Access 的桌面 Chrome／Edge 及 HTTPS。私人 HF 的正式 Round-trip PASS 不會自動讓公開 GitHub Pages 可讀私人資料；本包不把 Token 放前端，也不公開 GBA 圖磚。全體訪客雲端模式仍需要受控供應器與再散布授權閘門。
+使用 GitHub 更新 ZIP：將 index.html、gba-estimated/、本說明及整合 Manifest 放到原 repository 根目錄；保留原 src、data、vendor、config。請勿把私人工程包與測試 fixtures 放到公開 repository。
 
-## 工程驗證
+入口版本為 main-page-20261019.2。完整工程包提供回滾原檔、逐檔變更 SHA、可重跑測試與一鍵 Console；回滾不影響 prepared 資料或原核心。
 
-工程環境 Python 3.12.14、Node v24.19.0。測試依賴只有 @napi-rs/canvas 0.1.100；若沒有預裝，先在 integration-tests 執行 npm install。正式網站不需要 Node、Python 或 npm。
-
-```sh
-python3 integration-tools/run-integration.py --output ../astra-new-empty-results
-```
-
-輸出包含命令、stdout、stderr、退出碼、時間與 machine-readable 結果。測試使用真正 Native 選定 prepared 頁面與 15 張原生 CHMv2 raster；Node 目錄／DOM adapter、快取預載不能冒充新瀏覽器權限測試或新網路採集。
-
-Proof=INCOMPLETE；winnerId=null；unknownSafelyResolved=0；PRODUCTION_MERGE_HOLD。已部署 Production／原 Graph／Route 核心未修改；候選首頁有兩個新增標籤，必須如實稱為待驗收入口修改。
+PROTECTED_GRAPH_ROUTE_UNCHANGED / PRODUCTION_MERGE_HOLD。
