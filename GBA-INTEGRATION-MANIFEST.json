@@ -1,18 +1,18 @@
 {
-  "schema": "astra-main-page-gba-integration-candidate-v2",
-  "entryVersion": "main-page-20261019.2",
+  "schema": "astra-main-page-gba-integration-candidate-v3",
+  "entryVersion": "main-page-20261019.3",
   "baseCommit": "1165748cd9660843d232b55796188ab8d33a0a10",
   "basePublicURL": "https://twranger-glitch.github.io/haidian-soundscape/",
-  "previousIntegrationZIP_SHA256": "4b3caa2f46d5165bc617127f95fc88e4254a28dabb8d9a93336c1b97e636be9c",
+  "previousIntegrationZIP_SHA256": "8f3bb2d28b4ca025428e45ddd9c7e8af4686e3418ccb9b5e32d37ba834bdeff2",
   "newEntry": "index.html -> gba-estimated/integration.mjs",
   "modifiedOriginalCoreFiles": [],
   "files": [
     {
       "path": "GBA-INTEGRATION-README.md",
       "action": "modified",
-      "bytes": 2072,
-      "sha256": "bca947ee1fe411dd6b8af76312302a9ce0b7582cbe8f4c94fbf02137b56dd7b0",
-      "previousIntegrationSHA256": "312d091961ae31433399d0f85f4cb95208d404122bc2c4f646f5749de4740358"
+      "bytes": 2596,
+      "sha256": "bdac631741d1aa4fcfce5129732ee51de7b7c808a699a86ca3a86a475f31a105",
+      "previousIntegrationSHA256": "bca947ee1fe411dd6b8af76312302a9ce0b7582cbe8f4c94fbf02137b56dd7b0"
     },
     {
       "path": "gba-estimated/CHMV2-SOURCE-AND-LICENSE.md",
@@ -128,24 +128,31 @@
     },
     {
       "path": "gba-estimated/geometry-inspection.mjs",
-      "action": "added",
+      "action": "unchanged-retained-dependency",
       "bytes": 7759,
       "sha256": "ab4cfaf24799ea656fad2c6ee918276c9ae848fbba19416a3f2c5eff5b7bef3d",
-      "previousIntegrationSHA256": null
+      "previousIntegrationSHA256": "ab4cfaf24799ea656fad2c6ee918276c9ae848fbba19416a3f2c5eff5b7bef3d"
     },
     {
       "path": "gba-estimated/integration.css",
       "action": "modified",
-      "bytes": 1150,
-      "sha256": "95d777e3a191d4059eb787d4a2649bab4d9d511de9f13b17642d9977e35e1497",
-      "previousIntegrationSHA256": "1945cfa8cd5f6b037e722e083daeb1613b2ecfc20342547b5d549df7e701eb21"
+      "bytes": 1351,
+      "sha256": "b4c3750d84d72d20984993d9090b43db72d153aa561fea786f5977054edacbae",
+      "previousIntegrationSHA256": "95d777e3a191d4059eb787d4a2649bab4d9d511de9f13b17642d9977e35e1497"
     },
     {
       "path": "gba-estimated/integration.mjs",
       "action": "modified",
-      "bytes": 18144,
-      "sha256": "202710e90d634d983d93193a518ea7b0ae4219db209669a6c07d326f5142d55a",
-      "previousIntegrationSHA256": "e95f9faa6d44e0383e78a22e3fdd5297e6e3bf56d9e1f6f6ab701c081bbf7824"
+      "bytes": 17951,
+      "sha256": "e9cec0ce5bab40e6a246891f0356b3a14ee41469540d77acd371a6cd2d936c90",
+      "previousIntegrationSHA256": "202710e90d634d983d93193a518ea7b0ae4219db209669a6c07d326f5142d55a"
+    },
+    {
+      "path": "gba-estimated/launcher.mjs",
+      "action": "added",
+      "bytes": 993,
+      "sha256": "4040cdde8c90f586c1c5a2332347eeaa80a2f23db7f1bbd17795596479d39db7",
+      "previousIntegrationSHA256": null
     },
     {
       "path": "gba-estimated/leaflet-overlay.mjs",
@@ -163,17 +170,17 @@
     },
     {
       "path": "gba-estimated/model-worker.mjs",
-      "action": "modified",
+      "action": "unchanged-retained-dependency",
       "bytes": 3248,
       "sha256": "e0ca771595bf6cd4bfefcc3729ac311b35de4a6bac17ca040672d8ab417e855d",
-      "previousIntegrationSHA256": "3c99625379ac36874b9c86fa3e36208904dcdb67a0705bd8a346814ecfd403f1"
+      "previousIntegrationSHA256": "e0ca771595bf6cd4bfefcc3729ac311b35de4a6bac17ca040672d8ab417e855d"
     },
     {
       "path": "gba-estimated/route-admission.mjs",
-      "action": "added",
+      "action": "unchanged-retained-dependency",
       "bytes": 3431,
       "sha256": "f36c81aefa8866f8c75d32f8300b9c8a837ca310bacadc618c2a04e7c1bf780f",
-      "previousIntegrationSHA256": null
+      "previousIntegrationSHA256": "f36c81aefa8866f8c75d32f8300b9c8a837ca310bacadc618c2a04e7c1bf780f"
     },
     {
       "path": "gba-estimated/route-bridge.mjs",
@@ -184,10 +191,10 @@
     },
     {
       "path": "gba-estimated/route-overlay.mjs",
-      "action": "modified",
+      "action": "unchanged-retained-dependency",
       "bytes": 1651,
       "sha256": "9b5d63a88b23282eecd200ed78ab2f17afa6fae8721ecf7143b48899aaae8783",
-      "previousIntegrationSHA256": "c87a712d1ddbc7132d22babe8dcf432d30725e2ca5e586f98dccf717dda00be6"
+      "previousIntegrationSHA256": "9b5d63a88b23282eecd200ed78ab2f17afa6fae8721ecf7143b48899aaae8783"
     },
     {
       "path": "gba-estimated/routing/canopy-estimated-route.mjs",
@@ -256,8 +263,8 @@
       "path": "index.html",
       "action": "modified",
       "bytes": 630530,
-      "sha256": "01f963b06ed635dc0aeee4839cc95c175141c5f00f279704a9f5df799a68799d",
-      "previousIntegrationSHA256": "d637604223f563af4191b815dbc112383a5cc06bdc5d44454c656a64ba114a9a"
+      "sha256": "50c8caec2da5e9604eaf4bceac7bc5c3f5687dec1233518fe7a4de25689a9d45",
+      "previousIntegrationSHA256": "01f963b06ed635dc0aeee4839cc95c175141c5f00f279704a9f5df799a68799d"
     }
   ],
   "ownSHAIncludedInOuterManifest": true,
@@ -271,5 +278,6 @@
   "unverifiedInspectionRankingAllowed": false,
   "Proof": "INCOMPLETE",
   "winnerId": null,
-  "unknownSafelyResolved": 0
+  "unknownSafelyResolved": 0,
+  "launcherHost": "DOCUMENT_BODY_NOT_HIDDEN_LEAFLET_CORNER"
 }

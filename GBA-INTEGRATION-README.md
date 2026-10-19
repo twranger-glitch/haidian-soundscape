@@ -1,4 +1,4 @@
-# ASTRA 建築＋CHMv2 估計接入候選｜2026-10-19.2
+# ASTRA 建築＋CHMv2 估計接入候選｜2026-10-19.3
 
 沿用正式首頁、Leaflet 地圖與原路線分析；Graph 37.9.9.16.18／Route 37.9.9.16.11 原始位元組未改。本包未部署，新版 Windows Native 尚未驗收。
 
@@ -20,6 +20,13 @@ ML_ESTIMATED 保持估計，資料缺失或來源衝突保持 UNKNOWN。Verified
 
 使用 GitHub 更新 ZIP：將 index.html、gba-estimated/、本說明及整合 Manifest 放到原 repository 根目錄；保留原 src、data、vendor、config。請勿把私人工程包與測試 fixtures 放到公開 repository。
 
-入口版本為 main-page-20261019.2。完整工程包提供回滾原檔、逐檔變更 SHA、可重跑測試與一鍵 Console；回滾不影響 prepared 資料或原核心。
+入口版本為 main-page-20261019.3。完整工程包提供回滾原檔、逐檔變更 SHA、可重跑測試與一鍵 Console；回滾不影響 prepared 資料或原核心。
 
 PROTECTED_GRAPH_ROUTE_UNCHANGED / PRODUCTION_MERGE_HOLD。
+
+
+## .3 入口修復
+
+原首頁刻意隱藏 Leaflet 右上角，.2 的 GBA 按鈕因此無法看見。.3 改由 body 直屬的固定按鈕開啟面板，不取消原首頁的隱藏規則。桌面位置在右上工具列第一個圓形圖示左側，文字為「GBA 估計」。
+
+新 Console 檢查 11 個來源 SHA，並核對入口非零大小、無隱藏祖先、固定位置及面板可開啟；程式 SHA PASS 不再代替 UI 可用性驗證。單元／CSSOM 通過不等於 Windows Native 或正式網站新版 PASS。
