@@ -1,0 +1,77 @@
+{
+  "schema": "astra-accepted-taiwan-estimated-v1",
+  "acceptanceArchiveSHA256": "c22d8cd29394614e4becdb9853aed12cd19c0adb3de5cdfbd334e3c8fa0ee177",
+  "acceptance": {
+    "WindowsNorthTaiwanNative": "PASS",
+    "basis": "INDEPENDENT_AUDIT_OF_SUPPLIED_WINDOWS_RECORDS_NOT_NEW_EXECUTION"
+  },
+  "heightClassification": "ML_ESTIMATED",
+  "verifiedProofEligible": false,
+  "realWorldCoverageComplete": false,
+  "policy": {
+    "NO_PRODUCTION_CHANGE": true,
+    "PRODUCTION_MERGE_HOLD": true,
+    "Proof": "INCOMPLETE",
+    "winnerId": null,
+    "unknownSafelyResolved": 0
+  },
+  "regions": [
+    {
+      "id": "e120_n25_e125_n20",
+      "bounds": [
+        120,
+        20,
+        125,
+        25
+      ],
+      "readBounds": [
+        120.03677083119982,
+        20.2633378114797,
+        124.72657269999999,
+        25.00372542154334
+      ],
+      "status": "prepared",
+      "release": "e74bbe30909af4306c707df7",
+      "manifestSHA256": "2e00471b9352338d97aadaa26761aa1f25257e1afdcdb514b9272458f2958b8c",
+      "baseURL": "/regions/south/",
+      "existingRegionUnmodified": true,
+      "role": "south",
+      "acceptanceStatus": "PASS",
+      "canonicalBuildings": 1359042,
+      "tileCount": 15388,
+      "realWorldCoverageComplete": false
+    },
+    {
+      "id": "north-40f0c50dbfd0b9f6c2cbb7fc",
+      "bounds": [
+        120,
+        25,
+        122.6,
+        25.8
+      ],
+      "readBounds": [
+        121.02536926665267,
+        24.997038344277797,
+        122.083516,
+        25.6299281
+      ],
+      "status": "prepared",
+      "release": "40f0c50dbfd0b9f6c2cbb7fc",
+      "manifestSHA256": "2fa9239bc1686fb45e5fd7fc4d6b400c03b9a7fc78aef807b1f977aa143970e5",
+      "baseURL": "/regions/north/",
+      "aoiFiltered": true,
+      "realWorldCoverageComplete": false,
+      "role": "north",
+      "acceptanceStatus": "PASS",
+      "canonicalBuildings": 201521,
+      "tileCount": 1349
+    }
+  ],
+  "storage": {
+    "repository": "yhzkiki/ASTRA-GBA-Prepared",
+    "repoType": "dataset",
+    "requiredVisibility": "private",
+    "upload": "NOT_RUN",
+    "tokensInFrontend": false
+  }
+}

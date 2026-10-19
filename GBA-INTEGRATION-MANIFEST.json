@@ -1,0 +1,261 @@
+{
+  "schema": "astra-main-page-gba-integration-candidate-v1",
+  "baseCommit": "1165748cd9660843d232b55796188ab8d33a0a10",
+  "basePublicURL": "https://twranger-glitch.github.io/haidian-soundscape/",
+  "originalFiles": 259,
+  "originalUnchangedFiles": 258,
+  "originalChangedFiles": [
+    "index.html"
+  ],
+  "newEntry": "index.html -> gba-estimated/integration.mjs",
+  "modifiedOriginalCoreFiles": [],
+  "files": [
+    {
+      "path": "GBA-INTEGRATION-README.md",
+      "action": "added",
+      "bytes": 3122,
+      "sha256": "312d091961ae31433399d0f85f4cb95208d404122bc2c4f646f5749de4740358",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/CHMV2-SOURCE-AND-LICENSE.md",
+      "action": "added",
+      "bytes": 1309,
+      "sha256": "90d05d975e18658a5e68043c449cdfd8f5f7e30923c903ca5885eddbf6d0fe27",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/SOURCES-AND-LICENSE.md",
+      "action": "added",
+      "bytes": 1862,
+      "sha256": "bf54feb814efe0e6d87f2f9ce246aa6c00b70a7e1b18a4ca361b0698eb8d67b4",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/canopy/decoder.mjs",
+      "action": "added",
+      "bytes": 341,
+      "sha256": "d4c1e6a2da127dbc1d5893a9ef42b23fd0ae3cb3964e18d4b2cdbbbcdeaa0dc2",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/canopy/grid.mjs",
+      "action": "added",
+      "bytes": 4058,
+      "sha256": "49ef39d8208cec08aee842de1cc5b049a35c1a7d53d016cc6c9ffc32612dc4bf",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/canopy/provider.mjs",
+      "action": "added",
+      "bytes": 8723,
+      "sha256": "f5c413bfb0b77df4dc972b1cd25f380a2f432f54023db208c10b528c7454eb19",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/canopy/render.mjs",
+      "action": "added",
+      "bytes": 2315,
+      "sha256": "0f30559fe93d66ae561d4eae66ac2e66a7e28d65932b014bd66448af0655a682",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/client/prepared-provider.mjs",
+      "action": "added",
+      "bytes": 6326,
+      "sha256": "6f4db364f20ce78bae5ee115c6738b64f558c8a154b0c4b4d3c000fab96f74ad",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/config/ACCEPTED-TAIWAN-REGISTRY.json",
+      "action": "added",
+      "bytes": 2094,
+      "sha256": "a45f3c9592ef031d27a89132da14d87b117288658b0e54833913d4d3a3ea3410",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/config/CONFLICT-REGISTRY.json",
+      "action": "added",
+      "bytes": 633,
+      "sha256": "4ccb903b6a86c1414b3846c9b0bad46763d45b270a819055ab4fd29549ffc53c",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/config/LIVE-CORE-LOCKS.json",
+      "action": "added",
+      "bytes": 202,
+      "sha256": "f5bf471475230770e8facd3f863a418254aa05bdff0abdb9729dbc7b724d11da",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/config/PREPARED-LOCATIONS.json",
+      "action": "added",
+      "bytes": 114,
+      "sha256": "957f55620152a2ffd89ea645429648e64590e73007989b6461636147dce8352a",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/config/VALIDATED-V8-MODULE-LOCKS.json",
+      "action": "added",
+      "bytes": 1883,
+      "sha256": "0332a03f054659343f080cc86b7e78fc4be7e2c5d1be762c23af327b77472967",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/engine/estimated-shade.mjs",
+      "action": "added",
+      "bytes": 6663,
+      "sha256": "d68299211a3a2be8113d8ed06d50c0aa1819de22da8fc2fe07a980d15d905c23",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/engine/geometry.mjs",
+      "action": "added",
+      "bytes": 6459,
+      "sha256": "7f564ccd4926127025dbb96ca0652bf3e79834e009cfe02ac94e500a49c2414e",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/engine/solar.mjs",
+      "action": "added",
+      "bytes": 1878,
+      "sha256": "84edc503ae969978054e77540262b7070c93c62e202147ad54b7041bea0b31f7",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/engine/source-priority.mjs",
+      "action": "added",
+      "bytes": 3117,
+      "sha256": "1effde2526f346522618761abc6fcab0ee60f458ce031a6a997182aa80c77f94",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/integration.css",
+      "action": "added",
+      "bytes": 1024,
+      "sha256": "1945cfa8cd5f6b037e722e083daeb1613b2ecfc20342547b5d549df7e701eb21",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/integration.mjs",
+      "action": "added",
+      "bytes": 13755,
+      "sha256": "e95f9faa6d44e0383e78a22e3fdd5297e6e3bf56d9e1f6f6ab701c081bbf7824",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/leaflet-overlay.mjs",
+      "action": "added",
+      "bytes": 1855,
+      "sha256": "3c4072221e300d374962a2b97e5bfc05930181422796d18dda95e310e4aa726b",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/local-data.mjs",
+      "action": "added",
+      "bytes": 6367,
+      "sha256": "11f8019b53e531b1ce1ceecebeae803d77a039319c37b4d1c0340290d3434ba2",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/model-worker.mjs",
+      "action": "added",
+      "bytes": 2563,
+      "sha256": "3c99625379ac36874b9c86fa3e36208904dcdb67a0705bd8a346814ecfd403f1",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/route-bridge.mjs",
+      "action": "added",
+      "bytes": 3328,
+      "sha256": "b1250859d41b8f1969bd26f8514cdecec1925be106adb542e0cbde80216d4273",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/route-overlay.mjs",
+      "action": "added",
+      "bytes": 877,
+      "sha256": "c87a712d1ddbc7132d22babe8dcf432d30725e2ca5e586f98dccf717dda00be6",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/routing/canopy-estimated-route.mjs",
+      "action": "added",
+      "bytes": 6925,
+      "sha256": "1290aba7f7501d41b10a6c26ec9feb52c7006a8c531b1cb19751c70acfa3cdb1",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/routing/connected-estimated-route.mjs",
+      "action": "added",
+      "bytes": 6950,
+      "sha256": "3ec0556a83f0d8a6040e55458abcb1a2f04113bf1c4c04fa0340ff0177b6cef1",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/routing/estimated-route.mjs",
+      "action": "added",
+      "bytes": 8751,
+      "sha256": "baa4ed55cbabcf4026b1c182d6f7544d6de21df36ae10b100c3b18b02adab4ba",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/taiwan/accepted-provider.mjs",
+      "action": "added",
+      "bytes": 3562,
+      "sha256": "522d2942eafacddc00eb6a6d8813b8cc07cb5d1696da7100ff8a7b6004169ad3",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/taiwan/isolated-session.mjs",
+      "action": "added",
+      "bytes": 3494,
+      "sha256": "4461483cf90549ccdd059b8ef3ac2e4bdeeae944ba5df2f2688b825186c0b9f7",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/taiwan/northern-provider.mjs",
+      "action": "added",
+      "bytes": 10019,
+      "sha256": "ff32a0a5d6a9b79a37f19a0e683f228bb7fc0d58dffa39e66f7caee14cea8904",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/taiwan/provider.mjs",
+      "action": "added",
+      "bytes": 9670,
+      "sha256": "60680dc5226cecf07f2c8c87d2bb37b4e622126817170356a074f0b7d0e93221",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/vendor/geotiff-2.1.3/LICENSE.txt",
+      "action": "added",
+      "bytes": 1088,
+      "sha256": "da0811089f254e909f69f75fa496ca97e5167a8eaa945d9a6bffdd8499b47a49",
+      "previousSHA256": null
+    },
+    {
+      "path": "gba-estimated/vendor/geotiff-2.1.3/geotiff.js",
+      "action": "added",
+      "bytes": 317520,
+      "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c",
+      "previousSHA256": null
+    },
+    {
+      "path": "index.html",
+      "action": "modified",
+      "bytes": 630530,
+      "sha256": "d637604223f563af4191b815dbc112383a5cc06bdc5d44454c656a64ba114a9a",
+      "previousSHA256": "ff8eec4ee16e8deb2a6e34947c7651779be0d55d4a053e4235682faca460fd71"
+    }
+  ],
+  "ownSHAIncludedInOuterManifest": true,
+  "dataDelivery": "OWNER_READ_ONLY_LOCAL_DIRECTORY_NOT_PUBLIC_HF_ACCESS",
+  "publicPreparedTilesIncluded": false,
+  "newMainPageWindowsNative": "NOT_RUN",
+  "deployed": false,
+  "merge": "HOLD",
+  "Proof": "INCOMPLETE",
+  "winnerId": null,
+  "unknownSafelyResolved": 0
+}

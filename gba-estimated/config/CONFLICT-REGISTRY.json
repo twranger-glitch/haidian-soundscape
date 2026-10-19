@@ -1,0 +1,27 @@
+{
+  "schema": "astra-estimated-conflict-registry-v1",
+  "basis": "SEALED_SELECTED_TILE_INTEGRATION",
+  "sourceEvidenceSHA256": "e464ed0ce04343b834ee8cb7c020f932c9c4e29c2ae0e7affe203e3c1811110c",
+  "manifestSHA256": {
+    "north": "2fa9239bc1686fb45e5fd7fc4d6b400c03b9a7fc78aef807b1f977aa143970e5",
+    "south": "2e00471b9352338d97aadaa26761aa1f25257e1afdcdb514b9272458f2958b8c"
+  },
+  "identities": [
+    [
+      "osm",
+      "499656656",
+      "TWN"
+    ],
+    [
+      "osm",
+      "499656657",
+      "TWN"
+    ],
+    [
+      "osm",
+      "547096431",
+      "TWN"
+    ]
+  ],
+  "action": "WITHHOLD_ESTIMATED_CASTER_RETAIN_UNKNOWN"
+}
