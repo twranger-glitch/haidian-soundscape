@@ -1434,6 +1434,21 @@
       vertexCoverageChecked:true, maxVertexWitnessOffsetM };
   }
 
+  // Validate the existing explicit endpoint policy before geometric dedupe.
+  // An invalid representative must not suppress an endpoint-valid candidate.
+  function normalizedEndpointEligibleCandidates(input, audit = null) {
+    if (!Object.keys(endpointNormalizationReferences).length) return input;
+    const out = [];
+    for (const raw of input || []) {
+      const candidate = withCandidateIdentity(raw);
+      if (normalizedCandidateEndpointsMatch(candidate)) { out.push(candidate); continue; }
+      audit?.dedupe?.push?.({stage:'endpoint-normalization', candidateId:candidate?.id,
+        stableCandidateId:candidate?.stableCandidateId, geometryHash:candidate?.geometryHash,
+        status:'rejected', reason:'does-not-reach-user-confirmed-routing-endpoint', phase:'before-geometric-dedupe'});
+    }
+    return out;
+  }
+
   function dedupeCandidates(candidates, audit = null) {
     const out = [];
     for (const raw of candidates || []) {
@@ -5118,7 +5133,8 @@
       }
 
       const mappedSource=await realmSourcePromise;
-      if(mappedSource.available&&window.HaidianPedestrianGraph.mappedWalkCandidates){const mapped=await window.HaidianPedestrianGraph.mappedWalkCandidates(mappedSource.payload,aPoint,bPoint,{speedMps,detourPct,shouldCancel:()=>serial!==analysisSerial});perf.mappedWalkAudit={...mapped.walkability,reason:mapped.reason||mapped.walkability?.reason,alternatives:mapped.alternativeDiagnostics};stretchRescueCandidates.push(...mapped.candidates||[]);}
+      let mappedSourceWitness = null;
+      if(mappedSource.available&&window.HaidianPedestrianGraph.mappedWalkCandidates){const mapped=await window.HaidianPedestrianGraph.mappedWalkCandidates(mappedSource.payload,aPoint,bPoint,{speedMps,detourPct,shouldCancel:()=>serial!==analysisSerial});mappedSourceWitness=mapped;perf.mappedWalkAudit={...mapped.walkability,reason:mapped.reason||mapped.walkability?.reason,alternatives:mapped.alternativeDiagnostics};stretchRescueCandidates.push(...mapped.candidates||[]);}
       const providerCandidates = await providerPromise;
       if (serial !== analysisSerial) return;
       let exploratoryCandidates = [];
@@ -5208,6 +5224,27 @@
         }
       }
       if (serial !== analysisSerial) return;
+      // Reuse existing mapped source evidence before dedupe discards its
+      // representative. No graph mutation, new search, or connector permission.
+      if (window.ASTRARouteSourceProvenance?.transfer) {
+        const handoffStarted = nowMs();
+        try {
+          const handoff = await window.ASTRARouteSourceProvenance.transfer({
+            candidates:graphCandidates, mapped:mappedSourceWitness, source:mappedSource,
+            a:aPoint, b:bPoint, shouldCancel:()=>serial!==analysisSerial
+          });
+          if (serial !== analysisSerial) return;
+          graphCandidates = handoff.candidates;
+          perf.sourceWalkHandoff = handoff.diagnostics;
+        } catch (error) {
+          if (serial !== analysisSerial) return;
+          // Missing evidence never grants source-supported status.
+          perf.sourceWalkHandoff = {status:'BLOCKED',reason:error?.message||String(error),transferred:0};
+        } finally {
+          perf.sourceWalkHandoffMs = nowMs()-handoffStarted;
+        }
+      }
+      if (serial !== analysisSerial) return;
       const candidateAudit = {
         version: VERSION,
         generated: [
@@ -5219,7 +5256,7 @@
         graphLifecycle: Array.isArray(graphResult?.diagnostics?.candidateLifecycle) ? graphResult.diagnostics.candidateLifecycle.slice() : [],
         dedupe: [], quality: [], detour: [], scored: [], displayed: []
       };
-      const candidates = dedupeCandidates(providerCandidates.concat(graphCandidates, stretchRescueCandidates, exploratoryCandidates), candidateAudit);
+      const candidates = dedupeCandidates(normalizedEndpointEligibleCandidates(providerCandidates.concat(graphCandidates, stretchRescueCandidates, exploratoryCandidates), candidateAudit), candidateAudit);
       if (manualMatch?.matched && manualMatch.candidate) {
         const manualCandidate = withCandidateIdentity(manualMatch.candidate); candidates.push(manualCandidate);
         candidateAudit.generated.push(Object.assign(candidateEligibilityAuditRecord(manualCandidate, 'manual'), {source:'manual'}));

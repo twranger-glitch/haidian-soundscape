@@ -1,0 +1,27 @@
+{
+  "schema": "astra-release-candidate-v1",
+  "release": "mapped-source-handoff-20261020.2",
+  "entryVersion": "main-page-20261020.2",
+  "baseCoreVersions": {
+    "graph": "37.9.9.16.18",
+    "route": "37.9.9.16.11"
+  },
+  "baseRouteSHA256": "c32a8d5ea9a0547d4b7f0ad64305629b352d663100d2c2389c94eb45e0412733",
+  "routePatchSHA256": "0e5b5a27b3dd8a0700ff7436d3c80f58327cca7737abefd5ffd5730c5c0afef1",
+  "graphSHA256": "ec960fca6707d5af60d6240d289600d375af339b6ec5b89ead6254a3bfccf2e1",
+  "scope": "mapped-source evidence handoff, foreign Canvas ownership, GBA-only Taiwan time fallback; prior endpoint-before-dedupe retained",
+  "newSealedCoreVersion": false,
+  "externallyDeployed": false,
+  "PreparedOrNativeArchiveModified": false,
+  "Proof": "INCOMPLETE",
+  "winnerId": null,
+  "unknownSafelyResolved": 0,
+  "verifiedWinnerSemanticsChanged": false,
+  "terminalDetourWalkabilityShadePoliciesChanged": false,
+  "priorRouteSHA256": "a1168a006d96ae63ce90ab87a65ffbda3aa3b7526d8f51c061c565e8157880e8",
+  "sourceHandoffSHA256": "194b74f475113e586fa4eaa76f0569e79251f4b55d84e828446e3f6ed4501325",
+  "additionalSourceOrShadeQueries": 0,
+  "foreignCanvasOwnershipFix": true,
+  "estimatedLayerUTC8Fallback": true,
+  "shadeIntegrationSHA256": "f27df72c12a2fb421f114f4bd5986ee22a1fce9e2c280c300154714a3092059d"
+}

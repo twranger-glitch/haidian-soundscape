@@ -523,6 +523,8 @@
   function isLikelyShadeCanvas(canvas) {
     if (!canvas || !mapRef || !mapRef.getContainer) return false;
     if (shadeHostCanvasBaseline && shadeHostCanvasBaseline.has(canvas)) return false;
+    // Explicitly owned independent layers are never SDK-owned framebuffers.
+    if (canvas.hasAttribute("data-astra-canvas-owner")) return false;
     // Our canopy overlay is an L.GridLayer whose canvas tiles carry .leaflet-tile.
     // Never touch those; the stale artifact observed in v7.4 lives in the
     // overlay/map pane as a viewport-sized SDK canvas.

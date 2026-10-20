@@ -1,36 +1,32 @@
 {
-  "schema": "astra-deploy-manifest-v2",
-  "release": "dev37.9.9.15-candidate-dedupe-vertex-coverage-pre-live",
-  "createdAt": "2026-10-04T21:35:00+08:00",
-  "visibleVersion": "v9.0.0-dev37.8",
-  "integrationBaseline": "sealed graph core dev37.9.9.14 + sealed route core dev37.9.9.11",
-  "scope": "candidate near-corridor dedupe original-vertex coverage only; graph, Realm, terminal, endpoint normalization, provenance, shade, detour, comparator and Yen semantics unchanged",
-  "cacheWiring": {
-    "src/pedestrian-graph-routing.js": "core=37.9.9.14",
-    "src/route-exposure.js": "core=37.9.9.15",
-    "src/building-data-provider.js": "core=37.9.8.4",
-    "src/nlsc-official-geometry.js": "core=37.9.7",
-    "src/own-shade-renderer.js": "core=37.9.7",
-    "src/shademap-integration.js": "core=37.9.7"
-  },
-  "verification": {
-    "regressionPassed": 424,
-    "regressionFailed": 0,
-    "testSuitesExitZero": "19/19",
-    "cycleCases": "40/40 PASS",
-    "directionCases": "38/38 PASS",
-    "mappedHandoffCases": "18/18 PASS",
-    "sourceScopeCases": "34/34 PASS",
-    "topologyDiversityCases": "38/38 PASS",
-    "randomDirectedCycleStress": "250 cases / 16,597 all-pairs PASS",
-    "publicWebsite": "NOT YET RUN — PRE-LIVE",
-    "liveBrowser": "NOT YET RUN — PRE-LIVE",
-    "liveGenericCycle": "PASS — parallel 6/3/3; figure-eight 8/4/4; ring 4/2/2; directed legal long-wrap preserved",
-    "liveXiaoqiao": "PASS — 52/52 graph; fastest 320.40162376093997 m; mapped/Realm/normalization/comparator semantics preserved",
-    "dedupeBaselineRed": "12 PASS / 10 FAIL (expected RED)",
-    "dedupePatched": "22/22 PASS"
-  },
+  "schema": "astra-deploy-manifest-v4",
+  "release": "mapped-source-handoff-20261020.2",
+  "publicSiteAcceptance": "NOT_DEPLOYED",
   "files": {
+    ".github/workflows/build-building-data.yml": {
+      "bytes": 7731,
+      "sha256": "571e18fef00cb6b635633d65d781e8fcdc4cd8ef5349bc9edf74b38750e010b4"
+    },
+    ".github/workflows/build-flood-pmtiles.yml": {
+      "bytes": 5232,
+      "sha256": "37100811fb08c25cb1022e63ad42653c0f098da8da8119468885fb27576356e5"
+    },
+    ".github/workflows/deploy-pages.yml": {
+      "bytes": 2947,
+      "sha256": "b0563607f788d6589c82a75441d768fe0501ab408913616553629a96c03e456a"
+    },
+    ".gitignore": {
+      "bytes": 144,
+      "sha256": "82ada7f9f6b3eee9a66f467c4ac154296dd826f0f688558e12c2d021f4c489f2"
+    },
+    "ASTRA-RELEASE.json": {
+      "bytes": 1304,
+      "sha256": "1b95b6d215543a60be3fda11d5d5cf66ddfa9acfca6d56c258c2fc933060f599"
+    },
+    "GBA-INTEGRATION-README.md": {
+      "bytes": 1764,
+      "sha256": "32f9b0117380e0e8164658a79e346ad8cecfe56ae08c809b96347b0fbdfe8c38"
+    },
     "LIVE-ACCEPTANCE-dev37.9.9.13.md": {
       "bytes": 2102,
       "sha256": "89d107684976b0b23337bed8e230ef7329619f7023231bdfd4fb4eb879083aa1"
@@ -114,6 +110,10 @@
     "RELEASE-dev37.9.9.9.md": {
       "bytes": 3533,
       "sha256": "8c7f1d03c2954cbbf4cd64df6469f35e5af9056b3030518598595c9aec6240ed"
+    },
+    "UPLOAD-NOTE.txt": {
+      "bytes": 453,
+      "sha256": "f9aea242280c9a1e3e259f8ed2f4474fb568164357aa191b48f56c1c1d65483a"
     },
     "buildings/NLSC-OFFICIAL-GEOMETRY-PILOT.md": {
       "bytes": 549,
@@ -587,6 +587,10 @@
       "bytes": 30473,
       "sha256": "9b0eb40425e54996d0117942435f962ed47f7b6146e4ee77976c0bc9c1013e43"
     },
+    "buildings/nlsc-official-geometry-pilot-2026-09-30.geojson": {
+      "bytes": 106480,
+      "sha256": "93037fa2055a1f002dcaa2e2002df1e643f9c701083ac50d81c80d1c86f482b6"
+    },
     "buildings/nlsc-official-geometry-pilot-2026-10-01.geojson": {
       "bytes": 683046,
       "sha256": "ba9dd74f30b867b3a3765bc481ef6e345efaac1515afc6c11901e60dc9d60d29"
@@ -602,6 +606,18 @@
     "config.shademap.js": {
       "bytes": 886,
       "sha256": "899eed3a8066d9b4840f7301bf71d62ad24192682d4797294fc2be78912be828"
+    },
+    "config.shademap.template.js": {
+      "bytes": 13121,
+      "sha256": "5d6b9575d5475fb964e1b0a4039637f74b86499caf8b25481a509abb31f9a226"
+    },
+    "data/building": {
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "data/building-tile-index.json": {
+      "bytes": 4934,
+      "sha256": "fbb7e4af90055ea7bc0bab36bed3b6d4552b02aace0ed20b63463f286db2c809"
     },
     "data/multisource/evidence-index.json": {
       "bytes": 55290,
@@ -791,9 +807,153 @@
       "bytes": 872,
       "sha256": "127d9db5e227a078cf8352ec312d554f45da30bfb6fac8746193e0aa3528b5f2"
     },
+    "favicon.png": {
+      "bytes": 2067,
+      "sha256": "6fab7510e71e156685140298c9ad9c292603fdac2b860296b799ba87b9130093"
+    },
+    "gba-estimated/CHMV2-SOURCE-AND-LICENSE.md": {
+      "bytes": 1309,
+      "sha256": "90d05d975e18658a5e68043c449cdfd8f5f7e30923c903ca5885eddbf6d0fe27"
+    },
+    "gba-estimated/SOURCES-AND-LICENSE.md": {
+      "bytes": 1862,
+      "sha256": "bf54feb814efe0e6d87f2f9ce246aa6c00b70a7e1b18a4ca361b0698eb8d67b4"
+    },
+    "gba-estimated/canopy/decoder.mjs": {
+      "bytes": 341,
+      "sha256": "d4c1e6a2da127dbc1d5893a9ef42b23fd0ae3cb3964e18d4b2cdbbbcdeaa0dc2"
+    },
+    "gba-estimated/canopy/grid.mjs": {
+      "bytes": 4058,
+      "sha256": "49ef39d8208cec08aee842de1cc5b049a35c1a7d53d016cc6c9ffc32612dc4bf"
+    },
+    "gba-estimated/canopy/provider.mjs": {
+      "bytes": 8723,
+      "sha256": "f5c413bfb0b77df4dc972b1cd25f380a2f432f54023db208c10b528c7454eb19"
+    },
+    "gba-estimated/canopy/render.mjs": {
+      "bytes": 2315,
+      "sha256": "0f30559fe93d66ae561d4eae66ac2e66a7e28d65932b014bd66448af0655a682"
+    },
+    "gba-estimated/client/prepared-provider.mjs": {
+      "bytes": 6326,
+      "sha256": "6f4db364f20ce78bae5ee115c6738b64f558c8a154b0c4b4d3c000fab96f74ad"
+    },
+    "gba-estimated/config/ACCEPTED-TAIWAN-REGISTRY.json": {
+      "bytes": 2094,
+      "sha256": "a45f3c9592ef031d27a89132da14d87b117288658b0e54833913d4d3a3ea3410"
+    },
+    "gba-estimated/config/CONFLICT-REGISTRY.json": {
+      "bytes": 633,
+      "sha256": "4ccb903b6a86c1414b3846c9b0bad46763d45b270a819055ab4fd29549ffc53c"
+    },
+    "gba-estimated/config/LIVE-CORE-LOCKS.json": {
+      "bytes": 515,
+      "sha256": "95c7e71c7ffa0d5ac08316a56983afb36ae0a7f0a56bb8f04558131f9a62bc3f"
+    },
+    "gba-estimated/config/PREPARED-LOCATIONS.json": {
+      "bytes": 114,
+      "sha256": "957f55620152a2ffd89ea645429648e64590e73007989b6461636147dce8352a"
+    },
+    "gba-estimated/config/VALIDATED-V8-MODULE-LOCKS.json": {
+      "bytes": 1883,
+      "sha256": "0332a03f054659343f080cc86b7e78fc4be7e2c5d1be762c23af327b77472967"
+    },
+    "gba-estimated/engine/estimated-shade.mjs": {
+      "bytes": 6663,
+      "sha256": "d68299211a3a2be8113d8ed06d50c0aa1819de22da8fc2fe07a980d15d905c23"
+    },
+    "gba-estimated/engine/geometry.mjs": {
+      "bytes": 6459,
+      "sha256": "7f564ccd4926127025dbb96ca0652bf3e79834e009cfe02ac94e500a49c2414e"
+    },
+    "gba-estimated/engine/solar.mjs": {
+      "bytes": 1878,
+      "sha256": "84edc503ae969978054e77540262b7070c93c62e202147ad54b7041bea0b31f7"
+    },
+    "gba-estimated/engine/source-priority.mjs": {
+      "bytes": 3117,
+      "sha256": "1effde2526f346522618761abc6fcab0ee60f458ce031a6a997182aa80c77f94"
+    },
+    "gba-estimated/geometry-inspection.mjs": {
+      "bytes": 7759,
+      "sha256": "ab4cfaf24799ea656fad2c6ee918276c9ae848fbba19416a3f2c5eff5b7bef3d"
+    },
+    "gba-estimated/integration.css": {
+      "bytes": 1351,
+      "sha256": "b4c3750d84d72d20984993d9090b43db72d153aa561fea786f5977054edacbae"
+    },
+    "gba-estimated/integration.mjs": {
+      "bytes": 17992,
+      "sha256": "b7fe3919e861d7c9c99a320ad0a769c94961d62057d2aafc0ab6b3c132046fed"
+    },
+    "gba-estimated/launcher.mjs": {
+      "bytes": 993,
+      "sha256": "4040cdde8c90f586c1c5a2332347eeaa80a2f23db7f1bbd17795596479d39db7"
+    },
+    "gba-estimated/leaflet-overlay.mjs": {
+      "bytes": 1920,
+      "sha256": "38bf1b5b40d068922ab01794dd4533b595dc0241b374ade1d2065636f9d3ab2a"
+    },
+    "gba-estimated/local-data.mjs": {
+      "bytes": 6367,
+      "sha256": "11f8019b53e531b1ce1ceecebeae803d77a039319c37b4d1c0340290d3434ba2"
+    },
+    "gba-estimated/model-worker.mjs": {
+      "bytes": 3248,
+      "sha256": "e0ca771595bf6cd4bfefcc3729ac311b35de4a6bac17ca040672d8ab417e855d"
+    },
+    "gba-estimated/route-admission.mjs": {
+      "bytes": 3431,
+      "sha256": "f36c81aefa8866f8c75d32f8300b9c8a837ca310bacadc618c2a04e7c1bf780f"
+    },
+    "gba-estimated/route-bridge.mjs": {
+      "bytes": 3328,
+      "sha256": "b1250859d41b8f1969bd26f8514cdecec1925be106adb542e0cbde80216d4273"
+    },
+    "gba-estimated/route-overlay.mjs": {
+      "bytes": 1651,
+      "sha256": "9b5d63a88b23282eecd200ed78ab2f17afa6fae8721ecf7143b48899aaae8783"
+    },
+    "gba-estimated/routing/canopy-estimated-route.mjs": {
+      "bytes": 6925,
+      "sha256": "1290aba7f7501d41b10a6c26ec9feb52c7006a8c531b1cb19751c70acfa3cdb1"
+    },
+    "gba-estimated/routing/connected-estimated-route.mjs": {
+      "bytes": 6950,
+      "sha256": "3ec0556a83f0d8a6040e55458abcb1a2f04113bf1c4c04fa0340ff0177b6cef1"
+    },
+    "gba-estimated/routing/estimated-route.mjs": {
+      "bytes": 8751,
+      "sha256": "baa4ed55cbabcf4026b1c182d6f7544d6de21df36ae10b100c3b18b02adab4ba"
+    },
+    "gba-estimated/taiwan/accepted-provider.mjs": {
+      "bytes": 3562,
+      "sha256": "522d2942eafacddc00eb6a6d8813b8cc07cb5d1696da7100ff8a7b6004169ad3"
+    },
+    "gba-estimated/taiwan/isolated-session.mjs": {
+      "bytes": 3494,
+      "sha256": "4461483cf90549ccdd059b8ef3ac2e4bdeeae944ba5df2f2688b825186c0b9f7"
+    },
+    "gba-estimated/taiwan/northern-provider.mjs": {
+      "bytes": 10019,
+      "sha256": "ff32a0a5d6a9b79a37f19a0e683f228bb7fc0d58dffa39e66f7caee14cea8904"
+    },
+    "gba-estimated/taiwan/provider.mjs": {
+      "bytes": 9670,
+      "sha256": "60680dc5226cecf07f2c8c87d2bb37b4e622126817170356a074f0b7d0e93221"
+    },
+    "gba-estimated/vendor/geotiff-2.1.3/LICENSE.txt": {
+      "bytes": 1088,
+      "sha256": "da0811089f254e909f69f75fa496ca97e5167a8eaa945d9a6bffdd8499b47a49"
+    },
+    "gba-estimated/vendor/geotiff-2.1.3/geotiff.js": {
+      "bytes": 317520,
+      "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
+    },
     "index.html": {
-      "bytes": 630365,
-      "sha256": "1329c417725f8a6babd0b099884e4395c9c24699bbeb5505213133023527a3b4"
+      "bytes": 630677,
+      "sha256": "2d0f03f4cb71540e22178b6b7ef7a43c9174f7a4729fc79f01beab8ddfc3e3d9"
     },
     "licenses/DATA-AND-COST-NOTICE.md": {
       "bytes": 3774,
@@ -842,6 +1002,14 @@
     "licenses/terrain-attribution.md": {
       "bytes": 12300,
       "sha256": "2ce4d3414b4592d17ad56a5af57feb480686ddcfb0a3e4ea0b566d28cde13567"
+    },
+    "nanshan_cemetery.geojson": {
+      "bytes": 7210801,
+      "sha256": "9be0dca8cd680762ecfaba1115807e289b2297f1abd13df2ba48a216ca7699ca"
+    },
+    "shanhaizhun.geojson": {
+      "bytes": 157600,
+      "sha256": "bf3d821686215565eed34a78cf153adfac5f78cf085a3bcf160d9529c03575c3"
     },
     "src/building-data-provider.js": {
       "bytes": 25524,
@@ -892,24 +1060,124 @@
       "sha256": "1a8ba6b8426210a0c6e3b8d9962122b26af019357240763daaafdb77c36c2f34"
     },
     "src/own-shade-renderer.js": {
-      "bytes": 11851,
-      "sha256": "939520c300a7c6778730dab91e7fc2120d18e9d6eb0341c074afa7d37495d412"
+      "bytes": 12483,
+      "sha256": "77bf98ec86c880ed3e7ffd02513e88c36a413f9ab0d37fb56443ade90499bc33"
     },
     "src/pedestrian-graph-routing.js": {
-      "bytes": 538076,
-      "sha256": "b39e343b4b0651d3af049350308ea4ab7b589617c308e18e5c9b04aaee889492"
+      "bytes": 593191,
+      "sha256": "ec960fca6707d5af60d6240d289600d375af339b6ec5b89ead6254a3bfccf2e1"
     },
     "src/route-exposure.js": {
-      "bytes": 373230,
-      "sha256": "deab55d84822c28e32ffbdcbfbfbaea4d6588adc060cc42b8172d8cca561aa34"
+      "bytes": 411296,
+      "sha256": "0e5b5a27b3dd8a0700ff7436d3c80f58327cca7737abefd5ffd5730c5c0afef1"
+    },
+    "src/route-source-provenance.js": {
+      "bytes": 14768,
+      "sha256": "194b74f475113e586fa4eaa76f0569e79251f4b55d84e828446e3f6ed4501325"
     },
     "src/shademap-integration.js": {
-      "bytes": 390114,
-      "sha256": "af5c1088040f9fb53411e254e6618f1db4fa1b0831da1d3bf465828f5f0c203f"
+      "bytes": 392409,
+      "sha256": "f27df72c12a2fb421f114f4bd5986ee22a1fce9e2c280c300154714a3092059d"
     },
     "src/source-clock.js": {
       "bytes": 1656,
       "sha256": "82bb9c21da4acb955077f8ac822050ee8b2b12979830057ba78ba0acc780cad5"
+    },
+    "taijiang_water_day.geojson": {
+      "bytes": 89703,
+      "sha256": "24d084c774693a2eaed89f2da3228a12d568a062cc96885cd9ec451b6bfb188b"
+    },
+    "tainan_water_texture.geojson": {
+      "bytes": 33191,
+      "sha256": "883b475bca2c33d7a8e062b62f705376e1ac240daf91842a6129f8dbf4f0fe4f"
+    },
+    "tests/dev37.9/support.js": {
+      "bytes": 3654,
+      "sha256": "3b9667194d5cb15e57b69e4b175e22dd05bc767320de03abc8dc0c8f8ca4928d"
+    },
+    "tests/run-dev37-9-core.js": {
+      "bytes": 408,
+      "sha256": "dbb475c33e981aca01a4bada33d87f636256dc6c06a831bd6a29c16b456829dd"
+    },
+    "tests/test-v900-dev37-9-patch-lock.js": {
+      "bytes": 1487,
+      "sha256": "3bf22d74035960df67ddc32ddd30284d48250a6bf3fdabbff473d89749add47f"
+    },
+    "tests/test-v900-dev37-9-provider-lifecycle.js": {
+      "bytes": 5611,
+      "sha256": "9211e1cb4acbd40149ab7f81a90b1408625a05a62f51346caf951ca871d5004f"
+    },
+    "tests/test-v900-dev37-9-route-core.js": {
+      "bytes": 8258,
+      "sha256": "b143b7dea11855ed32ac28e969a37e605a5275fa8bae397486324331e819c50a"
+    },
+    "tests/test-v900-dev37-9-shadow-core.js": {
+      "bytes": 10310,
+      "sha256": "cb8f2d6e9f88c77bca3075e238e998e11b67f20f7d2b04d3aae21ab436c2f9d0"
+    },
+    "tools/.gitkeep": {
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "tools/01-BUILDING-SHADOW-PROVENANCE-LIVE.js": {
+      "bytes": 32767,
+      "sha256": "428ac64b202754b62f8cca442d477a5a9aef161e22439c53fb1d5c1111e063b6"
+    },
+    "tools/apply-v853-to-repo.py": {
+      "bytes": 3453,
+      "sha256": "b6c953c7b95ea366f713cd90a535a8628949c675720fd1ef0a14631848f51d42"
+    },
+    "tools/build-building-coverage.py": {
+      "bytes": 20569,
+      "sha256": "6d9563ea2608dbb4b0e751ba57889d4f05095eeea4488867bd640d822394ee92"
+    },
+    "tools/build-building-region.py": {
+      "bytes": 9815,
+      "sha256": "95cd3cde50c93228538bec502fa25ce3b39eea389be61f7968e93394255598fc"
+    },
+    "tools/build-building-tiles.py": {
+      "bytes": 31129,
+      "sha256": "9a1b11a550d73f6737f88ba17d130767fdcf6a9c5bfbb3467f3b791fb9fde460"
+    },
+    "tools/build-prebuilt-surface-tiles.py": {
+      "bytes": 11305,
+      "sha256": "272ababdcd67bc153a21638b0039f446f9d7ed6dcd4a398bc775026fb467ab90"
+    },
+    "tools/check-building-dataset.py": {
+      "bytes": 2658,
+      "sha256": "91314a8c1c1e1bc624a231cc06ef74a9378eac7dfe91c40644657840d2c709a7"
+    },
+    "tools/check-data-freshness.py": {
+      "bytes": 3869,
+      "sha256": "fb3c8c84e1284a5ff7d7231d6f9e7c5a94d79b8dd80c42d9940f884383077833"
+    },
+    "tools/deploy-building-tiles-hf.py": {
+      "bytes": 7387,
+      "sha256": "0fb34747d04f98cfd1518079d5d2a1c6d2f2e8fed88ef5d6a1f71c55d18db799"
+    },
+    "tools/fetch-osm-building-fallback.py": {
+      "bytes": 4939,
+      "sha256": "0c497e689c0f3fdc867863e7e2a540b466768fa2c8b7682965db60228b7748c7"
+    },
+    "tools/fetch-overture-buildings.sh": {
+      "bytes": 1820,
+      "sha256": "b24ff25a9c163ca3eba6cc0d82ed430f6ac23a220429946e6013595cb2fb2d65"
+    },
+    "tools/make-building-tile-index.py": {
+      "bytes": 4122,
+      "sha256": "b447ee648587c17e4509817e8e5c670cf41d44cc868dcc58476a530f4669def7"
+    },
+    "tools/prebuild-osm-buildings.py": {
+      "bytes": 2617,
+      "sha256": "39ba910007943f595191326d8767f5a0fa2dd408439abbcbf69b6f66d1b7964b"
+    },
+    "tools/preflight-v853.py": {
+      "bytes": 4388,
+      "sha256": "1e7c700bf656ac6af4fb26f5fe11d56265ca3574baaac7bd00afc06b12311f9c"
+    },
+    "tools/validate-building-dataset.py": {
+      "bytes": 4799,
+      "sha256": "0940c76c2b83250a206568f6bf2c06796c3022a8c116256f99dbf8ba1e8cd079"
     },
     "vendor/building-vendor.js": {
       "bytes": 59061,
@@ -919,5 +1187,8 @@
       "bytes": 317520,
       "sha256": "cb5c9731bfee1f8bff1728e54e4436ada81ea3258b178a3d6603c61b58d99e6c"
     }
-  }
+  },
+  "additionalManifest": "GBA-INTEGRATION-MANIFEST.json",
+  "Proof": "INCOMPLETE",
+  "winnerId": null
 }
