@@ -1,0 +1,10 @@
+{
+  "repository": "yhzkiki/ASTRA-GBA-Prepared",
+  "commit": "302fb29aa09753dc6df6555c59a24af2d1a9d37d",
+  "publicationSHA256": "5c60945584ff5162021c1532b44677971f9e61a2b42b174bd3d246a60cd99eba",
+  "inventorySHA256": "a9500b4cbdac8bfc6835c1400dd23138287f67fd88a223256958edddf61b210e",
+  "sourceManifests": {
+    "south": "2e00471b9352338d97aadaa26761aa1f25257e1afdcdb514b9272458f2958b8c",
+    "north": "2fa9239bc1686fb45e5fd7fc4d6b400c03b9a7fc78aef807b1f977aa143970e5"
+  }
+}
