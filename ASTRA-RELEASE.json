@@ -1,7 +1,7 @@
 {
   "schema": "astra-release-candidate-v1",
-  "release": "mapped-source-handoff-20261020.2",
-  "entryVersion": "main-page-20261020.2",
+  "release": "private-session-lifecycle-20261021.8",
+  "entryVersion": "main-page-20261021.8",
   "baseCoreVersions": {
     "graph": "37.9.9.16.18",
     "route": "37.9.9.16.11"
@@ -9,7 +9,7 @@
   "baseRouteSHA256": "c32a8d5ea9a0547d4b7f0ad64305629b352d663100d2c2389c94eb45e0412733",
   "routePatchSHA256": "0e5b5a27b3dd8a0700ff7436d3c80f58327cca7737abefd5ffd5730c5c0afef1",
   "graphSHA256": "ec960fca6707d5af60d6240d289600d375af339b6ec5b89ead6254a3bfccf2e1",
-  "scope": "mapped-source evidence handoff, foreign Canvas ownership, GBA-only Taiwan time fallback; prior endpoint-before-dedupe retained",
+  "scope": "Remote Estimated authorization lifecycle: before/after operation checks, fail-closed disconnect and logout cancellation; all geometry/model/core policies unchanged",
   "newSealedCoreVersion": false,
   "externallyDeployed": false,
   "PreparedOrNativeArchiveModified": false,
@@ -23,5 +23,17 @@
   "additionalSourceOrShadeQueries": 0,
   "foreignCanvasOwnershipFix": true,
   "estimatedLayerUTC8Fallback": true,
-  "shadeIntegrationSHA256": "f27df72c12a2fb421f114f4bd5986ee22a1fce9e2c280c300154714a3092059d"
+  "shadeIntegrationSHA256": "f27df72c12a2fb421f114f4bd5986ee22a1fce9e2c280c300154714a3092059d",
+  "parentRelease": "private-prepared-transport-20261020.7",
+  "sealedCoreChanged": false,
+  "folderPersistenceDefault": false,
+  "autoRestoredLayerEnabled": false,
+  "canopyAcquisitionCandidate": true,
+  "WindowsNativeAcceptanceThisIteration": "NOT_RUN",
+  "proofPolicyUnchanged": true,
+  "estimatedSceneLifecycleCandidate": true,
+  "remotePreparedTransportCandidate": true,
+  "publicRemoteServiceConfigured": false,
+  "remoteSessionLifecycleCandidate": true,
+  "authorizationMetadataRequests": "pre/post remote logical operation plus visible 10s lease; no model queries added"
 }
