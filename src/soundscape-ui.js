@@ -30,7 +30,8 @@
     roam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c2.5-4 5-4 7.5 0s5 4 7.5 0"/><path d="M3 17c2.5-4 5-4 7.5 0s5 4 7.5 0" opacity=".5"/><circle cx="20" cy="7" r="2"/></svg>',
     tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6"/><path d="M5.2 18.8a9.6 9.6 0 0 1 0-13.6M18.8 5.2a9.6 9.6 0 0 1 0 13.6" opacity=".55"/></svg>',
     map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>',
-    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>'
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/></svg>'
   };
 
   var state = {
@@ -380,6 +381,7 @@
     document.body.classList.add('ss-has-bar');
     syncBarVisibility();
     markNowPlaying();
+    if (document.body.classList.contains('ss-list-open')) renderList();
   }
 
   // Cloudinary 可直接產生波形圖；其他來源只顯示細進度線。
@@ -497,6 +499,7 @@
     radio.checked = true;
     window.filterMarkers();
     syncChips();
+    if (document.body.classList.contains('ss-list-open')) renderList();
     setTimeout(markNowPlaying, 50);
   }
 
@@ -865,6 +868,7 @@
         enhanceCard(root, uid);
         if (isSheetMode()) {
           document.body.classList.add('ss-sheet-mode');
+          if (document.body.classList.contains('ss-list-open')) setList(false);
           openSheet(e.popup);
         } else if (e.popup._updateLayout && e.popup._updatePosition) {
           // 卡片加了「附近還有」之後變高，重新定位一次。
@@ -1254,12 +1258,157 @@
     }, { passive: true });
   }
 
+  // ================================================================ 第六輪：聲音清單
+  // 不想在地圖上找點的人，可以直接翻清單：最新、離我最近、離地圖中心。
+
+  var LS_SORT = 'ss-list-sort';
+  var listEl = null;
+  var listSort = readLS(LS_SORT) || 'latest';
+  var userPos = null;
+
+  function buildList() {
+    if (listEl) return;
+    listEl = el('div');
+    listEl.id = 'ssList';
+    listEl.setAttribute('role', 'dialog');
+    listEl.setAttribute('aria-label', '聲音清單');
+    listEl.innerHTML =
+      '<div class="ss-list-head">' +
+        '<div class="ss-list-title">聲音清單 <span class="ss-list-count" id="ssListCount"></span></div>' +
+        '<div class="ss-list-sort" role="tablist">' +
+          '<button type="button" data-sort="latest">最新</button>' +
+          '<button type="button" data-sort="near">離我最近</button>' +
+          '<button type="button" data-sort="center">離畫面中心</button>' +
+        '</div>' +
+        '<button type="button" class="ss-list-close" aria-label="關閉清單">' + ICON.close + '</button>' +
+      '</div>' +
+      '<div class="ss-list-body" id="ssListBody"></div>';
+    document.body.appendChild(listEl);
+    if (window.L && L.DomEvent) {
+      L.DomEvent.disableClickPropagation(listEl);
+      L.DomEvent.disableScrollPropagation(listEl);
+    }
+    listEl.querySelector('.ss-list-close').addEventListener('click', function () { setList(false); });
+    listEl.querySelectorAll('[data-sort]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        listSort = b.dataset.sort;
+        writeLS(LS_SORT, listSort);
+        if (listSort === 'near' && !userPos) locateForList();
+        renderList();
+      });
+    });
+    document.addEventListener('change', function (e) {
+      if (e.target && e.target.name === 'catFilter' && document.body.classList.contains('ss-list-open')) renderList();
+    });
+  }
+
+  function locateForList() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      renderList();
+    }, function () {
+      if (typeof window.showToast === 'function') window.showToast('拿不到你的位置，改用畫面中心排序');
+      listSort = 'center';
+      renderList();
+    }, { maximumAge: 60000, timeout: 8000 });
+  }
+
+  function listOrigin() {
+    if (listSort === 'near' && userPos) return userPos;
+    var map = window.map;
+    if (!map) return null;
+    var c = map.getCenter();
+    return { lat: c.lat, lon: c.lng };
+  }
+
+  function renderList() {
+    if (!listEl) return;
+    var cur = document.querySelector('input[name="catFilter"]:checked');
+    var catKey = cur ? cur.value : 'all';
+    var list = items().filter(function (i) { return isPlayable(i) && (catKey === 'all' || catOf(i).key === catKey); });
+    var origin = listSort === 'latest' ? null : listOrigin();
+    if (origin) {
+      list = list.map(function (i) { return { item: i, d: haversine(origin, i) }; }).sort(function (a, b) { return a.d - b.d; });
+    } else {
+      list = list.map(function (i) { return { item: i, d: null }; }).sort(function (a, b) {
+        return new Date(b.item.date || 0).getTime() - new Date(a.item.date || 0).getTime();
+      });
+    }
+    listEl.querySelectorAll('[data-sort]').forEach(function (b) {
+      var on = b.dataset.sort === listSort;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.getElementById('ssListCount').textContent = list.length;
+
+    var body = document.getElementById('ssListBody');
+    body.innerHTML = '';
+    if (!list.length) {
+      body.appendChild(el('div', 'ss-list-empty', '這個分類還沒有聲音'));
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    list.forEach(function (r) {
+      var it = r.item, cat = catOf(it);
+      var row = el('button', 'ss-related-row ss-list-row' + (state.heard.has(it.uid) ? ' is-heard' : '') + (it.uid === state.uid ? ' is-now' : ''));
+      row.type = 'button';
+      row.dataset.uid = it.uid;
+      var img = el('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.src = it.coverUrl || FALLBACK_COVER;
+      img.onerror = function () { if (img.src !== FALLBACK_COVER) img.src = FALLBACK_COVER; };
+      row.appendChild(img);
+      var sub = r.d != null ? fmtDist(r.d) : String(it.date || '').replace(' 00:00:00', '').split(' ')[0].replace(/-/g, '/');
+      row.appendChild(el('span', 'ss-related-text',
+        '<b>' + esc(plain(it.title)) + '</b>' +
+        '<i><span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label) + '・' + esc(plain(it.author || '海佃特派員')) + (sub ? '・' + esc(sub) : '') + '</i>'));
+      row.appendChild(el('span', 'ss-related-play', it.uid === state.uid ? '<span class="ss-eq"><i></i><i></i><i></i></span>' : ICON.play));
+      row.addEventListener('click', function () {
+        if (isSheetMode()) setList(false);
+        playUid(it.uid, { openCard: true });
+      });
+      frag.appendChild(row);
+    });
+    body.appendChild(frag);
+  }
+
+  function setList(open) {
+    buildList();
+    document.body.classList.toggle('ss-list-open', open);
+    var chip = document.getElementById('ssListChip');
+    if (chip) {
+      chip.classList.toggle('is-on', open);
+      chip.setAttribute('aria-pressed', open ? 'true' : 'false');
+    }
+    if (open) {
+      if (listSort === 'near' && !userPos) locateForList();
+      renderList();
+      if (isSheetMode() && window.map) window.map.closePopup();
+    }
+  }
+
+  function buildListChip() {
+    var wrap = document.getElementById('ssChips');
+    if (!wrap || document.getElementById('ssListChip')) return;
+    var chip = el('button', 'ss-chip ss-chip-list', ICON.list + '清單');
+    chip.type = 'button';
+    chip.id = 'ssListChip';
+    chip.setAttribute('aria-pressed', 'false');
+    chip.title = '翻看所有聲音';
+    chip.addEventListener('click', function () { setList(!document.body.classList.contains('ss-list-open')); });
+    var sep = wrap.querySelector('.ss-chip-sep');
+    wrap.insertBefore(chip, sep);
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
     buildHero();
     buildBar();
     buildChips();
+    buildListChip();
     buildIdle();
     buildBarExtras();
     heroGreeting();
