@@ -1419,3 +1419,16 @@ body:has(.modal-overlay.active) .drawer-panel > .toggle-btn {
   outline: 3px solid var(--ss-sand);
   outline-offset: 3px;
 }
+
+/* ================================================================== */
+/* 第五輪：加到主畫面後的全螢幕安全區                                     */
+/* ================================================================== */
+@media (display-mode: standalone) and (max-width: 600px) {
+  .glass-header { top: calc(10px + env(safe-area-inset-top, 0px)) !important; }
+  #ssChips { top: calc(70px + env(safe-area-inset-top, 0px)); }
+  .glass-header.hidden-up ~ #ssChips { top: calc(40px + env(safe-area-inset-top, 0px)); }
+  .header-pull-tab { padding-top: env(safe-area-inset-top, 0px) !important; height: auto !important; }
+  .listening-hint { top: calc(14px + env(safe-area-inset-top, 0px)) !important; }
+  #ssBar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  #ssIdle { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
