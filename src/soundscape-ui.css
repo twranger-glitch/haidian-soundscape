@@ -521,8 +521,7 @@ body.haidian-v4-mode-data #ssChips,
 body.haidian-v4-mode-walk #ssChips,
 body.listening-mode #ssChips,
 body.nanshan-mode #ssChips,
-body.ss-splash-open #ssChips,
-.glass-header.hidden-up ~ #ssChips {
+body.ss-splash-open #ssChips {
   opacity: 0;
   pointer-events: none;
 }
@@ -531,8 +530,9 @@ body.haidian-v4-mode-data #ssChips .ss-chip,
 body.haidian-v4-mode-walk #ssChips .ss-chip,
 body.listening-mode #ssChips .ss-chip,
 body.nanshan-mode #ssChips .ss-chip,
-body.ss-splash-open #ssChips .ss-chip,
-.glass-header.hidden-up ~ #ssChips .ss-chip { pointer-events: none; }
+body.ss-splash-open #ssChips .ss-chip { pointer-events: none; }
+/* 手機標題列自動收起時，分類列往上補位 */
+.glass-header.hidden-up ~ #ssChips { top: 40px; }
 
 /* ------------------------------------------------------------------ */
 /* 4. 聲景模式的底圖較安靜；圖資模式維持原色                             */
@@ -627,53 +627,6 @@ body #routePanel.drawer-panel.collapsed > .toggle-btn { top: 118px !important; }
 /* ------------------------------------------------------------------ */
 /* 6. 作品卡片                                                          */
 /* ------------------------------------------------------------------ */
-
-.sound-card .ss-cover-wrap { position: relative; display: block; cursor: pointer; }
-.sound-card .ss-cover-wrap .sound-cover { display: block; }
-.ss-cover-play {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 58px;
-  height: 58px;
-  margin: -29px 0 0 -29px;
-  border-radius: 50%;
-  background: rgba(12, 26, 29, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  transition: transform 0.3s var(--ss-ease), background 0.3s;
-  pointer-events: none;
-}
-.ss-cover-play svg { width: 24px; height: 24px; margin-left: 3px; }
-.ss-cover-wrap:hover .ss-cover-play { transform: scale(1.08); background: rgba(12, 26, 29, 0.75); }
-.ss-cover-wrap.is-playing .ss-cover-play svg { margin-left: 0; }
-.ss-cover-duration {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  background: rgba(12, 26, 29, 0.7);
-  color: #fff;
-  font: 600 11.5px/1 var(--ss-sans);
-  font-variant-numeric: tabular-nums;
-  padding: 5px 8px;
-  border-radius: 999px;
-  letter-spacing: 0.04em;
-}
-.ss-cover-duration:empty { display: none; }
-
-.sound-card .meta-gps.ss-place {
-  font-family: var(--ss-sans) !important;
-  letter-spacing: 0.02em;
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sound-card .sound-title { font-family: var(--ss-serif); letter-spacing: 0.03em; }
 
 /* 手機：卡片改為底部面板 */
 #ssSheet {
@@ -775,3 +728,366 @@ body.ss-sheet-open #ssBar { z-index: 1960; }
   .custom-sound-icon.ss-now .sound-dot-marker > .ss-ring,
   .ss-hero-inner { animation: none !important; }
 }
+
+/* ================================================================== */
+/* 第二輪：整體視覺統一、單一播放器、雙底圖、調頻漫遊                    */
+/* ================================================================== */
+
+/* ---------- 雙底圖：縮小或臺灣以外用世界向量地圖，臺灣放大用國土測繪中心 ---------- */
+.ss-nlsc-tiles,
+.ss-osm-tiles { transition: opacity 0.5s ease; }
+body:not(.haidian-v4-mode-data).ss-taiwan-base .ss-osm-tiles { opacity: 0 !important; }
+body:not(.haidian-v4-mode-data).ss-taiwan-base.ss-zoom-world .ss-nlsc-tiles { opacity: 0 !important; }
+body.haidian-v4-mode-data .ss-world-base,
+body:not(.ss-taiwan-base) .ss-world-base { visibility: hidden; }
+/* 臺灣圖磚稍微暖色，和世界地圖的紙張色調接起來 */
+body:not(.haidian-v4-mode-data) .ss-base-soft {
+  filter: sepia(0.18) saturate(0.45) brightness(1.03) contrast(0.92);
+}
+
+/* ---------- 標題列與地圖控制：同一套墨色＋紙色 ---------- */
+.glass-header {
+  background: rgba(251, 250, 246, 0.94) !important;
+  border: 1px solid var(--ss-line) !important;
+  box-shadow: 0 10px 30px -14px rgba(12, 26, 29, 0.35) !important;
+  font-family: var(--ss-sans);
+}
+.glass-header .project-title,
+.glass-header .project-title .main-title { color: var(--ss-ink) !important; }
+.glass-header .project-title .main-title { color: var(--ss-teal) !important; }
+.glass-header .nav-buttons button {
+  color: var(--ss-ink) !important;
+  font-weight: 600 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+}
+.glass-header .nav-buttons button:hover { background: rgba(12, 26, 29, 0.06) !important; }
+.glass-header .nav-buttons button.btn-latest svg { color: var(--ss-sand-deep); }
+.glass-header .nav-buttons button.btn-submit {
+  background: var(--ss-ink) !important;
+  color: #fbf8ef !important;
+}
+.glass-header .nav-buttons button.btn-submit:hover { background: var(--ss-ink-2) !important; }
+.glass-header .nav-buttons #authBtn {
+  background: transparent !important;
+  color: var(--ss-ink) !important;
+  border: 1px solid rgba(12, 26, 29, 0.18) !important;
+}
+
+#rightToolsWrapper .tools-toggle-btn,
+.locate-me-btn,
+.haidian-v4-dock.is-minimized,
+#astra-gba-launcher {
+  background: rgba(251, 250, 246, 0.95) !important;
+  color: var(--ss-ink) !important;
+  border: 1px solid var(--ss-line) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 10px 24px -12px rgba(12, 26, 29, 0.45) !important;
+}
+.locate-me-btn { color: var(--ss-teal) !important; }
+.drawer-panel > .toggle-btn {
+  background: rgba(251, 250, 246, 0.95) !important;
+  color: var(--ss-ink) !important;
+  box-shadow: 6px 6px 18px -10px rgba(12, 26, 29, 0.4) !important;
+}
+
+/* ---------- 調頻漫遊 ---------- */
+.ss-chip-tune svg { width: 16px; height: 16px; }
+.ss-chip-tune {
+  background: var(--ss-ink) !important;
+  color: #fbf8ef !important;
+  border-color: var(--ss-ink) !important;
+}
+.ss-chip-tune.is-on {
+  background: var(--ss-sand) !important;
+  color: var(--ss-ink) !important;
+  border-color: var(--ss-sand-deep) !important;
+}
+.ss-chip-sep {
+  flex-shrink: 0;
+  width: 1px;
+  margin: 6px 2px;
+  background: rgba(12, 26, 29, 0.15);
+}
+
+#ssReticle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 950;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+body.ss-tuning #ssReticle { opacity: 1; }
+.ss-ret-ring {
+  position: absolute;
+  left: -72px;
+  top: -72px;
+  width: 144px;
+  height: 144px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(12, 26, 29, 0.35);
+  transition: border-color 0.3s, transform 0.4s var(--ss-ease);
+}
+.ss-ret-dot {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ss-ink);
+  box-shadow: 0 0 0 4px rgba(251, 250, 246, 0.9);
+}
+#ssReticle.is-locked .ss-ret-ring {
+  border: 2px solid var(--ss-sand-deep);
+  transform: scale(0.9);
+  box-shadow: 0 0 0 6px rgba(243, 194, 107, 0.18);
+}
+body.ss-dragging #ssReticle .ss-ret-ring { transform: scale(1.06); }
+.ss-ret-label {
+  position: absolute;
+  top: 84px;
+  left: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--ss-ink-soft);
+  color: #fbf8ef;
+  font: 600 13px/1 var(--ss-sans);
+  padding: 9px 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--ss-shadow);
+}
+
+/* ---------- 單一播放器：卡片裡不再出現第二組播放鍵 ---------- */
+.ss-card .btn-play-main,
+.ss-card .embedded-player-slot { display: none !important; }
+
+.ss-wave {
+  display: none;
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 120px;
+  max-width: 300px;
+  height: 36px;
+  cursor: pointer;
+}
+.ss-wave.has-wave { display: block; }
+.ss-wave img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.ss-wave-base { opacity: 0.45; }
+.ss-wave-prog { clip-path: inset(0 100% 0 0); }
+#ssBar { width: min(980px, calc(100% - 24px)); }
+@media (max-width: 860px) {
+  .ss-wave { display: none !important; }
+}
+
+/* ---------- 作品卡片：照片是主角 ---------- */
+.leaflet-popup-content-wrapper:has(.ss-card) {
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  box-shadow: 0 30px 60px -20px rgba(12, 26, 29, 0.55) !important;
+}
+@media (min-width: 601px) {
+  .leaflet-popup-content:has(.ss-card) { width: 340px !important; }
+}
+
+.ss-cover-wrap {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--ss-ink);
+}
+.ss-cover-wrap .sound-cover {
+  display: block;
+  width: 100%;
+  height: 230px !important;
+  object-fit: cover;
+  transition: transform 1.2s var(--ss-ease);
+}
+.ss-cover-wrap.is-playable { cursor: pointer; }
+.ss-cover-wrap.is-playable:hover .sound-cover { transform: scale(1.04); }
+.ss-cover-wrap.is-current.is-playing { cursor: default; }
+.ss-cover-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12, 26, 29, 0.35) 0%, rgba(12, 26, 29, 0) 30%, rgba(12, 26, 29, 0) 45%, rgba(12, 26, 29, 0.85) 100%);
+  pointer-events: none;
+}
+.ss-cover-cat {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(251, 250, 246, 0.92);
+  color: var(--ss-ink);
+  font: 700 12px/1 var(--ss-sans);
+  padding: 7px 11px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+.ss-cover-caption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+  color: #fff;
+  pointer-events: none;
+}
+.ss-cover-caption .sound-title {
+  font-family: var(--ss-serif) !important;
+  font-size: 23px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  color: #fff !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.ss-cover-by {
+  margin-top: 6px;
+  font: 500 13px/1 var(--ss-sans);
+  color: rgba(255, 255, 255, 0.82);
+  letter-spacing: 0.04em;
+}
+.ss-cover-by::before { content: "採集｜"; opacity: 0.7; }
+.ss-cover-play {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  min-width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: var(--ss-sand);
+  color: var(--ss-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 700 13px/1 var(--ss-sans);
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s var(--ss-ease);
+  pointer-events: none;
+}
+.ss-cover-play svg { width: 22px; height: 22px; margin-left: 3px; }
+.ss-cover-wrap.is-playable:hover .ss-cover-play { transform: scale(1.06); }
+.ss-cover-wrap.is-playing .ss-cover-play {
+  padding: 0 16px;
+  background: rgba(12, 26, 29, 0.72);
+  color: #fbf8ef;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.ss-cover-play .ss-eq { position: static; display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+.ss-cover-play .ss-eq i { width: 3px; background: var(--ss-sand); border-radius: 2px; animation: ssEq 0.9s ease-in-out infinite; }
+.ss-cover-play .ss-eq i:nth-child(2) { animation-delay: 0.2s; }
+.ss-cover-play .ss-eq i:nth-child(3) { animation-delay: 0.45s; }
+.ss-cover-wrap.is-playable .ss-cover-caption { right: 92px; }
+.ss-cover-wrap.is-playing .ss-cover-caption { right: 18px; bottom: 82px; }
+.ss-cover-duration {
+  position: absolute;
+  top: 14px;
+  right: 58px;
+  background: rgba(12, 26, 29, 0.6);
+  color: #fff;
+  font: 600 11.5px/1 var(--ss-sans);
+  font-variant-numeric: tabular-nums;
+  padding: 7px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+.ss-cover-duration:empty { display: none; }
+
+/* 原本卡片上的標題列只剩分享、導航、收藏等小工具 */
+.ss-card .sound-info { padding: 14px 18px 16px !important; font-family: var(--ss-sans); }
+.ss-card .sound-info > div:first-child {
+  justify-content: flex-end !important;
+  margin-bottom: 6px !important;
+}
+.ss-card .card-meta-box {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 0 12px !important;
+}
+.ss-card .card-tags-row .meta-category { display: none !important; }
+.ss-card .meta-author-name { display: none !important; }
+.ss-card .meta-row { justify-content: flex-start !important; margin-bottom: 8px !important; }
+.ss-card .meta-date-text {
+  font-family: var(--ss-sans) !important;
+  color: var(--ss-muted) !important;
+  font-size: 12.5px !important;
+}
+.ss-card .sound-desc {
+  font-size: 15px !important;
+  line-height: 1.75 !important;
+  color: #2b3739 !important;
+  letter-spacing: 0.02em;
+  margin: 0 0 14px !important;
+}
+
+.ss-card .meta-gps.ss-place {
+  font-family: var(--ss-sans) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: var(--ss-ink) !important;
+  font-size: 13px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  white-space: normal !important;
+  flex-wrap: wrap;
+}
+.ss-card .meta-gps.ss-place > svg { color: var(--ss-teal); width: 14px; height: 14px; }
+.ss-place-name { font-weight: 700; }
+.ss-place-name:empty { display: none; }
+.ss-place-coords {
+  appearance: none;
+  border: 1px solid var(--ss-line);
+  background: #f4f2ec;
+  color: var(--ss-muted);
+  font: 500 11.5px/1 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  padding: 5px 8px;
+  border-radius: 999px;
+  cursor: copy;
+  letter-spacing: 0.02em;
+}
+.ss-place-coords:hover { color: var(--ss-ink); border-color: rgba(12, 26, 29, 0.25); }
+.ss-place-coords.is-copied { background: var(--ss-teal); color: #fff; border-color: var(--ss-teal); }
+
+.ss-card .reaction-btn { border-radius: 999px !important; }
+
+/* 手機面板裡的卡片 */
+.ss-sheet-body { padding: 0 0 14px !important; }
+.ss-sheet-body .ss-cover-wrap { border-radius: 0; }
+.ss-sheet-body .ss-cover-wrap .sound-cover { height: 240px !important; border-radius: 0 !important; }
+#ssSheet { overflow: hidden; }
+.ss-sheet-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+}
+.ss-sheet-grip::before { background: rgba(255, 255, 255, 0.7); }
+.ss-sheet-close { top: 14px; right: 14px; }

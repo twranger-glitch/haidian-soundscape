@@ -28,6 +28,7 @@
     shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     roam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c2.5-4 5-4 7.5 0s5 4 7.5 0"/><path d="M3 17c2.5-4 5-4 7.5 0s5 4 7.5 0" opacity=".5"/><circle cx="20" cy="7" r="2"/></svg>',
+    tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6"/><path d="M5.2 18.8a9.6 9.6 0 0 1 0-13.6M18.8 5.2a9.6 9.6 0 0 1 0 13.6" opacity=".55"/></svg>',
     map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>'
   };
 
@@ -39,6 +40,9 @@
     heroPick: null,
     closingFromPopup: false,
     durations: {},
+    tune: false,
+    tuneTarget: null,
+    volume: 1,
     places: readJSON(LS_PLACE) || {}
   };
 
@@ -173,6 +177,17 @@
     window.closeGlobalPlayer = wrapped;
   }
 
+  // 播放控制只留在底部播放列：卡片不再嵌入第二個播放器。
+  function disableEmbeddedPlayer() {
+    if (window.mountGlobalPlayerIntoPopup_ && window.mountGlobalPlayerIntoPopup_.__ssWrapped) return;
+    var noop = function () {
+      if (typeof window.restoreGlobalPlayerToBody_ === 'function') window.restoreGlobalPlayerToBody_(true);
+      document.body.classList.remove('player-embedded');
+    };
+    noop.__ssWrapped = true;
+    window.mountGlobalPlayerIntoPopup_ = noop;
+  }
+
   function stopAll() {
     var fn = window.closeGlobalPlayer && window.closeGlobalPlayer.__ssOriginal;
     if (fn) fn(); else if (audio()) audio().pause();
@@ -268,6 +283,7 @@
       '<div class="ss-bar-row">' +
         '<button type="button" class="ss-bar-cover" id="ssCover" aria-label="開啟作品卡片"><img alt=""><span class="ss-eq"><i></i><i></i><i></i></span></button>' +
         '<div class="ss-bar-text" id="ssText"><div class="ss-bar-title" id="ssTitle"></div><div class="ss-bar-meta"><span class="ss-dot" id="ssDot"></span><span id="ssMeta"></span><span class="ss-time" id="ssTime"></span></div></div>' +
+        '<div class="ss-wave" id="ssWave" title="點擊跳轉"><img class="ss-wave-base" alt=""><img class="ss-wave-prog" alt=""></div>' +
         '<div class="ss-bar-btns">' +
           '<button type="button" class="ss-roam" id="ssRoam" title="播完自動接附近的下一段">' + ICON.roam + '<span>聲音漫遊</span></button>' +
           '<button type="button" class="ss-icon-btn ss-play-btn" id="ssPlay" aria-label="播放或暫停">' + ICON.pause + '</button>' +
@@ -313,12 +329,13 @@
     });
     syncRoam();
 
-    var prog = document.getElementById('ssProgress');
-    prog.addEventListener('click', function (e) {
-      var a = audio();
-      if (!a || !a.duration) return;
-      var r = prog.getBoundingClientRect();
-      a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * a.duration;
+    [document.getElementById('ssProgress'), document.getElementById('ssWave')].forEach(function (node) {
+      node.addEventListener('click', function (e) {
+        var a = audio();
+        if (!a || !a.duration) return;
+        var r = node.getBoundingClientRect();
+        a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * a.duration;
+      });
     });
   }
 
@@ -341,9 +358,25 @@
     document.getElementById('ssTitle').textContent = plain(item.title);
     document.getElementById('ssMeta').textContent = cat.label + '・' + plain(item.author || '海佃特派員');
     document.getElementById('ssDot').className = 'ss-dot ' + cat.cls;
+    var wave = document.getElementById('ssWave');
+    var w = waveformUrls(item.audioUrl);
+    wave.classList.toggle('has-wave', !!w);
+    if (w) {
+      wave.querySelector('.ss-wave-base').src = w.base;
+      wave.querySelector('.ss-wave-prog').src = w.prog;
+    }
     document.body.classList.add('ss-has-bar');
     syncBarVisibility();
     markNowPlaying();
+  }
+
+  // Cloudinary 可直接產生波形圖；其他來源只顯示細進度線。
+  function waveformUrls(url) {
+    if (!url || url.indexOf('res.cloudinary.com') < 0) return null;
+    var make = function (c) {
+      return url.replace('/upload/', '/upload/fl_waveform,co_rgb:' + c + ',b_transparent,w_900,h_90/').replace(/\.[^.\/]+$/, '.png');
+    };
+    return { base: make('5b6b6e'), prog: make('f3c26b') };
   }
 
   function syncBarState() {
@@ -361,14 +394,14 @@
     if (!a) return;
     var bar = document.querySelector('#ssProgress > i');
     var t = document.getElementById('ssTime');
-    if (bar) bar.style.width = (a.duration ? (a.currentTime / a.duration * 100) : 0) + '%';
+    var pct = a.duration ? (a.currentTime / a.duration * 100) : 0;
+    if (bar) bar.style.width = pct + '%';
+    var prog = document.querySelector('#ssWave .ss-wave-prog');
+    if (prog) prog.style.clipPath = 'inset(0 ' + (100 - pct) + '% 0 0)';
     if (t) t.textContent = a.duration ? fmt(a.currentTime) + ' / ' + fmt(a.duration) : '';
   }
 
-  // 桌機版卡片裡已經有完整播放器，同一首的卡片打開時播放列暫時收起。
   function syncBarVisibility() {
-    var tucked = !isSheetMode() && state.openPopupUid && state.openPopupUid === state.uid;
-    document.body.classList.toggle('ss-bar-tucked', !!tucked);
     document.body.classList.toggle('ss-card-open', !isSheetMode() && !!state.openPopupUid);
   }
 
@@ -411,6 +444,14 @@
     wrap.id = 'ssChips';
     wrap.setAttribute('role', 'toolbar');
     wrap.setAttribute('aria-label', '聲景分類篩選');
+    var tune = el('button', 'ss-chip ss-chip-tune', ICON.tune + '調頻漫遊');
+    tune.type = 'button';
+    tune.id = 'ssTuneChip';
+    tune.setAttribute('aria-pressed', 'false');
+    tune.title = '拖動地圖，讓準星靠近聲音就自動播放';
+    tune.addEventListener('click', function () { setTune(!state.tune); });
+    wrap.appendChild(tune);
+    wrap.appendChild(el('span', 'ss-chip-sep'));
     var defs = [{ key: 'all', cls: '', label: '全部' }].concat(CATS);
     defs.forEach(function (c) {
       var b = el('button', 'ss-chip', (c.cls ? '<span class="ss-dot ' + c.cls + '"></span>' : '') + esc(c.label) + '<span class="ss-count" data-count="' + c.key + '"></span>');
@@ -454,6 +495,97 @@
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+  }
+
+  // ---------------------------------------------------------------- 調頻漫遊
+  // 參考 Radio Garden：拖動地圖讓準星靠近一段聲音，就自動切換過去，聲音淡入淡出。
+
+  var TUNE_RADIUS = 72;
+
+  function buildTune() {
+    if (document.getElementById('ssReticle')) return;
+    var ret = el('div', '', '<span class="ss-ret-ring"></span><span class="ss-ret-dot"></span><div class="ss-ret-label" id="ssRetLabel"></div>');
+    ret.id = 'ssReticle';
+    ret.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(ret);
+  }
+
+  function setTune(on) {
+    state.tune = on;
+    document.body.classList.toggle('ss-tuning', on);
+    var chip = document.getElementById('ssTuneChip');
+    if (chip) {
+      chip.classList.toggle('is-on', on);
+      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    if (on) {
+      buildTune();
+      if (window.map) window.map.closePopup();
+      if (typeof window.showToast === 'function') window.showToast('調頻漫遊：拖動地圖，讓準星靠近聲音');
+      tuneScan(true);
+    } else {
+      state.tuneTarget = null;
+    }
+  }
+
+  function tuneCandidate() {
+    var map = window.map;
+    if (!map || !window.globalMarkerMap) return null;
+    var size = map.getSize();
+    var center = L.point(size.x / 2, size.y / 2);
+    var best = null;
+    Object.keys(window.globalMarkerMap).forEach(function (uid) {
+      var m = window.globalMarkerMap[uid];
+      var item = findItem(uid);
+      if (!m || !isPlayable(item)) return;
+      var d = map.latLngToContainerPoint(m.getLatLng()).distanceTo(center);
+      if (d <= TUNE_RADIUS && (!best || d < best.d)) best = { uid: uid, d: d, item: item };
+    });
+    return best;
+  }
+
+  function tuneScan(settled) {
+    if (!state.tune) return;
+    var c = tuneCandidate();
+    var label = document.getElementById('ssRetLabel');
+    var ret = document.getElementById('ssReticle');
+    if (ret) ret.classList.toggle('is-locked', !!c);
+    if (label) {
+      label.innerHTML = c
+        ? '<span class="ss-dot ' + catOf(c.item).cls + '"></span>' + esc(plain(c.item.title))
+        : '拖動地圖，靠近一段聲音';
+    }
+    if (!settled) return;
+    if (c && c.uid !== window.currentAudioUid) {
+      crossfadeTo(c.uid);
+    } else if (!c && audio() && !audio().paused) {
+      fade(0, 350, function () { audio().pause(); });
+    } else if (c && audio() && audio().paused) {
+      audio().play().catch(function () {});
+      fade(state.volume, 400);
+    }
+  }
+
+  function fade(to, ms, done) {
+    var a = audio();
+    if (!a) return done && done();
+    clearInterval(a.__ssFade);
+    var from = a.volume, t0 = Date.now();
+    a.__ssFade = setInterval(function () {
+      var k = Math.min(1, (Date.now() - t0) / ms);
+      try { a.volume = from + (to - from) * k; } catch (e) {}
+      if (k >= 1) { clearInterval(a.__ssFade); if (done) done(); }
+    }, 30);
+  }
+
+  function crossfadeTo(uid) {
+    var a = audio();
+    var go = function () {
+      window.startGlobalPlayback && window.startGlobalPlayback(uid, { skipFocus: true });
+      try { a.volume = 0; } catch (e) {}
+      fade(state.volume, 500);
+    };
+    if (a && !a.paused) fade(0, 300, go); else go();
   }
 
   // ---------------------------------------------------------------- 4. basemap
@@ -510,27 +642,49 @@
     var card = root.querySelector('.sound-card');
     if (!card || card.__ssDone) return;
     card.__ssDone = true;
+    card.classList.add('ss-card');
     var item = findItem(uid);
     if (!item) return;
+    var cat = catOf(item);
 
+    // 封面變成主視覺：標題、分類與長度疊在照片上
     var cover = card.querySelector('.sound-cover');
-    if (cover && isPlayable(item)) {
+    if (cover) {
       var wrap = el('div', 'ss-cover-wrap');
-      wrap.setAttribute('role', 'button');
-      wrap.setAttribute('tabindex', '0');
-      wrap.setAttribute('aria-label', '播放聲音');
       wrap.dataset.uid = uid;
       cover.parentNode.insertBefore(wrap, cover);
       wrap.appendChild(cover);
-      wrap.appendChild(el('span', 'ss-cover-play', ICON.play));
-      var dur = el('span', 'ss-cover-duration');
-      wrap.appendChild(dur);
-      var toggle = function (e) {
-        if (typeof window.toggleCardPlay === 'function') window.toggleCardPlay(e, uid);
-      };
-      wrap.addEventListener('click', toggle);
-      wrap.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle(e); });
-      loadDuration(item, dur);
+      wrap.appendChild(el('span', 'ss-cover-shade'));
+      wrap.appendChild(el('span', 'ss-cover-cat', '<span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label)));
+      var title = card.querySelector('.sound-title');
+      if (title) {
+        var cap = el('div', 'ss-cover-caption');
+        cap.appendChild(title);
+        var by = el('div', 'ss-cover-by', esc(plain(item.author || '海佃特派員')));
+        cap.appendChild(by);
+        wrap.appendChild(cap);
+      }
+      if (isPlayable(item)) {
+        wrap.classList.add('is-playable');
+        wrap.setAttribute('role', 'button');
+        wrap.setAttribute('tabindex', '0');
+        var ctl = el('span', 'ss-cover-play');
+        wrap.appendChild(ctl);
+        var dur = el('span', 'ss-cover-duration');
+        wrap.appendChild(dur);
+        var act = function (e) {
+          if (e) { e.preventDefault(); e.stopPropagation(); }
+          var a = audio();
+          var current = window.currentAudioUid === uid;
+          // 正在播放這一首時，封面只顯示狀態；暫停、下一首都在底部播放列。
+          if (current && a && !a.paused) return;
+          if (current && a) { a.play().catch(function () {}); return; }
+          window.startGlobalPlayback && window.startGlobalPlayback(uid, { skipFocus: true });
+        };
+        wrap.addEventListener('click', act);
+        wrap.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') act(e); });
+        loadDuration(item, dur);
+      }
     }
 
     var gps = card.querySelector('.meta-gps');
@@ -557,14 +711,30 @@
   function loadPlace(item, node) {
     var key = (+item.lat).toFixed(4) + ',' + (+item.lon).toFixed(4);
     var coords = (+item.lat).toFixed(4) + ', ' + (+item.lon).toFixed(4);
+    var svg = node.querySelector('svg');
+    node.textContent = '';
+    if (svg) node.appendChild(svg);
+    var nameNode = el('span', 'ss-place-name');
+    var coordNode = el('button', 'ss-place-coords', esc(coords));
+    coordNode.type = 'button';
+    coordNode.title = '複製座標';
+    coordNode.addEventListener('click', function (e) {
+      e.stopPropagation();
+      try {
+        navigator.clipboard.writeText(coords).then(function () {
+          if (typeof window.showToast === 'function') window.showToast('已複製座標 ' + coords);
+          coordNode.classList.add('is-copied');
+          setTimeout(function () { coordNode.classList.remove('is-copied'); }, 1200);
+        });
+      } catch (err) {}
+    });
+    node.appendChild(nameNode);
+    node.appendChild(coordNode);
+    node.classList.add('ss-place');
     var paint = function (name) {
       if (!name) return;
-      var svg = node.querySelector('svg');
-      node.textContent = '';
-      if (svg) node.appendChild(svg);
-      node.appendChild(document.createTextNode(' ' + name));
-      node.classList.add('ss-place');
-      node.title = name + '（' + coords + '）';
+      nameNode.textContent = name;
+      node.classList.add('has-name');
     };
     if (state.places[key]) return paint(state.places[key]);
 
@@ -589,12 +759,14 @@
 
   function syncCoverButtons() {
     var a = audio();
-    document.querySelectorAll('.ss-cover-wrap').forEach(function (w) {
-      var on = a && !a.paused && w.dataset.uid === window.currentAudioUid;
-      w.classList.toggle('is-playing', !!on);
+    document.querySelectorAll('.ss-cover-wrap.is-playable').forEach(function (w) {
+      var current = w.dataset.uid === window.currentAudioUid;
+      var playing = current && a && !a.paused;
+      w.classList.toggle('is-current', !!current);
+      w.classList.toggle('is-playing', !!playing);
       var p = w.querySelector('.ss-cover-play');
-      if (p) p.innerHTML = on ? ICON.pause : ICON.play;
-      w.setAttribute('aria-label', on ? '暫停聲音' : '播放聲音');
+      if (p) p.innerHTML = playing ? '<span class="ss-eq"><i></i><i></i><i></i></span><span>正在播放</span>' : ICON.play;
+      w.setAttribute('aria-label', playing ? '正在播放，請用下方播放列控制' : '播放這段聲音');
     });
   }
 
@@ -679,8 +851,6 @@
         if (isSheetMode()) {
           document.body.classList.add('ss-sheet-mode');
           openSheet(e.popup);
-        } else if (uid === window.currentAudioUid && typeof window.mountGlobalPlayerIntoPopup_ === 'function') {
-          window.mountGlobalPlayerIntoPopup_();
         }
       }
       syncBarVisibility();
@@ -694,6 +864,11 @@
       closeSheet(e.popup);
       syncBarVisibility();
     });
+
+    map.on('move', function () { if (state.tune) tuneScan(false); });
+    map.on('moveend', function () { if (state.tune) setTimeout(function () { tuneScan(true); }, 60); });
+    map.on('dragstart', function () { document.body.classList.add('ss-dragging'); });
+    map.on('dragend', function () { document.body.classList.remove('ss-dragging'); });
 
     var refresh = function () { setTimeout(markNowPlaying, 30); };
     map.on('zoomend moveend', refresh);
@@ -725,6 +900,7 @@
     tidyLayout();
     waitFor(function () { return window.map && window.globalAudio; }, function () {
       wrapCloseGlobalPlayer();
+      disableEmbeddedPlayer();
       bindAudio();
       bindMap();
       softenBasemap();
