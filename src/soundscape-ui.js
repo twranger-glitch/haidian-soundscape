@@ -207,6 +207,10 @@
     if (!splash || splash.querySelector('.ss-hero-inner')) return;
     splash.classList.add('ss-hero');
 
+    splash.appendChild(el('div', 'ss-hero-bg'));
+    splash.appendChild(el('div', 'ss-hero-bg'));
+    splash.appendChild(el('div', 'ss-hero-veil'));
+
     var inner = el('div', 'ss-hero-inner');
     inner.innerHTML =
       '<div class="ss-eyebrow">Haidian Soundscape · 台南 海佃</div>' +
@@ -268,6 +272,7 @@
       '<div class="ss-featured-title">' + esc(plain(pick.title)) + '</div>' +
       '<div class="ss-featured-meta"><span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label) + '・' + esc(plain(pick.author || '海佃特派員')) + '</div>';
     if (orb) orb.disabled = false;
+    setHeroBg(pick.coverUrl || FALLBACK_COVER);
   }
 
   // ---------------------------------------------------------------- 2. bar
@@ -346,6 +351,10 @@
     if (!item) return;
     state.uid = uid;
     state.played.add(uid);
+    markHeard(uid);
+    if (state.history[state.history.length - 1] !== uid) state.history.push(uid);
+    if (state.history.length > 60) state.history.shift();
+    syncMediaSession(item);
     var cat = catOf(item);
     var img = document.querySelector('#ssCover img');
     if (img) {
@@ -429,6 +438,7 @@
 
   function markNowPlaying() {
     document.querySelectorAll('.custom-sound-icon.ss-now').forEach(function (n) { n.classList.remove('ss-now'); });
+    syncHeard();
     if (!state.uid || !window.globalMarkerMap) return;
     var m = window.globalMarkerMap[state.uid];
     var icon = m && m._icon;
@@ -654,6 +664,7 @@
       wrap.dataset.uid = uid;
       cover.parentNode.insertBefore(wrap, cover);
       wrap.appendChild(cover);
+      watchCover(wrap);
       wrap.appendChild(el('span', 'ss-cover-shade'));
       wrap.appendChild(el('span', 'ss-cover-cat', '<span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label)));
       var title = card.querySelector('.sound-title');
@@ -689,6 +700,7 @@
 
     var gps = card.querySelector('.meta-gps');
     if (gps && item.lat) loadPlace(item, gps);
+    addRelated(card, item);
     syncCoverButtons();
   }
 
@@ -851,6 +863,12 @@
         if (isSheetMode()) {
           document.body.classList.add('ss-sheet-mode');
           openSheet(e.popup);
+        } else if (e.popup._updateLayout && e.popup._updatePosition) {
+          // 卡片加了「附近還有」之後變高，重新定位一次。
+          // 不能用 popup.update()，它會用原始 HTML 重畫內容而把這些調整洗掉。
+          e.popup._updateLayout();
+          e.popup._updatePosition();
+          if (e.popup._adjustPan) e.popup._adjustPan();
         }
       }
       syncBarVisibility();
@@ -891,20 +909,290 @@
     }
   }
 
+  // ================================================================ 第三輪：探索與回饋
+
+  var LS_HEARD = 'ss-heard-v1';
+  state.heard = new Set(readJSON(LS_HEARD) || []);
+  state.history = [];
+
+  function hoverable() {
+    return !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+  }
+
+  function haversine(a, b) {
+    var R = 6371000, toRad = Math.PI / 180;
+    var dLat = (+b.lat - +a.lat) * toRad, dLon = (+b.lon - +a.lon) * toRad;
+    var s = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(+a.lat * toRad) * Math.cos(+b.lat * toRad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+
+  function fmtDist(m) {
+    if (!isFinite(m)) return '';
+    if (m < 50) return '就在旁邊';
+    if (m < 1000) return Math.round(m / 10) * 10 + ' 公尺';
+    return (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' 公里';
+  }
+
+  // ---- 已聽過的聲音：實心點是還沒聽過，空心點是聽過了 ----
+
+  function markHeard(uid) {
+    if (!uid || state.heard.has(uid)) return;
+    state.heard.add(uid);
+    writeLS(LS_HEARD, JSON.stringify(Array.from(state.heard)));
+    syncHeard();
+  }
+
+  function heardStats() {
+    var list = items().filter(isPlayable);
+    var n = list.filter(function (i) { return state.heard.has(i.uid); }).length;
+    return { total: list.length, heard: n };
+  }
+
+  function syncHeard() {
+    if (window.globalMarkerMap) {
+      Object.keys(window.globalMarkerMap).forEach(function (uid) {
+        var m = window.globalMarkerMap[uid];
+        if (m && m._icon) m._icon.classList.toggle('ss-heard', state.heard.has(uid));
+      });
+    }
+    var s = heardStats();
+    document.querySelectorAll('[data-ss-heard]').forEach(function (node) {
+      node.textContent = s.heard ? '已聽 ' + s.heard + ' / ' + s.total : s.total + ' 段聲音';
+    });
+  }
+
+  // ---- 滑鼠靠近聲音點就先告訴你是什麼 ----
+
+  function bindTips() {
+    if (!hoverable() || !window.globalMarkerMap || !window.L) return;
+    Object.keys(window.globalMarkerMap).forEach(function (uid) {
+      var m = window.globalMarkerMap[uid];
+      if (!m || m.__ssTip || !m.bindTooltip) return;
+      var item = findItem(uid);
+      if (!item) return;
+      m.__ssTip = true;
+      var cat = catOf(item);
+      var html = '<span class="ss-dot ' + cat.cls + '"></span><b>' + esc(plain(item.title)) + '</b><i>' + esc(cat.label) + '・' + esc(plain(item.author || '海佃特派員')) + '</i>';
+      m.bindTooltip(html, { direction: 'top', offset: [0, -18], className: 'ss-tip', opacity: 1 });
+      m.on('popupopen', function () { try { m.closeTooltip(); } catch (e) {} });
+    });
+  }
+
+  // 篩選會重畫所有標記，重畫後補上提示與狀態。
+  function wrapRenderMarkers() {
+    var orig = window.renderMarkers;
+    if (typeof orig !== 'function' || orig.__ssWrapped) return;
+    var wrapped = function () {
+      var r = orig.apply(this, arguments);
+      afterRender();
+      return r;
+    };
+    wrapped.__ssWrapped = true;
+    window.renderMarkers = wrapped;
+  }
+
+  function afterRender() {
+    bindTips();
+    setTimeout(function () { markNowPlaying(); syncHeard(); }, 30);
+  }
+
+  // ---- 沒在播放時，底部常駐一顆「隨機聽一段」 ----
+
+  function buildIdle() {
+    if (document.getElementById('ssIdle')) return;
+    var pill = el('button', 'ss-idle', ICON.play + '<span class="ss-idle-text">隨機聽一段</span><span class="ss-idle-sub" data-ss-heard></span>');
+    pill.type = 'button';
+    pill.id = 'ssIdle';
+    pill.setAttribute('aria-label', '隨機聽一段聲音');
+    pill.addEventListener('click', function () {
+      var n = randomPick(null);
+      if (n) playUid(n.uid, { openCard: true });
+    });
+    document.body.appendChild(pill);
+    if (window.L && L.DomEvent) L.DomEvent.disableClickPropagation(pill);
+  }
+
+  // ---- 卡片底部：附近還有哪些聲音 ----
+
+  function addRelated(card, item) {
+    var info = card.querySelector('.sound-info');
+    if (!info || info.querySelector('.ss-related')) return;
+    var list = items()
+      .filter(function (i) { return i.uid !== item.uid && isPlayable(i); })
+      .map(function (i) { return { item: i, d: haversine(item, i) }; })
+      .sort(function (a, b) { return a.d - b.d; })
+      .slice(0, 3);
+    if (!list.length) return;
+    var box = el('div', 'ss-related', '<div class="ss-related-title">附近還有</div>');
+    list.forEach(function (r) {
+      var cat = catOf(r.item);
+      var row = el('button', 'ss-related-row' + (state.heard.has(r.item.uid) ? ' is-heard' : ''));
+      row.type = 'button';
+      row.dataset.uid = r.item.uid;
+      var img = el('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.src = r.item.coverUrl || FALLBACK_COVER;
+      img.onerror = function () { if (img.src !== FALLBACK_COVER) img.src = FALLBACK_COVER; };
+      row.appendChild(img);
+      row.appendChild(el('span', 'ss-related-text',
+        '<b>' + esc(plain(r.item.title)) + '</b>' +
+        '<i><span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label) + '・' + fmtDist(r.d) + '</i>'));
+      row.appendChild(el('span', 'ss-related-play', ICON.play));
+      row.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        playUid(r.item.uid, { openCard: true });
+      });
+      box.appendChild(row);
+    });
+    info.appendChild(box);
+  }
+
+  // ---- 封面載入前先鋪一層微光 ----
+
+  function watchCover(wrap) {
+    var img = wrap.querySelector('.sound-cover');
+    if (!img) return;
+    var done = function () { wrap.classList.add('is-loaded'); };
+    if (img.complete && img.naturalWidth) done();
+    else {
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    }
+  }
+
+  // ---- 鎖定畫面與耳機按鍵 ----
+
+  function syncMediaSession(item) {
+    if (!('mediaSession' in navigator) || !window.MediaMetadata) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: plain(item.title),
+        artist: plain(item.author || '海佃特派員'),
+        album: '海佃溪遊記・' + catOf(item).label,
+        artwork: item.coverUrl ? [{ src: item.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : []
+      });
+    } catch (e) {}
+  }
+
+  function bindMediaSession() {
+    if (!('mediaSession' in navigator) || bindMediaSession.done) return;
+    bindMediaSession.done = true;
+    var set = function (k, fn) { try { navigator.mediaSession.setActionHandler(k, fn); } catch (e) {} };
+    set('play', function () { var a = audio(); if (a) a.play().catch(function () {}); });
+    set('pause', function () { var a = audio(); if (a) a.pause(); });
+    set('nexttrack', playNext);
+    set('previoustrack', playPrevious);
+    set('seekbackward', function (d) { seekBy(-((d && d.seekOffset) || 10)); });
+    set('seekforward', function (d) { seekBy((d && d.seekOffset) || 10); });
+  }
+
+  function playNext() { var n = nextNearby(); if (n) playUid(n.uid); }
+  function playShuffle() { var n = randomPick(state.uid); if (n) playUid(n.uid); }
+  function playPrevious() {
+    if (state.history.length < 2) return;
+    state.history.pop();
+    var prev = state.history.pop();
+    if (prev) playUid(prev);
+  }
+  function seekBy(sec) {
+    var a = audio();
+    if (!a || !a.duration) return;
+    a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + sec));
+  }
+
+  // ---- 鍵盤：空白鍵播放暫停，N 下一段，P 上一段，S 隨機，左右鍵快轉 ----
+
+  function bindKeys() {
+    document.addEventListener('keydown', function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      var a = audio();
+      switch (e.key) {
+        case ' ':
+          if (!state.uid || !a) return;
+          e.preventDefault();
+          if (a.paused) a.play().catch(function () {}); else a.pause();
+          break;
+        case 'ArrowRight': if (!state.uid) return; e.preventDefault(); seekBy(5); break;
+        case 'ArrowLeft': if (!state.uid) return; e.preventDefault(); seekBy(-5); break;
+        case 'n': case 'N': playNext(); break;
+        case 'p': case 'P': playPrevious(); break;
+        case 's': case 'S': playShuffle(); break;
+        case 'Escape': if (state.openPopupUid && window.map) window.map.closePopup(); break;
+      }
+    });
+    var hint = { ssPlay: '播放／暫停（空白鍵）', ssNext: '附近的下一段（N）', ssShuffle: '隨機一段（S）', ssClose: '停止播放' };
+    if (hoverable()) Object.keys(hint).forEach(function (id) { var b = document.getElementById(id); if (b) b.title = hint[id]; });
+  }
+
+  // ---- 手機：在播放列文字上左右滑切歌 ----
+
+  function bindBarSwipe() {
+    var text = document.getElementById('ssText');
+    if (!text) return;
+    var sx = null, sy = null;
+    text.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    text.addEventListener('touchend', function (e) {
+      if (sx == null) return;
+      var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      sx = sy = null;
+      if (Math.abs(dx) < 60 || Math.abs(dy) > 40) return;
+      if (dx < 0) playNext(); else playPrevious();
+    });
+  }
+
+  // ---- 首頁：拿這段聲音的封面當背景，慢慢推近 ----
+
+  function setHeroBg(url) {
+    var layers = document.querySelectorAll('.ss-hero-bg');
+    if (!layers.length) return;
+    var cur = document.querySelector('.ss-hero-bg.is-on');
+    var next = layers[0] === cur ? layers[1] : layers[0];
+    var probe = new Image();
+    probe.onload = function () {
+      next.style.backgroundImage = 'url("' + url.replace(/"/g, '%22') + '")';
+      next.classList.add('is-on');
+      if (cur) cur.classList.remove('is-on');
+    };
+    probe.onerror = function () { if (url !== FALLBACK_COVER) setHeroBg(FALLBACK_COVER); };
+    probe.src = url;
+  }
+
+  // ---- 分享連結直接降落在那段聲音，不用先看首頁 ----
+
+  function landOnSharedWork() {
+    var work = null;
+    try { work = new URLSearchParams(location.search).get('work'); } catch (e) {}
+    if (!work) return;
+    waitFor(function () { return typeof window.enterMap === 'function' && document.getElementById('splashScreen'); }, function () {
+      window.enterMap();
+    });
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
     buildHero();
     buildBar();
     buildChips();
+    buildIdle();
     tidyLayout();
+    bindKeys();
+    bindBarSwipe();
+    landOnSharedWork();
     waitFor(function () { return window.map && window.globalAudio; }, function () {
       wrapCloseGlobalPlayer();
       disableEmbeddedPlayer();
+      wrapRenderMarkers();
       bindAudio();
       bindMap();
+      bindMediaSession();
       softenBasemap();
     });
+    waitFor(function () { return items().length && window.globalMarkerMap && Object.keys(window.globalMarkerMap).length ? 1 : null; }, afterRender);
     var cardBtn = document.querySelector('.close-player-btn');
     if (cardBtn) cardBtn.addEventListener('click', function () { onStopped(); });
     window.addEventListener('resize', syncBarVisibility);

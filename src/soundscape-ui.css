@@ -1091,3 +1091,253 @@ body.ss-dragging #ssReticle .ss-ret-ring { transform: scale(1.06); }
 }
 .ss-sheet-grip::before { background: rgba(255, 255, 255, 0.7); }
 .ss-sheet-close { top: 14px; right: 14px; }
+
+/* ================================================================== */
+/* 第三輪：探索與回饋                                                    */
+/* ================================================================== */
+
+/* ---------- 首頁背景：這段聲音的封面，慢慢推近 ---------- */
+#splashScreen.ss-hero { position: fixed; overflow: hidden; }
+.ss-hero-bg {
+  position: absolute;
+  inset: -6%;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  filter: blur(16px) brightness(0.5) saturate(0.8);
+  transform: scale(1.02);
+  animation: ssKen 48s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.ss-hero-bg.is-on { opacity: 1; }
+.ss-hero-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% 38%, rgba(15, 118, 110, 0.32) 0%, rgba(12, 26, 29, 0) 60%),
+    linear-gradient(180deg, rgba(9, 20, 22, 0.55) 0%, rgba(9, 20, 22, 0.35) 45%, rgba(9, 20, 22, 0.8) 100%);
+  pointer-events: none;
+}
+#splashScreen.ss-hero { background: rgba(9, 20, 22, 0.92); }
+.ss-hero-inner { position: relative; z-index: 1; }
+@keyframes ssKen {
+  from { transform: scale(1.02) translate(0, 0); }
+  to { transform: scale(1.12) translate(-1.5%, 1.5%); }
+}
+
+/* ---------- 滑鼠提示 ---------- */
+.leaflet-tooltip.ss-tip {
+  background: var(--ss-ink-soft);
+  color: #fbf8ef;
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px 8px 10px;
+  box-shadow: var(--ss-shadow);
+  font-family: var(--ss-sans);
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 7px;
+  align-items: center;
+  white-space: nowrap;
+  width: max-content;
+  max-width: 280px;
+}
+.leaflet-tooltip.ss-tip::before { border-top-color: var(--ss-ink-soft); }
+.leaflet-tooltip.ss-tip .ss-dot { grid-row: 1 / 3; }
+.leaflet-tooltip.ss-tip b { font: 700 13px/1.3 var(--ss-serif); letter-spacing: 0.03em; }
+.leaflet-tooltip.ss-tip i { font: 500 11px/1.3 var(--ss-sans); font-style: normal; opacity: 0.65; }
+
+/* ---------- 已聽過：空心點 ---------- */
+.custom-sound-icon.ss-heard:not(.ss-now) .sound-dot-marker::after {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 3px currentColor !important;
+}
+.custom-sound-icon.ss-heard:not(.ss-now) .sound-dot-marker::before { opacity: 0.1; }
+.ss-dot.cat-nature { --dot: var(--ss-cat-nature); }
+.ss-dot.cat-culture { --dot: var(--ss-cat-culture); }
+.ss-dot.cat-industry { --dot: var(--ss-cat-industry); }
+.ss-dot.cat-space { --dot: var(--ss-cat-space); }
+.ss-dot.cat-history { --dot: var(--ss-cat-history); }
+.is-heard .ss-dot { background: transparent !important; box-shadow: inset 0 0 0 2px var(--dot, var(--ss-cat-default)); }
+
+/* ---------- 沒在播放時的「隨機聽一段」 ---------- */
+#ssIdle {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translate(-50%, 0);
+  z-index: 1890;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--ss-ink-soft);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #fbf8ef;
+  border-radius: 999px;
+  padding: 8px 18px 8px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: var(--ss-shadow);
+  font-family: var(--ss-sans);
+  transition: transform 0.45s var(--ss-ease), opacity 0.3s, background 0.25s;
+}
+#ssIdle > svg {
+  width: 38px;
+  height: 38px;
+  padding: 9px 7px 9px 11px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--ss-sand);
+  color: var(--ss-ink);
+  flex-shrink: 0;
+  transition: transform 0.3s var(--ss-ease);
+}
+#ssIdle:hover > svg { transform: scale(1.08); }
+.ss-idle-text { font: 700 14px/1 var(--ss-sans); letter-spacing: 0.06em; }
+.ss-idle-sub { font: 500 11.5px/1 var(--ss-sans); opacity: 0.55; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.ss-idle-sub:empty { display: none; }
+body.ss-has-bar #ssIdle,
+body.ss-splash-open #ssIdle,
+body.ss-sheet-open #ssIdle,
+body.ss-tuning #ssIdle,
+body.haidian-v4-mode-data #ssIdle,
+body.haidian-v4-mode-walk #ssIdle,
+body.listening-mode #ssIdle,
+body.nanshan-mode #ssIdle {
+  transform: translate(-50%, 140%);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  #ssIdle { bottom: 14px; }
+}
+
+/* ---------- 卡片：附近還有 ---------- */
+.ss-related { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ss-line); }
+.ss-related-title {
+  font: 700 11.5px/1 var(--ss-sans);
+  letter-spacing: 0.16em;
+  color: var(--ss-muted);
+  margin-bottom: 8px;
+}
+.ss-related-row {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 4px 6px 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+  font-family: var(--ss-sans);
+  transition: background 0.2s;
+}
+.ss-related-row:hover { background: rgba(12, 26, 29, 0.05); }
+.ss-related-row img {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e8e4da;
+}
+.ss-related-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ss-related-text b {
+  font: 600 14px/1.3 var(--ss-serif);
+  color: var(--ss-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+.ss-related-text i {
+  font: 500 11.5px/1 var(--ss-sans);
+  font-style: normal;
+  color: var(--ss-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ss-related-play {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ss-ink);
+  background: rgba(12, 26, 29, 0.06);
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+.ss-related-play svg { width: 14px; height: 14px; margin-left: 2px; }
+.ss-related-row:hover .ss-related-play { background: var(--ss-sand); }
+.ss-related-row.is-heard .ss-related-text b { color: var(--ss-muted); font-weight: 500; }
+
+/* 桌機卡片變高時，內容在卡片裡捲動，封面留在頂端 */
+@media (min-width: 601px) {
+  .leaflet-popup-content:has(.ss-card) {
+    max-height: calc(100vh - 210px);
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+  }
+}
+
+/* ---------- 封面載入微光 ---------- */
+.ss-cover-wrap { background: linear-gradient(110deg, #1b2f31 20%, #2a4345 45%, #1b2f31 70%); background-size: 200% 100%; animation: ssShimmer 1.6s linear infinite; }
+.ss-cover-wrap.is-loaded { animation: none; background: var(--ss-ink); }
+.ss-cover-wrap .sound-cover { opacity: 0; transition: opacity 0.6s ease, transform 1.2s var(--ss-ease); }
+.ss-cover-wrap.is-loaded .sound-cover { opacity: 1; }
+@keyframes ssShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ---------- 版權列：手機縮成一行，點一下展開 ---------- */
+@media (max-width: 600px) {
+  .leaflet-control-attribution {
+    font-size: 9.5px !important;
+    max-width: 52vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.85;
+    border-radius: 8px 0 0 0;
+    margin-right: 0 !important;
+  }
+  .leaflet-control-attribution:active,
+  .leaflet-control-attribution:focus-within { max-width: none; white-space: normal; }
+  body.ss-has-bar .leaflet-control-attribution { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-hero-bg, .ss-cover-wrap { animation: none !important; }
+}
+
+/* 隨機聽一段：文字不換行；桌機卡片打開時先讓位 */
+#ssIdle { white-space: nowrap; }
+body.ss-card-open #ssIdle { transform: translate(-50%, 140%); opacity: 0; pointer-events: none; }
+@media (max-width: 600px) {
+  .ss-idle-text { font-size: 13.5px; }
+  .ss-idle-sub { font-size: 11px; }
+}
+
+/* 手機標題列收起時的小拉把 */
+.header-pull-tab {
+  width: auto !important;
+  height: 26px !important;
+  padding: 0 14px !important;
+  background: rgba(251, 250, 246, 0.95) !important;
+  border: 1px solid var(--ss-line) !important;
+  border-top: none !important;
+  border-radius: 0 0 12px 12px !important;
+  box-shadow: 0 8px 18px -10px rgba(12, 26, 29, 0.45) !important;
+  flex-direction: row !important;
+  gap: 8px !important;
+}
+.header-pull-tab .pull-line { width: 18px !important; height: 3px !important; background: rgba(12, 26, 29, 0.25) !important; }
+.header-pull-tab .pull-text { font: 700 11px/1 var(--ss-sans) !important; color: var(--ss-ink) !important; letter-spacing: 0.08em !important; }
