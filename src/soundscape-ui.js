@@ -29,7 +29,8 @@
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     roam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c2.5-4 5-4 7.5 0s5 4 7.5 0"/><path d="M3 17c2.5-4 5-4 7.5 0s5 4 7.5 0" opacity=".5"/><circle cx="20" cy="7" r="2"/></svg>',
     tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6"/><path d="M5.2 18.8a9.6 9.6 0 0 1 0-13.6M18.8 5.2a9.6 9.6 0 0 1 0 13.6" opacity=".55"/></svg>',
-    map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>'
+    map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>'
   };
 
   var state = {
@@ -355,6 +356,8 @@
     if (state.history[state.history.length - 1] !== uid) state.history.push(uid);
     if (state.history.length > 60) state.history.shift();
     syncMediaSession(item);
+    syncNowColor(item);
+    setTimeout(syncNextHint, 0);
     var cat = catOf(item);
     var img = document.querySelector('#ssCover img');
     if (img) {
@@ -1172,6 +1175,85 @@
     });
   }
 
+  // ================================================================ 第四輪：沉浸與細節
+
+  // ---- 首頁問候跟著時段走 ----
+
+  function greeting() {
+    var h = new Date().getHours();
+    if (h < 5) return '夜深了';
+    if (h < 11) return '早安';
+    if (h < 14) return '午安';
+    if (h < 18) return '午後好';
+    return '晚安';
+  }
+
+  function heroGreeting() {
+    var eyebrow = document.querySelector('.ss-eyebrow');
+    if (eyebrow) eyebrow.innerHTML = '<span class="ss-greet">' + greeting() + '</span>・Haidian Soundscape・台南 海佃';
+  }
+
+  // ---- 播放列：分享、下一段預告、分類色 ----
+
+  function buildBarExtras() {
+    var btns = document.querySelector('.ss-bar-btns');
+    if (!btns || document.getElementById('ssShare')) return;
+    var share = el('button', 'ss-icon-btn ss-hide-sm', ICON.share);
+    share.type = 'button';
+    share.id = 'ssShare';
+    share.setAttribute('aria-label', '分享這段聲音');
+    share.title = '分享這段聲音';
+    share.addEventListener('click', function (e) {
+      if (state.uid && typeof window.shareWork === 'function') window.shareWork(e, state.uid);
+    });
+    btns.insertBefore(share, document.getElementById('ssClose'));
+  }
+
+  function syncNextHint() {
+    var next = document.getElementById('ssNext');
+    if (!next || !hoverable()) return;
+    var n = nextNearby();
+    next.title = n ? '下一段：' + plain(n.title) + '（N）' : '附近的下一段（N）';
+  }
+
+  var CAT_COLOR = { 'cat-nature': '#10b981', 'cat-culture': '#f59e0b', 'cat-industry': '#ea580c', 'cat-space': '#3b82f6', 'cat-history': '#8b5cf6', 'cat-default': '#64748b' };
+  function syncNowColor(item) {
+    var c = CAT_COLOR[catOf(item).cls] || CAT_COLOR['cat-default'];
+    document.body.style.setProperty('--ss-now', c);
+  }
+
+  // ---- 手機面板：點地圖或往下拉封面就收起 ----
+
+  function bindSheetGestures() {
+    var map = window.map;
+    if (!map || map.__ssSheetTap) return;
+    map.__ssSheetTap = true;
+    map.on('click', function () {
+      if (isSheetMode() && state.openPopupUid && !state.tune) map.closePopup();
+    });
+    // Leaflet 在面板上擋掉了 touchstart 冒泡，所以直接掛在面板本身。
+    buildSheet();
+    sheet.addEventListener('touchstart', function (e) {
+      var wrap = e.target.closest && e.target.closest('.ss-cover-wrap');
+      if (!wrap) return;
+      var y0 = e.touches[0].clientY, moved = 0;
+      var onMove = function (ev) {
+        moved = Math.max(0, ev.touches[0].clientY - y0);
+        sheet.style.transition = 'none';
+        sheet.style.transform = 'translateY(' + moved + 'px)';
+      };
+      var onEnd = function () {
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+        if (moved > 90 && window.map) window.map.closePopup();
+      };
+      document.addEventListener('touchmove', onMove, { passive: true });
+      document.addEventListener('touchend', onEnd);
+    }, { passive: true });
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
@@ -1179,6 +1261,8 @@
     buildBar();
     buildChips();
     buildIdle();
+    buildBarExtras();
+    heroGreeting();
     tidyLayout();
     bindKeys();
     bindBarSwipe();
@@ -1189,6 +1273,7 @@
       wrapRenderMarkers();
       bindAudio();
       bindMap();
+      bindSheetGestures();
       bindMediaSession();
       softenBasemap();
     });

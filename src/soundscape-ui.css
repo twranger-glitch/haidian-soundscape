@@ -1341,3 +1341,81 @@ body.ss-card-open #ssIdle { transform: translate(-50%, 140%); opacity: 0; pointe
 }
 .header-pull-tab .pull-line { width: 18px !important; height: 3px !important; background: rgba(12, 26, 29, 0.25) !important; }
 .header-pull-tab .pull-text { font: 700 11px/1 var(--ss-sans) !important; color: var(--ss-ink) !important; letter-spacing: 0.08em !important; }
+
+/* ================================================================== */
+/* 第四輪：沉浸與細節                                                    */
+/* ================================================================== */
+
+/* 首頁問候 */
+.ss-greet { color: var(--ss-sand); }
+
+/* 正在播放的分類色沿著進度條走 */
+.ss-bar-progress > i { background: linear-gradient(90deg, var(--ss-now, var(--ss-teal-bright)), var(--ss-sand)); }
+.ss-bar-cover { box-shadow: 0 0 0 2px var(--ss-now, transparent); }
+
+/* 專注模式提示：墨色、單行 */
+.listening-hint {
+  background: var(--ss-ink-soft) !important;
+  color: #fbf8ef !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: var(--ss-shadow) !important;
+  font: 700 13px/1 var(--ss-sans) !important;
+  letter-spacing: 0.06em !important;
+  padding: 11px 18px !important;
+  white-space: nowrap !important;
+  max-width: calc(100vw - 32px);
+}
+.listening-hint:hover { background: var(--ss-ink-2) !important; border-color: rgba(255, 255, 255, 0.2) !important; }
+.listening-hint::after { opacity: 0.6 !important; font-weight: 500 !important; }
+@media (max-width: 600px) {
+  .listening-hint::after { content: "" !important; }
+  .listening-hint { top: 14px !important; }
+}
+
+/* 桌機標題列的收合小把手 */
+.haidian-header-minimize-btn {
+  background: rgba(251, 250, 246, 0.96) !important;
+  border: 1px solid var(--ss-line) !important;
+  border-top: none !important;
+  color: var(--ss-muted) !important;
+  box-shadow: 0 6px 14px -8px rgba(12, 26, 29, 0.4) !important;
+  width: 34px !important;
+  height: 18px !important;
+  bottom: -14px !important;
+  font-size: 12px !important;
+}
+.haidian-header-minimize-btn:hover { color: var(--ss-ink) !important; background: #fff !important; }
+
+/* 對話框打開時，右側工具與底部元件讓路 */
+body:has(.modal-overlay.active) #rightToolsWrapper,
+body:has(.modal-overlay.active) .locate-me-wrapper,
+body:has(.modal-overlay.active) .haidian-v4-dock,
+body:has(.modal-overlay.active) #ssIdle,
+body:has(.modal-overlay.active) #ssChips,
+body:has(.modal-overlay.active) .drawer-panel > .toggle-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.2s;
+}
+/* 手機：課程模組展開時，定位鍵先退場 */
+@media (max-width: 600px) {
+  body:has(.haidian-v4-dock:not(.is-minimized)) .locate-me-wrapper { opacity: 0 !important; pointer-events: none !important; }
+}
+
+/* 對話框與標題文字沿用同一套字體 */
+.modal-overlay .modal-content,
+.modal-overlay .modal-box { font-family: var(--ss-sans); }
+.modal-overlay h2, .modal-overlay h3 { font-family: var(--ss-serif); letter-spacing: 0.04em; }
+
+/* 鍵盤焦點 */
+.ss-chip:focus-visible,
+.ss-icon-btn:focus-visible,
+.ss-roam:focus-visible,
+#ssIdle:focus-visible,
+.ss-related-row:focus-visible,
+.ss-ghost-btn:focus-visible,
+.ss-place-coords:focus-visible,
+.ss-sheet-close:focus-visible {
+  outline: 3px solid var(--ss-sand);
+  outline-offset: 3px;
+}
