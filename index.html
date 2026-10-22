@@ -23,6 +23,17 @@
     <link rel="preconnect" href="https://wmts.nlsc.gov.tw">
     <link rel="preconnect" href="https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <style>
+      /* 首屏就隱藏舊版入口卡片，新版首頁載入前只顯示同色底與呼吸光球 */
+      #splashScreen > .splash-card { display: none !important; }
+      #splashScreen { background: radial-gradient(120% 80% at 50% 38%, rgba(15,118,110,.32) 0%, rgba(12,26,29,0) 60%), #0b1719 !important; }
+      #splashScreen:not(.ss-hero)::before {
+        content: ""; position: absolute; left: 50%; top: 50%; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #ffe0a3 0%, #f3c26b 45%, #e0a43d 100%); opacity: .35;
+        animation: ssBoot 1.6s ease-in-out infinite alternate;
+      }
+      @keyframes ssBoot { from { transform: scale(.92); opacity: .2; } to { transform: scale(1); opacity: .45; } }
+    </style>
     <!-- 聲景介面改版層結束 -->
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15006,10 +15017,10 @@ body.listening-mode .glass-header,
 <!-- 聲景介面改版層：移除下面這段即可還原 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
-<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.5">
+<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.6">
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
-<script src="./src/soundscape-basemap.js?v=20261023.5"></script>
-<script src="./src/soundscape-ui.js?v=20261023.5"></script>
+<script src="./src/soundscape-basemap.js?v=20261023.6"></script>
+<script src="./src/soundscape-ui.js?v=20261023.6"></script>
 <!-- 聲景介面改版層結束 -->
 </body></html>
