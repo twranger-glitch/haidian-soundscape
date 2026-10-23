@@ -1987,3 +1987,71 @@ body.ss-night #rightToolsWrapper .tools-menu-container {
   --ss-teal: #0f766e;
   color-scheme: light;
 }
+
+/* ------------------------------------------------------------------ */
+/* 第九輪：離線                                                         */
+/* ------------------------------------------------------------------ */
+.ss-offline {
+  position: fixed;
+  left: 50%;
+  top: 150px;
+  transform: translate(-50%, -8px);
+  z-index: 1300;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ss-ink-soft);
+  color: #fbf8ef;
+  font: 600 12.5px/1 var(--ss-sans);
+  padding: 9px 14px;
+  border-radius: 999px;
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s var(--ss-ease);
+  white-space: nowrap;
+}
+.ss-offline svg { width: 15px; height: 15px; color: var(--ss-sand); }
+.ss-offline.is-on { opacity: 1; transform: translate(-50%, 0); }
+body.ss-splash-open .ss-offline { top: auto; bottom: 24px; }
+@media (max-width: 600px) { .ss-offline { top: 120px; font-size: 12px; } }
+
+.ss-off-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 4px 8px; }
+.ss-off-head b { font: 600 12.5px/1.4 var(--ss-sans); color: var(--ss-muted); }
+.ss-off-clear {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ss-muted);
+  font: 600 12px/1 var(--ss-sans);
+  padding: 6px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ss-off-clear:hover { color: var(--ss-ink); }
+.ss-row-save .ss-row-ico { background: rgba(243, 194, 107, 0.26); color: #9a6a12; }
+.ss-row-save.is-busy { cursor: progress; }
+.ss-row-save.is-busy .ss-row-ico { animation: ssPulse 1s ease-in-out infinite; }
+@keyframes ssPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.ss-saved-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font: 700 10px/1 var(--ss-sans);
+  font-style: normal;
+  color: #9a6a12;
+  background: rgba(243, 194, 107, 0.3);
+  padding: 3px 5px;
+  border-radius: 6px;
+  vertical-align: 1px;
+}
+body.ss-night .ss-row-save .ss-row-ico { color: var(--ss-sand); background: rgba(243, 194, 107, 0.18); }
+body.ss-night .ss-saved-tag { color: var(--ss-sand); background: rgba(243, 194, 107, 0.16); }
+/* 已存下的聲音點：外圈多一道沙色 */
+.sound-dot-marker.ss-saved { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ss-sand), 0 6px 14px -6px rgba(12, 26, 29, 0.5) !important; }
+@media (max-width: 600px) {
+  body:has(#sidePanel.ss-panel:not(.collapsed)) #ssIdle,
+  body:has(#routePanel.ss-panel:not(.collapsed)) #ssIdle { opacity: 0 !important; pointer-events: none !important; }
+  .ss-panel .drawer-content { padding-bottom: 20px !important; }
+}

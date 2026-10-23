@@ -956,6 +956,7 @@
   }
 
   function syncHeard() {
+    if (typeof syncOffline === 'function') syncOffline();
     if (window.globalMarkerMap) {
       Object.keys(window.globalMarkerMap).forEach(function (uid) {
         var m = window.globalMarkerMap[uid];
@@ -1366,7 +1367,7 @@
       var sub = r.d != null ? fmtDist(r.d) : String(it.date || '').replace(' 00:00:00', '').split(' ')[0].replace(/-/g, '/');
       row.appendChild(el('span', 'ss-related-text',
         '<b>' + esc(plain(it.title)) + '</b>' +
-        '<i><span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label) + '・' + esc(plain(it.author || '海佃特派員')) + (sub ? '・' + esc(sub) : '') + '</i>'));
+        '<i><span class="ss-dot ' + cat.cls + '"></span>' + esc(cat.label) + '・' + esc(plain(it.author || '海佃特派員')) + (sub ? '・' + esc(sub) : '') + (isSaved(it) ? '<em class="ss-saved-tag">已存</em>' : '') + '</i>'));
       row.appendChild(el('span', 'ss-related-play', it.uid === state.uid ? '<span class="ss-eq"><i></i><i></i><i></i></span>' : ICON.play));
       row.addEventListener('click', function () {
         if (isSheetMode()) setList(false);
@@ -1663,6 +1664,136 @@
     if (mq && mq.addEventListener) mq.addEventListener('change', function () { applyTheme(isNight()); });
   }
 
+  // ---------------------------------------------------------------- 9. 離線
+  // Service Worker 負責首頁、函式庫、圖磚與資料的備份；聲音由這裡整段存進快取，走讀時沒訊號也能聽。
+
+  var AUDIO_CACHE = 'ss-audio-v1';
+  var SAVE_MAX = 20;
+  var ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>';
+  var ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M5.5 12.5a11 11 0 0 1 13 0"/><path d="M9 16.5a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r="1"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+  var savedUrls = new Set();
+
+  function swOK() {
+    return 'serviceWorker' in navigator && !!window.caches &&
+      (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  }
+
+  function absUrl(u) { try { return new URL(u, location.href).href; } catch (e) { return u; } }
+  function isSaved(item) { return !!(item && item.audioUrl && savedUrls.has(absUrl(item.audioUrl))); }
+  function savedCount() { return items().filter(isSaved).length; }
+
+  function registerSW() {
+    if (!swOK()) return;
+    var go = function () {
+      setTimeout(function () {
+        navigator.serviceWorker.register('./sw.js').catch(function (e) { console.warn('離線快取未啟用', e); });
+      }, 2500);
+    };
+    if (document.readyState === 'complete') go();
+    else window.addEventListener('load', go, { once: true });
+  }
+
+  function loadSaved() {
+    if (!swOK()) return;
+    caches.open(AUDIO_CACHE).then(function (c) { return c.keys(); }).then(function (keys) {
+      savedUrls = new Set(keys.map(function (r) { return r.url; }));
+      syncOffline();
+    }).catch(function () {});
+  }
+
+  function saveItems(list, onProgress) {
+    return caches.open(AUDIO_CACHE).then(function (c) {
+      var i = 0, ok = 0;
+      function next() {
+        if (i >= list.length) return Promise.resolve(ok);
+        var item = list[i++];
+        var url = absUrl(item.audioUrl);
+        if (savedUrls.has(url)) { onProgress && onProgress(i, list.length); return next(); }
+        return fetch(url, { mode: 'cors' }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return c.put(url, r);
+        }).then(function () { savedUrls.add(url); ok++; }).catch(function () {})
+          .then(function () { onProgress && onProgress(i, list.length); return next(); });
+      }
+      return next();
+    }).then(function (n) { syncOffline(); return n; });
+  }
+
+  function clearSaved() {
+    return caches.delete(AUDIO_CACHE).then(function () { savedUrls = new Set(); syncOffline(); });
+  }
+
+  function itemsToSave() {
+    var m = window.map;
+    if (!m) return [];
+    var b = m.getBounds(), c = m.getCenter();
+    var centre = { lat: c.lat, lon: c.lng };
+    return items().filter(isPlayable)
+      .filter(function (i) { return b.contains([+i.lat, +i.lon]); })
+      .sort(function (a, b2) { return haversine(centre, a) - haversine(centre, b2); })
+      .slice(0, SAVE_MAX);
+  }
+
+  function syncOffline() {
+    var n = savedCount();
+    document.querySelectorAll('[data-ss-saved]').forEach(function (node) {
+      node.textContent = n ? '已存 ' + n + ' 段聲音，沒網路也能聽' : '還沒存任何聲音';
+    });
+    var clr = document.querySelector('.ss-off-clear');
+    if (clr) clr.style.display = n ? '' : 'none';
+    var pill = document.getElementById('ssOffline');
+    if (pill) {
+      var off = navigator.onLine === false;
+      pill.classList.toggle('is-on', off);
+      pill.querySelector('span').textContent = n ? '離線中 · 可以聽已存的 ' + n + ' 段聲音' : '離線中 · 還沒存下任何聲音';
+    }
+    if (window.globalMarkerMap) {
+      Object.keys(window.globalMarkerMap).forEach(function (uid) {
+        var mk = window.globalMarkerMap[uid];
+        if (mk && mk._icon) mk._icon.classList.toggle('ss-saved', isSaved(findItem(uid)));
+      });
+    }
+  }
+
+  function buildOffline() {
+    if (!swOK()) return;
+    var pill = el('div', 'ss-offline', ICON_OFF + '<span></span>');
+    pill.id = 'ssOffline';
+    pill.setAttribute('role', 'status');
+    document.body.appendChild(pill);
+    window.addEventListener('online', syncOffline);
+    window.addEventListener('offline', syncOffline);
+
+    var content = document.querySelector('#sidePanel .drawer-content');
+    if (content) {
+      var sec = el('div', 'ss-sec ss-sec-offline',
+        '<span class="panel-label">' + ICON_DOWN + ' 離線</span>' +
+        '<div class="ss-off-head"><b data-ss-saved>還沒存任何聲音</b><button type="button" class="ss-off-clear">清除</button></div>');
+      var row = rowButton('ss-row-save', ICON_DOWN, '存下這一帶的聲音', '把畫面裡最近的 ' + SAVE_MAX + ' 段存進手機，走讀時沒訊號也能聽', function () {
+        if (row.disabled) return;
+        var list = itemsToSave();
+        var b = row.querySelector('b'), i = row.querySelector('i');
+        if (!list.length) { b.textContent = '畫面裡沒有可以存的聲音'; setTimeout(function () { b.textContent = '存下這一帶的聲音'; }, 1800); return; }
+        row.disabled = true;
+        row.classList.add('is-busy');
+        saveItems(list, function (done, total) { b.textContent = '存到 ' + done + ' / ' + total + '…'; }).then(function () {
+          row.disabled = false;
+          row.classList.remove('is-busy');
+          b.textContent = '存好了';
+          setTimeout(function () { b.textContent = '存下這一帶的聲音'; }, 2200);
+          ssNote('這一帶的聲音已經存進手機，沒網路也能聽');
+        });
+      });
+      sec.appendChild(row);
+      sec.querySelector('.ss-off-clear').addEventListener('click', function () {
+        clearSaved().then(function () { ssNote('已清掉存下的聲音'); });
+      });
+      content.appendChild(sec);
+    }
+    loadSaved();
+    window.ssOffline = { save: saveItems, clear: clearSaved, saved: savedCount, nearby: itemsToSave, isSaved: isSaved };
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
@@ -1676,6 +1807,8 @@
     tidyLayout();
     tidyPanels();
     buildTheme();
+    buildOffline();
+    registerSW();
     bindKeys();
     bindBarSwipe();
     landOnSharedWork();
