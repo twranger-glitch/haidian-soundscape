@@ -1035,12 +1035,32 @@
     if (!a) return;
     a.onAuthStateChanged(function (u) {
       if (root) renderAuth();
+      navMineBtn(!!u);
       syncQueueBadge();
       if (u) processQueue();
       var reopen = false;
       try { reopen = sessionStorage.getItem(SS_REOPEN); if (u) sessionStorage.removeItem(SS_REOPEN); } catch (e) {}
       if (u && reopen && !(root && root.classList.contains('active'))) setTimeout(function () { open({ mine: reopen === 'mine' }); }, 400);
     });
+  }
+  // 上方選單的「我的投稿」：登入後才出現，放在「我的收藏」旁邊
+  function navMineBtn(show) {
+    var b = document.getElementById('navMineBtn');
+    if (!b) {
+      var fav = document.getElementById('navFavBtn');
+      var nav = fav ? fav.parentNode : document.querySelector('.glass-header .nav-buttons');
+      if (!nav) return;
+      b = document.createElement('button');
+      b.id = 'navMineBtn';
+      b.className = 'btn-latest';
+      b.type = 'button';
+      b.title = '我的投稿';
+      b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>' +
+        '<span class="full-text">我的投稿</span><span class="short-text">作品</span>';
+      b.addEventListener('click', function () { open({ mine: true }); });
+      nav.insertBefore(b, fav ? fav.nextSibling : nav.firstChild);
+    }
+    b.style.display = show ? 'flex' : 'none';
   }
   function renderAuth() {
     var box = $('#ssSubAuth', root);
@@ -1556,7 +1576,7 @@
     window.ssSubmit = {
       open: open, close: close, mine: function () { open({ mine: true }); }, ready: backendReady, config: CONFIG,
       queue: processQueue, pending: function () { return idbAll('queue'); }, mine: function () { return readJSON(LS_MINE) || []; },
-      _st: st, _prepare: prepareAudio
+      _st: st, _prepare: prepareAudio, _navMine: navMineBtn
     };
   }
 

@@ -1819,43 +1819,8 @@ body:has(#routePanel.ss-panel:not(.collapsed)) #sidePanel > .toggle-btn { opacit
 }
 
 /* ------------------------------------------------------------------ */
-/* 第八輪：夜間模式                                                     */
+/* 第八輪：小提示                                                       */
 /* ------------------------------------------------------------------ */
-
-/* 左下角的日夜切換 */
-#ssTheme {
-  position: fixed;
-  left: 20px;
-  bottom: calc(42px + var(--ss-bar-h));
-  z-index: 1200;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--ss-line);
-  background: rgba(251, 250, 246, 0.95);
-  color: var(--ss-ink);
-  box-shadow: 0 10px 24px -12px rgba(12, 26, 29, 0.45);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  appearance: none;
-  padding: 0;
-  transition: opacity 0.3s, transform 0.3s var(--ss-ease), background 0.3s, color 0.3s;
-}
-#ssTheme svg { width: 20px; height: 20px; }
-#ssTheme:hover { transform: translateY(-2px); }
-body.ss-splash-open #ssTheme,
-body.ss-sheet-open #ssTheme,
-body.ss-list-open #ssTheme,
-body.ss-card-open #ssTheme,
-body.listening-mode #ssTheme,
-body:has(.modal-overlay.active) #ssTheme { opacity: 0; pointer-events: none; }
-@media (max-width: 600px) {
-  #ssTheme { left: 12px; bottom: calc(30px + var(--ss-bar-h) + env(safe-area-inset-bottom, 0px)); width: 42px; height: 42px; }
-  body:has(#sidePanel:not(.collapsed)) #ssTheme,
-  body:has(#routePanel:not(.collapsed)) #ssTheme { opacity: 0; pointer-events: none; }
-}
-
 /* 小提示 */
 .ss-note {
   position: fixed;
@@ -1875,118 +1840,6 @@ body:has(.modal-overlay.active) #ssTheme { opacity: 0; pointer-events: none; }
   white-space: nowrap;
 }
 .ss-note.is-on { opacity: 1; transform: translate(-50%, 0); }
-
-/* 夜間的色票：文字變亮、紙變成深色，暗色面則更深一層 */
-body.ss-night {
-  --ss-ink: #eef0e9;
-  --ss-paper: #121f22;
-  --ss-line: rgba(255, 255, 255, 0.1);
-  --ss-muted: #9db0b1;
-  --ss-teal: #5ec8bd;
-  --ss-night-surface: rgba(20, 32, 35, 0.94);
-  --ss-night-deep: #0b1517;
-  --ss-night-raise: rgba(255, 255, 255, 0.07);
-  color-scheme: dark;
-}
-body.ss-night #map, body.ss-night .leaflet-container { background: #101c1f !important; }
-
-/* 底圖：臺灣通用電子地圖與 OSM 圖磚翻成夜色 */
-body.ss-night:not(.haidian-v4-mode-data) .ss-base-soft {
-  filter: invert(1) hue-rotate(185deg) brightness(0.82) contrast(0.9) saturate(0.3) !important;
-}
-
-/* 淺色面 → 夜色面 */
-body.ss-night .glass-header,
-body.ss-night .header-pull-tab,
-body.ss-night .haidian-header-minimize-btn,
-body.ss-night #rightToolsWrapper .tools-toggle-btn,
-body.ss-night .locate-me-btn,
-body.ss-night .haidian-v4-dock.is-minimized,
-body.ss-night #astra-gba-launcher,
-body.ss-night .drawer-panel > .toggle-btn,
-body.ss-night #ssTheme,
-body.ss-night .ss-panel .drawer-content,
-body.ss-night #ssList {
-  background: var(--ss-night-surface) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: var(--ss-ink) !important;
-  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
-}
-body.ss-night .glass-header .project-title,
-body.ss-night .glass-header .project-title span.sub-title,
-body.ss-night .glass-header .nav-buttons button { color: var(--ss-ink) !important; }
-body.ss-night .glass-header .project-title span.main-title { color: var(--ss-sand) !important; }
-body.ss-night .glass-header .nav-buttons button:not(.btn-submit):hover { background: var(--ss-night-raise) !important; }
-body.ss-night .glass-header .nav-buttons button.btn-submit { background: var(--ss-sand) !important; color: #0c1a1d !important; }
-body.ss-night .glass-header .nav-buttons button.btn-submit:hover { background: var(--ss-sand-deep) !important; }
-body.ss-night .locate-me-btn { color: var(--ss-teal) !important; }
-body.ss-night .ss-chip { background: var(--ss-night-surface); color: var(--ss-ink); border-color: rgba(255, 255, 255, 0.1); }
-body.ss-night .ss-chip .ss-chip-count { color: var(--ss-muted); }
-body.ss-night .ss-chip.is-on,
-body.ss-night .ss-list-sort button.is-on { background: var(--ss-sand); color: #0c1a1d; border-color: var(--ss-sand); }
-body.ss-night .ss-chip-tune { background: var(--ss-sand) !important; color: #0c1a1d !important; border-color: var(--ss-sand) !important; }
-body.ss-night .ss-chip-tune svg { color: #0c1a1d; }
-
-/* 暗色面在夜裡要再深一層，才分得出層次 */
-body.ss-night .ss-pg,
-body.ss-night .ss-panel .time-display,
-body.ss-night #routePanel.ss-panel .route-btn.ss-rt.active,
-body.ss-night .ss-list-row.is-now .ss-related-play,
-body.ss-night .marker-cluster-small div,
-body.ss-night .marker-cluster-medium div,
-body.ss-night .marker-cluster-large div { background: var(--ss-night-deep) !important; color: #fbf8ef !important; }
-body.ss-night .ss-pg-bar { background: rgba(255, 255, 255, 0.1); }
-body.ss-night #routePanel.ss-panel .route-btn.ss-rt.active { border-color: rgba(255, 255, 255, 0.08) !important; }
-body.ss-night .marker-cluster-small div, body.ss-night .marker-cluster-medium div, body.ss-night .marker-cluster-large div { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 8px 18px -8px rgba(0, 0, 0, 0.8) !important; }
-body.ss-night #ssBar, body.ss-night #ssIdle, body.ss-night .leaflet-tooltip.ss-tip, body.ss-night .listening-hint { border: 1px solid rgba(255, 255, 255, 0.1) !important; background: rgba(8, 18, 20, 0.94) !important; }
-
-/* 面板內的小面 */
-body.ss-night .ss-ph-close,
-body.ss-night .ss-list-close,
-body.ss-night .ss-search-clear { background: var(--ss-night-raise); color: var(--ss-ink); }
-body.ss-night .ss-row:hover,
-body.ss-night #routePanel.ss-panel .route-btn.ss-rt:hover,
-body.ss-night .ss-related-row:hover { background: rgba(255, 255, 255, 0.06) !important; }
-body.ss-night .ss-panel .search-input { background: rgba(255, 255, 255, 0.06) !important; color: var(--ss-ink); border-color: rgba(255, 255, 255, 0.12) !important; }
-body.ss-night .ss-panel .search-input::placeholder { color: var(--ss-muted); }
-body.ss-night .ss-panel #favFilterToggle { background: rgba(255, 255, 255, 0.18); }
-body.ss-night .ss-panel #favFilterToggle:checked { background: #e11d48; }
-body.ss-night .ss-panel .time-slider::-webkit-slider-thumb { border-color: var(--ss-sand); }
-body.ss-night .ss-panel .time-slider::-moz-range-thumb { border-color: var(--ss-sand); }
-body.ss-night .ss-ph-eyebrow { color: var(--ss-teal); }
-body.ss-night .ss-list-sort button { border-color: rgba(255, 255, 255, 0.14); color: var(--ss-muted); }
-body.ss-night .ss-list-empty { color: var(--ss-muted); }
-body.ss-night .ss-list-row.is-now .ss-related-text b { color: var(--ss-teal); }
-body.ss-night .ss-row-ico { background: rgba(94, 200, 189, 0.14); color: var(--ss-teal); }
-body.ss-night .ss-row-fav .ss-row-ico { background: rgba(225, 29, 72, 0.18); color: #fb7185; }
-body.ss-night .ss-row-ach .ss-row-ico { background: rgba(243, 194, 107, 0.18); color: var(--ss-sand); }
-body.ss-night #sidePanel.drawer-panel.collapsed > .toggle-btn::after,
-body.ss-night #routePanel.drawer-panel.collapsed > .toggle-btn::after { color: var(--ss-ink); }
-body.ss-night .drawer-panel > .toggle-btn:hover { color: var(--ss-sand) !important; }
-
-/* 作品卡與底部清單維持紙色，像在暗處拿著一張明信片；只把紙調暖一點 */
-body.ss-night #ssSheet,
-body.ss-night .leaflet-popup-content-wrapper:has(.ss-card) { background: #f4f1ea; }
-body.ss-night .leaflet-popup-tip { background: #f4f1ea; }
-body.ss-night .ss-related-row .ss-related-text b { color: #1b2a2d; }
-body.ss-night .ss-related-row .ss-related-text i { color: #5b6b6e; }
-body.ss-night .ss-related-title { color: #1b2a2d; }
-body.ss-night .ss-list-row .ss-related-text b { color: var(--ss-ink); }
-body.ss-night .ss-list-row .ss-related-text i { color: var(--ss-muted); }
-body.ss-night .haidian-v4-dock.is-minimized,
-body.ss-night .haidian-v4-dock.is-minimized * { color: var(--ss-ink) !important; }
-body.ss-night .haidian-v4-dock.is-minimized .haidian-v4-dock-toggle { background: var(--ss-night-raise) !important; border-color: rgba(255, 255, 255, 0.1) !important; }
-/* 紙色卡片裡的色票要回到白天，不然字會變白 */
-body.ss-night #ssSheet,
-body.ss-night .leaflet-popup-content-wrapper,
-body.ss-night .modal-overlay,
-body.ss-night #rightToolsWrapper .tools-menu-container {
-  --ss-ink: #0c1a1d;
-  --ss-muted: #5b6b6e;
-  --ss-line: rgba(12, 26, 29, 0.08);
-  --ss-teal: #0f766e;
-  color-scheme: light;
-}
 
 /* ------------------------------------------------------------------ */
 /* 第九輪：離線                                                         */
@@ -2046,8 +1899,7 @@ body.ss-splash-open .ss-offline { top: auto; bottom: 24px; }
   border-radius: 6px;
   vertical-align: 1px;
 }
-body.ss-night .ss-row-save .ss-row-ico { color: var(--ss-sand); background: rgba(243, 194, 107, 0.18); }
-body.ss-night .ss-saved-tag { color: var(--ss-sand); background: rgba(243, 194, 107, 0.16); }
+
 /* 已存下的聲音點：外圈多一道沙色 */
 .sound-dot-marker.ss-saved { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ss-sand), 0 6px 14px -6px rgba(12, 26, 29, 0.5) !important; }
 @media (max-width: 600px) {
@@ -2193,7 +2045,7 @@ body.ss-night .ss-saved-tag { color: var(--ss-sand); background: rgba(243, 194, 
 .ss-sub-copy dd { margin: 0; }
 .ss-sub-done-acts { display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 16px; }
 .ss-sub-done-acts .ss-sub-send { max-width: 320px; }
-body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle, body.ss-sub-open #ssTheme { opacity: 0 !important; pointer-events: none !important; }
+body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle { opacity: 0 !important; pointer-events: none !important; }
 
 /* ---------- 第十一輪：投稿流程 ---------- */
 .ss-sub-draftbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 20px 6px; padding: 9px 14px; border-radius: 12px; background: rgba(243, 194, 107, 0.22); font: 600 12.5px/1.3 var(--ss-sans); color: #7a5410; }
@@ -2256,7 +2108,6 @@ body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle, bo
   .ss-sub-way.is-mic, .ss-sub-way.is-file { padding: 12px; }
   .ss-sub-way.is-mic i, .ss-sub-way.is-file i { font-size: 11px; }
 }
-body.ss-night .ss-sub-way { border-color: rgba(255, 255, 255, 0.1); }
 
 /* ===== 第十三輪：必填／選填、還差什麼、Google 登入 ===== */
 .ss-sub-lead { margin: 8px 0 0; font: 400 13px/1.55 var(--ss-sans); color: var(--sub-muted); max-width: 46ch; }
@@ -2297,7 +2148,6 @@ body.ss-night .ss-sub-way { border-color: rgba(255, 255, 255, 0.1); }
 .ss-sub-auth-ico { width: 28px; height: 28px; border-radius: 50%; background: var(--ss-teal); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
 .ss-sub-auth-ico svg { width: 14px; height: 14px; }
 .ss-sub-auth.is-shake { animation: ssShake 0.5s ease; }
-body.ss-night .ss-sub-todo button { background: transparent; }
 
 /* ===== 我的投稿 ===== */
 .ss-sub-headacts { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
