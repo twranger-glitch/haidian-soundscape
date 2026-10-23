@@ -25,6 +25,27 @@
     <!-- 聲景介面改版層結束 -->
     
     <script>window.__ssDCL=false;document.addEventListener("DOMContentLoaded",function(){window.__ssDCL=true},{once:true});</script>
+    <script>
+    /* 測試站（*.vercel.app）專用：幾個 Cloudflare Worker 只允許正式站網域跨站呼叫，
+     * 在測試站就改走 vercel.json 設定的同源代理（/_w/…）。正式站不動。 */
+    (function(){
+      if (!/\.vercel\.app$/.test(location.hostname)) return;
+      var MAP = { 'haidian-heat-risk-api.yhzkiki.workers.dev': '/_w/heat-risk', 'haidian-dtm-proxy.yhzkiki.workers.dev': '/_w/dtm' };
+      window.ssProxyUrl = function (u) {
+        var m = /^https:\/\/([a-z0-9.-]+\.workers\.dev)(\/.*)?$/.exec(String(u));
+        return (m && MAP[m[1]]) ? location.origin + MAP[m[1]] + (m[2] || '/') : u;
+      };
+      var f = window.fetch;
+      window.fetch = function (input, init) {
+        if (typeof input === 'string' || input instanceof URL) input = window.ssProxyUrl(input);
+        else if (input && input.url && /^(GET|HEAD)$/.test(input.method || 'GET')) {
+          var p = window.ssProxyUrl(input.url);
+          if (p !== input.url) input = new Request(p, { method: input.method, headers: input.headers, mode: 'same-origin', credentials: input.credentials, cache: input.cache, signal: input.signal });
+        }
+        return f.call(this, input, init);
+      };
+    })();
+    </script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script defer src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
@@ -83,7 +104,7 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.26">
+    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.27">
 
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_START -->
 
@@ -96,7 +117,7 @@
 <!-- ===== END: RIGHT_TOOLS_UNIVERSAL_DESIGN ===== -->
 
 <link rel="stylesheet" href="./gba-estimated/integration.css?v=20261020.3">
-<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.26">
+<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.27">
 <script>
 /* 標題明體（Noto Serif TC，只取 700 一種字重）不擋首屏，也不讓頁面載到一半整頁重排：
  * - 第一次造訪：這次先用系統明體。頁面載完、瀏覽器有空時，只把目前畫面上明體文字用得到的字型分片抓進快取，不套用。
@@ -160,7 +181,7 @@
 })();
 </script>
 <noscript><link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional"></noscript>
-<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.26">
+<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.27">
 </head>
 <body>
 
@@ -399,40 +420,40 @@
     <div class="layer-folder-content">
 <section class="layer-subsection ss-history-list">
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1875" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1874 府城街道圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1875" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1874 府城街道圖</label><button type="button" class="ss-info" data-info="history_1875" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1875" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1875', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_tainan" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1895 臺南府迅速測圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_tainan" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1895 臺南府迅速測圖</label><button type="button" class="ss-info" data-info="history_tainan" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_tainan" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_tainan', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1900" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1900 臺南府城內外略圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1900" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1900 臺南府城內外略圖</label><button type="button" class="ss-info" data-info="history_1900" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1900" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1900', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1904" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1904 臺灣堡圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1904" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1904 臺灣堡圖</label><button type="button" class="ss-info" data-info="history_1904" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1904" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1904', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1920" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1920 臺南市區改正圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1920" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1920 臺南市區改正圖</label><button type="button" class="ss-info" data-info="history_1920" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1920" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1920', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1921" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1921 臺灣堡圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1921" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1921 臺灣堡圖</label><button type="button" class="ss-info" data-info="history_1921" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1921" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1921', this.value)"></div>
                 </div>
                 <div class="history-layer-item" style="margin-bottom:8px;">
-                    <label style="margin-bottom:0;"><input type="checkbox" value="history_1944" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1944 美軍航照圖</label>
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1944" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1944 美軍航照圖</label><button type="button" class="ss-info" data-info="history_1944" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                     <div id="ctrl_history_1944" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1944', this.value)"></div>
                 </div>
 </section>
 <section class="layer-subsection">
 <div class="layer-subsection-title ss-rt-title">文史調查圖資</div>
-                <label style="display:flex; align-items:center; gap:8px; margin-bottom:0; cursor:pointer; width:100%;">
+                <div class="ss-info-row"><label style="display:flex; align-items:center; gap:8px; margin-bottom:0; cursor:pointer; width:100%;">
     <input type="checkbox" id="nanshanToggle" onchange="toggleNanshanLayer(this.checked)" style="accent-color:#8b5cf6; margin:0; width:17px; height:17px; cursor:pointer; flex-shrink:0;">
     <span>南山公墓歷史名人墓塚</span>
-</label>
+</label><button type="button" class="ss-info" data-info="nanshan" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
 </section>
     </div>
 </details>
@@ -809,23 +830,23 @@
                     <input type="range" id="hydrologyOpacity" min="0.1" max="1" step="0.05" value="0.55" style="width:100%; accent-color:#0f766e; margin:0 0 10px 0;" oninput="updateHydrologyOpacity(this.value)">
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">府城水文史</div>
-                    <label><input type="checkbox" id="hydro_tainan_water_texture" onchange="toggleHydrologyLayer('tainan_water_texture', this.checked)" style="accent-color:#0f766e;"> 府城歷史水系紋理</label>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_tainan_water_texture" onchange="toggleHydrologyLayer('tainan_water_texture', this.checked)" style="accent-color:#0f766e;"> 府城歷史水系紋理</label><button type="button" class="ss-info" data-info="hydro_tainan_water_texture" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">海岸與防護</div>
-                    <label><input type="checkbox" id="hydro_SEAWALLZONE" onchange="toggleHydrologyLayer('SEAWALLZONE', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label>
-                    <label><input type="checkbox" id="hydro_CoastalBufferZone" onchange="toggleHydrologyLayer('CoastalBufferZone', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label>
-                    <label><input type="checkbox" id="hydro_CoastalProtectionZone" onchange="toggleHydrologyLayer('CoastalProtectionZone', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_SEAWALLZONE" onchange="toggleHydrologyLayer('SEAWALLZONE', this.checked)" style="accent-color:#0f766e;"> 海堤區域</label><button type="button" class="ss-info" data-info="hydro_SEAWALLZONE" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_CoastalBufferZone" onchange="toggleHydrologyLayer('CoastalBufferZone', this.checked)" style="accent-color:#0f766e;"> 海岸緩衝區</label><button type="button" class="ss-info" data-info="hydro_CoastalBufferZone" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_CoastalProtectionZone" onchange="toggleHydrologyLayer('CoastalProtectionZone', this.checked)" style="accent-color:#0f766e;"> 海岸保護區</label><button type="button" class="ss-info" data-info="hydro_CoastalProtectionZone" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">排水治理</div>
-                    <label><input type="checkbox" id="hydro_REGDAREA" onchange="toggleHydrologyLayer('REGDAREA', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_REGDAREA" onchange="toggleHydrologyLayer('REGDAREA', this.checked)" style="accent-color:#0f766e;"> 區域排水治理區</label><button type="button" class="ss-info" data-info="hydro_REGDAREA" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">水庫與保護區</div>
-                    <label><input type="checkbox" id="hydro_reservoir" onchange="toggleHydrologyLayer('reservoir', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label>
-                    <label><input type="checkbox" id="hydro_TWQPROT" onchange="toggleHydrologyLayer('TWQPROT', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_reservoir" onchange="toggleHydrologyLayer('reservoir', this.checked)" style="accent-color:#0f766e;"> 水庫範圍</label><button type="button" class="ss-info" data-info="hydro_reservoir" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_TWQPROT" onchange="toggleHydrologyLayer('TWQPROT', this.checked)" style="accent-color:#0f766e;"> 水質水量保護區</label><button type="button" class="ss-info" data-info="hydro_TWQPROT" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
 
                     <div style="font-size:11px; color:#164e63; font-weight:800; margin:10px 0 6px 0;">地下水與地層下陷</div>
-                    <label><input type="checkbox" id="hydro_Salinizationzone" onchange="toggleHydrologyLayer('Salinizationzone', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label>
-                    <label><input type="checkbox" id="hydro_LASUBSTA" onchange="toggleHydrologyLayer('LASUBSTA', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_Salinizationzone" onchange="toggleHydrologyLayer('Salinizationzone', this.checked)" style="accent-color:#0f766e;"> 地下水鹽化區</label><button type="button" class="ss-info" data-info="hydro_Salinizationzone" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div class="ss-info-row"><label><input type="checkbox" id="hydro_LASUBSTA" onchange="toggleHydrologyLayer('LASUBSTA', this.checked)" style="accent-color:#0f766e;"> 地層下陷監測站</label><button type="button" class="ss-info" data-info="hydro_LASUBSTA" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
                 </div>
 </section>
     </div>
@@ -907,32 +928,17 @@
                     </summary>
                     <div class="layer-folder-content">
                         <section class="layer-subsection nimby-facility-panel" id="nimbyFacilityModule">
-                            <div class="nimby-hero">
-                                <div class="nimby-hero-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><circle cx="12" cy="12" r="7"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path></svg>
-                                </div>
-                                <div>
-                                    <span class="nimby-eyebrow">生活環境與設施</span>
-                                    <h3>周邊鄰避設施</h3>
-                                    <p>以目前地圖中心或指定點位，查詢周邊鄰避設施。</p>
-                                </div>
-                                <span class="nimby-api-stamp">COM_012<small>開放 API</small></span>
-                            </div>
-                
-                            <label class="nimby-main-toggle">
-                                <span class="nimby-toggle-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"></path><path d="M5 20V10l7-5 7 5v10"></path><path d="M9 20v-5h6v5"></path><path d="M12 8v3"></path></svg>
-                                </span>
-                                <span class="nimby-toggle-copy">
-                                    <strong>顯示周邊鄰避設施</strong>
-                                    <small id="nimbyFacilityHint">以目前地圖中心查詢</small>
-                                </span>
-                                <span class="nimby-switch">
+                            <div class="ss-info-row">
+                                <label class="nimby-layer-row">
                                     <input type="checkbox" id="nimbyFacilityToggle" onchange="toggleNimbyFacilityLayer(this.checked)">
-                                    <span class="nimby-switch-track" aria-hidden="true"></span>
-                                </span>
-                            </label>
-                
+                                    <span class="nimby-toggle-copy">
+                                        <strong>周邊鄰避設施</strong>
+                                        <small id="nimbyFacilityHint">以目前地圖中心查詢</small>
+                                    </span>
+                                </label>
+                                <button type="button" class="ss-info" data-info="nimby" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button>
+                            </div>
+
                             <div class="nimby-controls" id="nimbyFacilityControlPanel" hidden>
                                 <div class="nimby-topline">
                                     <span class="nimby-kicker">圖層查詢</span>
@@ -972,7 +978,7 @@
                 
                                 <div class="nimby-meta">
                                     <code id="nimbyFacilityQueryInfo">查詢中心：尚未設定</code>
-                                    <a class="nimby-doc-link" href="https://maps.nlsc.gov.tw/S09SOA/pro/Api_ajax_list.jsp" target="_blank" rel="noopener noreferrer">API 說明 ↗</a>
+                                    <a class="nimby-doc-link" href="https://maps.nlsc.gov.tw/S09SOA/pro/Api_ajax_list.jsp" target="_blank" rel="noopener noreferrer">國土測繪中心 COM_012 開放 API ↗</a>
                                 </div>
                             </div>
                         </section>
@@ -1237,16 +1243,16 @@
         </div>
     </div>
     
-    <script defer src="./src/app/app-main.js?v=20261023.26"></script>
-<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.26"></script>
-<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.26"></script>
-<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.26"></script>
-<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.26"></script>
-<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.26"></script>
+    <script defer src="./src/app/app-main.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.27"></script>
+<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.27"></script>
+<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.27"></script>
 <!-- 探究地景專用：熱風險、氣象、淹水災情、日照樹蔭、路線曝曬、GBA 估計 -->
 <script defer src="./src/heat-risk.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/cwa-temperature-layer.js?v=9.0.0-dev37.8"></script>
-<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.26"></script>
+<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.27"></script>
 <script defer src="./config.shademap.js?v=9.0.0-dev37.8"></script>
 <script defer src="./config.route-exposure.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/source-clock.js?v=9.0.0-dev37.8"></script>
@@ -1265,9 +1271,10 @@
 <script defer src="./src/nationwide-regression-suite.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/route-source-provenance.js?v=20261020.2"></script>
 <script defer src="./src/route-exposure.js?v=9.0.0-dev37.8&core=37.9.9.16.11&patch=mapped-source-handoff-20261020.2"></script>
-<script defer src="./src/app/gis-menu.js?v=20261023.26"></script>
+<script defer src="./src/app/gis-menu.js?v=20261023.27"></script>
 <!-- 聲景介面改版層：兩個分站共用 -->
-<script defer src="./src/soundscape-basemap.js?v=20261023.26"></script>
-<script defer src="./src/soundscape-ui.js?v=20261023.26"></script>
+<script defer src="./src/soundscape-basemap.js?v=20261023.27"></script>
+<script defer src="./src/app/layer-info.js?v=20261023.27"></script>
+<script defer src="./src/soundscape-ui.js?v=20261023.27"></script>
 <script type="module" src="./gba-estimated/integration.mjs?v=20261021.8"></script>
 </body></html>

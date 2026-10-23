@@ -7,7 +7,7 @@
  * - 資料庫 JSON：先走網路，成功就備份，斷線時用備份。
  * 想停用：把 DISABLED 改成 true 重新部署，所有人的快取會自動清掉並解除註冊。
  */
-var VERSION = "20261023.26";
+var VERSION = "20261023.27";
 var DISABLED = false;
 var SHELL = 'ss-shell-' + VERSION;
 var CDN = 'ss-cdn-' + VERSION;
@@ -175,6 +175,7 @@ self.addEventListener('fetch', function (e) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
   if (req.mode === 'navigate') { e.respondWith(navigate(req)); return; }
+  if (url.origin === self.location.origin && url.pathname.indexOf('/_w/') === 0) return; // 測試站的同源代理：即時資料，不快取
   if (url.origin === self.location.origin) { e.respondWith(staleWhileRevalidate(SHELL, req)); return; }
   if (url.hostname.endsWith(DATA_HOST)) { e.respondWith(dataFirst(req, url)); return; }
   if (hostIn(url, TILE_HOSTS)) { e.respondWith(cacheFirst(TILES, req, TILE_MAX)); return; }

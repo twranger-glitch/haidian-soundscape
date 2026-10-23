@@ -45,6 +45,7 @@
   var CAT_CLS = { '自然絮語': 'cat-nature', '常民聲': 'cat-culture', '活動與產業': 'cat-industry', '空間聲': 'cat-space', '歲月回音': 'cat-history' };
   var DEFAULT_CENTER = [23.03, 120.21];
   var LS_AUTHOR = 'ss-sub-author';
+  var LS_CONSENT = 'ss-sub-consent-v1';
   var LS_DRAFT = 'ss-sub-draft-v1';
   var LS_MINE = 'ss-my-subs-v1';
   var LS_PLACE = 'ss-place-v1';
@@ -314,6 +315,14 @@
           '<div class="ss-sub-headacts"><button type="button" class="ss-sub-minebtn" id="ssSubMineBtn">我的投稿</button>' +
           '<button type="button" class="ss-sub-close" aria-label="關閉">' + I.close + '</button></div>' +
         '</div>' +
+        '<div class="ss-sub-mission" id="ssSubMission">' +
+          '<ol class="ss-sub-steps" aria-label="任務三步驟">' +
+            '<li><i>🎧</i><b>打開耳朵</b><span>找一個吸引你的聲音</span></li>' +
+            '<li><i>📱</i><b>按下錄影</b><span>10～30 秒，自動帶上位置</span></li>' +
+            '<li><i>✍️</i><b>寫下故事</b><span>它為什麼值得被記錄</span></li>' +
+          '</ol>' +
+          '<button type="button" class="ss-sub-info" id="ssSubGuideBtn" aria-label="完整任務說明" title="完整任務說明">i</button>' +
+        '</div>' +
         '<div class="ss-sub-draftbar" id="ssSubDraftBar" hidden><span>已接回上次沒送出的草稿</span><button type="button" class="ss-sub-link" id="ssSubDraftClear">清掉重來</button></div>' +
         '<form class="ss-sub-form" novalidate>' +
 
@@ -382,10 +391,64 @@
             '<div class="ss-sub-auth" id="ssSubAuth" hidden></div>' +
             '<div class="ss-sub-status" id="ssSubStatus"></div>' +
             '<div class="ss-sub-progress" id="ssSubProgress" hidden><i></i></div>' +
+            '<div class="ss-sub-consent" id="ssSubConsent">' +
+              '<label><input type="checkbox" id="ssSubAgree"><span>我讀過並同意</span></label>' +
+              '<button type="button" class="ss-sub-link" id="ssSubRulesBtn">採集倫理與投稿規範</button>' +
+            '</div>' +
             '<button type="submit" class="ss-sub-send" id="ssSubSend">' + I.check + '<span>送出到地圖</span></button>' +
             '<p class="ss-sub-fine">送出即同意以 CC BY-NC 授權，讓大家在非商業用途下聆聽與引用；可隨時申請下架。</p>' +
           '</div>' +
         '</form>' +
+        '<div class="ss-sub-guide" id="ssSubGuide" hidden>' +
+          '<div class="ss-sub-guide-head">' +
+            '<div class="ss-sub-tabs" role="tablist"><button type="button" class="is-on" data-tab="mission" role="tab">任務說明</button><button type="button" data-tab="rules" role="tab">採集規範</button></div>' +
+            '<button type="button" class="ss-sub-close" id="ssSubGuideClose" aria-label="關閉說明">' + I.close + '</button>' +
+          '</div>' +
+          '<div class="ss-sub-guide-body">' +
+            '<div class="ss-sub-guide-tab" data-tab="mission">' +
+              '<span class="ss-sub-eyebrow">聲音收集站</span><h3>各位聲音探索員，歡迎！</h3>' +
+              '<p>家鄉是認識世界的起點，而聆聽，是我們擁抱土地的方式。我們正在一起打造一張屬於這片土地的「聲景地圖」。請打開你的耳朵，尋找那些正在發生的聲音，並用影像把它們留下來。你的每一次投稿，都是地圖上一個會發聲的座標。</p>' +
+              '<h4>任務三步驟</h4>' +
+              '<ol class="ss-sub-guide-steps">' +
+                '<li><b>打開耳朵</b>靜下心來，在溪畔或社區找到一個吸引你的聲音。</li>' +
+                '<li><b>按下錄影</b>錄 10～30 秒的影片。畫面可以對準發聲源或周遭環境，重點是聲音；影片會幫系統自動抓到你的位置。</li>' +
+                '<li><b>寫下故事</b>填寫表單，告訴我們這個聲音的故事。</li>' +
+              '</ol>' +
+              '<h4>採集小提醒</h4>' +
+              '<ul class="ss-sub-guide-tips">' +
+                '<li>專注你想記錄的聲音，盡量避開不相關的噪音。</li>' +
+                '<li>注意環境安全，絕對不要靠近危險區域。</li>' +
+                '<li>想一想：這個聲音，為什麼值得被記錄下來？</li>' +
+              '</ul>' +
+              '<p class="ss-sub-guide-cta">準備好了嗎？出發，去聽見這片土地吧！</p>' +
+            '</div>' +
+            '<div class="ss-sub-guide-tab" data-tab="rules" hidden>' +
+              '<span class="ss-sub-eyebrow">採集倫理與投稿規範</span><h3>保護自己，也保護別人</h3>' +
+              '<p>參與聲音地景採集的同學，請遵守以下數位小公民規範。</p>' +
+              '<details class="ss-sub-rule" open><summary><i>1</i>我會保護自己和別人的隱私</summary><ul>' +
+                '<li>強烈建議用「暱稱」投稿，不說出、不錄到可辨識身分的資訊（全名、地址、電話等）。</li>' +
+                '<li>錄到他人聲音時，只能是「一般路人聲音」或「聽不出是誰」的談話，不可清楚錄下私下談話內容。</li>' +
+                '<li>不在錄音中透露別人的秘密或私人糾紛。</li></ul></details>' +
+              '<details class="ss-sub-rule"><summary><i>2</i>我錄的聲音要「先問過」再錄</summary><ul>' +
+                '<li>要錄到特定同學、老師或家人的聲音前，必須先告知並得到同意。</li>' +
+                '<li>絕不偷錄他人的私下對話。</li>' +
+                '<li>課堂上的教學內容，需先徵求老師允許。</li></ul></details>' +
+              '<details class="ss-sub-rule"><summary><i>3</i>我尊重著作權，只上傳「自己有權利」的聲音</summary><ul>' +
+                '<li>作品以「親自錄製」為主，禁止側錄網路音樂、電視節目或廣播上傳。</li>' +
+                '<li>背景有流行音樂或廣告歌時，請盡量避開或縮短，避免侵權。</li>' +
+                '<li>投稿即代表同意將作品授權學校於教學或校園活動中無償展示播放。</li></ul></details>' +
+              '<details class="ss-sub-rule"><summary><i>4</i>我會用友善、不傷人的聲音</summary><ul>' +
+                '<li>使用文明用語，不說髒話、不取笑他人。</li>' +
+                '<li>絕不錄製或散布任何歧視、霸凌、威脅或謠言內容。</li>' +
+                '<li>現場有人爭吵或不適時，請勿錄音上傳，以免造成二次傷害。</li></ul></details>' +
+              '<details class="ss-sub-rule"><summary><i>5</i>我會遵守學校與平台規範</summary><ul>' +
+                '<li>遵守學校設備使用規定，不在禁止錄音的時地錄製。</li>' +
+                '<li>不利用錄音檔進行惡意剪輯或私下散布嘲笑。</li>' +
+                '<li>經管理員認定有個資、隱私或侵權疑慮時，平台有權逕行下架作品。</li></ul></details>' +
+            '</div>' +
+          '</div>' +
+          '<div class="ss-sub-guide-foot"><button type="button" class="ss-sub-send" id="ssSubGuideAgree">' + I.check + '<span>我讀完了，同意規範</span></button></div>' +
+        '</div>' +
         '<div class="ss-sub-done" id="ssSubDone" hidden></div>' +
         '<div class="ss-sub-mine" id="ssSubMine" hidden></div>' +
       '</div>';
@@ -444,16 +507,52 @@
     $('#ssSubVideoPos', root).addEventListener('click', function () { if (st.videoGps) setPos(st.videoGps.lat, st.videoGps.lon, 'video', true); });
     $('#ssSubWhen', root).addEventListener('input', function () { st.whenTouched = true; });
     $('#ssSubDraftClear', root).addEventListener('click', function () { resetForm(); clearDraft(); $('#ssSubDraftBar', root).hidden = true; });
+    var agree = $('#ssSubAgree', root);
+    agree.checked = !!readLS(LS_CONSENT);
+    agree.addEventListener('change', function () {
+      if (agree.checked) writeLS(LS_CONSENT, new Date().toISOString()); else { try { localStorage.removeItem(LS_CONSENT); } catch (e) {} }
+      refreshTodo();
+    });
+    $('#ssSubGuideBtn', root).addEventListener('click', function () { openGuide('mission'); });
+    $('#ssSubRulesBtn', root).addEventListener('click', function () { openGuide('rules'); });
+    $('#ssSubGuideClose', root).addEventListener('click', closeGuide);
+    $('#ssSubGuideAgree', root).addEventListener('click', function () {
+      if (!agree.checked) { agree.checked = true; agree.dispatchEvent(new Event('change')); }
+      closeGuide();
+    });
+    $('.ss-sub-tabs', root).addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('button[data-tab]');
+      if (b) showGuideTab(b.dataset.tab);
+    });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
     var author = readLS(LS_AUTHOR);
     if (author) $('#ssSubAuthor', root).value = author;
     ['ssSubTitleIn', 'ssSubAuthor', 'ssSubDesc', 'ssSubWhen', 'ssSubEmail'].forEach(function (id) {
       $('#' + id, root).addEventListener('input', function () { syncMeta(); saveDraft(); });
     });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('active')) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key !== 'Escape' || !root.classList.contains('active')) return; if (!$('#ssSubGuide', root).hidden) closeGuide(); else close(); });
     window.addEventListener('resize', debounce(drawWave, 150));
     return root;
   }
+
+  // ------------------------------------------------------------ 任務說明 / 採集規範
+  function showGuideTab(name) {
+    Array.prototype.forEach.call(root.querySelectorAll('.ss-sub-tabs button'), function (b) { b.classList.toggle('is-on', b.dataset.tab === name); b.setAttribute('aria-selected', b.dataset.tab === name ? 'true' : 'false'); });
+    Array.prototype.forEach.call(root.querySelectorAll('.ss-sub-guide-tab'), function (t) { t.hidden = t.dataset.tab !== name; });
+    $('.ss-sub-guide-body', root).scrollTop = 0;
+  }
+  function openGuide(tab) {
+    var g = $('#ssSubGuide', root);
+    showGuideTab(tab || 'mission');
+    g.hidden = false;
+    requestAnimationFrame(function () { g.classList.add('is-on'); });
+  }
+  function closeGuide() {
+    var g = $('#ssSubGuide', root);
+    g.classList.remove('is-on');
+    setTimeout(function () { g.hidden = true; }, 220);
+  }
+  function agreed() { return !!(root && $('#ssSubAgree', root).checked); }
 
   // ------------------------------------------------------------ open / close
   function open(opts) {
@@ -965,7 +1064,8 @@
       { sec: 'audio', label: '聲音', ok: !!st.audioBlob },
       { sec: 'pos', label: '位置', ok: !!st.pos },
       { sec: 'meta', label: '標題', ok: !!$('#ssSubTitleIn', root).value.trim() },
-      { sec: 'meta', label: '類別', ok: !!st.cat }
+      { sec: 'meta', label: '類別', ok: !!st.cat },
+      { sec: 'consent', label: '同意規範', ok: agreed() }
     ];
     if (needLogin()) list.push({ sec: 'auth', label: 'Google 登入', ok: !!authValid() });
     return list;
@@ -982,7 +1082,7 @@
     $('#ssSubSend', root).classList.toggle('is-pending', !!left);
   }
   function jumpTo(sec) {
-    var s = sec === 'auth' ? $('#ssSubAuth', root) : root.querySelector('.ss-sub-sec[data-sec="' + sec + '"]');
+    var s = sec === 'auth' ? $('#ssSubAuth', root) : sec === 'consent' ? $('#ssSubConsent', root) : root.querySelector('.ss-sub-sec[data-sec="' + sec + '"]');
     if (!s) return;
     s.classList.add('is-shake');
     s.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1100,6 +1200,7 @@
     if (!st.pos) problems.push({ sec: 'pos', msg: '把圖釘拖到採集的地點' });
     if (!$('#ssSubTitleIn', root).value.trim()) problems.push({ sec: 'meta', msg: '給這段聲音一個標題' });
     if (!st.cat) problems.push({ sec: 'meta', msg: '選一個類別' });
+    if (!agreed()) problems.push({ sec: 'consent', msg: '先讀一下採集倫理與投稿規範，再勾選同意' });
     if (needLogin() && !authValid()) problems.push({ sec: 'auth', msg: inAppBrowser() ? '請改用 Safari 或 Chrome 打開，才能用 Google 登入' : '最後一步：按「用 Google 帳號登入」' });
     return problems;
   }
