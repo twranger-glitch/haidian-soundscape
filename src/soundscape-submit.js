@@ -311,7 +311,8 @@
       '<div class="ss-sub-box" role="dialog" aria-modal="true" aria-labelledby="ssSubTitle">' +
         '<div class="ss-sub-head">' +
           '<div><span class="ss-sub-eyebrow">投稿</span><h2 class="ss-sub-title" id="ssSubTitle">把一段聲音放上地圖</h2><p class="ss-sub-lead" id="ssSubLead">只有 4 件事一定要做：<b>聲音、位置、標題、類別</b>。其他都可以跳過。</p></div>' +
-          '<button type="button" class="ss-sub-close" aria-label="關閉">' + I.close + '</button>' +
+          '<div class="ss-sub-headacts"><button type="button" class="ss-sub-minebtn" id="ssSubMineBtn">我的投稿</button>' +
+          '<button type="button" class="ss-sub-close" aria-label="關閉">' + I.close + '</button></div>' +
         '</div>' +
         '<div class="ss-sub-draftbar" id="ssSubDraftBar" hidden><span>已接回上次沒送出的草稿</span><button type="button" class="ss-sub-link" id="ssSubDraftClear">清掉重來</button></div>' +
         '<form class="ss-sub-form" novalidate>' +
@@ -386,6 +387,7 @@
           '</div>' +
         '</form>' +
         '<div class="ss-sub-done" id="ssSubDone" hidden></div>' +
+        '<div class="ss-sub-mine" id="ssSubMine" hidden></div>' +
       '</div>';
     document.body.appendChild(root);
     form = $('.ss-sub-form', root);
@@ -415,6 +417,7 @@
     }
 
     $('.ss-sub-close', root).addEventListener('click', close);
+    $('#ssSubMineBtn', root).addEventListener('click', showMine);
     root.addEventListener('click', function (e) { if (e.target === root) close(); });
     $('#ssSubRec', root).addEventListener('click', toggleRec);
     $('#ssSubMic', root).addEventListener('click', toggleRec);
@@ -460,7 +463,9 @@
     if (typeof window.closeModal === 'function') { try { window.closeModal('submitChoiceModal'); } catch (e) {} }
     if (window.map && typeof window.map.closePopup === 'function') window.map.closePopup();
     $('#ssSubDone', root).hidden = true;
+    $('#ssSubMine', root).hidden = true;
     form.hidden = false;
+    if (opts.mine) setTimeout(showMine, 0);
     if (!$('#ssSubWhen', root).value) $('#ssSubWhen', root).value = localDateTime();
     root.classList.add('active');
     document.body.classList.add('ss-sub-open');
@@ -1033,8 +1038,8 @@
       syncQueueBadge();
       if (u) processQueue();
       var reopen = false;
-      try { reopen = sessionStorage.getItem(SS_REOPEN) === '1'; if (u) sessionStorage.removeItem(SS_REOPEN); } catch (e) {}
-      if (u && reopen && !(root && root.classList.contains('active'))) setTimeout(function () { open(); }, 400);
+      try { reopen = sessionStorage.getItem(SS_REOPEN); if (u) sessionStorage.removeItem(SS_REOPEN); } catch (e) {}
+      if (u && reopen && !(root && root.classList.contains('active'))) setTimeout(function () { open({ mine: reopen === 'mine' }); }, 400);
     });
   }
   function renderAuth() {
@@ -1412,12 +1417,14 @@
       '<div class="ss-sub-done-acts">' +
         '<button type="button" class="ss-sub-send" id="ssSubBack">' + I.pin + '<span>' + (queued || payload._review ? '回到地圖' : '去看那個點') + '</span></button>' +
         '<button type="button" class="ss-sub-chipbtn" id="ssSubAgain">再投一段</button>' +
+        (needLogin() ? '<button type="button" class="ss-sub-chipbtn" id="ssSubSeeMine">看我的投稿</button>' : '') +
       '</div>';
     $('#ssSubBack', root).addEventListener('click', function () {
       close(); resetForm();
       if (!queued && !payload._review && window.map) { try { window.map.flyTo([payload.lat, payload.lon], Math.max(window.map.getZoom(), 16)); } catch (e) {} }
     });
     $('#ssSubAgain', root).addEventListener('click', function () { resetForm(); box.hidden = true; form.hidden = false; });
+    if ($('#ssSubSeeMine', root)) $('#ssSubSeeMine', root).addEventListener('click', function () { resetForm(); showMine(); });
   }
 
   function clearPhoto() {
@@ -1446,6 +1453,76 @@
     if (st.miniMap) setPos(st.miniMap.getCenter().lat, st.miniMap.getCenter().lng, '', false, true);
     markSec('photo', false); markSec('meta', false);
     status(''); progress(null);
+  }
+
+  // ------------------------------------------------------------ 我的投稿：登入後向後端查自己每一件的狀態（含以前用表單投的）
+  var MINE_STATE = {
+    live: { label: '已上架', cls: 'is-live' },
+    review: { label: '待審中', cls: 'is-review', hint: '內容裡有些字詞要管理者先看過' },
+    working: { label: '處理中', cls: 'is-working', hint: '通常幾分鐘內會好' },
+    problem: { label: '處理中', cls: 'is-working', hint: '管理者會協助處理' },
+    hidden: { label: '已下架', cls: 'is-hidden' },
+    queued: { label: '排隊中', cls: 'is-working', hint: '還在這台裝置裡，有網路就會送出' }
+  };
+  function showMine() {
+    var box = $('#ssSubMine', root);
+    form.hidden = true;
+    $('#ssSubDone', root).hidden = true;
+    box.hidden = false;
+    var head = '<div class="ss-sub-mine-head"><button type="button" class="ss-sub-link" id="ssSubMineBack">← 回到投稿</button><h3>我的投稿</h3></div>';
+    var back = function () { $('#ssSubMineBack', box).addEventListener('click', function () { box.hidden = true; form.hidden = false; }); };
+    if (!backendReady()) { box.innerHTML = head + '<p class="ss-sub-mine-empty">站內投稿還沒接上後端。</p>'; back(); return; }
+    if (needLogin() && !authValid()) {
+      box.innerHTML = head + '<p class="ss-sub-mine-empty">登入後就能看到你投過的每一件、現在是什麼狀態。</p><div class="ss-sub-mine-login"><button type="button" class="ss-sub-gbtn" id="ssSubMineLogin"><span class="ss-sub-g">G</span>用 Google 帳號登入</button></div>';
+      back();
+      $('#ssSubMineLogin', box).addEventListener('click', function () {
+        var a = fbAuth();
+        if (!a) return;
+        a.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(showMine).catch(function (err) {
+          if (/popup-blocked|operation-not-supported/.test(err && err.code || '')) { try { sessionStorage.setItem(SS_REOPEN, 'mine'); } catch (e) {} a.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); }
+        });
+      });
+      return;
+    }
+    box.innerHTML = head + '<p class="ss-sub-mine-empty">讀取中…</p>';
+    back();
+    var queued = (readJSON(LS_MINE) || []).filter(function (m) { return m.queued; }).map(function (m) { return { uid: m.uid, title: m.title, category: m.category, at: '', state: 'queued' }; });
+    authToken().then(function (t) {
+      return fetch(CONFIG.endpoint, { method: 'POST', body: JSON.stringify({ action: 'mine', idToken: t }) }).then(function (r) { return r.json(); });
+    }).then(function (j) {
+      if (!j || !j.ok) throw new Error(j && j.error || '讀不到');
+      if (box.hidden) return;
+      renderMine(queued.concat(j.items || []), authValid());
+    }).catch(function (err) {
+      if (box.hidden) return;
+      box.innerHTML = head + '<p class="ss-sub-mine-empty">讀不到你的投稿：' + esc(err && err.message || err) + '</p>';
+      back();
+    });
+  }
+  function renderMine(items, who) {
+    var box = $('#ssSubMine', root);
+    var live = {};
+    (window.allMarkersData || []).forEach(function (i) { live[i.uid] = 1; });
+    var count = {};
+    items.forEach(function (x) { count[x.state] = (count[x.state] || 0) + 1; });
+    box.innerHTML = '<div class="ss-sub-mine-head"><button type="button" class="ss-sub-link" id="ssSubMineBack">← 回到投稿</button><h3>我的投稿</h3>' +
+      (who ? '<p>' + esc(who.email) + '・共 ' + items.length + ' 件' + (count.live ? '，' + count.live + ' 件在地圖上' : '') + '</p>' : '') + '</div>' +
+      (items.length ? '<ul class="ss-sub-mine-list">' + items.map(function (x) {
+        var st = MINE_STATE[x.state] || MINE_STATE.working;
+        var canSee = x.state === 'live' && live[x.uid];
+        return '<li><div class="ss-sub-mine-t"><b>' + esc(x.title) + '</b><i>' + esc([x.category, x.at].filter(Boolean).join('・')) + (st.hint ? '・' + esc(st.hint) : '') + '</i></div>' +
+          '<span class="ss-sub-mine-st ' + st.cls + '">' + st.label + '</span>' +
+          (canSee ? '<button type="button" class="ss-sub-chipbtn" data-see="' + esc(x.uid) + '">' + I.pin + '看</button>' : '') + '</li>';
+      }).join('') + '</ul>' : '<p class="ss-sub-mine-empty">這個帳號還沒有投稿紀錄。投第一段吧！</p>') +
+      '<p class="ss-sub-fine">想下架自己的作品，請寫信給管理者，或在作品卡片上按「原作者申請下架」。</p>';
+    $('#ssSubMineBack', box).addEventListener('click', function () { box.hidden = true; form.hidden = false; });
+    box.querySelectorAll('[data-see]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-see');
+        close();
+        if (typeof window.focusMarkerOnMap === 'function') setTimeout(function () { window.focusMarkerOnMap(uid); }, 250);
+      });
+    });
   }
 
   // ------------------------------------------------------------ hook into the page
@@ -1477,7 +1554,7 @@
     waitAuth(0);
 
     window.ssSubmit = {
-      open: open, close: close, ready: backendReady, config: CONFIG,
+      open: open, close: close, mine: function () { open({ mine: true }); }, ready: backendReady, config: CONFIG,
       queue: processQueue, pending: function () { return idbAll('queue'); }, mine: function () { return readJSON(LS_MINE) || []; },
       _st: st, _prepare: prepareAudio
     };

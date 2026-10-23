@@ -42,6 +42,9 @@ var SITE_SUBMIT = {
   STATUS_REVIEW: '待審'
 };
 
+// 站內投稿只收這 5 類，和前端的按鈕一樣
+var SITE_CATEGORIES = ['自然絮語', '常民聲', '活動與產業', '空間聲', '歲月回音'];
+
 // 預設擋字：碰到的投稿不會被拒絕，而是先標「待審」不上地圖，摘要信會提醒你看
 var SITE_DEFAULT_WORDS = ['娛樂城', '博弈', '百家樂', '代儲', '貸款', '色情', '約砲', '約炮', '援交', '加賴', '加line', '幹你', '操你', '靠北', '白癡', '智障', 'http', 'www.'];
 
@@ -49,6 +52,10 @@ function doPost(e) {
   var out = { ok: false };
   try {
     var p = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (p.action === 'mine') {
+      out = { ok: true, items: siteMine_(siteCheckLogin_(p).email) };
+      return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+    }
     siteValidate_(p);
     var who = siteCheckLogin_(p);
     var settings = siteSettings_();
@@ -118,6 +125,7 @@ function siteHidden_(status) {
 
 function siteValidate_(p) {
   if (!p || !p.title || !p.audio || !p.audio.publicId) throw new Error('缺少標題或聲音');
+  if (SITE_CATEGORIES.indexOf(String(p.category || '')) === -1) throw new Error('請選一個類別');
   var lat = +p.lat, lon = +p.lon;
   if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) throw new Error('座標不正確');
   if (String(p.title).length > 60 || String(p.description || '').length > 600) throw new Error('文字太長');
@@ -195,12 +203,13 @@ function siteSetup() {
     sh.setColumnWidth(1, 300); sh.setColumnWidth(2, 300); sh.setColumnWidth(3, 420);
     sh.setFrozenRows(1);
   }
-  var want = { siteDailyDigest: 1, siteOnEdit: 1, siteOnOpen: 1 };
+  var want = { siteDailyDigest: 1, siteOnEdit: 1, siteOnOpen: 1, siteWeeklyCleanup: 1 };
   ScriptApp.getProjectTriggers().forEach(function (t) { if (want[t.getHandlerFunction()]) ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('siteDailyDigest').timeBased().everyDays(1).atHour(SITE_SUBMIT.DIGEST_HOUR).inTimezone('Asia/Taipei').create();
   ScriptApp.newTrigger('siteOnEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('siteOnOpen').forSpreadsheet(ss).onOpen().create();
-  Logger.log('完成：設定分頁、每天 ' + SITE_SUBMIT.DIGEST_HOUR + ' 點摘要信、下架自動更新地圖、站內投稿選單。');
+  ScriptApp.newTrigger('siteWeeklyCleanup').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).inTimezone('Asia/Taipei').create();
+  Logger.log('完成：設定分頁、每天 ' + SITE_SUBMIT.DIGEST_HOUR + ' 點摘要信、每週日清理沒用到的雲端檔、下架自動更新地圖、站內投稿選單。');
 }
 
 function siteOnOpen() {
@@ -209,6 +218,7 @@ function siteOnOpen() {
     .addItem('👀 重新上架選取的列', 'siteRestore')
     .addSeparator()
     .addItem('✉️ 立刻寄一份投稿摘要給我', 'siteDigestNow')
+    .addItem('🧹 清理沒投稿成功的雲端檔（會先問你）', 'siteCleanupNow')
     .addToUi();
 }
 
@@ -307,4 +317,96 @@ function siteInTaiwan_(lat, lon) {
   var boxes = [[21.7, 25.5, 119.2, 122.2], [24.3, 24.6, 118.1, 118.6], [25.9, 26.5, 119.8, 120.6]];
   for (var i = 0; i < boxes.length; i++) { var b = boxes[i]; if (lat >= b[0] && lat <= b[1] && lon >= b[2] && lon <= b[3]) return true; }
   return false;
+}
+
+// ------------------------------------------------------------ 我的投稿：登入的人查自己投過的每一件（含以前用表單投的）
+function siteMine_(email) {
+  if (!email) throw new Error('請先登入');
+  var data = getMainSheet_().getDataRange().getValues();
+  var out = [];
+  for (var i = data.length - 1; i >= 1 && out.length < 50; i--) {
+    if (normalize_(data[i][CONFIG.COLUMN.EMAIL - 1]).toLowerCase() !== email) continue;
+    var status = normalize_(data[i][CONFIG.COLUMN.STATUS - 1]);
+    var state = status.indexOf(SITE_SUBMIT.STATUS_HIDDEN) > -1 ? 'hidden'
+      : status.indexOf(SITE_SUBMIT.STATUS_REVIEW) > -1 ? 'review'
+      : status.indexOf('失敗') > -1 || status.indexOf('無 GPS') > -1 || status.indexOf('額度') > -1 ? 'problem'
+      : status === CONFIG.STATUS.DONE ? 'live' : 'working';
+    var ts = data[i][0];
+    out.push({
+      uid: normalize_(data[i][CONFIG.COLUMN.UID - 1]),
+      title: normalize_(data[i][1]).slice(0, 60) || '（沒有標題）',
+      category: normalize_(data[i][5]).split(/[(（]/)[0].trim(),
+      at: ts instanceof Date ? Utilities.formatDate(ts, 'Asia/Taipei', 'yyyy-MM-dd HH:mm') : '',
+      state: state
+    });
+  }
+  return out;
+}
+
+// ------------------------------------------------------------ 清理孤兒檔：有人直接傳到 Cloudinary 卻沒投稿成功，留下來的檔案
+function siteWeeklyCleanup() { siteCleanup_(false); }
+function siteCleanupNow() {
+  var ui = SpreadsheetApp.getUi();
+  var r = siteCleanup_(true);
+  if (r.error) { ui.alert('沒辦法清理：' + r.error); return; }
+  if (!r.orphans.length) { ui.alert('「' + SITE_SUBMIT.FOLDER + '」資料夾裡 ' + r.total + ' 個檔案都有對應的投稿，不用清。'); return; }
+  var ok = ui.alert('清理確認', '「' + SITE_SUBMIT.FOLDER + '」資料夾裡有 ' + r.total + ' 個檔案，其中 ' + r.orphans.length + ' 個超過 2 天、試算表裡找不到對應的投稿（包含已下架的都算有對應，不會刪）。\n\n要刪掉這 ' + r.orphans.length + ' 個嗎？', ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  var n = siteDeleteOrphans_(r.orphans);
+  ui.alert('刪掉 ' + n + ' 個沒用到的檔案。');
+}
+
+function siteCleanup_(dryRun) {
+  var props = PropertiesService.getScriptProperties();
+  var ak = props.getProperty('CLOUDINARY_API_KEY'), as = props.getProperty('CLOUDINARY_API_SECRET');
+  if (!ak || !as) return { error: '指令碼屬性裡沒有 CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET', orphans: [], total: 0 };
+  var auth = { Authorization: 'Basic ' + Utilities.base64Encode(ak + ':' + as) };
+  var files = [];
+  try {
+    ['video', 'image'].forEach(function (type) {
+      var cursor = '';
+      for (var guard = 0; guard < 20; guard++) {
+        var url = 'https://api.cloudinary.com/v1_1/' + SITE_SUBMIT.CLOUD_NAME + '/resources/' + type + '/upload?max_results=500&prefix=' + encodeURIComponent(SITE_SUBMIT.FOLDER + '/') + (cursor ? '&next_cursor=' + encodeURIComponent(cursor) : '');
+        var res = UrlFetchApp.fetch(url, { headers: auth, muteHttpExceptions: true });
+        if (res.getResponseCode() !== 200) throw new Error('Cloudinary 回應 ' + res.getResponseCode() + '（這組 API 金鑰可能不是 ' + SITE_SUBMIT.CLOUD_NAME + ' 帳號的）');
+        var j = safeJsonParse_(res.getContentText()) || {};
+        (j.resources || []).forEach(function (f) { files.push({ id: f.public_id, type: type, at: Date.parse(f.created_at) }); });
+        cursor = j.next_cursor;
+        if (!cursor) break;
+      }
+    });
+  } catch (err) { if (!dryRun) Logger.log('清理孤兒檔：' + err); return { error: String(err.message || err), orphans: [], total: 0 }; }
+
+  // 試算表（含下架、待審）和 _asset_registry 裡提到的檔案都算「有對應」
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var main = getMainSheet_().getDataRange().getValues();
+  var used = [];
+  for (var i = 1; i < main.length; i++) used.push(main[i][CONFIG.COLUMN.COVER_URL - 1], main[i][CONFIG.COLUMN.AUDIO_URL - 1], main[i][CONFIG.COLUMN.CLOUDINARY_PUBLIC_ID - 1]);
+  var reg = ss.getSheetByName(CONFIG.REGISTRY_SHEET_NAME);
+  if (reg && reg.getLastRow() > 1) reg.getRange(2, 6, reg.getLastRow() - 1, 1).getValues().forEach(function (r) { used.push(r[0]); });
+  var hay = used.join('\n');
+  var cutoff = Date.now() - 2 * 86400000;
+  var orphans = files.filter(function (f) { return f.at < cutoff && hay.indexOf(f.id) === -1; });
+
+  // 煞車：試算表裡一個站內投稿都找不到、卻要刪一堆檔案，多半是讀錯分頁，停下來
+  if (orphans.length > 5 && hay.indexOf(SITE_SUBMIT.FOLDER + '/') === -1) return { error: '試算表裡找不到任何站內投稿，為了安全先不刪', orphans: [], total: files.length };
+  if (!dryRun && orphans.length) siteDeleteOrphans_(orphans);
+  return { orphans: orphans, total: files.length };
+}
+
+function siteDeleteOrphans_(orphans) {
+  var props = PropertiesService.getScriptProperties();
+  var auth = { Authorization: 'Basic ' + Utilities.base64Encode(props.getProperty('CLOUDINARY_API_KEY') + ':' + props.getProperty('CLOUDINARY_API_SECRET')) };
+  var n = 0;
+  ['video', 'image'].forEach(function (type) {
+    var ids = orphans.filter(function (f) { return f.type === type; }).map(function (f) { return f.id; });
+    for (var i = 0; i < ids.length && i < 500; i += 100) {
+      var chunk = ids.slice(i, i + 100);
+      var q = chunk.map(function (id) { return 'public_ids[]=' + encodeURIComponent(id); }).join('&');
+      var res = UrlFetchApp.fetch('https://api.cloudinary.com/v1_1/' + SITE_SUBMIT.CLOUD_NAME + '/resources/' + type + '/upload?' + q, { method: 'delete', headers: auth, muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) n += chunk.length;
+    }
+  });
+  Logger.log('清理孤兒檔：刪掉 ' + n + ' 個');
+  return n;
 }
