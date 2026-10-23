@@ -706,16 +706,19 @@
         close();
       }
     }
+    var header = nav.closest('.glass-header');
     function open() {
       if (!user) return;
       menu.hidden = false;
       btn.setAttribute('aria-expanded', 'true');
       wrap.classList.add('is-open');
+      if (header) header.classList.add('ss-acct-open'); // 標題列本身有 z-index，選單要浮在抽屜標籤上面得整列一起抬高
     }
     function close() {
       menu.hidden = true;
       btn.setAttribute('aria-expanded', 'false');
       wrap.classList.remove('is-open');
+      if (header) header.classList.remove('ss-acct-open');
     }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();

@@ -2218,6 +2218,7 @@ body.ss-acct-on .glass-header .nav-buttons #navMineBtn,
 body.ss-acct-on .glass-header .nav-buttons #authBtn { display: none !important; }
 
 .ss-acct { position: relative; margin-left: 4px; }
+.glass-header.ss-acct-open { z-index: 3000 !important; }
 .ss-acct-btn {
   display: inline-flex !important;
   align-items: center;
