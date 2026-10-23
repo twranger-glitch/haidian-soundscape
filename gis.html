@@ -83,7 +83,7 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.25">
+    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.26">
 
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_START -->
 
@@ -96,7 +96,7 @@
 <!-- ===== END: RIGHT_TOOLS_UNIVERSAL_DESIGN ===== -->
 
 <link rel="stylesheet" href="./gba-estimated/integration.css?v=20261020.3">
-<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.25">
+<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.26">
 <script>
 /* 標題明體（Noto Serif TC，只取 700 一種字重）不擋首屏，也不讓頁面載到一半整頁重排：
  * - 第一次造訪：這次先用系統明體。頁面載完、瀏覽器有空時，只把目前畫面上明體文字用得到的字型分片抓進快取，不套用。
@@ -160,7 +160,7 @@
 })();
 </script>
 <noscript><link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional"></noscript>
-<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.25">
+<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.26">
 </head>
 <body>
 
@@ -381,7 +381,7 @@
 </section>
 <section class="layer-subsection">
 <div class="layer-subsection-title ss-rt-title">現代圖資 <small>自選底圖</small></div>
-                <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 臺灣精細地圖</label>
+                <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 臺灣通用電子地圖</label>
                 <label><input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> ESRI 衛星影像</label>
                 <label><input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> OSM 標準地圖</label>
                 <div id="basemapAutoFallbackNote" role="status" aria-live="polite" style="display:none; font-size:11px; color:var(--text-muted); margin:3px 0 5px 4px;">已離開臺灣底圖範圍，正在使用 OSM 標準地圖。</div>
@@ -521,7 +521,7 @@
   <div class="hf-heading">
     <div>
       <div class="layer-subsection-title hf-title">
-        全國歷史淹水災情 <small>中央與地方官方紀錄</small>
+        全國歷史淹水災情 <small>水利署災害調查</small>
       </div>
       <p class="hf-intro">
         全國案件以點位或範圍呈現；地方原始範圍圖資另保留原始配色與來源標示。
@@ -534,7 +534,7 @@
     <input type="checkbox" id="nationalHistoryFloodToggle" onchange="toggleNationalHistoryFloodLayer(this.checked)">
     <span class="hf-toggle-copy">
       <strong>顯示全國歷史淹水案件</strong>
-      <small id="nationalHistoryFloodHint">待載入官方整合資料</small>
+      <small id="nationalHistoryFloodHint">水利署 2004 年起的颱風與豪雨淹水範圍</small>
     </span>
   </label>
 
@@ -606,7 +606,8 @@
 
     <details class="nhf-facts">
       <summary>資料來源與上線規則</summary>
-      <p>中央歷史案件、地方原始範圍與淹水潛勢必須分開標示。全國案件可由後端整合後輸出 GeoJSON；臺南市原始範圍仍保留在下一個「臺南地方原始災情範圍」模組中。</p>
+      <p>資料來自經濟部水利署「歷史淹水資料」（政府資料開放授權），由各河川局在豪雨或颱風後的淹水災害調查彙整而成，收錄 2004 年起 30 多場颱風與豪雨的淹水範圍。屬大尺度調查，不含零星、都市道路或低窪魚塭的積水；縣市依範圍中心點判定。臺南市的原始範圍另保留在下一個「臺南地方原始災情範圍」模組。</p>
+      <a href="https://data.gov.tw/dataset/25770" target="_blank" rel="noopener noreferrer">水利署 歷史淹水資料（政府資料開放平臺）↗</a><br>
       <a href="https://moisagis.moi.gov.tw/moiap/gis2010/Pro/Logged/flood/web/index.cfm" target="_blank" rel="noopener noreferrer">查看內政部歷史淹水案件查詢 ↗</a><br>
       <a href="https://datahub.ncdr.nat.gov.tw/dataset/detail?pid=b73c525a-df95-4385-b895-99ba61354a56" target="_blank" rel="noopener noreferrer">查看災防中心歷史淹水災害點位資料集 ↗</a>
     </details>
@@ -790,12 +791,7 @@
 
 <section class="layer-subsection">
 <div class="layer-subsection-title ss-rt-title">水文專區 <small>快取圖資</small></div>
-                <label>
-                    <input type="checkbox" id="hydrologyMasterToggle" onchange="toggleHydrologyPanel(this.checked)" style="accent-color:#0f766e; width:17px; height:17px; margin:0; flex-shrink:0;">
-                    啟用水文專區
-                </label>
-
-                <div id="hydrologyControlPanel" style="display:none; margin-top:10px; padding:10px; background:#ecfeff; border:1px solid #a5f3fc; border-radius:10px;">
+                <div id="hydrologyControlPanel" style="display:block; margin-top:10px; padding:10px; background:#ecfeff; border:1px solid #a5f3fc; border-radius:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                         <span style="font-size:11px; color:#155e75; font-weight:800;">目前啟用圖層</span>
                         <span id="hydrologyStatusText" style="font-size:11px; color:#0f766e; font-weight:800;">0 層</span>
@@ -839,12 +835,7 @@
     <div class="layer-folder-content">
 <section class="layer-subsection">
 <div class="layer-subsection-title ss-rt-title">官方災害圖資</div>
-                <label>
-                    <input type="checkbox" id="officialHazardMasterToggle" onchange="toggleOfficialHazardPanel(this.checked)" style="accent-color:#7c3aed; width:17px; height:17px; margin:0; flex-shrink:0;">
-                    啟用官方災害圖資
-                </label>
-
-                <div id="officialHazardControlPanel" style="display:none; margin-top:10px; padding:10px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px;">
+                <div id="officialHazardControlPanel" style="display:block; margin-top:10px; padding:10px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                         <span style="font-size:11px; color:#5b21b6; font-weight:800;">目前啟用圖層</span>
                         <span id="officialHazardStatusText" style="font-size:11px; color:#6d28d9; font-weight:800;">0 層</span>
@@ -1228,36 +1219,34 @@
             <button class="modal-close-btn" onclick="closeModal('aboutModal')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
-            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
+            <img src="src/pwa/about-gis.jpg" class="modal-img" alt="台江一帶的正射影像：鹽水溪、魚塭與聚落">
             <div class="modal-content">
                 <h2 class="modal-title about-title">
-    <span class="about-title-zh">海佃地圖</span>
-    <span class="about-title-en">Haidian Hidden Library</span>
+    <span class="about-title-zh">探究地景</span>
+    <span class="about-title-en">用圖資讀土地</span>
 </h2>
-                <div class="modal-tag">Hidden below, growing beyond.</div>
-                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
-                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
-                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
+                <div class="modal-tag">Read the land through its layers.</div>
+                <p class="modal-text">同一塊土地，不同的圖會說不同的話。1904 年的臺灣堡圖畫著魚塭與水圳，1944 年的美軍航照留下田埂的紋理，今天的通用電子地圖則是馬路與社區。把它們一層一層疊起來，海佃、台江這片土地怎麼從內海變成陸地、從鹽田變成校園，就在眼前展開。</p>
+                <p class="modal-text">這裡把<strong>歷史地圖、淹水潛勢、歷年淹水範圍、水文與地質災害圖資、日照與樹蔭模擬</strong>放進同一張地圖。每一層都來自官方公開資料，可以各自調整透明度、互相比對；想知道學校附近哪裡曾經淹過水、哪條路夏天最曬、百年前的海岸線在哪裡，都能自己找答案。</p>
+                <p class="modal-text">探究地景是海佃地下圖書室「海佃溪遊記」的另一張地圖：聲音地景用耳朵認識家鄉，探究地景用圖資提問。先看見問題，再走出去驗證，讓每一次的田野都有據可查。</p>
                 <div class="quote-block">
-                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
-                    <p class="modal-text" style="font-size: 14px;">家鄉是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">地圖不只是答案，更是提問的起點。</p>
+                    <p class="modal-text" style="font-size: 14px;">影像：內政部國土測繪中心正射影像（政府資料開放授權）。</p>
                 </div>
-                
-                
             </div>
         </div>
     </div>
     
-    <script defer src="./src/app/app-main.js?v=20261023.25"></script>
-<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.25"></script>
-<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.25"></script>
-<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.25"></script>
-<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.25"></script>
-<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.25"></script>
+    <script defer src="./src/app/app-main.js?v=20261023.26"></script>
+<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.26"></script>
+<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.26"></script>
+<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.26"></script>
+<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.26"></script>
+<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.26"></script>
 <!-- 探究地景專用：熱風險、氣象、淹水災情、日照樹蔭、路線曝曬、GBA 估計 -->
 <script defer src="./src/heat-risk.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/cwa-temperature-layer.js?v=9.0.0-dev37.8"></script>
-<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.25"></script>
+<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.26"></script>
 <script defer src="./config.shademap.js?v=9.0.0-dev37.8"></script>
 <script defer src="./config.route-exposure.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/source-clock.js?v=9.0.0-dev37.8"></script>
@@ -1276,9 +1265,9 @@
 <script defer src="./src/nationwide-regression-suite.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/route-source-provenance.js?v=20261020.2"></script>
 <script defer src="./src/route-exposure.js?v=9.0.0-dev37.8&core=37.9.9.16.11&patch=mapped-source-handoff-20261020.2"></script>
-<script defer src="./src/app/gis-menu.js?v=20261023.25"></script>
+<script defer src="./src/app/gis-menu.js?v=20261023.26"></script>
 <!-- 聲景介面改版層：兩個分站共用 -->
-<script defer src="./src/soundscape-basemap.js?v=20261023.25"></script>
-<script defer src="./src/soundscape-ui.js?v=20261023.25"></script>
+<script defer src="./src/soundscape-basemap.js?v=20261023.26"></script>
+<script defer src="./src/soundscape-ui.js?v=20261023.26"></script>
 <script type="module" src="./gba-estimated/integration.mjs?v=20261021.8"></script>
 </body></html>

@@ -2524,7 +2524,7 @@ map.getPane('nationalHistoryFloodPane').style.pointerEvents = 'auto';
 
 var NATIONAL_HISTORY_FLOOD_DEFAULT_CONFIG = {
     endpoint: './national-historical-flood.geojson',
-    sourceLabel: '全國官方整合 GeoJSON',
+    sourceLabel: '水利署 歷史淹水資料',
     maxFeaturesForFit: 3000
 };
 
