@@ -30,10 +30,18 @@
     mp3Kbps: 128,
     lamejsUrl: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.0/lame.min.js',
     fallbackForm: 'https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform',
-    fallbackGpsEntry: 'entry.255203319'
+    fallbackGpsEntry: 'entry.255203319',
+    googleClientId: ''   // 填了就要先用 Google 登入才能送出；GAS 的 SITE_SUBMIT.GOOGLE_CLIENT_ID 要填同一個
   };
 
   var CATS = ['自然絮語', '常民聲', '活動與產業', '空間聲', '歲月回音'];
+  var CAT_HINT = {
+    '自然絮語': '鳥叫、蟲鳴、風聲、水聲，大自然自己發出的聲音',
+    '常民聲': '市場叫賣、廟口、街坊聊天，日常生活裡人的聲音',
+    '活動與產業': '工廠、農漁作業、施工、節慶活動，工作或特別場合的聲音',
+    '空間聲': '橋下、隧道、空曠處，聽得出這個空間樣子的聲音',
+    '歲月回音': '長輩講古、老物件、快要消失的聲音'
+  };
   var CAT_CLS = { '自然絮語': 'cat-nature', '常民聲': 'cat-culture', '活動與產業': 'cat-industry', '空間聲': 'cat-space', '歲月回音': 'cat-history' };
   var DEFAULT_CENTER = [23.03, 120.21];
   var LS_AUTHOR = 'ss-sub-author';
@@ -302,14 +310,14 @@
     root.innerHTML =
       '<div class="ss-sub-box" role="dialog" aria-modal="true" aria-labelledby="ssSubTitle">' +
         '<div class="ss-sub-head">' +
-          '<div><span class="ss-sub-eyebrow">投稿</span><h2 class="ss-sub-title" id="ssSubTitle">把一段聲音放上地圖</h2></div>' +
+          '<div><span class="ss-sub-eyebrow">投稿</span><h2 class="ss-sub-title" id="ssSubTitle">把一段聲音放上地圖</h2><p class="ss-sub-lead" id="ssSubLead">只有 4 件事一定要做：<b>聲音、位置、標題、類別</b>。其他都可以跳過。</p></div>' +
           '<button type="button" class="ss-sub-close" aria-label="關閉">' + I.close + '</button>' +
         '</div>' +
         '<div class="ss-sub-draftbar" id="ssSubDraftBar" hidden><span>已接回上次沒送出的草稿</span><button type="button" class="ss-sub-link" id="ssSubDraftClear">清掉重來</button></div>' +
         '<form class="ss-sub-form" novalidate>' +
 
           '<section class="ss-sub-sec" data-sec="audio">' +
-            '<h3 class="ss-sub-h"><span class="ss-sub-num">1</span>聲音<small>錄影、錄音，或選一個檔案</small></h3>' +
+            '<h3 class="ss-sub-h"><span class="ss-sub-num">1</span>聲音<em class="ss-sub-req">必填</em><small>錄影、錄音，或選一個檔案</small></h3>' +
             '<div class="ss-sub-ways" id="ssSubWays">' +
               '<label class="ss-sub-way is-video">' + I.cam + '<b>錄影</b><i id="ssSubVideoHint">開相機錄一段，畫面、聲音、位置一次帶齊</i><input type="file" id="ssSubVideoCap" accept="video/*" capture="environment"></label>' +
               '<button type="button" class="ss-sub-way is-mic" id="ssSubMic">' + I.mic + '<b>錄音</b><i>只錄聲音，用這支手機的麥克風</i></button>' +
@@ -339,13 +347,13 @@
           '</section>' +
 
           '<section class="ss-sub-sec" data-sec="photo">' +
-            '<h3 class="ss-sub-h"><span class="ss-sub-num">2</span>照片<small>選填，當作封面</small></h3>' +
+            '<h3 class="ss-sub-h"><span class="ss-sub-num">2</span>照片<em class="ss-sub-opt">選填</em><small>當作封面，錄影的話會自動用影片截圖</small></h3>' +
             '<label class="ss-sub-photo" id="ssSubPhotoBox">' + I.photo + '<span>拍一張或選一張</span><input type="file" id="ssSubPhoto" accept="image/*"></label>' +
             '<div class="ss-sub-photo-note" id="ssSubPhotoNote" hidden></div>' +
           '</section>' +
 
           '<section class="ss-sub-sec" data-sec="pos">' +
-            '<h3 class="ss-sub-h"><span class="ss-sub-num">3</span>位置<small>拖動圖釘，或點地圖</small></h3>' +
+            '<h3 class="ss-sub-h"><span class="ss-sub-num">3</span>位置<em class="ss-sub-req">必填</em><small>拖動圖釘，或點地圖</small></h3>' +
             '<div class="ss-sub-map" id="ssSubMap"></div>' +
             '<div class="ss-sub-posrow">' +
               '<button type="button" class="ss-sub-chipbtn" id="ssSubLocate">' + I.locate + '用我現在的位置</button>' +
@@ -356,19 +364,21 @@
           '</section>' +
 
           '<section class="ss-sub-sec" data-sec="meta">' +
-            '<h3 class="ss-sub-h"><span class="ss-sub-num">4</span>說明</h3>' +
-            '<label class="ss-sub-field"><span>標題</span><input type="text" id="ssSubTitleIn" maxlength="40" placeholder="例如：清晨的鹽水溪排水" required></label>' +
-            '<div class="ss-sub-field"><span>類別</span><div class="ss-sub-cats" id="ssSubCats" role="radiogroup"></div></div>' +
-            '<label class="ss-sub-field"><span>採集者</span><input type="text" id="ssSubAuthor" maxlength="24" placeholder="你的名字或暱稱"></label>' +
-            '<label class="ss-sub-field"><span>這是什麼聲音？</span><textarea id="ssSubDesc" rows="3" maxlength="300" placeholder="在哪裡、什麼時候、聽到了什麼，為什麼想留下來"></textarea></label>' +
+            '<h3 class="ss-sub-h"><span class="ss-sub-num">4</span>說明<small>標題和類別要填，其他可以留白</small></h3>' +
+            '<label class="ss-sub-field"><span>標題<em class="ss-sub-req">必填</em></span><input type="text" id="ssSubTitleIn" maxlength="40" placeholder="例如：清晨的鹽水溪排水" required></label>' +
+            '<div class="ss-sub-field"><span>類別<em class="ss-sub-req">必填</em></span><div class="ss-sub-cats" id="ssSubCats" role="radiogroup"></div><p class="ss-sub-cathint" id="ssSubCatHint">不確定就選最接近的，之後可以再調整。</p></div>' +
+            '<label class="ss-sub-field"><span>採集者<em class="ss-sub-opt">選填</em></span><input type="text" id="ssSubAuthor" maxlength="24" placeholder="會公開在地圖上；不填就寫「海佃特派員」"></label>' +
+            '<label class="ss-sub-field"><span>這是什麼聲音？<em class="ss-sub-opt">選填</em></span><textarea id="ssSubDesc" rows="3" maxlength="300" placeholder="在哪裡、什麼時候、聽到了什麼，為什麼想留下來"></textarea></label>' +
             '<div class="ss-sub-row2">' +
-              '<label class="ss-sub-field"><span>採集時間</span><input type="datetime-local" id="ssSubWhen"></label>' +
-              '<label class="ss-sub-field"><span>Email（選填）</span><input type="email" id="ssSubEmail" placeholder="審核有問題時聯絡你"></label>' +
+              '<label class="ss-sub-field"><span>採集時間<em class="ss-sub-opt">已自動帶入</em></span><input type="datetime-local" id="ssSubWhen"></label>' +
+              '<label class="ss-sub-field" id="ssSubEmailField"><span>Email<em class="ss-sub-opt">選填・不公開</em></span><input type="email" id="ssSubEmail" placeholder="有問題時聯絡你"></label>' +
             '</div>' +
             '<input type="text" id="ssSubWeb" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">' +
           '</section>' +
 
           '<div class="ss-sub-foot">' +
+            '<ul class="ss-sub-todo" id="ssSubTodo" aria-label="送出前要完成的項目"></ul>' +
+            '<div class="ss-sub-auth" id="ssSubAuth" hidden></div>' +
             '<div class="ss-sub-status" id="ssSubStatus"></div>' +
             '<div class="ss-sub-progress" id="ssSubProgress" hidden><i></i></div>' +
             '<button type="submit" class="ss-sub-send" id="ssSubSend">' + I.check + '<span>送出到地圖</span></button>' +
@@ -389,9 +399,20 @@
       b.dataset.cat = c;
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', 'false');
+      b.title = CAT_HINT[c];
       b.addEventListener('click', function () { setCat(c); });
       cats.appendChild(b);
     });
+    $('#ssSubTodo', root).addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('button[data-sec]');
+      if (b) jumpTo(b.dataset.sec);
+    });
+    if (needLogin()) {
+      $('#ssSubEmailField', root).hidden = true;
+      $('#ssSubLead', root).innerHTML = inAppBrowser()
+        ? '<b class="ss-sub-warn">你是在 LINE 或 Facebook 裡面打開的。</b>送出時要用 Google 登入，這裡不能登入，建議先改用 Safari 或 Chrome 打開再開始。'
+        : '只有 4 件事一定要做：<b>聲音、位置、標題、類別</b>，最後用 Google 帳號登入就能送出。';
+    }
 
     $('.ss-sub-close', root).addEventListener('click', close);
     root.addEventListener('click', function (e) { if (e.target === root) close(); });
@@ -443,6 +464,8 @@
     if (!$('#ssSubWhen', root).value) $('#ssSubWhen', root).value = localDateTime();
     root.classList.add('active');
     document.body.classList.add('ss-sub-open');
+    renderAuth();
+    refreshTodo();
     var first = !st.miniMap;
     setTimeout(function () {
       initMiniMap();
@@ -920,12 +943,131 @@
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
     });
+    var hint = $('#ssSubCatHint', root);
+    if (hint) { hint.textContent = c ? c + '：' + CAT_HINT[c] : '不確定就選最接近的，之後可以再調整。'; hint.classList.toggle('is-on', !!c); }
     setTimeout(function () { syncMeta(); saveDraft(); }, 0);
   }
 
   function markSec(name, ok) {
     var s = root.querySelector('.ss-sub-sec[data-sec="' + name + '"]');
     if (s) s.classList.toggle('is-done', !!ok);
+    refreshTodo();
+  }
+
+  // 送出鈕上方的「還差什麼」：一眼看出哪幾項還沒好，點一下跳過去
+  function todoItems() {
+    var list = [
+      { sec: 'audio', label: '聲音', ok: !!st.audioBlob },
+      { sec: 'pos', label: '位置', ok: !!st.pos },
+      { sec: 'meta', label: '標題', ok: !!$('#ssSubTitleIn', root).value.trim() },
+      { sec: 'meta', label: '類別', ok: !!st.cat }
+    ];
+    if (needLogin()) list.push({ sec: 'auth', label: 'Google 登入', ok: !!authValid() });
+    return list;
+  }
+  function refreshTodo() {
+    var ul = root && $('#ssSubTodo', root);
+    if (!ul) return;
+    var items = todoItems();
+    var left = items.filter(function (x) { return !x.ok; }).length;
+    ul.innerHTML = '<li class="ss-sub-todo-h">' + (left ? '還差 ' + left + ' 項' : '都好了，可以送出') + '</li>' + items.map(function (x) {
+      return '<li class="' + (x.ok ? 'is-ok' : '') + '"><button type="button" data-sec="' + x.sec + '">' + (x.ok ? I.check : '<i></i>') + esc(x.label) + '</button></li>';
+    }).join('');
+    ul.classList.toggle('is-ready', !left);
+    $('#ssSubSend', root).classList.toggle('is-pending', !!left);
+  }
+  function jumpTo(sec) {
+    var s = sec === 'auth' ? $('#ssSubAuth', root) : root.querySelector('.ss-sub-sec[data-sec="' + sec + '"]');
+    if (!s) return;
+    s.classList.add('is-shake');
+    s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function () { s.classList.remove('is-shake'); }, 600);
+  }
+
+  // ------------------------------------------------------------ Google 登入（CONFIG.googleClientId 有填才啟用）
+  var SS_AUTH = 'ss-sub-auth-v1';
+  var auth = null, gsiLoading = null, gsiInit = false;
+  function needLogin() { return !!CONFIG.googleClientId; }
+  function authValid() {
+    if (!auth) { try { auth = JSON.parse(sessionStorage.getItem(SS_AUTH) || 'null'); } catch (e) { auth = null; } }
+    return auth && auth.exp * 1000 > Date.now() + 120000 ? auth : null;
+  }
+  function jwtPayload(t) {
+    try {
+      var b = String(t).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      b += '==='.slice((b.length + 3) % 4);
+      return JSON.parse(decodeURIComponent(escape(atob(b))));
+    } catch (e) { return null; }
+  }
+  function inAppBrowser() { return /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent || ''); }
+  function loadGsi() {
+    if (window.google && google.accounts && google.accounts.id) return Promise.resolve();
+    if (gsiLoading) return gsiLoading;
+    gsiLoading = new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client';
+      sc.async = true;
+      sc.onload = resolve;
+      sc.onerror = function () { gsiLoading = null; reject(new Error('gsi')); };
+      document.head.appendChild(sc);
+    });
+    return gsiLoading;
+  }
+  function onCredential(resp) {
+    var p = jwtPayload(resp && resp.credential);
+    if (!p || !p.email) { note('登入沒有成功，請再試一次'); return; }
+    auth = { token: resp.credential, email: p.email, name: p.name || '', exp: p.exp };
+    try { sessionStorage.setItem(SS_AUTH, JSON.stringify(auth)); } catch (e) {}
+    renderAuth();
+    status('');
+    processQueue();
+  }
+  function signOut() {
+    auth = null;
+    try { sessionStorage.removeItem(SS_AUTH); } catch (e) {}
+    try { google.accounts.id.disableAutoSelect(); } catch (e) {}
+    renderAuth();
+  }
+  function renderAuth() {
+    var box = $('#ssSubAuth', root);
+    if (!needLogin()) { box.hidden = true; return; }
+    box.hidden = false;
+    var a = authValid();
+    if (a) {
+      box.className = 'ss-sub-auth is-in';
+      box.innerHTML = '<span class="ss-sub-auth-ico">' + I.check + '</span><div class="ss-sub-auth-t"><b>已用 Google 登入</b><i>' + esc(a.email) + '・不會公開</i></div><button type="button" class="ss-sub-link" id="ssSubAuthOut">換帳號</button>';
+      $('#ssSubAuthOut', box).addEventListener('click', signOut);
+      refreshTodo();
+      return;
+    }
+    box.className = 'ss-sub-auth';
+    if (inAppBrowser()) {
+      var ext = location.href.split('#')[0];
+      ext += (ext.indexOf('?') > -1 ? '&' : '?') + 'openExternalBrowser=1';
+      box.innerHTML = '<div class="ss-sub-auth-t"><b>最後一步：用 Google 帳號登入</b><i>你是在 LINE 或 Facebook 裡面打開這個網頁，Google 不允許在這裡登入。請改用 Safari 或 Chrome 打開。</i></div>' +
+        '<div class="ss-sub-auth-acts"><a class="ss-sub-chipbtn" href="' + esc(ext) + '" target="_blank" rel="noopener">用瀏覽器打開</a><button type="button" class="ss-sub-chipbtn" id="ssSubCopyUrl">複製網址</button></div>';
+      $('#ssSubCopyUrl', box).addEventListener('click', function () {
+        var u = location.href.split('#')[0];
+        (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { note('網址複製好了，貼到 Safari 或 Chrome'); }, function () { window.prompt('複製這個網址，貼到 Safari 或 Chrome', u); });
+      });
+      refreshTodo();
+      return;
+    }
+    box.innerHTML = '<div class="ss-sub-auth-t"><b>最後一步：用 Google 帳號登入</b><i>只用來確認是真人、有問題時聯絡你。email 不會公開，也不會讀取你的其他資料。</i></div><div class="ss-sub-gbtn" id="ssSubGBtn"><span class="ss-sub-gwait">載入登入按鈕…</span></div>';
+    loadGsi().then(function () {
+      if (!gsiInit) {
+        google.accounts.id.initialize({ client_id: CONFIG.googleClientId, callback: onCredential, auto_select: false, cancel_on_tap_outside: true, use_fedcm_for_prompt: true });
+        gsiInit = true;
+      }
+      var slot = $('#ssSubGBtn', root);
+      if (!slot) return;
+      slot.innerHTML = '';
+      google.accounts.id.renderButton(slot, { type: 'standard', theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', locale: 'zh-TW', width: Math.min(320, Math.max(220, slot.clientWidth || 280)) });
+    }).catch(function () {
+      var slot = $('#ssSubGBtn', root);
+      if (slot) slot.innerHTML = '<span class="ss-sub-gwait">登入按鈕載不出來，請確認網路後關掉再打開一次</span>';
+    });
+    refreshTodo();
   }
 
   function validate() {
@@ -934,6 +1076,7 @@
     if (!st.pos) problems.push({ sec: 'pos', msg: '把圖釘拖到採集的地點' });
     if (!$('#ssSubTitleIn', root).value.trim()) problems.push({ sec: 'meta', msg: '給這段聲音一個標題' });
     if (!st.cat) problems.push({ sec: 'meta', msg: '選一個類別' });
+    if (needLogin() && !authValid()) problems.push({ sec: 'auth', msg: inAppBrowser() ? '請改用 Safari 或 Chrome 打開，才能用 Google 登入' : '最後一步：按「用 Google 帳號繼續」登入' });
     return problems;
   }
 
@@ -1044,6 +1187,11 @@
   function deliver(job, report) {
     report = report || function () {};
     var payload = job.payload;
+    if (needLogin()) {
+      var a = authValid();
+      if (!a) { var le = new Error('登入過期了，請在下面重新登入再送一次'); le.needLogin = true; return Promise.reject(le); }
+      payload.idToken = a.token;
+    }
     var audioFile = job.audio.blob instanceof File ? job.audio.blob : new File([job.audio.blob], job.audio.name, { type: job.audio.blob.type || 'audio/mpeg' });
     report('上傳聲音…', 0);
     return uploadCloudinary(audioFile, 'audio', function (p) { report('上傳聲音… ' + Math.round(p * 100) + '%', p * 0.7); })
@@ -1058,9 +1206,13 @@
       .then(function (c) {
         if (c) payload.cover = { url: c.secure_url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_1200/'), publicId: c.public_id };
         report('寫入地圖資料…', 0.97);
-        return postMeta(payload).catch(function (err) { if (/Failed to fetch|NetworkError|Load failed/i.test(String(err.message))) err.net = true; throw err; });
+        return postMeta(payload).catch(function (err) {
+          if (/Failed to fetch|NetworkError|Load failed/i.test(String(err.message))) err.net = true;
+          if (/登入/.test(String(err.message))) { err.needLogin = true; auth = null; try { sessionStorage.removeItem(SS_AUTH); } catch (x) {} }
+          throw err;
+        });
       })
-      .then(function () { report('完成', 1); return payload; });
+      .then(function (j) { delete payload.idToken; payload._review = !!(j && j.review); report('完成', 1); return payload; });
   }
 
   function collectPayload() {
@@ -1090,8 +1242,8 @@
     var problems = validate();
     if (problems.length) {
       status(problems[0].msg, 'warn');
-      var s = root.querySelector('.ss-sub-sec[data-sec="' + problems[0].sec + '"]');
-      if (s) { s.classList.add('is-shake'); s.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function () { s.classList.remove('is-shake'); }, 600); }
+      if (problems[0].sec === 'auth') renderAuth();
+      jumpTo(problems[0].sec);
       return;
     }
     var payload = collectPayload();
@@ -1119,7 +1271,7 @@
         send.disabled = false; send.classList.remove('is-busy');
         status(''); progress(null);
         rememberMine(payload, how === 'queued');
-        if (how === 'sent') addFreshMarker(payload);
+        if (how === 'sent' && !payload._review) addFreshMarker(payload);
         clearDraft();
         showDone(payload, how);
       })
@@ -1128,6 +1280,7 @@
         send.disabled = false; send.classList.remove('is-busy');
         progress(null);
         status('送出失敗：' + (err && err.message || err) + '。', 'err');
+        if (err && err.needLogin) { renderAuth(); jumpTo('auth'); return; }
         var box = $('#ssSubStatus', root);
         if (st.lastJob && isNetErr(err)) {
           var q = el('button', 'ss-sub-link', '排隊，回到有網路時自動送出');
@@ -1153,6 +1306,7 @@
   // ------------------------------------------------------------ 排隊：沒網路也能先投
   var queueBusy = false;
   function enqueue(job) {
+    delete job.payload.idToken;
     idbPut('queue', job).then(syncQueueBadge);
   }
 
@@ -1161,13 +1315,13 @@
       var n = (list || []).length;
       document.querySelectorAll('[data-ss-queue]').forEach(function (node) {
         node.hidden = !n;
-        node.textContent = n ? '有 ' + n + ' 筆投稿在排隊，回到有網路會自動送出' : '';
+        node.textContent = !n ? '' : needLogin() && !authValid() ? '有 ' + n + ' 筆投稿在排隊，打開「投稿」用 Google 登入後就會送出' : '有 ' + n + ' 筆投稿在排隊，回到有網路會自動送出';
       });
     });
   }
 
   function processQueue() {
-    if (queueBusy || !backendReady() || navigator.onLine === false) return;
+    if (queueBusy || !backendReady() || navigator.onLine === false || (needLogin() && !authValid())) return;
     queueBusy = true;
     idbAll('queue').then(function (list) {
       list = (list || []).sort(function (a, b) { return a.createdAt - b.createdAt; });
@@ -1178,7 +1332,7 @@
         return deliver(job).then(function () {
           return idbDel('queue', job.id).then(function () {
             markMineSent(job.payload.uid);
-            addFreshMarker(job.payload);
+            if (!job.payload._review) addFreshMarker(job.payload);
             note('剛才排隊的「' + job.payload.title + '」已經送出了');
             return next();
           });
@@ -1253,14 +1407,16 @@
       '<h3>' + (queued ? '先收著了，回到有網路會自動送出' : '送出了，謝謝你留下這段聲音') + '</h3>' +
       '<p>' + (queued
         ? '「' + esc(payload.title) + '」已經存在這台裝置裡；等手機連上網路、再打開這個網站，就會自動上傳。'
-        : '「' + esc(payload.title) + '」已經寫進資料庫，地圖上先放了一個「剛送出」的點，幾分鐘內會正式上架。') + '</p>' +
+        : payload._review
+          ? '「' + esc(payload.title) + '」已經收到了。內容裡有些字詞需要管理者先看一下，看過就會上架。'
+          : '「' + esc(payload.title) + '」已經寫進資料庫，地圖上先放了一個「剛送出」的點，幾分鐘內會正式上架。') + '</p>' +
       '<div class="ss-sub-done-acts">' +
-        '<button type="button" class="ss-sub-send" id="ssSubBack">' + I.pin + '<span>' + (queued ? '回到地圖' : '去看那個點') + '</span></button>' +
+        '<button type="button" class="ss-sub-send" id="ssSubBack">' + I.pin + '<span>' + (queued || payload._review ? '回到地圖' : '去看那個點') + '</span></button>' +
         '<button type="button" class="ss-sub-chipbtn" id="ssSubAgain">再投一段</button>' +
       '</div>';
     $('#ssSubBack', root).addEventListener('click', function () {
       close(); resetForm();
-      if (!queued && window.map) { try { window.map.flyTo([payload.lat, payload.lon], Math.max(window.map.getZoom(), 16)); } catch (e) {} }
+      if (!queued && !payload._review && window.map) { try { window.map.flyTo([payload.lat, payload.lon], Math.max(window.map.getZoom(), 16)); } catch (e) {} }
     });
     $('#ssSubAgain', root).addEventListener('click', function () { resetForm(); box.hidden = true; form.hidden = false; });
   }
@@ -1285,6 +1441,8 @@
     $('#ssSubDraftBar', root).hidden = true;
     st.cat = '';
     root.querySelectorAll('.ss-sub-cat').forEach(function (b) { b.classList.remove('is-on'); b.setAttribute('aria-checked', 'false'); });
+    var hint = $('#ssSubCatHint', root);
+    hint.textContent = '不確定就選最接近的，之後可以再調整。'; hint.classList.remove('is-on');
     st.pos = null; st.place = '';
     if (st.miniMap) setPos(st.miniMap.getCenter().lat, st.miniMap.getCenter().lng, '', false, true);
     markSec('photo', false); markSec('meta', false);
