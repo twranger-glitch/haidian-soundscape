@@ -1785,6 +1785,7 @@
         });
       });
       sec.appendChild(row);
+      var q = el('div', 'ss-off-queue'); q.setAttribute('data-ss-queue', ''); q.hidden = true; sec.appendChild(q);
       sec.querySelector('.ss-off-clear').addEventListener('click', function () {
         clearSaved().then(function () { ssNote('已清掉存下的聲音'); });
       });

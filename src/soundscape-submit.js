@@ -1,5 +1,5 @@
 /*
- * 聲景投稿：站內直接錄音／上傳、挑照片、在地圖上釘位置，一鍵送出。
+ * 聲景投稿：站內直接錄音／上傳、剪頭尾、挑照片、在地圖上釘位置，一鍵送出。
  *
  * 後端接線（兩件事，都免費）：
  *  1. Cloudinary 後台 → Settings → Upload → Upload presets → Add：Signing mode 選 Unsigned，
@@ -7,6 +7,14 @@
  *  2. 把 tools/apps-script-submit.gs 的 doPost 貼進現有的 Apps Script 專案，部署成網頁應用程式
  *     （執行身分：我；存取權：任何人），把網址填進 CONFIG.endpoint。
  * 兩個都還沒填時，表單照樣能填、能錄、能釘位置，但送出時會改用 Google 表單接手。
+ *
+ * 流程上的省力設計：
+ *  - 錄音／選檔後在瀏覽器裡解碼，畫出波形、可剪頭尾，送出前用 lamejs 壓成 128k mp3，
+ *    檔案小、不吃 Cloudinary 轉檔額度、每台裝置都能播。
+ *  - 照片先縮到 1600px 再上傳。
+ *  - 草稿自動保存（文字在 localStorage、錄音與照片在 IndexedDB），重開頁面接得回來。
+ *  - 沒網路或送出失敗，可以排隊；回到有網路自動送出。
+ *  - 送出後地圖立刻出現「剛送出」的點，等後台真的上架後自動換成正式的。
  */
 (function () {
   'use strict';
@@ -15,8 +23,11 @@
     cloudName: 'dcccnd4gk',
     uploadPreset: '',
     endpoint: '',
-    maxAudioMB: 40,
-    maxImageMB: 12,
+    maxAudioMB: 60,
+    maxImageMB: 20,
+    maxMinutes: 10,
+    mp3Kbps: 128,
+    lamejsUrl: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.0/lame.min.js',
     fallbackForm: 'https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform',
     fallbackGpsEntry: 'entry.255203319'
   };
@@ -25,6 +36,11 @@
   var CAT_CLS = { '自然絮語': 'cat-nature', '常民聲': 'cat-culture', '活動與產業': 'cat-industry', '空間聲': 'cat-space', '歲月回音': 'cat-history' };
   var DEFAULT_CENTER = [23.03, 120.21];
   var LS_AUTHOR = 'ss-sub-author';
+  var LS_DRAFT = 'ss-sub-draft-v1';
+  var LS_MINE = 'ss-my-subs-v1';
+  var LS_PLACE = 'ss-place-v1';
+  var DB_NAME = 'ss-submit';
+  var DB_VER = 1;
 
   var I = {
     mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>',
@@ -37,7 +53,9 @@
     locate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>'
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 12v6M9.5 14.5 12 12l2.5 2.5"/></svg>'
   };
 
   // ------------------------------------------------------------ utils
@@ -46,8 +64,10 @@
   function $(sel, root) { return (root || document).querySelector(sel); }
   function readLS(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function writeLS(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function readJSON(k) { try { return JSON.parse(readLS(k) || 'null'); } catch (e) { return null; } }
   function fmtTime(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
-  function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+  function fmtTime1(s) { s = Math.max(0, s || 0); var m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); }
+  function fmtMB(b) { return b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
@@ -63,9 +83,41 @@
     n.textContent = msg;
     n.classList.add('is-on');
     clearTimeout(note.t);
-    note.t = setTimeout(function () { n.classList.remove('is-on'); }, 2200);
+    note.t = setTimeout(function () { n.classList.remove('is-on'); }, 2400);
   }
   function backendReady() { return !!(CONFIG.cloudName && CONFIG.uploadPreset && CONFIG.endpoint); }
+  function debounce(fn, ms) { var t; return function () { var a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
+  function isNetErr(err) { return !!(err && (err.net || /斷線|Failed to fetch|NetworkError|Load failed/i.test(String(err.message || err)))); }
+
+  // ------------------------------------------------------------ IndexedDB（草稿與排隊）
+  function db() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) return reject(new Error('no idb'));
+      var req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains('draft')) d.createObjectStore('draft');
+        if (!d.objectStoreNames.contains('queue')) d.createObjectStore('queue', { keyPath: 'id' });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idb(store, mode, fn) {
+    return db().then(function (d) {
+      return new Promise(function (resolve, reject) {
+        var tx = d.transaction(store, mode);
+        var s = tx.objectStore(store);
+        var out = fn(s);
+        tx.oncomplete = function () { resolve(out && out.result !== undefined ? out.result : out); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    }).catch(function () { return null; });
+  }
+  function idbGet(store, key) { return idb(store, 'readonly', function (s) { return s.get(key); }); }
+  function idbPut(store, val, key) { return idb(store, 'readwrite', function (s) { return key !== undefined ? s.put(val, key) : s.put(val); }); }
+  function idbDel(store, key) { return idb(store, 'readwrite', function (s) { return s.delete(key); }); }
+  function idbAll(store) { return idb(store, 'readonly', function (s) { return s.getAll(); }); }
 
   // ------------------------------------------------------------ EXIF GPS（只讀 JPEG）
   function exifGps(file) {
@@ -82,9 +134,7 @@
             if (v.getUint8(off) !== 0xFF) return resolve(null);
             var marker = v.getUint8(off + 1);
             var size = v.getUint16(off + 2);
-            if (marker === 0xE1 && v.getUint32(off + 4) === 0x45786966) { // "Exif"
-              return resolve(parseTiff(v, off + 10));
-            }
+            if (marker === 0xE1 && v.getUint32(off + 4) === 0x45786966) return resolve(parseTiff(v, off + 10));
             if (marker === 0xDA) break;
             off += 2 + size;
           }
@@ -129,13 +179,115 @@
     }
   }
 
+  // ------------------------------------------------------------ 音訊：解碼、波形、mp3
+  var actx = null;
+  function audioCtx() {
+    if (actx) return actx;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+    return actx;
+  }
+
+  function decodeBlob(blob) {
+    var ctx = audioCtx();
+    if (!ctx) return Promise.reject(new Error('no audio context'));
+    return blob.arrayBuffer().then(function (buf) {
+      return new Promise(function (resolve, reject) {
+        var p;
+        try { p = ctx.decodeAudioData(buf, resolve, reject); } catch (e) { reject(e); return; }
+        if (p && p.then) p.then(resolve, reject);
+      });
+    });
+  }
+
+  function peaksOf(audioBuffer, n) {
+    var ch0 = audioBuffer.getChannelData(0);
+    var ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
+    var len = ch0.length, step = Math.max(1, Math.floor(len / n)), out = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var s = i * step, e = Math.min(len, s + step), peak = 0;
+      for (var j = s; j < e; j += 2) {
+        var v = Math.abs(ch0[j]);
+        if (ch1) v = Math.max(v, Math.abs(ch1[j]));
+        if (v > peak) peak = v;
+      }
+      out[i] = peak;
+    }
+    return out;
+  }
+
+  var mp3Worker = null;
+  function encoderWorker() {
+    if (mp3Worker) return mp3Worker;
+    var src = [
+      'var lameOk=false;try{importScripts(' + JSON.stringify(CONFIG.lamejsUrl) + ');lameOk=true;}catch(e){}',
+      'onmessage=function(e){var d=e.data;if(!lameOk){postMessage({error:"lamejs"});return;}',
+      'try{var enc=new lamejs.Mp3Encoder(d.channels.length,d.sampleRate,d.kbps);var out=[];var block=1152*8;var L=d.channels[0],R=d.channels[1];var n=L.length;',
+      'for(var i=0;i<n;i+=block){var l=L.subarray(i,i+block);var buf=R?enc.encodeBuffer(l,R.subarray(i,i+block)):enc.encodeBuffer(l);if(buf.length)out.push(new Uint8Array(buf));if((i/block)%20===0)postMessage({progress:i/n});}',
+      'var end=enc.flush();if(end.length)out.push(new Uint8Array(end));var blob=new Blob(out,{type:"audio/mpeg"});postMessage({done:blob});}catch(err){postMessage({error:String(err)});}}'
+    ].join('\n');
+    mp3Worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+    return mp3Worker;
+  }
+
+  function toInt16(f32, from, to) {
+    var n = to - from, out = new Int16Array(n);
+    for (var i = 0; i < n; i++) { var v = f32[from + i]; v = v < -1 ? -1 : v > 1 ? 1 : v; out[i] = v < 0 ? v * 32768 : v * 32767; }
+    return out;
+  }
+
+  function encodeMp3(audioBuffer, start, end, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var sr = audioBuffer.sampleRate;
+      var s = Math.max(0, Math.floor(start * sr)), e = Math.min(audioBuffer.length, Math.floor(end * sr));
+      if (e - s < sr * 0.3) return reject(new Error('剪得太短了'));
+      var chans = [toInt16(audioBuffer.getChannelData(0), s, e)];
+      if (audioBuffer.numberOfChannels > 1) chans.push(toInt16(audioBuffer.getChannelData(1), s, e));
+      var w;
+      try { w = encoderWorker(); } catch (err) { return reject(err); }
+      var timer = setTimeout(function () { cleanup(); reject(new Error('壓縮逾時')); }, 240000);
+      function cleanup() { clearTimeout(timer); w.onmessage = null; w.onerror = null; }
+      w.onmessage = function (ev) {
+        var d = ev.data;
+        if (d.progress != null && onProgress) onProgress(d.progress);
+        if (d.done) { cleanup(); resolve(d.done); }
+        if (d.error) { cleanup(); mp3Worker = null; try { w.terminate(); } catch (x) {} reject(new Error(d.error)); }
+      };
+      w.onerror = function () { cleanup(); mp3Worker = null; try { w.terminate(); } catch (x) {} reject(new Error('壓縮失敗')); };
+      w.postMessage({ channels: chans, sampleRate: sr, kbps: CONFIG.mp3Kbps }, chans.map(function (c) { return c.buffer; }));
+    });
+  }
+
+  // ------------------------------------------------------------ 照片縮圖
+  function shrinkImage(file) {
+    var MAX = 1600;
+    var load = window.createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return createImageBitmap(file); })
+      : new Promise(function (resolve, reject) { var im = new Image(); im.onload = function () { resolve(im); }; im.onerror = reject; im.src = URL.createObjectURL(file); });
+    return load.then(function (im) {
+      var w = im.width, h = im.height;
+      var scale = Math.min(1, MAX / Math.max(w, h));
+      var cw = Math.round(w * scale), ch = Math.round(h * scale);
+      var c = document.createElement('canvas');
+      c.width = cw; c.height = ch;
+      c.getContext('2d').drawImage(im, 0, 0, cw, ch);
+      if (im.close) im.close();
+      return new Promise(function (resolve) { c.toBlob(function (b) { resolve(b); }, 'image/jpeg', 0.84); });
+    }).then(function (b) {
+      if (!b) return file;
+      return b.size < file.size || file.type !== 'image/jpeg' ? new File([b], 'cover.jpg', { type: 'image/jpeg' }) : file;
+    }).catch(function () { return file; });
+  }
+
   // ------------------------------------------------------------ state
   var st = {
-    audioBlob: null, audioName: '', audioUrl: '', audioDur: 0,
-    photoFile: null, photoUrl: '', photoGps: null,
-    pos: null, posSource: '',
-    cat: '', rec: null, recChunks: [], recTimer: null, recStart: 0, stream: null,
-    busy: false, miniMap: null, miniMarker: null
+    audioBlob: null, audioName: '', audioUrl: '', audioDur: 0, buffer: null, peaks: null,
+    trimStart: 0, trimEnd: 0, mp3: null, mp3Key: '',
+    photoFile: null, photoBlob: null, photoUrl: '', photoGps: null,
+    pos: null, posSource: '', place: '',
+    cat: '', rec: null, recChunks: [], recTimer: null, recStart: 0, stream: null, meter: null,
+    busy: false, miniMap: null, miniMarker: null, restoring: false
   };
   var root, form, audioPreview;
 
@@ -150,6 +302,7 @@
           '<div><span class="ss-sub-eyebrow">投稿</span><h2 class="ss-sub-title" id="ssSubTitle">把一段聲音放上地圖</h2></div>' +
           '<button type="button" class="ss-sub-close" aria-label="關閉">' + I.close + '</button>' +
         '</div>' +
+        '<div class="ss-sub-draftbar" id="ssSubDraftBar" hidden><span>已接回上次沒送出的草稿</span><button type="button" class="ss-sub-link" id="ssSubDraftClear">清掉重來</button></div>' +
         '<form class="ss-sub-form" novalidate>' +
 
           '<section class="ss-sub-sec" data-sec="audio">' +
@@ -157,14 +310,24 @@
             '<div class="ss-sub-audio">' +
               '<div class="ss-sub-rec">' +
                 '<button type="button" class="ss-sub-recbtn" id="ssSubRec">' + I.mic + '</button>' +
-                '<div class="ss-sub-rectext"><b id="ssSubRecLabel">按一下開始錄音</b><i id="ssSubRecHint">用手機麥克風，錄到你覺得夠了再按停止</i></div>' +
+                '<div class="ss-sub-rectext"><b id="ssSubRecLabel">按一下開始錄音</b><i id="ssSubRecHint">用手機麥克風，錄到你覺得夠了再按停止</i><div class="ss-sub-meter" id="ssSubMeter" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
               '</div>' +
               '<label class="ss-sub-filebtn">' + I.file + '<span>選音檔或影片</span><input type="file" id="ssSubAudioFile" accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.mp4,.mov"></label>' +
             '</div>' +
             '<div class="ss-sub-preview" id="ssSubAudioPreview" hidden>' +
-              '<button type="button" class="ss-sub-pp" id="ssSubPP">' + I.play + '</button>' +
-              '<div class="ss-sub-pv-text"><b id="ssSubAudioName">錄音</b><i id="ssSubAudioMeta"></i></div>' +
-              '<button type="button" class="ss-sub-x" id="ssSubAudioClear" aria-label="移除聲音">' + I.trash + '</button>' +
+              '<div class="ss-sub-pv-row">' +
+                '<button type="button" class="ss-sub-pp" id="ssSubPP">' + I.play + '</button>' +
+                '<div class="ss-sub-pv-text"><b id="ssSubAudioName">錄音</b><i id="ssSubAudioMeta"></i></div>' +
+                '<button type="button" class="ss-sub-x" id="ssSubAudioClear" aria-label="移除聲音">' + I.trash + '</button>' +
+              '</div>' +
+              '<div class="ss-sub-wave" id="ssSubWaveBox" hidden>' +
+                '<canvas id="ssSubWave" height="64"></canvas>' +
+                '<div class="ss-sub-trim">' +
+                  '<label><span>開始</span><input type="range" id="ssSubTrimA" min="0" max="1000" value="0"><b id="ssSubTrimAT">0:00.0</b></label>' +
+                  '<label><span>結束</span><input type="range" id="ssSubTrimB" min="0" max="1000" value="1000"><b id="ssSubTrimBT">0:00.0</b></label>' +
+                '</div>' +
+                '<div class="ss-sub-trimnote" id="ssSubTrimNote">拖兩個滑桿剪掉頭尾，送出前會壓成 mp3。</div>' +
+              '</div>' +
             '</div>' +
           '</section>' +
 
@@ -180,8 +343,8 @@
             '<div class="ss-sub-posrow">' +
               '<button type="button" class="ss-sub-chipbtn" id="ssSubLocate">' + I.locate + '用我現在的位置</button>' +
               '<button type="button" class="ss-sub-chipbtn" id="ssSubPhotoPos" hidden>' + I.photo + '用照片裡的位置</button>' +
-              '<span class="ss-sub-pos" id="ssSubPosText">還沒選位置</span>' +
             '</div>' +
+            '<div class="ss-sub-pos" id="ssSubPosText">還沒選位置</div>' +
           '</section>' +
 
           '<section class="ss-sub-sec" data-sec="meta">' +
@@ -199,6 +362,7 @@
 
           '<div class="ss-sub-foot">' +
             '<div class="ss-sub-status" id="ssSubStatus"></div>' +
+            '<div class="ss-sub-progress" id="ssSubProgress" hidden><i></i></div>' +
             '<button type="submit" class="ss-sub-send" id="ssSubSend">' + I.check + '<span>送出到地圖</span></button>' +
             '<p class="ss-sub-fine">送出即同意以 CC BY-NC 授權，讓大家在非商業用途下聆聽與引用；可隨時申請下架。</p>' +
           '</div>' +
@@ -210,7 +374,6 @@
     audioPreview = new Audio();
     audioPreview.preload = 'metadata';
 
-    // categories
     var cats = $('#ssSubCats', root);
     CATS.forEach(function (c) {
       var b = el('button', 'ss-sub-cat', '<span class="ss-dot ' + CAT_CLS[c] + '"></span>' + c);
@@ -226,22 +389,32 @@
     root.addEventListener('click', function (e) { if (e.target === root) close(); });
     $('#ssSubRec', root).addEventListener('click', toggleRec);
     $('#ssSubAudioFile', root).addEventListener('change', function (e) { if (e.target.files[0]) setAudio(e.target.files[0], e.target.files[0].name); e.target.value = ''; });
-    $('#ssSubAudioClear', root).addEventListener('click', function () { clearAudio(); });
+    $('#ssSubAudioClear', root).addEventListener('click', function () { clearAudio(); saveDraft(); });
     $('#ssSubPP', root).addEventListener('click', togglePreview);
     audioPreview.addEventListener('ended', function () { $('#ssSubPP', root).innerHTML = I.play; });
     audioPreview.addEventListener('pause', function () { $('#ssSubPP', root).innerHTML = I.play; });
     audioPreview.addEventListener('play', function () { $('#ssSubPP', root).innerHTML = I.pause; });
-    audioPreview.addEventListener('loadedmetadata', function () {
-      if (isFinite(audioPreview.duration)) { st.audioDur = audioPreview.duration; syncAudioMeta(); }
+    audioPreview.addEventListener('timeupdate', function () {
+      if (st.buffer && audioPreview.currentTime >= st.trimEnd - 0.05) { audioPreview.pause(); audioPreview.currentTime = st.trimStart; }
+      drawWave();
     });
+    audioPreview.addEventListener('loadedmetadata', function () {
+      if (isFinite(audioPreview.duration) && !st.audioDur) { st.audioDur = audioPreview.duration; syncAudioMeta(); }
+    });
+    $('#ssSubTrimA', root).addEventListener('input', onTrim);
+    $('#ssSubTrimB', root).addEventListener('input', onTrim);
     $('#ssSubPhoto', root).addEventListener('change', function (e) { if (e.target.files[0]) setPhoto(e.target.files[0]); });
     $('#ssSubLocate', root).addEventListener('click', useMyLocation);
     $('#ssSubPhotoPos', root).addEventListener('click', function () { if (st.photoGps) setPos(st.photoGps.lat, st.photoGps.lon, 'photo', true); });
+    $('#ssSubDraftClear', root).addEventListener('click', function () { resetForm(); clearDraft(); $('#ssSubDraftBar', root).hidden = true; });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
     var author = readLS(LS_AUTHOR);
     if (author) $('#ssSubAuthor', root).value = author;
-    $('#ssSubTitleIn', root).addEventListener('input', syncMeta);
+    ['ssSubTitleIn', 'ssSubAuthor', 'ssSubDesc', 'ssSubWhen', 'ssSubEmail'].forEach(function (id) {
+      $('#' + id, root).addEventListener('input', function () { syncMeta(); saveDraft(); });
+    });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('active')) close(); });
+    window.addEventListener('resize', debounce(drawWave, 150));
     return root;
   }
 
@@ -257,6 +430,7 @@
     if (!$('#ssSubWhen', root).value) $('#ssSubWhen', root).value = localDateTime();
     root.classList.add('active');
     document.body.classList.add('ss-sub-open');
+    var first = !st.miniMap;
     setTimeout(function () {
       initMiniMap();
       if (opts.latlng) setPos(opts.latlng.lat, opts.latlng.lng, 'map', true);
@@ -264,6 +438,7 @@
         var c = window.map.getCenter();
         setPos(c.lat, c.lng, '', true, true);
       }
+      if (first) restoreDraft();
     }, 60);
   }
 
@@ -275,7 +450,7 @@
     document.body.classList.remove('ss-sub-open');
   }
 
-  // ------------------------------------------------------------ mini map
+  // ------------------------------------------------------------ mini map + 地名
   function initMiniMap() {
     var box = $('#ssSubMap', root);
     if (!window.L || !box) return;
@@ -293,19 +468,51 @@
     setTimeout(function () { m.invalidateSize(); }, 200);
   }
 
+  var lookupPlace = debounce(function (lat, lon) {
+    var key = (+lat).toFixed(4) + ',' + (+lon).toFixed(4);
+    var cache = readJSON(LS_PLACE) || {};
+    if (cache[key]) return paintPlace(cache[key], key);
+    if (navigator.onLine === false) return;
+    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=zh-TW&lat=' + lat + '&lon=' + lon;
+    fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      var a = (j && j.address) || {};
+      var spot = j && j.name ? j.name : (a.amenity || a.leisure || a.road || a.neighbourhood || '');
+      var area = a.city_district || a.suburb || a.town || a.village || '';
+      var name = [area, spot].filter(Boolean).join('・');
+      if (!name) return;
+      cache = readJSON(LS_PLACE) || {};
+      cache[key] = name;
+      writeLS(LS_PLACE, JSON.stringify(cache));
+      paintPlace(name, key);
+    }).catch(function () {});
+  }, 900);
+
+  function paintPlace(name, key) {
+    if (!st.pos) return;
+    var cur = (+st.pos.lat).toFixed(4) + ',' + (+st.pos.lon).toFixed(4);
+    if (cur !== key) return;
+    st.place = name;
+    var t = $('#ssSubPosText', root);
+    var n = t.querySelector('.ss-sub-place');
+    if (!n) { n = el('span', 'ss-sub-place'); t.insertBefore(n, t.firstChild); }
+    n.textContent = name;
+    saveDraft();
+  }
+
   function setPos(lat, lon, source, pan, tentative) {
     lat = +lat; lon = +lon;
     if (!isFinite(lat) || !isFinite(lon)) return;
     st.pos = tentative ? null : { lat: lat, lon: lon };
     st.posSource = source;
+    st.place = '';
     if (st.miniMarker) st.miniMarker.setLatLng([lat, lon]);
     if (st.miniMap && pan) st.miniMap.setView([lat, lon], Math.max(st.miniMap.getZoom(), 16));
     var t = $('#ssSubPosText', root);
-    if (tentative) t.textContent = '圖釘先放在畫面中間，拖到真正的地點';
-    else t.textContent = lat.toFixed(5) + ', ' + lon.toFixed(5) + (source === 'gps' ? '（我的位置）' : source === 'photo' ? '（照片）' : '');
+    if (tentative) t.innerHTML = '<span class="ss-sub-coord">圖釘先放在畫面中間，拖到真正的地點</span>';
+    else t.innerHTML = '<span class="ss-sub-coord">' + lat.toFixed(5) + ', ' + lon.toFixed(5) + (source === 'gps' ? '（我的位置）' : source === 'photo' ? '（照片）' : '') + '</span>';
     t.classList.toggle('is-set', !tentative);
     markSec('pos', !tentative);
-    if (!tentative) status('');
+    if (!tentative) { status(''); lookupPlace(lat, lon); saveDraft(); }
   }
 
   function useMyLocation() {
@@ -322,12 +529,41 @@
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
 
-  // ------------------------------------------------------------ audio
+  // ------------------------------------------------------------ 錄音
   function pickMime() {
     if (!window.MediaRecorder) return '';
     var list = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/aac'];
     for (var i = 0; i < list.length; i++) if (MediaRecorder.isTypeSupported(list[i])) return list[i];
     return '';
+  }
+
+  function startMeter(stream) {
+    var ctx = audioCtx();
+    var box = $('#ssSubMeter', root);
+    if (!ctx || !box) return;
+    try {
+      if (ctx.state === 'suspended') ctx.resume();
+      var src = ctx.createMediaStreamSource(stream);
+      var an = ctx.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);
+      var data = new Uint8Array(an.frequencyBinCount);
+      var bars = box.querySelectorAll('i');
+      box.hidden = false;
+      var raf;
+      var tick = function () {
+        an.getByteFrequencyData(data);
+        var per = Math.floor(data.length / bars.length);
+        for (var i = 0; i < bars.length; i++) {
+          var sum = 0;
+          for (var j = 0; j < per; j++) sum += data[i * per + j];
+          bars[i].style.height = Math.max(8, Math.min(100, (sum / per) / 2.2)) + '%';
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+      st.meter = { stop: function () { cancelAnimationFrame(raf); try { src.disconnect(); } catch (e) {} box.hidden = true; } };
+    } catch (e) {}
   }
 
   function toggleRec() {
@@ -348,6 +584,7 @@
         var ext = /mp4|aac/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'webm';
         stream.getTracks().forEach(function (t) { t.stop(); });
         st.stream = null;
+        if (st.meter) { st.meter.stop(); st.meter = null; }
         if (blob.size < 2000) { note('沒錄到聲音，再試一次'); syncRecUI(false); return; }
         setAudio(blob, '現場錄音.' + ext);
         syncRecUI(false);
@@ -356,10 +593,11 @@
       rec.start(500);
       st.recStart = Date.now();
       syncRecUI(true);
+      startMeter(stream);
       st.recTimer = setInterval(function () {
         var s = (Date.now() - st.recStart) / 1000;
         $('#ssSubRecLabel', root).textContent = '錄音中 ' + fmtTime(s);
-        if (s >= 600) stopRec();
+        if (s >= CONFIG.maxMinutes * 60) stopRec();
       }, 250);
     }).catch(function () {
       note('沒有取得麥克風權限，請改用「選音檔或影片」');
@@ -376,15 +614,16 @@
     b.classList.toggle('is-rec', on);
     b.innerHTML = on ? I.stop : I.mic;
     b.setAttribute('aria-label', on ? '停止錄音' : '開始錄音');
+    $('#ssSubRecHint', root).hidden = on;
     if (!on) {
       $('#ssSubRecLabel', root).textContent = st.audioBlob ? '重新錄一段' : '按一下開始錄音';
       $('#ssSubRecHint', root).textContent = st.audioBlob ? '會取代現在這段聲音' : '用手機麥克風，錄到你覺得夠了再按停止';
-    } else {
-      $('#ssSubRecHint', root).textContent = '再按一下停止。最長 10 分鐘。';
     }
   }
 
-  function setAudio(blob, name) {
+  // ------------------------------------------------------------ 聲音檔：預覽、波形、剪輯
+  function setAudio(blob, name, opts) {
+    opts = opts || {};
     if (blob.size > CONFIG.maxAudioMB * 1048576) { note('檔案太大了（上限 ' + CONFIG.maxAudioMB + ' MB），請剪短一點'); return; }
     clearAudio(true);
     st.audioBlob = blob;
@@ -395,43 +634,141 @@
     $('#ssSubAudioName', root).textContent = st.audioName;
     syncAudioMeta();
     $('#ssSubAudioPreview', root).hidden = false;
+    $('#ssSubWaveBox', root).hidden = true;
     markSec('audio', true);
     status('');
     syncRecUI(false);
-    if (!$('#ssSubTitleIn', root).value && /錄音/.test(st.audioName) === false) {
+    if (!$('#ssSubTitleIn', root).value && !/錄音/.test(st.audioName)) {
       var base = st.audioName.replace(/\.[a-z0-9]+$/i, '').slice(0, 40);
-      if (!/^(rec|audio|voice|\d)/i.test(base)) $('#ssSubTitleIn', root).value = base;
+      if (!/^(rec|audio|voice|img|vid|\d)/i.test(base)) { $('#ssSubTitleIn', root).value = base; syncMeta(); }
     }
+    if (!opts.skipSave) saveDraft();
+    $('#ssSubAudioMeta', root).textContent = '解析中…';
+    decodeBlob(blob).then(function (buf) {
+      if (st.audioBlob !== blob) return;
+      st.buffer = buf;
+      st.audioDur = buf.duration;
+      st.trimStart = 0;
+      st.trimEnd = buf.duration;
+      st.peaks = peaksOf(buf, 600);
+      $('#ssSubWaveBox', root).hidden = false;
+      var a = $('#ssSubTrimA', root), b = $('#ssSubTrimB', root);
+      a.value = 0; b.value = 1000;
+      syncTrimText();
+      drawWave();
+      syncAudioMeta();
+    }).catch(function () {
+      if (st.audioBlob !== blob) return;
+      st.buffer = null;
+      syncAudioMeta();
+      $('#ssSubTrimNote', root).textContent = '這個格式瀏覽器讀不出來，會直接上傳原檔。';
+    });
+  }
+
+  function onTrim() {
+    if (!st.buffer) return;
+    var a = $('#ssSubTrimA', root), b = $('#ssSubTrimB', root);
+    var d = st.buffer.duration;
+    var s = +a.value / 1000 * d, e = +b.value / 1000 * d;
+    if (e - s < 0.5) {
+      if (this === a) { s = Math.max(0, e - 0.5); a.value = Math.round(s / d * 1000); }
+      else { e = Math.min(d, s + 0.5); b.value = Math.round(e / d * 1000); }
+    }
+    st.trimStart = s; st.trimEnd = e;
+    st.mp3 = null;
+    syncTrimText();
+    drawWave();
+    syncAudioMeta();
+    if (!audioPreview.paused) { if (audioPreview.currentTime < s || audioPreview.currentTime > e) audioPreview.currentTime = s; }
+    else audioPreview.currentTime = s;
+  }
+
+  function syncTrimText() {
+    $('#ssSubTrimAT', root).textContent = fmtTime1(st.trimStart);
+    $('#ssSubTrimBT', root).textContent = fmtTime1(st.trimEnd);
+    var cut = st.buffer ? (st.buffer.duration - (st.trimEnd - st.trimStart)) : 0;
+    $('#ssSubTrimNote', root).textContent = cut > 0.2 ? '會剪掉 ' + cut.toFixed(1) + ' 秒，留下 ' + fmtTime1(st.trimEnd - st.trimStart) + '。送出前壓成 mp3。' : '拖兩個滑桿剪掉頭尾，送出前會壓成 mp3。';
+  }
+
+  function drawWave() {
+    var c = $('#ssSubWave', root);
+    if (!c || !st.peaks || $('#ssSubWaveBox', root).hidden) return;
+    var w = c.clientWidth || 300, h = 64, dpr = window.devicePixelRatio || 1;
+    if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = h * dpr; }
+    var g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    var n = st.peaks.length, d = st.buffer.duration;
+    var s = st.trimStart / d * w, e = st.trimEnd / d * w;
+    var cur = (audioPreview.currentTime || 0) / d * w;
+    for (var i = 0; i < n; i++) {
+      var x = i / n * w;
+      var bh = Math.max(2, st.peaks[i] * (h - 8));
+      var inside = x >= s && x <= e;
+      g.fillStyle = inside ? (x <= cur ? '#0f766e' : '#1b2a2d') : 'rgba(12,26,29,0.18)';
+      g.fillRect(x, (h - bh) / 2, Math.max(1, w / n - 0.5), bh);
+    }
+    g.fillStyle = 'rgba(12,26,29,0.08)';
+    g.fillRect(0, 0, s, h);
+    g.fillRect(e, 0, w - e, h);
+    g.fillStyle = '#f3c26b';
+    g.fillRect(s - 1, 0, 2, h);
+    g.fillRect(e - 1, 0, 2, h);
   }
 
   function syncAudioMeta() {
     var m = $('#ssSubAudioMeta', root);
     if (!st.audioBlob) { m.textContent = ''; return; }
-    m.textContent = (st.audioDur ? fmtTime(st.audioDur) + '・' : '') + fmtMB(st.audioBlob.size);
+    var dur = st.buffer ? (st.trimEnd - st.trimStart) : st.audioDur;
+    var est = st.buffer ? '約 ' + fmtMB(dur * CONFIG.mp3Kbps * 125) + '（mp3）' : fmtMB(st.audioBlob.size);
+    m.textContent = (dur ? fmtTime(dur) + '・' : '') + est;
   }
 
   function clearAudio(silent) {
     try { audioPreview.pause(); } catch (e) {}
     if (st.audioUrl) URL.revokeObjectURL(st.audioUrl);
-    st.audioBlob = null; st.audioUrl = ''; st.audioName = ''; st.audioDur = 0;
+    st.audioBlob = null; st.audioUrl = ''; st.audioName = ''; st.audioDur = 0; st.buffer = null; st.peaks = null; st.mp3 = null; st.trimStart = 0; st.trimEnd = 0;
     audioPreview.removeAttribute('src');
-    if (root) { $('#ssSubAudioPreview', root).hidden = true; markSec('audio', false); if (!silent) syncRecUI(false); }
+    if (root) {
+      $('#ssSubAudioPreview', root).hidden = true;
+      $('#ssSubWaveBox', root).hidden = true;
+      markSec('audio', false);
+      if (!silent) syncRecUI(false);
+    }
   }
 
   function togglePreview() {
     if (!st.audioUrl) return;
     if (audioPreview.paused) {
       if (window.globalAudio && !window.globalAudio.paused) window.globalAudio.pause();
+      if (st.buffer && (audioPreview.currentTime < st.trimStart || audioPreview.currentTime >= st.trimEnd - 0.1)) audioPreview.currentTime = st.trimStart;
       audioPreview.play().catch(function () {});
     } else audioPreview.pause();
   }
 
-  // ------------------------------------------------------------ photo
-  function setPhoto(file) {
+  // 送出用的 mp3：剪好、壓好，同樣的設定不重做
+  function prepareAudio(onProgress) {
+    if (!st.buffer) return Promise.resolve({ blob: st.audioBlob, name: st.audioName, encoded: false });
+    var key = st.audioName + '|' + st.trimStart.toFixed(2) + '|' + st.trimEnd.toFixed(2);
+    if (st.mp3 && st.mp3Key === key) return Promise.resolve({ blob: st.mp3, name: 'sound.mp3', encoded: true });
+    return encodeMp3(st.buffer, st.trimStart, st.trimEnd, onProgress).then(function (blob) {
+      st.mp3 = blob; st.mp3Key = key;
+      return { blob: blob, name: 'sound.mp3', encoded: true };
+    }).catch(function (err) {
+      // lamejs 載不到（例如離線）就退回原檔
+      if (st.trimStart > 0.2 || st.trimEnd < st.buffer.duration - 0.2) throw new Error('沒辦法壓縮，剪頭尾就不會生效：' + (err.message || err));
+      return { blob: st.audioBlob, name: st.audioName, encoded: false };
+    });
+  }
+
+  // ------------------------------------------------------------ 照片
+  function setPhoto(file, opts) {
+    opts = opts || {};
     if (!/^image\//.test(file.type)) { note('請選一張照片'); return; }
     if (file.size > CONFIG.maxImageMB * 1048576) { note('照片太大了（上限 ' + CONFIG.maxImageMB + ' MB）'); return; }
     if (st.photoUrl) URL.revokeObjectURL(st.photoUrl);
     st.photoFile = file;
+    st.photoBlob = null;
     st.photoUrl = URL.createObjectURL(file);
     var box = $('#ssSubPhotoBox', root);
     box.classList.add('has-photo');
@@ -442,18 +779,24 @@
     $('#ssSubPhotoPos', root).hidden = true;
     var noteEl = $('#ssSubPhotoNote', root);
     noteEl.hidden = true;
+    shrinkImage(file).then(function (b) {
+      if (st.photoFile !== file) return;
+      st.photoBlob = b;
+      box.querySelector('span').textContent = '換一張 · ' + fmtMB(b.size);
+      if (!opts.skipSave) saveDraft();
+    });
     exifGps(file).then(function (gps) {
-      if (!gps) return;
+      if (!gps || st.photoFile !== file) return;
       st.photoGps = gps;
       $('#ssSubPhotoPos', root).hidden = false;
+      if (!st.pos) { setPos(gps.lat, gps.lon, 'photo', true); return; }
       noteEl.hidden = false;
       noteEl.innerHTML = I.pin + ' 這張照片有位置資訊。<button type="button" class="ss-sub-link" id="ssSubUsePhotoPos">用它當採集地點</button>';
       $('#ssSubUsePhotoPos', root).addEventListener('click', function () { setPos(gps.lat, gps.lon, 'photo', true); noteEl.hidden = true; });
-      if (!st.pos) setPos(gps.lat, gps.lon, 'photo', true);
     });
   }
 
-  // ------------------------------------------------------------ meta
+  // ------------------------------------------------------------ 說明
   function syncMeta() {
     markSec('meta', !!($('#ssSubTitleIn', root).value.trim() && st.cat));
     status('');
@@ -461,12 +804,12 @@
 
   function setCat(c) {
     st.cat = c;
-    setTimeout(syncMeta, 0);
     root.querySelectorAll('.ss-sub-cat').forEach(function (b) {
       var on = b.dataset.cat === c;
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
     });
+    setTimeout(function () { syncMeta(); saveDraft(); }, 0);
   }
 
   function markSec(name, ok) {
@@ -488,12 +831,75 @@
     s.textContent = msg || '';
     s.className = 'ss-sub-status' + (kind ? ' is-' + kind : '');
   }
+  function progress(p) {
+    var box = $('#ssSubProgress', root);
+    if (p == null) { box.hidden = true; return; }
+    box.hidden = false;
+    box.firstChild.style.width = Math.round(p * 100) + '%';
+  }
 
-  // ------------------------------------------------------------ upload / submit
+  // ------------------------------------------------------------ 草稿
+  var saveDraft = debounce(function () {
+    if (!root || st.restoring) return;
+    var d = {
+      title: $('#ssSubTitleIn', root).value, cat: st.cat, author: $('#ssSubAuthor', root).value, desc: $('#ssSubDesc', root).value,
+      when: $('#ssSubWhen', root).value, email: $('#ssSubEmail', root).value,
+      pos: st.pos, posSource: st.posSource, place: st.place, trimStart: st.trimStart, trimEnd: st.trimEnd,
+      hasAudio: !!st.audioBlob, hasPhoto: !!st.photoFile, at: Date.now()
+    };
+    var empty = !d.title && !d.desc && !d.hasAudio && !d.hasPhoto && !d.cat;
+    if (empty) { clearDraft(); return; }
+    writeLS(LS_DRAFT, JSON.stringify(d));
+    if (st.audioBlob) idbPut('draft', { blob: st.audioBlob, name: st.audioName }, 'audio'); else idbDel('draft', 'audio');
+    if (st.photoFile) idbPut('draft', { blob: st.photoFile, name: st.photoFile.name || 'photo.jpg' }, 'photo'); else idbDel('draft', 'photo');
+  }, 500);
+
+  function clearDraft() {
+    try { localStorage.removeItem(LS_DRAFT); } catch (e) {}
+    idbDel('draft', 'audio'); idbDel('draft', 'photo');
+  }
+
+  function restoreDraft() {
+    var d = readJSON(LS_DRAFT);
+    if (!d || Date.now() - (d.at || 0) > 7 * 86400e3) return;
+    st.restoring = true;
+    $('#ssSubTitleIn', root).value = d.title || '';
+    $('#ssSubAuthor', root).value = d.author || $('#ssSubAuthor', root).value;
+    $('#ssSubDesc', root).value = d.desc || '';
+    if (d.when) $('#ssSubWhen', root).value = d.when;
+    $('#ssSubEmail', root).value = d.email || '';
+    if (d.cat) setCat(d.cat);
+    if (d.pos) { setPos(d.pos.lat, d.pos.lon, d.posSource || 'map', true); if (d.place) { st.place = d.place; } }
+    syncMeta();
+    var jobs = [];
+    if (d.hasAudio) jobs.push(idbGet('draft', 'audio').then(function (r) {
+      if (r && r.blob) {
+        setAudio(r.blob, r.name, { skipSave: true });
+        if (d.trimEnd) {
+          var tryTrim = function (n) {
+            if (st.buffer) {
+              st.trimStart = Math.min(d.trimStart || 0, st.buffer.duration); st.trimEnd = Math.min(d.trimEnd, st.buffer.duration);
+              $('#ssSubTrimA', root).value = Math.round(st.trimStart / st.buffer.duration * 1000);
+              $('#ssSubTrimB', root).value = Math.round(st.trimEnd / st.buffer.duration * 1000);
+              syncTrimText(); drawWave(); syncAudioMeta();
+            } else if (n < 40) setTimeout(function () { tryTrim(n + 1); }, 250);
+          };
+          tryTrim(0);
+        }
+      }
+    }));
+    if (d.hasPhoto) jobs.push(idbGet('draft', 'photo').then(function (r) { if (r && r.blob) setPhoto(new File([r.blob], r.name || 'photo.jpg', { type: r.blob.type || 'image/jpeg' }), { skipSave: true }); }));
+    Promise.all(jobs).then(function () {
+      st.restoring = false;
+      $('#ssSubDraftBar', root).hidden = false;
+    });
+  }
+
+  // ------------------------------------------------------------ 上傳與送出
   function uploadCloudinary(file, kind, onProgress) {
     return new Promise(function (resolve, reject) {
       var fd = new FormData();
-      fd.append('file', file, file.name || (kind === 'image' ? 'cover.jpg' : 'audio'));
+      fd.append('file', file, file.name || (kind === 'image' ? 'cover.jpg' : 'sound.mp3'));
       fd.append('upload_preset', CONFIG.uploadPreset);
       fd.append('folder', 'haidian-site');
       var xhr = new XMLHttpRequest();
@@ -506,7 +912,7 @@
           else reject(new Error(r.error && r.error.message || ('上傳失敗 ' + xhr.status)));
         } catch (e) { reject(new Error('上傳回應看不懂')); }
       };
-      xhr.onerror = function () { reject(new Error('上傳時斷線了')); };
+      xhr.onerror = function () { var e = new Error('上傳時斷線了'); e.net = true; reject(e); };
       xhr.send(fd);
     });
   }
@@ -522,20 +928,34 @@
       });
   }
 
-  function submit() {
-    if (st.busy) return;
-    if ($('#ssSubWeb', root).value) return; // 機器人填的
-    var problems = validate();
-    if (problems.length) {
-      status(problems[0].msg, 'warn');
-      var s = root.querySelector('.ss-sub-sec[data-sec="' + problems[0].sec + '"]');
-      if (s) { s.classList.add('is-shake'); s.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function () { s.classList.remove('is-shake'); }, 600); }
-      return;
-    }
+  // 一筆投稿從上傳到寫入；排隊重送也走這裡
+  function deliver(job, report) {
+    report = report || function () {};
+    var payload = job.payload;
+    var audioFile = job.audio.blob instanceof File ? job.audio.blob : new File([job.audio.blob], job.audio.name, { type: job.audio.blob.type || 'audio/mpeg' });
+    report('上傳聲音…', 0);
+    return uploadCloudinary(audioFile, 'audio', function (p) { report('上傳聲音… ' + Math.round(p * 100) + '%', p * 0.7); })
+      .then(function (a) {
+        payload.audio = { url: a.secure_url, publicId: a.public_id, resourceType: a.resource_type, cloudName: CONFIG.cloudName, duration: a.duration || 0, bytes: a.bytes, format: a.format };
+        payload.audioMp3 = a.format === 'mp3' ? a.secure_url : 'https://res.cloudinary.com/' + CONFIG.cloudName + '/video/upload/' + a.public_id + '.mp3';
+        if (!job.photo) return null;
+        report('上傳照片…', 0.75);
+        var photoFile = job.photo.blob instanceof File ? job.photo.blob : new File([job.photo.blob], job.photo.name || 'cover.jpg', { type: job.photo.blob.type || 'image/jpeg' });
+        return uploadCloudinary(photoFile, 'image', function (p) { report('上傳照片… ' + Math.round(p * 100) + '%', 0.75 + p * 0.2); });
+      })
+      .then(function (c) {
+        if (c) payload.cover = { url: c.secure_url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_1200/'), publicId: c.public_id };
+        report('寫入地圖資料…', 0.97);
+        return postMeta(payload).catch(function (err) { if (/Failed to fetch|NetworkError|Load failed/i.test(String(err.message))) err.net = true; throw err; });
+      })
+      .then(function () { report('完成', 1); return payload; });
+  }
+
+  function collectPayload() {
     var author = $('#ssSubAuthor', root).value.trim();
     if (author) writeLS(LS_AUTHOR, author);
     var when = $('#ssSubWhen', root).value;
-    var payload = {
+    return {
       source: 'site',
       uid: uuid(),
       title: $('#ssSubTitleIn', root).value.trim(),
@@ -546,51 +966,154 @@
       lat: +st.pos.lat.toFixed(6),
       lon: +st.pos.lon.toFixed(6),
       posSource: st.posSource,
+      place: st.place || '',
       email: $('#ssSubEmail', root).value.trim(),
       page: location.href.split('?')[0]
     };
+  }
 
+  function submit() {
+    if (st.busy) return;
+    if ($('#ssSubWeb', root).value) return;
+    var problems = validate();
+    if (problems.length) {
+      status(problems[0].msg, 'warn');
+      var s = root.querySelector('.ss-sub-sec[data-sec="' + problems[0].sec + '"]');
+      if (s) { s.classList.add('is-shake'); s.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function () { s.classList.remove('is-shake'); }, 600); }
+      return;
+    }
+    var payload = collectPayload();
     if (!backendReady()) { fallbackToForm(payload); return; }
 
     st.busy = true;
     var send = $('#ssSubSend', root);
     send.disabled = true;
     send.classList.add('is-busy');
-    status('上傳聲音…', 'busy');
-    var file = st.audioBlob;
-    if (!(file instanceof File)) { try { file = new File([st.audioBlob], st.audioName, { type: st.audioBlob.type }); } catch (e) { file = st.audioBlob; } }
+    try { audioPreview.pause(); } catch (e) {}
+    status('整理聲音…', 'busy');
+    progress(0);
 
-    uploadCloudinary(file, 'audio', function (p) { status('上傳聲音… ' + Math.round(p * 100) + '%', 'busy'); })
+    prepareAudio(function (p) { status('壓成 mp3… ' + Math.round(p * 100) + '%', 'busy'); progress(p * 0.25); })
       .then(function (a) {
-        payload.audio = { url: a.secure_url, publicId: a.public_id, resourceType: a.resource_type, cloudName: CONFIG.cloudName, duration: a.duration || st.audioDur || 0, bytes: a.bytes };
-        payload.audioMp3 = 'https://res.cloudinary.com/' + CONFIG.cloudName + '/video/upload/' + a.public_id + '.mp3';
-        if (!st.photoFile) return null;
-        status('上傳照片…', 'busy');
-        return uploadCloudinary(st.photoFile, 'image', function (p) { status('上傳照片… ' + Math.round(p * 100) + '%', 'busy'); });
+        var job = { id: payload.uid, payload: payload, audio: { blob: a.blob, name: a.name }, photo: st.photoFile ? { blob: st.photoBlob || st.photoFile, name: 'cover.jpg' } : null, createdAt: Date.now() };
+        if (navigator.onLine === false) { enqueue(job); return 'queued'; }
+        return deliver(job, function (msg, p) { status(msg, 'busy'); progress(0.25 + p * 0.75); }).then(function () { return 'sent'; }).catch(function (err) {
+          if (isNetErr(err)) { st.lastJob = job; throw err; }
+          throw err;
+        });
       })
-      .then(function (c) {
-        if (c) payload.cover = { url: c.secure_url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_1200/'), publicId: c.public_id };
-        status('寫入地圖資料…', 'busy');
-        return postMeta(payload);
-      })
-      .then(function () {
+      .then(function (how) {
         st.busy = false;
         send.disabled = false; send.classList.remove('is-busy');
-        status('');
-        showDone(payload);
+        status(''); progress(null);
+        rememberMine(payload, how === 'queued');
+        if (how === 'sent') addFreshMarker(payload);
+        clearDraft();
+        showDone(payload, how);
       })
       .catch(function (err) {
         st.busy = false;
         send.disabled = false; send.classList.remove('is-busy');
-        status('送出失敗：' + (err && err.message || err) + '。再試一次，或改用表單。', 'err');
-        var retry = el('button', 'ss-sub-link', '改用 Google 表單送出');
+        progress(null);
+        status('送出失敗：' + (err && err.message || err) + '。', 'err');
+        var box = $('#ssSubStatus', root);
+        if (st.lastJob && isNetErr(err)) {
+          var q = el('button', 'ss-sub-link', '排隊，回到有網路時自動送出');
+          q.type = 'button';
+          q.addEventListener('click', function () {
+            var job = st.lastJob; st.lastJob = null;
+            enqueue(job);
+            rememberMine(job.payload, true);
+            clearDraft();
+            status(''); showDone(job.payload, 'queued');
+          });
+          box.appendChild(document.createTextNode(' '));
+          box.appendChild(q);
+        }
+        var retry = el('button', 'ss-sub-link', '改用 Google 表單');
         retry.type = 'button';
         retry.addEventListener('click', function () { fallbackToForm(payload); });
-        $('#ssSubStatus', root).appendChild(document.createTextNode(' '));
-        $('#ssSubStatus', root).appendChild(retry);
+        box.appendChild(document.createTextNode(' '));
+        box.appendChild(retry);
       });
   }
 
+  // ------------------------------------------------------------ 排隊：沒網路也能先投
+  var queueBusy = false;
+  function enqueue(job) {
+    idbPut('queue', job).then(syncQueueBadge);
+  }
+
+  function syncQueueBadge() {
+    idbAll('queue').then(function (list) {
+      var n = (list || []).length;
+      document.querySelectorAll('[data-ss-queue]').forEach(function (node) {
+        node.hidden = !n;
+        node.textContent = n ? '有 ' + n + ' 筆投稿在排隊，回到有網路會自動送出' : '';
+      });
+    });
+  }
+
+  function processQueue() {
+    if (queueBusy || !backendReady() || navigator.onLine === false) return;
+    queueBusy = true;
+    idbAll('queue').then(function (list) {
+      list = (list || []).sort(function (a, b) { return a.createdAt - b.createdAt; });
+      var i = 0;
+      function next() {
+        if (i >= list.length) return;
+        var job = list[i++];
+        return deliver(job).then(function () {
+          return idbDel('queue', job.id).then(function () {
+            markMineSent(job.payload.uid);
+            addFreshMarker(job.payload);
+            note('剛才排隊的「' + job.payload.title + '」已經送出了');
+            return next();
+          });
+        }).catch(function (err) {
+          if (isNetErr(err)) return; // 還是沒網路，下次再試
+          // 真的失敗（例如檔案被拒），留著讓人看得到，但不要卡住後面的
+          return next();
+        });
+      }
+      return next();
+    }).then(function () { queueBusy = false; syncQueueBadge(); }, function () { queueBusy = false; });
+  }
+
+  // ------------------------------------------------------------ 我的投稿與「剛送出」的點
+  function rememberMine(payload, queued) {
+    var mine = readJSON(LS_MINE) || [];
+    mine = mine.filter(function (m) { return m.uid !== payload.uid; });
+    mine.unshift({ uid: payload.uid, title: payload.title, lat: payload.lat, lon: payload.lon, category: payload.category, at: Date.now(), queued: !!queued });
+    writeLS(LS_MINE, JSON.stringify(mine.slice(0, 50)));
+  }
+  function markMineSent(uid) {
+    var mine = readJSON(LS_MINE) || [];
+    mine.forEach(function (m) { if (m.uid === uid) m.queued = false; });
+    writeLS(LS_MINE, JSON.stringify(mine));
+  }
+
+  var freshLayer = null;
+  function addFreshMarker(p) {
+    if (!window.map || !window.L) return;
+    if (!freshLayer) freshLayer = L.layerGroup().addTo(window.map);
+    var icon = L.divIcon({ className: 'ss-fresh-pin', html: '<span></span>', iconSize: [22, 22], iconAnchor: [11, 11] });
+    var m = L.marker([p.lat, p.lon], { icon: icon, zIndexOffset: 5000 });
+    m.bindTooltip('剛送出：' + esc(p.title) + '<br><small>幾分鐘內會正式上架</small>', { direction: 'top', offset: [0, -12], className: 'ss-tip' });
+    m.__uid = p.uid;
+    freshLayer.addLayer(m);
+  }
+
+  function syncFresh() {
+    var mine = (readJSON(LS_MINE) || []).filter(function (m) { return Date.now() - m.at < 86400e3 && !m.queued; });
+    var live = {};
+    (window.allMarkersData || []).forEach(function (i) { live[i.uid] = 1; });
+    var pending = mine.filter(function (m) { return !live[m.uid]; });
+    if (freshLayer) freshLayer.clearLayers();
+    pending.forEach(addFreshMarker);
+  }
+
+  // ------------------------------------------------------------ 完成畫面
   function fallbackToForm(payload) {
     var url = CONFIG.fallbackForm + '?usp=pp_url&' + CONFIG.fallbackGpsEntry + '=' + encodeURIComponent(payload.lat + ', ' + payload.lon);
     var w = window.open(url, '_blank');
@@ -601,32 +1124,39 @@
       '<div class="ss-sub-done-ico">' + I.file + '</div>' +
       '<h3>站內直送還沒接上，先用表單</h3>' +
       '<p>已經把座標 <code>' + esc(payload.lat + ', ' + payload.lon) + '</code> 帶進 Google 表單，請在表單裡上傳剛才的聲音與照片，其他欄位照抄即可：</p>' +
-      '<dl class="ss-sub-copy"><dt>標題</dt><dd>' + esc(payload.title) + '</dd><dt>類別</dt><dd>' + esc(payload.category) + '</dd><dt>採集者</dt><dd>' + esc(payload.author) + '</dd>' + (payload.description ? '<dt>說明</dt><dd>' + esc(payload.description) + '</dd>' : '') + '</dl>' +
+      '<dl class="ss-sub-copy"><dt>標題</dt><dd>' + esc(payload.title) + '</dd><dt>類別</dt><dd>' + esc(payload.category) + '</dd><dt>採集者</dt><dd>' + esc(payload.author) + '</dd>' + (payload.place ? '<dt>地點</dt><dd>' + esc(payload.place) + '</dd>' : '') + (payload.description ? '<dt>說明</dt><dd>' + esc(payload.description) + '</dd>' : '') + '</dl>' +
       (w ? '' : '<p><a class="ss-sub-link" href="' + esc(url) + '" target="_blank" rel="noopener">表單沒有自動打開？按這裡</a></p>') +
-      '<div class="ss-sub-done-acts"><button type="button" class="ss-sub-send" id="ssSubBack">' + I.check + '<span>回到地圖</span></button></div>';
+      '<div class="ss-sub-done-acts"><button type="button" class="ss-sub-send" id="ssSubBack">' + I.check + '<span>回到地圖</span></button><button type="button" class="ss-sub-chipbtn" id="ssSubEdit">回去改內容</button></div>';
     $('#ssSubBack', root).addEventListener('click', close);
+    $('#ssSubEdit', root).addEventListener('click', function () { box.hidden = true; form.hidden = false; });
   }
 
-  function showDone(payload) {
+  function showDone(payload, how) {
     var box = $('#ssSubDone', root);
     form.hidden = true;
     box.hidden = false;
+    var queued = how === 'queued';
     box.innerHTML =
-      '<div class="ss-sub-done-ico is-ok">' + I.check + '</div>' +
-      '<h3>送出了，謝謝你留下這段聲音</h3>' +
-      '<p>「' + esc(payload.title) + '」已經寫進資料庫，通常幾分鐘內就會出現在地圖上；需要的話可以先把頁面重新整理。</p>' +
+      '<div class="ss-sub-done-ico ' + (queued ? 'is-wait' : 'is-ok') + '">' + (queued ? I.clock : I.check) + '</div>' +
+      '<h3>' + (queued ? '先收著了，回到有網路會自動送出' : '送出了，謝謝你留下這段聲音') + '</h3>' +
+      '<p>' + (queued
+        ? '「' + esc(payload.title) + '」已經存在這台裝置裡；等手機連上網路、再打開這個網站，就會自動上傳。'
+        : '「' + esc(payload.title) + '」已經寫進資料庫，地圖上先放了一個「剛送出」的點，幾分鐘內會正式上架。') + '</p>' +
       '<div class="ss-sub-done-acts">' +
-        '<button type="button" class="ss-sub-send" id="ssSubBack">' + I.check + '<span>回到地圖</span></button>' +
+        '<button type="button" class="ss-sub-send" id="ssSubBack">' + I.pin + '<span>' + (queued ? '回到地圖' : '去看那個點') + '</span></button>' +
         '<button type="button" class="ss-sub-chipbtn" id="ssSubAgain">再投一段</button>' +
       '</div>';
-    $('#ssSubBack', root).addEventListener('click', function () { close(); resetForm(); });
+    $('#ssSubBack', root).addEventListener('click', function () {
+      close(); resetForm();
+      if (!queued && window.map) { try { window.map.flyTo([payload.lat, payload.lon], Math.max(window.map.getZoom(), 16)); } catch (e) {} }
+    });
     $('#ssSubAgain', root).addEventListener('click', function () { resetForm(); box.hidden = true; form.hidden = false; });
   }
 
   function resetForm() {
     clearAudio();
     if (st.photoUrl) URL.revokeObjectURL(st.photoUrl);
-    st.photoFile = null; st.photoUrl = ''; st.photoGps = null;
+    st.photoFile = null; st.photoBlob = null; st.photoUrl = ''; st.photoGps = null;
     var box = $('#ssSubPhotoBox', root);
     box.classList.remove('has-photo'); box.style.backgroundImage = ''; box.querySelector('span').textContent = '拍一張或選一張';
     $('#ssSubPhotoNote', root).hidden = true;
@@ -634,23 +1164,23 @@
     $('#ssSubTitleIn', root).value = '';
     $('#ssSubDesc', root).value = '';
     $('#ssSubWhen', root).value = localDateTime();
-    setCat('');
-    st.pos = null;
+    $('#ssSubDraftBar', root).hidden = true;
+    st.cat = '';
+    root.querySelectorAll('.ss-sub-cat').forEach(function (b) { b.classList.remove('is-on'); b.setAttribute('aria-checked', 'false'); });
+    st.pos = null; st.place = '';
     if (st.miniMap) setPos(st.miniMap.getCenter().lat, st.miniMap.getCenter().lng, '', false, true);
     markSec('photo', false); markSec('meta', false);
-    status('');
+    status(''); progress(null);
   }
 
   // ------------------------------------------------------------ hook into the page
   function hook() {
-    // 標頭「我要投稿」
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('.glass-header .btn-submit, [onclick*="submitChoiceModal"]');
       if (!b) return;
       e.preventDefault(); e.stopPropagation();
       open();
     }, true);
-    // 地圖長按／右鍵
     var wait = function (n) {
       if (typeof window.showSubmitPopup === 'function') {
         window.showSubmitPopup = function (latlng) { open({ latlng: latlng }); };
@@ -659,7 +1189,21 @@
       if (n < 200) setTimeout(function () { wait(n + 1); }, 100);
     };
     wait(0);
-    window.ssSubmit = { open: open, close: close, ready: backendReady, config: CONFIG };
+
+    // 資料載好後：放上「剛送出」的點、試著送出排隊的投稿
+    var waitData = function (n) {
+      if (window.map && window.allMarkersData && window.allMarkersData.length) { syncFresh(); return; }
+      if (n < 600) setTimeout(function () { waitData(n + 1); }, 200);
+    };
+    waitData(0);
+    setTimeout(function () { syncQueueBadge(); processQueue(); }, 4000);
+    window.addEventListener('online', function () { setTimeout(processQueue, 1500); });
+
+    window.ssSubmit = {
+      open: open, close: close, ready: backendReady, config: CONFIG,
+      queue: processQueue, pending: function () { return idbAll('queue'); }, mine: function () { return readJSON(LS_MINE) || []; },
+      _st: st, _prepare: prepareAudio
+    };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hook, { once: true });

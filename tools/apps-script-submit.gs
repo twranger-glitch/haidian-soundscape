@@ -14,7 +14,7 @@
  *     這樣站內上傳的照片才會當封面。
  *
  * 前端送來的 JSON 欄位：title, author, description, category, date("YYYY-MM-DD HH:MM:SS"),
- * lat, lon, email, uid, audio{url, publicId, resourceType, cloudName}, cover{url, publicId}
+ * lat, lon, place, email, uid, audioMp3, audio{url, publicId, resourceType, cloudName}, cover{url, publicId}
  */
 function doPost(e) {
   var out = { ok: false };
@@ -42,7 +42,7 @@ function doPost(e) {
       row[3] = String(p.description || '').trim();       // D 說明
       row[CONFIG.COLUMN.DATE - 1] = when;                // E 採集時間
       row[5] = String(p.category || '').trim();          // F 類別
-      row[CONFIG.COLUMN.MANUAL_LOC - 1] = p.posSource === 'gps' ? '站內：裝置定位' : p.posSource === 'photo' ? '站內：照片座標' : '站內：地圖釘選';
+      row[CONFIG.COLUMN.MANUAL_LOC - 1] = (p.place ? String(p.place) + '｜' : '') + (p.posSource === 'gps' ? '站內：裝置定位' : p.posSource === 'photo' ? '站內：照片座標' : '站內：地圖釘選');
       row[CONFIG.COLUMN.EMAIL - 1] = String(p.email || '').trim();
       row[CONFIG.COLUMN.GPS - 1] = (+p.lat).toFixed(6) + ', ' + (+p.lon).toFixed(6);
       row[CONFIG.COLUMN.COVER_URL - 1] = p.cover && p.cover.url ? String(p.cover.url) : '';

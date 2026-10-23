@@ -2194,3 +2194,31 @@ body.ss-night .ss-saved-tag { color: var(--ss-sand); background: rgba(243, 194, 
 .ss-sub-done-acts { display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 16px; }
 .ss-sub-done-acts .ss-sub-send { max-width: 320px; }
 body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle, body.ss-sub-open #ssTheme { opacity: 0 !important; pointer-events: none !important; }
+
+/* ---------- 第十一輪：投稿流程 ---------- */
+.ss-sub-draftbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 20px 6px; padding: 9px 14px; border-radius: 12px; background: rgba(243, 194, 107, 0.22); font: 600 12.5px/1.3 var(--ss-sans); color: #7a5410; }
+.ss-sub-meter { display: flex; align-items: flex-end; gap: 3px; height: 22px; margin-top: 4px; }
+.ss-sub-meter i { flex: 1; min-width: 3px; height: 8%; border-radius: 2px; background: #e11d48; transition: height 0.08s linear; }
+.ss-sub-rectext i[hidden] { display: none; }
+.ss-sub-preview { display: block; }
+.ss-sub-pv-row { display: flex; align-items: center; gap: 12px; }
+.ss-sub-wave { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.ss-sub-wave canvas { display: block; width: 100%; height: 64px; border-radius: 10px; background: rgba(251, 248, 239, 0.9); }
+.ss-sub-trim { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.ss-sub-trim label { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font: 600 11.5px/1 var(--ss-sans); color: rgba(251, 248, 239, 0.7); }
+.ss-sub-trim label b { font: 700 11.5px/1 var(--ss-sans); color: var(--ss-sand); font-variant-numeric: tabular-nums; }
+.ss-sub-trim input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.25); outline: none; margin: 0; }
+.ss-sub-trim input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--ss-sand); border: 2px solid #0c1a1d; cursor: grab; }
+.ss-sub-trim input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--ss-sand); border: 2px solid #0c1a1d; cursor: grab; }
+.ss-sub-trimnote { margin-top: 8px; font: 400 11.5px/1.4 var(--ss-sans); color: rgba(251, 248, 239, 0.65); }
+@media (max-width: 420px) { .ss-sub-trim { grid-template-columns: 1fr; } }
+.ss-sub-pos { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; font: 500 12px/1.4 var(--ss-sans); color: var(--sub-muted); }
+.ss-sub-pos.is-set .ss-sub-coord { color: var(--ss-teal); font-weight: 700; }
+.ss-sub-place { font: 700 13.5px/1.4 var(--ss-sans); color: var(--sub-ink); }
+.ss-sub-progress { height: 4px; border-radius: 99px; background: var(--sub-raise); margin: 0 0 10px; overflow: hidden; }
+.ss-sub-progress i { display: block; height: 100%; width: 0; background: var(--ss-teal); border-radius: 99px; transition: width 0.3s; }
+.ss-sub-done-ico.is-wait { background: rgba(243, 194, 107, 0.35); color: #7a5410; }
+.ss-fresh-pin span { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--ss-sand); border: 3px solid #fff; box-shadow: 0 0 0 0 rgba(243, 194, 107, 0.6); animation: ssFresh 1.6s ease-out infinite; }
+@keyframes ssFresh { 0% { box-shadow: 0 0 0 0 rgba(243, 194, 107, 0.6); } 100% { box-shadow: 0 0 0 16px rgba(243, 194, 107, 0); } }
+.ss-off-queue { font: 600 12px/1.4 var(--ss-sans); color: #7a5410; margin: 6px 0 0 8px; }
+.ss-off-queue[hidden] { display: none; }
