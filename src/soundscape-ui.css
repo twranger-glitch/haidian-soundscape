@@ -2331,3 +2331,172 @@ body.ss-acct-on .glass-header .nav-buttons #authBtn { display: none !important; 
     padding-right: 28px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 第十五輪：分站                                                       */
+/* 入口頁在 index.html；聲音地景與探究地景共用這套樣式。               */
+/* ------------------------------------------------------------------ */
+
+/* ---------- 標題列副標＝分站切換器 ---------- */
+.glass-header .project-title span.sub-title.ss-site {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  margin-left: 10px !important;
+  font-size: 13px !important;
+  vertical-align: middle;
+}
+.glass-header .project-title .ss-site-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 9px;
+  border: 1px solid rgba(12, 26, 29, 0.14);
+  border-radius: 999px;
+  background: rgba(12, 26, 29, 0.04);
+  color: var(--ss-ink);
+  font: 700 13px/1 var(--ss-sans);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.glass-header .project-title .ss-site-btn:hover,
+.glass-header .project-title .ss-site.is-open .ss-site-btn { background: rgba(15, 118, 110, 0.1); border-color: rgba(15, 118, 110, 0.35); color: var(--ss-teal); }
+.glass-header .project-title .ss-site-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.glass-header .project-title .ss-site-btn svg:last-child { width: 13px; height: 13px; opacity: 0.7; transition: transform 0.2s; }
+.glass-header .project-title .ss-site.is-open .ss-site-btn svg:last-child { transform: rotate(180deg); }
+.ss-site-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  min-width: 236px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--ss-paper);
+  border: 1px solid var(--ss-line);
+  box-shadow: var(--ss-shadow);
+  z-index: 3000;
+  animation: ssMenuIn 0.18s var(--ss-ease) both;
+  font-family: var(--ss-sans);
+  font-size: 13.5px;
+  letter-spacing: 0;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ss-site-menu a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 10px; color: var(--ss-ink); text-decoration: none;
+}
+.ss-site-menu a svg { width: 18px; height: 18px; color: var(--ss-muted); flex: 0 0 auto; }
+.ss-site-menu a span { display: flex; flex-direction: column; gap: 2px; }
+.ss-site-menu a b { font-weight: 700; font-size: 13.5px; line-height: 1.2; }
+.ss-site-menu a small { font-size: 11.5px; color: var(--ss-muted); line-height: 1.2; }
+.ss-site-menu a:hover { background: rgba(12, 26, 29, 0.06); }
+.ss-site-menu a:hover svg { color: var(--ss-teal); }
+.ss-site-menu a.is-cur { background: rgba(15, 118, 110, 0.08); cursor: default; }
+.ss-site-menu a.is-cur svg { color: var(--ss-teal); }
+.ss-site-menu a.is-cur b::after { content: "目前"; margin-left: 8px; font-size: 10px; color: var(--ss-teal); font-weight: 700; }
+.ss-site-menu .ss-site-home b { font-weight: 600; }
+.glass-header .nav-buttons .ss-acct-menu a.ss-acct-link {
+  display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px;
+  color: var(--ss-ink); text-decoration: none; font: 600 13.5px/1 var(--ss-sans);
+}
+.glass-header .nav-buttons .ss-acct-menu a.ss-acct-link svg { width: 18px; height: 18px; color: var(--ss-muted); }
+.glass-header .nav-buttons .ss-acct-menu a.ss-acct-link:hover { background: rgba(12, 26, 29, 0.06); }
+@media (max-width: 1100px) {
+  .glass-header .project-title span.sub-title.ss-site { display: inline-flex !important; }
+}
+@media (max-width: 600px) {
+  .glass-header .project-title span.sub-title.ss-site { margin-left: 6px !important; }
+  .glass-header .project-title .ss-site-btn { padding: 0 7px; gap: 4px; height: 28px; }
+  .glass-header .project-title .ss-site-btn > span { display: none; }
+  .ss-site-menu { position: fixed; left: 10px; right: 10px; top: calc(66px + env(safe-area-inset-top, 0px)); min-width: 0; }
+  .ss-site-menu a { padding: 12px 10px; }
+}
+
+/* ---------- 探究地景：沒有聆聽／走讀，整站就是圖資 ---------- */
+html[data-site="gis"] #sidePanel,
+html[data-site="gis"] #routePanel,
+html[data-site="gis"] .haidian-v4-dock,
+html[data-site="gis"] #floatingClearRouteBtn { display: none !important; }
+html[data-site="gis"] body.ss-works-off #ssChips,
+html[data-site="gis"] body.ss-works-off #ssIdle,
+html[data-site="gis"] body.ss-works-off #ssListChip,
+html[data-site="gis"] body.ss-works-off .ss-offline { display: none !important; }
+html[data-site="gis"] .glass-header .project-title::after { display: none !important; }
+
+/* ---------- 右側圖資面板：分組手風琴 ---------- */
+html[data-site] .haidian-v4-data-note { display: none !important; }
+html[data-site="sound"] .custom-layer-control::before { content: "地圖與底圖｜搜尋・底圖・歷史套疊" !important; }
+html[data-site="gis"] .custom-layer-control::before { content: "探究地景｜用圖資讀土地" !important; }
+
+#rightToolsWrapper .ss-group {
+  margin: 0 0 10px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 2px rgba(13, 47, 53, 0.06) !important;
+  transition: box-shadow 0.2s;
+}
+#rightToolsWrapper .ss-group[open] { box-shadow: 0 10px 24px -12px rgba(13, 47, 53, 0.25) !important; }
+#rightToolsWrapper .ss-group > summary {
+  min-height: 52px;
+  padding: 8px 12px 8px 14px !important;
+  gap: 8px;
+  background: #fff !important;
+  position: relative;
+}
+#rightToolsWrapper .ss-group[open] > summary { background: linear-gradient(180deg, #ffffff, #f3f8f7) !important; }
+#rightToolsWrapper .ss-group > summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ss-group-dot, #94a3b8);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ss-group-dot, #94a3b8) 18%, transparent);
+}
+#rightToolsWrapper .ss-group > summary span { flex: 0 1 auto; font-size: 14px !important; letter-spacing: 0.01em; }
+#rightToolsWrapper .ss-group > summary small { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px !important; }
+#rightToolsWrapper .ss-group > summary .ss-group-count {
+  flex: 0 0 auto;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ss-teal); color: #fff;
+  font: 800 11px/20px var(--ss-sans);
+  text-align: center;
+}
+#rightToolsWrapper .ss-group > summary .ss-group-count[hidden] { display: none; }
+#rightToolsWrapper .ss-group.is-active > summary span { color: var(--ss-teal) !important; }
+#rightToolsWrapper .ss-group[data-group="place"] { --ss-group-dot: #0f766e; }
+#rightToolsWrapper .ss-group[data-group="history"] { --ss-group-dot: #b45309; }
+#rightToolsWrapper .ss-group[data-group="water"] { --ss-group-dot: #2563eb; }
+#rightToolsWrapper .ss-group[data-group="hazard"] { --ss-group-dot: #7c3aed; }
+#rightToolsWrapper .ss-group[data-group="climate"] { --ss-group-dot: #ea580c; }
+#rightToolsWrapper .ss-group[data-group="living"] { --ss-group-dot: #0891b2; }
+#rightToolsWrapper .ss-group[data-group="works"] { --ss-group-dot: #e11d48; }
+#rightToolsWrapper .ss-group > .layer-folder-content { padding: 0 12px 12px !important; }
+#rightToolsWrapper .ss-group .layer-subsection:first-child { padding-top: 4px !important; }
+#rightToolsWrapper .ss-rt-title {
+  display: flex; align-items: center; gap: 5px;
+  margin: 0 0 8px !important;
+  color: var(--ss-muted) !important;
+  font: 800 11px/1.3 var(--ss-sans) !important;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+#rightToolsWrapper .ss-rt-title small { margin-left: 2px; color: #94a3b8; font-weight: 700; font-size: 10px; }
+#rightToolsWrapper .ss-rt-title svg { width: 13px; height: 13px; color: var(--ss-teal); }
+#rightToolsWrapper .ss-history-list .history-layer-item:last-child { margin-bottom: 0 !important; }
+#rightToolsWrapper .ss-group-empty { margin: 4px 2px 2px; font: 600 12px/1.5 var(--ss-sans); color: var(--ss-muted); }
+#rightToolsWrapper .ss-group-note { margin: 6px 0 10px; font: 500 12px/1.55 var(--ss-sans); color: var(--ss-muted); }
+#rightToolsWrapper .ss-group-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(225, 29, 72, 0.08); color: #be123c;
+  font: 700 12.5px/1 var(--ss-sans); text-decoration: none;
+}
+#rightToolsWrapper .ss-group-link:hover { background: rgba(225, 29, 72, 0.14); }
+#rightToolsWrapper .ss-works-toggle input { accent-color: #e11d48; width: 17px; height: 17px; margin: 0; }
+/* 氣候區塊：原本自帶的大邊框收斂成群組內的子區塊 */
+#rightToolsWrapper #ssClimateSlot > section { margin: 0 !important; }
+#rightToolsWrapper #ssClimateSlot > section + section { margin-top: 12px !important; padding-top: 12px !important; border-top: 1px solid #dce9e7; }
+#rightToolsWrapper #ssClimateSlot #haidianShadeSection { border: 0 !important; box-shadow: none !important; padding-left: 0 !important; padding-right: 0 !important; background: transparent !important; }

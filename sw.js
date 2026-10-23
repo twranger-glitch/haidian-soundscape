@@ -7,7 +7,7 @@
  * - 資料庫 JSON：先走網路，成功就備份，斷線時用備份。
  * 想停用：把 DISABLED 改成 true 重新部署，所有人的快取會自動清掉並解除註冊。
  */
-var VERSION = "20261023.24";
+var VERSION = "20261023.25";
 var DISABLED = false;
 var SHELL = 'ss-shell-' + VERSION;
 var CDN = 'ss-cdn-' + VERSION;
@@ -27,7 +27,7 @@ self.addEventListener('install', function (e) {
   self.skipWaiting();
   if (DISABLED) return;
   e.waitUntil(caches.open(SHELL).then(function (c) {
-    return Promise.all(['./', './index.html', './manifest.webmanifest', './src/pwa/icon-192.png'].map(function (u) {
+    return Promise.all(['./', './index.html', './sound.html', './gis.html', './manifest.webmanifest', './src/pwa/icon-192.png'].map(function (u) {
       return c.add(u).catch(function () {});
     }));
   }));
@@ -67,15 +67,22 @@ function trim(cacheName, max) {
   }).catch(function () {});
 }
 
+// 入口頁、聲音地景、探究地景各自存一份；離線時先找自己那頁，找不到才退回入口頁
+function pageKey(req) {
+  var url = new URL(req.url);
+  var name = url.pathname.split('/').pop() || 'index.html';
+  return /\.html$/.test(name) ? './' + name : './index.html';
+}
+
 function navigate(req) {
   return withTimeout(fetch(req), 6000).then(function (res) {
     if (res && res.ok) {
       var copy = res.clone();
-      caches.open(SHELL).then(function (c) { c.put('./index.html', copy); });
+      caches.open(SHELL).then(function (c) { c.put(pageKey(req), copy); });
     }
     return res;
   }).catch(function () {
-    return caches.match(req).then(function (r) { return r || caches.match('./index.html'); }).then(function (r) {
+    return caches.match(pageKey(req)).then(function (r) { return r || caches.match('./index.html'); }).then(function (r) {
       return r || new Response('<!doctype html><meta charset="utf-8"><title>離線</title><p style="font-family:sans-serif;padding:40px">目前沒有網路，也還沒存下這個網站。連上網後再打開一次就可以離線使用。</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     });
   });

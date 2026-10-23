@@ -2100,17 +2100,19 @@ document.addEventListener('change', function(event) {
     applyTainanHistoryFloodEventFilter();
 });
 
-document.getElementById(
-    'tainanHistoryFloodShowAll'
-).addEventListener('click', function() {
+/* 聲音地景分站沒有淹水災情區塊，按鈕不存在就略過 */
+function bindTainanHistoryFloodButton(id, handler) {
+    var button = document.getElementById(id);
+    if (button) button.addEventListener('click', handler);
+}
+
+bindTainanHistoryFloodButton('tainanHistoryFloodShowAll', function() {
     tainanHistoryFloodUserHasChangedSelection = true;
     selectAllTainanHistoryFloodEventsInCurrentDataset();
     applyTainanHistoryFloodEventFilter();
 });
 
-document.getElementById(
-    'tainanHistoryFloodHideAll'
-).addEventListener('click', function() {
+bindTainanHistoryFloodButton('tainanHistoryFloodHideAll', function() {
     tainanHistoryFloodUserHasChangedSelection = true;
 
     tainanHistoryFloodEvents.forEach(function(entry) {
@@ -2127,6 +2129,7 @@ map.on('zoomend', function() {
 
 /* ===== START: HISTORY_FLOOD_EARLY_ALL_SOURCE_PREFETCH ===== */
 function prefetchTainanHistoryFloodWhenIdle() {
+    if (!document.getElementById('tainanHistoryFloodModule')) return; // 聲音地景分站不預抓災情資料
     var selectedId = getTainanHistoryFloodSelectedId();
     var datasetIds = TAINAN_HISTORY_FLOOD_SOURCE_DATASET_IDS.slice();
 

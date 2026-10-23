@@ -10,6 +10,12 @@
   var LS_DOCK = 'ss-dock-open';
   var LS_PLACE = 'ss-place-v1';
   var SHEET_QUERY = '(max-width: 600px)';
+  // 分站：sound＝聲音地景、gis＝探究地景。沒有標記就是舊的單頁版。
+  var SITE = document.documentElement.getAttribute('data-site') || '';
+  var SITES = {
+    sound: { page: 'sound.html', name: '聲音地景', tag: '一張用耳朵閱讀的地圖' },
+    gis: { page: 'gis.html', name: '探究地景', tag: '用圖資讀土地' }
+  };
   // 與作品卡片 onerror 使用同一張預設封面
   var FALLBACK_COVER = 'https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=600&auto=format&fit=crop';
 
@@ -691,10 +697,13 @@
         btn.innerHTML = avatar(user, 28) + '<span class="ss-acct-name">' + esc(name) + '</span><span class="ss-acct-chev">' + ICON_CHEV + '</span>';
         btn.setAttribute('aria-label', '帳號選單：' + name);
         btn.title = '帳號';
+        var soundActs = SITE === 'gis'
+          ? '<a role="menuitem" data-ss-site-link="sound" href="sound.html" class="ss-acct-link">' + ICON_HEART + '<span>收藏與投稿在聲音地景</span></a>'
+          : '<button type="button" role="menuitem" data-act="fav">' + ICON_HEART + '<span>我的收藏</span></button>' +
+            '<button type="button" role="menuitem" data-act="mine">' + ICON_DOC + '<span>我的投稿</span></button>';
         menu.innerHTML =
           '<div class="ss-acct-head">' + avatar(user, 40) + '<div><b>' + esc(user.displayName || '') + '</b><i>' + esc(user.email || '') + '</i></div></div>' +
-          '<button type="button" role="menuitem" data-act="fav">' + ICON_HEART + '<span>我的收藏</span></button>' +
-          '<button type="button" role="menuitem" data-act="mine">' + ICON_DOC + '<span>我的投稿</span></button>' +
+          soundActs +
           '<div class="ss-acct-sep"></div>' +
           '<button type="button" role="menuitem" data-act="out">' + ICON_OUT + '<span>登出</span></button>';
       } else {
@@ -743,6 +752,106 @@
     waitFor(function () { return window.firebase && firebase.auth && firebase.auth(); }, function (a) {
       a.onAuthStateChanged(function (u) { user = u; render(); });
     }, 30000);
+  }
+
+  // ---------------------------------------------------------------- 5c. 分站：標題列的「聲音地景／探究地景」切換
+  // 副標本身就是切換器：點開選另一張地圖，切過去時帶著目前的地圖位置與縮放。
+
+  var ICON_SOUND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-8h3z"/><path d="M3 19a2 2 0 0 0 2 2h1v-8H3z"/></svg>';
+  var ICON_GIS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+  var ICON_HOME = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>';
+
+  function viewHash() {
+    var m = window.map;
+    if (!m || !m.getCenter) return '';
+    var c = m.getCenter();
+    return '#v=' + c.lat.toFixed(5) + ',' + c.lng.toFixed(5) + ',' + m.getZoom();
+  }
+
+  function siteHref(key) {
+    return SITES[key].page + viewHash();
+  }
+
+  function landOnView() {
+    var m = /[#&]v=(-?[\d.]+),(-?[\d.]+),(\d+(?:\.\d+)?)/.exec(location.hash || '');
+    if (!m) return;
+    waitFor(function () { return window.map; }, function (map) {
+      map.setView([+m[1], +m[2]], +m[3], { animate: false });
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    });
+  }
+
+  function landOnAbout() {
+    if (!/about/.test(location.hash || '')) return;
+    waitFor(function () { return typeof window.openModal === 'function'; }, function () {
+      setTimeout(function () { window.openModal('aboutModal'); }, 400);
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    });
+  }
+
+  function tidySite() {
+    if (!SITES[SITE]) return;
+    var sub = document.querySelector('.glass-header .project-title .sub-title');
+    if (!sub || sub.querySelector('.ss-site-btn')) return;
+    var cur = SITES[SITE];
+    sub.classList.add('ss-site');
+    sub.innerHTML = '';
+
+    var btn = el('button', 'ss-site-btn', (SITE === 'gis' ? ICON_GIS : ICON_SOUND) + '<span>' + cur.name + '</span>' + ICON_CHEV);
+    btn.type = 'button';
+    btn.id = 'ssSiteBtn';
+    btn.title = '切換到另一張地圖';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    var menu = el('div', 'ss-site-menu');
+    menu.id = 'ssSiteMenu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+    menu.innerHTML =
+      '<a role="menuitem" data-ss-site-link="sound" href="sound.html" class="' + (SITE === 'sound' ? 'is-cur' : '') + '">' + ICON_SOUND + '<span><b>' + SITES.sound.name + '</b><small>' + SITES.sound.tag + '</small></span></a>' +
+      '<a role="menuitem" data-ss-site-link="gis" href="gis.html" class="' + (SITE === 'gis' ? 'is-cur' : '') + '">' + ICON_GIS + '<span><b>' + SITES.gis.name + '</b><small>' + SITES.gis.tag + '</small></span></a>' +
+      '<div class="ss-acct-sep"></div>' +
+      '<a role="menuitem" href="index.html" class="ss-site-home">' + ICON_HOME + '<span><b>回到入口</b></span></a>';
+    sub.appendChild(btn);
+    sub.appendChild(menu);
+
+    var header = sub.closest('.glass-header');
+    function open() { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); sub.classList.add('is-open'); if (header) header.classList.add('ss-acct-open'); }
+    function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); sub.classList.remove('is-open'); if (header && !document.querySelector('.ss-acct.is-open')) header.classList.remove('ss-acct-open'); }
+    // 標題本身會跳回入口頁，切換器的點擊不能冒泡上去
+    sub.addEventListener('click', function (e) { e.stopPropagation(); });
+    btn.addEventListener('click', function (e) { e.preventDefault(); menu.hidden ? open() : close(); });
+    document.addEventListener('click', function (e) { if (!sub.contains(e.target)) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  }
+
+  function bindSiteLinks() {
+    // 所有指向另一個分站的連結，按下去時才補上目前視野
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[data-ss-site-link]');
+      if (!a) return;
+      var key = a.getAttribute('data-ss-site-link');
+      if (!SITES[key]) return;
+      if (key === SITE) { e.preventDefault(); return; }
+      a.href = siteHref(key);
+      try { localStorage.setItem('ss-site-last', key); } catch (err) {}
+    }, true);
+    try { if (SITES[SITE]) localStorage.setItem('ss-site-last', SITE); } catch (err) {}
+  }
+
+  // 圖資面板的分組：打開一組就把它捲到看得見的位置；手機上一次只開一組，面板不會長到看不完。
+  function tidyGroups() {
+    var control = document.querySelector('#rightToolsWrapper .custom-layer-control');
+    if (!control) return;
+    control.addEventListener('toggle', function (e) {
+      var group = e.target;
+      if (!group.classList || !group.classList.contains('ss-group') || !group.open) return;
+      if (isSheetMode()) {
+        Array.prototype.forEach.call(control.querySelectorAll('.ss-group[open]'), function (other) { if (other !== group) other.open = false; });
+      }
+      var summary = group.querySelector(':scope > summary');
+      if (summary && summary.scrollIntoView) setTimeout(function () { summary.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 30);
+    }, true);
   }
 
   // 圖資面板：「GBA 估計」原本固定浮在畫面右側，會壓在面板上；移到面板標題列、關閉鈕左邊。
@@ -1854,22 +1963,26 @@
   // ---------------------------------------------------------------- boot
 
   function boot() {
-    buildHero();
+    if (!SITE) { buildHero(); heroGreeting(); }
     buildBar();
     buildChips();
     buildListChip();
     buildIdle();
     buildBarExtras();
-    heroGreeting();
     tidyLayout();
     tidyHeader();
+    tidySite();
+    bindSiteLinks();
     tidyRightTools();
+    tidyGroups();
     tidyPanels();
     buildOffline();
     registerSW();
     bindKeys();
     bindBarSwipe();
     landOnSharedWork();
+    landOnView();
+    landOnAbout();
     waitFor(function () { return window.map && window.globalAudio; }, function () {
       wrapCloseGlobalPlayer();
       disableEmbeddedPlayer();
