@@ -31,7 +31,7 @@
     lamejsUrl: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.0/lame.min.js',
     fallbackForm: 'https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform',
     fallbackGpsEntry: 'entry.255203319',
-    googleClientId: ''   // 填了就要先用 Google 登入才能送出；GAS 的 SITE_SUBMIT.GOOGLE_CLIENT_ID 要填同一個
+    requireLogin: true   // 送出前要先用網站原本的 Google 登入（和「登入探險」同一個）；GAS 會向 Firebase 驗證
   };
 
   var CATS = ['自然絮語', '常民聲', '活動與產業', '空間聲', '歲月回音'];
@@ -984,49 +984,42 @@
     setTimeout(function () { s.classList.remove('is-shake'); }, 600);
   }
 
-  // ------------------------------------------------------------ Google 登入（CONFIG.googleClientId 有填才啟用）
-  var SS_AUTH = 'ss-sub-auth-v1';
-  var auth = null, gsiLoading = null, gsiInit = false;
-  function needLogin() { return !!CONFIG.googleClientId; }
+  // ------------------------------------------------------------ 登入：沿用網站原本「登入探險」的 Firebase Google 登入
+  var SS_REOPEN = 'ss-sub-reopen';
+  function needLogin() { return !!CONFIG.requireLogin; }
+  function fbAuth() { try { return window.firebase && firebase.auth ? firebase.auth() : null; } catch (e) { return null; } }
   function authValid() {
-    if (!auth) { try { auth = JSON.parse(sessionStorage.getItem(SS_AUTH) || 'null'); } catch (e) { auth = null; } }
-    return auth && auth.exp * 1000 > Date.now() + 120000 ? auth : null;
+    var a = fbAuth(), u = a && a.currentUser;
+    return u && u.email ? { email: u.email, name: u.displayName || '', user: u } : null;
   }
-  function jwtPayload(t) {
-    try {
-      var b = String(t).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      b += '==='.slice((b.length + 3) % 4);
-      return JSON.parse(decodeURIComponent(escape(atob(b))));
-    } catch (e) { return null; }
+  function authToken() {
+    var a = authValid();
+    if (a) return a.user.getIdToken();
+    var e = new Error('請先登入再送出'); e.needLogin = true;
+    return Promise.reject(e);
   }
   function inAppBrowser() { return /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent || ''); }
-  function loadGsi() {
-    if (window.google && google.accounts && google.accounts.id) return Promise.resolve();
-    if (gsiLoading) return gsiLoading;
-    gsiLoading = new Promise(function (resolve, reject) {
-      var sc = document.createElement('script');
-      sc.src = 'https://accounts.google.com/gsi/client';
-      sc.async = true;
-      sc.onload = resolve;
-      sc.onerror = function () { gsiLoading = null; reject(new Error('gsi')); };
-      document.head.appendChild(sc);
-    });
-    return gsiLoading;
-  }
-  function onCredential(resp) {
-    var p = jwtPayload(resp && resp.credential);
-    if (!p || !p.email) { note('登入沒有成功，請再試一次'); return; }
-    auth = { token: resp.credential, email: p.email, name: p.name || '', exp: p.exp };
-    try { sessionStorage.setItem(SS_AUTH, JSON.stringify(auth)); } catch (e) {}
-    renderAuth();
-    status('');
-    processQueue();
+  function signIn() {
+    // 手機版原本的登入會整頁跳轉，回來後自動把投稿頁打開；草稿本來就會接回
+    try { sessionStorage.setItem(SS_REOPEN, '1'); } catch (e) {}
+    saveDraft();
+    if (typeof window.toggleLogin === 'function' && !authValid()) window.toggleLogin();
   }
   function signOut() {
-    auth = null;
-    try { sessionStorage.removeItem(SS_AUTH); } catch (e) {}
-    try { google.accounts.id.disableAutoSelect(); } catch (e) {}
-    renderAuth();
+    var a = fbAuth();
+    if (a) a.signOut();
+  }
+  function watchAuth() {
+    var a = fbAuth();
+    if (!a) return;
+    a.onAuthStateChanged(function (u) {
+      if (root) renderAuth();
+      syncQueueBadge();
+      if (u) processQueue();
+      var reopen = false;
+      try { reopen = sessionStorage.getItem(SS_REOPEN) === '1'; if (u) sessionStorage.removeItem(SS_REOPEN); } catch (e) {}
+      if (u && reopen && !(root && root.classList.contains('active'))) setTimeout(function () { open(); }, 400);
+    });
   }
   function renderAuth() {
     var box = $('#ssSubAuth', root);
@@ -1035,8 +1028,9 @@
     var a = authValid();
     if (a) {
       box.className = 'ss-sub-auth is-in';
-      box.innerHTML = '<span class="ss-sub-auth-ico">' + I.check + '</span><div class="ss-sub-auth-t"><b>已用 Google 登入</b><i>' + esc(a.email) + '・不會公開</i></div><button type="button" class="ss-sub-link" id="ssSubAuthOut">換帳號</button>';
+      box.innerHTML = '<span class="ss-sub-auth-ico">' + I.check + '</span><div class="ss-sub-auth-t"><b>已登入' + (a.name ? '：' + esc(a.name) : '') + '</b><i>' + esc(a.email) + '・不會公開</i></div><button type="button" class="ss-sub-link" id="ssSubAuthOut">換帳號</button>';
       $('#ssSubAuthOut', box).addEventListener('click', signOut);
+      if (/登入/.test($('#ssSubStatus', root).textContent)) status('');
       refreshTodo();
       return;
     }
@@ -1053,20 +1047,9 @@
       refreshTodo();
       return;
     }
-    box.innerHTML = '<div class="ss-sub-auth-t"><b>最後一步：用 Google 帳號登入</b><i>只用來確認是真人、有問題時聯絡你。email 不會公開，也不會讀取你的其他資料。</i></div><div class="ss-sub-gbtn" id="ssSubGBtn"><span class="ss-sub-gwait">載入登入按鈕…</span></div>';
-    loadGsi().then(function () {
-      if (!gsiInit) {
-        google.accounts.id.initialize({ client_id: CONFIG.googleClientId, callback: onCredential, auto_select: false, cancel_on_tap_outside: true, use_fedcm_for_prompt: true });
-        gsiInit = true;
-      }
-      var slot = $('#ssSubGBtn', root);
-      if (!slot) return;
-      slot.innerHTML = '';
-      google.accounts.id.renderButton(slot, { type: 'standard', theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', locale: 'zh-TW', width: Math.min(320, Math.max(220, slot.clientWidth || 280)) });
-    }).catch(function () {
-      var slot = $('#ssSubGBtn', root);
-      if (slot) slot.innerHTML = '<span class="ss-sub-gwait">登入按鈕載不出來，請確認網路後關掉再打開一次</span>';
-    });
+    box.innerHTML = '<div class="ss-sub-auth-t"><b>最後一步：用 Google 帳號登入</b><i>和右上角「登入探險」是同一個登入。只用來確認是真人、有問題時聯絡你，email 不會公開。</i></div>' +
+      '<button type="button" class="ss-sub-gbtn" id="ssSubGBtn"><span class="ss-sub-g">G</span>用 Google 帳號登入</button>';
+    $('#ssSubGBtn', box).addEventListener('click', signIn);
     refreshTodo();
   }
 
@@ -1076,7 +1059,7 @@
     if (!st.pos) problems.push({ sec: 'pos', msg: '把圖釘拖到採集的地點' });
     if (!$('#ssSubTitleIn', root).value.trim()) problems.push({ sec: 'meta', msg: '給這段聲音一個標題' });
     if (!st.cat) problems.push({ sec: 'meta', msg: '選一個類別' });
-    if (needLogin() && !authValid()) problems.push({ sec: 'auth', msg: inAppBrowser() ? '請改用 Safari 或 Chrome 打開，才能用 Google 登入' : '最後一步：按「用 Google 帳號繼續」登入' });
+    if (needLogin() && !authValid()) problems.push({ sec: 'auth', msg: inAppBrowser() ? '請改用 Safari 或 Chrome 打開，才能用 Google 登入' : '最後一步：按「用 Google 帳號登入」' });
     return problems;
   }
 
@@ -1187,11 +1170,7 @@
   function deliver(job, report) {
     report = report || function () {};
     var payload = job.payload;
-    if (needLogin()) {
-      var a = authValid();
-      if (!a) { var le = new Error('登入過期了，請在下面重新登入再送一次'); le.needLogin = true; return Promise.reject(le); }
-      payload.idToken = a.token;
-    }
+    if (needLogin() && !authValid()) { var le = new Error('請先在下面登入再送出'); le.needLogin = true; return Promise.reject(le); }
     var audioFile = job.audio.blob instanceof File ? job.audio.blob : new File([job.audio.blob], job.audio.name, { type: job.audio.blob.type || 'audio/mpeg' });
     report('上傳聲音…', 0);
     return uploadCloudinary(audioFile, 'audio', function (p) { report('上傳聲音… ' + Math.round(p * 100) + '%', p * 0.7); })
@@ -1206,9 +1185,10 @@
       .then(function (c) {
         if (c) payload.cover = { url: c.secure_url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_1200/'), publicId: c.public_id };
         report('寫入地圖資料…', 0.97);
-        return postMeta(payload).catch(function (err) {
+        return (needLogin() ? authToken().then(function (t) { payload.idToken = t; }) : Promise.resolve())
+          .then(function () { return postMeta(payload); }).catch(function (err) {
           if (/Failed to fetch|NetworkError|Load failed/i.test(String(err.message))) err.net = true;
-          if (/登入/.test(String(err.message))) { err.needLogin = true; auth = null; try { sessionStorage.removeItem(SS_AUTH); } catch (x) {} }
+          if (/登入/.test(String(err.message))) err.needLogin = true;
           throw err;
         });
       })
@@ -1315,7 +1295,7 @@
       var n = (list || []).length;
       document.querySelectorAll('[data-ss-queue]').forEach(function (node) {
         node.hidden = !n;
-        node.textContent = !n ? '' : needLogin() && !authValid() ? '有 ' + n + ' 筆投稿在排隊，打開「投稿」用 Google 登入後就會送出' : '有 ' + n + ' 筆投稿在排隊，回到有網路會自動送出';
+        node.textContent = !n ? '' : needLogin() && !authValid() ? '有 ' + n + ' 筆投稿在排隊，登入後就會送出' : '有 ' + n + ' 筆投稿在排隊，回到有網路會自動送出';
       });
     });
   }
@@ -1474,6 +1454,8 @@
     waitData(0);
     setTimeout(function () { syncQueueBadge(); processQueue(); }, 4000);
     window.addEventListener('online', function () { setTimeout(processQueue, 1500); });
+    var waitAuth = function (n) { if (fbAuth()) watchAuth(); else if (n < 100) setTimeout(function () { waitAuth(n + 1); }, 200); };
+    waitAuth(0);
 
     window.ssSubmit = {
       open: open, close: close, ready: backendReady, config: CONFIG,

@@ -21,15 +21,16 @@
  *   - 試算表多一個「📮 站內投稿」選單：下架／重新上架選取的列、立刻寄摘要
  *   - 你手動把「處理狀態」改成「下架」時，地圖會自動更新
  *
- * 四、Google 登入（選用）：GOOGLE_CLIENT_ID 填了之後，站內投稿一定要先用 Google 登入；留空就維持匿名。
- *     前端 soundscape-submit.js 的 CONFIG.googleClientId 要填同一個。
+ * 四、登入：站內投稿沿用網站原本「登入探險」的 Firebase Google 登入，這裡會向 Firebase 確認登入是真的。
+ *     不想要求登入，把 REQUIRE_LOGIN 改成 false（前端 CONFIG.requireLogin 也要一起改）。
  *
  * 五、「部署」→「管理部署作業」→ 鉛筆 → 版本選「新版本」→ 部署（網址不變）。
  */
 var SITE_SUBMIT = {
   CLOUD_NAME: 'dcccnd4gk',   // 站內上傳用的 Cloudinary 帳號，要和前端 CONFIG.cloudName 一樣
   FOLDER: 'haidian-site',    // 和 upload preset 的資料夾一樣
-  GOOGLE_CLIENT_ID: '',      // Google 登入用的用戶端 ID（xxxx.apps.googleusercontent.com）；留空＝匿名投稿
+  REQUIRE_LOGIN: true,       // 一定要先登入才能投稿
+  FIREBASE_API_KEY: 'AIzaSyBXGNMbKedaTF2XjePRpFhNIv3NwRrmo_U', // 網站 index.html 裡 firebaseConfig 的 apiKey（本來就公開，不是密碼）
   MAX_PER_10_MIN: 30,        // 全站每 10 分鐘最多收幾件，擋惡意灌資料
   MAX_PER_PERSON_6H: 10,     // 登入後，同一個帳號 6 小時內最多幾件
   MAX_AUDIO_SEC: 660,        // 聲音最長幾秒（前端限制 10 分鐘，這裡多留一點）
@@ -127,16 +128,19 @@ function siteValidate_(p) {
   if (p.cover && p.cover.url && String(p.cover.url).indexOf(base + 'image/upload/') !== 0) throw new Error('封面來源不正確');
 }
 
-// Google 登入：向 Google 驗證前端送來的 ID token，確認是這個網站發的、信箱已驗證
+// 登入：把前端送來的 Firebase ID token 交給 Firebase 查，確認是本站的登入、信箱已驗證
 function siteCheckLogin_(p) {
-  if (!SITE_SUBMIT.GOOGLE_CLIENT_ID) return { email: '' };
-  if (!p.idToken) throw new Error('請先用 Google 登入再送出');
-  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(p.idToken), { muteHttpExceptions: true });
-  var info = r.getResponseCode() === 200 ? safeJsonParse_(r.getContentText()) : null;
-  if (!info || info.aud !== SITE_SUBMIT.GOOGLE_CLIENT_ID || !/^(https:\/\/)?accounts\.google\.com$/.test(info.iss || '') || String(info.email_verified) !== 'true' || +info.exp * 1000 < Date.now()) {
-    throw new Error('登入已過期，請重新登入再送出');
-  }
-  return { email: String(info.email).toLowerCase(), name: info.name || '' };
+  if (!SITE_SUBMIT.REQUIRE_LOGIN) return { email: '' };
+  if (!p.idToken) throw new Error('請先登入再送出');
+  var r = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + SITE_SUBMIT.FIREBASE_API_KEY, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify({ idToken: String(p.idToken) }), muteHttpExceptions: true
+  });
+  var res = r.getResponseCode() === 200 ? safeJsonParse_(r.getContentText()) : null;
+  var u = res && res.users && res.users[0];
+  if (!u || !u.email) throw new Error('登入已過期，請重新登入再送出');
+  if (u.emailVerified === false) throw new Error('這個帳號的 email 還沒驗證，請改用 Google 登入');
+  if (u.disabled) throw new Error('這個帳號暫時不能投稿，有疑問請來信');
+  return { email: String(u.email).toLowerCase(), name: u.displayName || '' };
 }
 
 function siteThrottle_(email) {
