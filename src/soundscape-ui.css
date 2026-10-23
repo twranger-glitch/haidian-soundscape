@@ -2222,3 +2222,38 @@ body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle, bo
 @keyframes ssFresh { 0% { box-shadow: 0 0 0 0 rgba(243, 194, 107, 0.6); } 100% { box-shadow: 0 0 0 16px rgba(243, 194, 107, 0); } }
 .ss-off-queue { font: 600 12px/1.4 var(--ss-sans); color: #7a5410; margin: 6px 0 0 8px; }
 .ss-off-queue[hidden] { display: none; }
+
+/* ============================================================
+   第十二輪：投稿步驟一 錄影／錄音／選檔
+   ============================================================ */
+.ss-sub-ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ss-sub-ways[hidden] { display: none; }
+.ss-sub-way { appearance: none; position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 14px 12px; border-radius: 18px; border: 1.5px solid rgba(12, 26, 29, 0.12); background: var(--sub-raise); color: var(--sub-ink); text-align: left; cursor: pointer; min-width: 0; font-family: var(--ss-sans); transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s; }
+.ss-sub-way:hover { border-color: rgba(15, 118, 110, 0.5); background: rgba(15, 118, 110, 0.06); }
+.ss-sub-way:active { transform: scale(0.98); }
+.ss-sub-way:focus-visible { outline: 2px solid var(--ss-teal); outline-offset: 2px; }
+.ss-sub-way svg { width: 26px; height: 26px; color: var(--ss-teal); margin-bottom: 2px; }
+.ss-sub-way b { font: 700 15px/1.2 var(--ss-sans); }
+.ss-sub-way i { font: 400 11.5px/1.45 var(--ss-sans); font-style: normal; color: var(--sub-muted); }
+.ss-sub-way input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ss-sub-way.is-video { border-color: transparent; background: linear-gradient(160deg, #0f766e, #115e59); color: #fff; box-shadow: 0 14px 28px -14px rgba(15, 118, 110, 0.8); }
+.ss-sub-way.is-video svg { color: #f3c26b; }
+.ss-sub-way.is-video i { color: rgba(255, 255, 255, 0.78); }
+.ss-sub-way.is-video:hover { background: linear-gradient(160deg, #0d6b63, #0f514c); }
+.ss-sub-way.is-mic svg { color: #e11d48; }
+.ss-sub-ways-note { margin: 8px 2px 0; font: 400 12px/1.5 var(--ss-sans); color: var(--sub-muted); }
+.ss-sub-ways-note[hidden] { display: none; }
+.ss-sub-rec[hidden] { display: none; }
+.ss-sub-pv-thumb { width: 56px; height: 42px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: var(--ss-sand); }
+.ss-sub-pv-thumb[hidden] { display: none; }
+@media (max-width: 560px) {
+  .ss-sub-ways { grid-template-columns: 1fr 1fr; }
+  .ss-sub-way.is-video { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; padding: 14px 16px; }
+  .ss-sub-way.is-video svg { width: 30px; height: 30px; margin: 0; }
+  .ss-sub-way.is-video b { display: block; }
+  .ss-sub-way.is-video > b, .ss-sub-way.is-video > i { flex: none; }
+  .ss-sub-way.is-video i { flex: 1; }
+  .ss-sub-way.is-mic, .ss-sub-way.is-file { padding: 12px; }
+  .ss-sub-way.is-mic i, .ss-sub-way.is-file i { font-size: 11px; }
+}
+body.ss-night .ss-sub-way { border-color: rgba(255, 255, 255, 0.1); }

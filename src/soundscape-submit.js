@@ -25,6 +25,7 @@
     endpoint: '',
     maxAudioMB: 60,
     maxImageMB: 20,
+    maxVideoMB: 300,
     maxMinutes: 10,
     mp3Kbps: 128,
     lamejsUrl: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.0/lame.min.js',
@@ -43,6 +44,7 @@
   var DB_VER = 1;
 
   var I = {
+    cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
     mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>',
     stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>',
@@ -284,7 +286,8 @@
   var st = {
     audioBlob: null, audioName: '', audioUrl: '', audioDur: 0, buffer: null, peaks: null,
     trimStart: 0, trimEnd: 0, mp3: null, mp3Key: '',
-    photoFile: null, photoBlob: null, photoUrl: '', photoGps: null,
+    photoFile: null, photoBlob: null, photoUrl: '', photoGps: null, photoFromVideo: false,
+    audioKind: 'audio', videoGps: null, thumbUrl: '', whenTouched: false,
     pos: null, posSource: '', place: '',
     cat: '', rec: null, recChunks: [], recTimer: null, recStart: 0, stream: null, meter: null,
     busy: false, miniMap: null, miniMarker: null, restoring: false
@@ -306,17 +309,21 @@
         '<form class="ss-sub-form" novalidate>' +
 
           '<section class="ss-sub-sec" data-sec="audio">' +
-            '<h3 class="ss-sub-h"><span class="ss-sub-num">1</span>聲音<small>現場錄，或選一個檔案</small></h3>' +
-            '<div class="ss-sub-audio">' +
-              '<div class="ss-sub-rec">' +
-                '<button type="button" class="ss-sub-recbtn" id="ssSubRec">' + I.mic + '</button>' +
-                '<div class="ss-sub-rectext"><b id="ssSubRecLabel">按一下開始錄音</b><i id="ssSubRecHint">用手機麥克風，錄到你覺得夠了再按停止</i><div class="ss-sub-meter" id="ssSubMeter" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
-              '</div>' +
-              '<label class="ss-sub-filebtn">' + I.file + '<span>選音檔或影片</span><input type="file" id="ssSubAudioFile" accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.mp4,.mov"></label>' +
+            '<h3 class="ss-sub-h"><span class="ss-sub-num">1</span>聲音<small>錄影、錄音，或選一個檔案</small></h3>' +
+            '<div class="ss-sub-ways" id="ssSubWays">' +
+              '<label class="ss-sub-way is-video">' + I.cam + '<b>錄影</b><i id="ssSubVideoHint">開相機錄一段，畫面、聲音、位置一次帶齊</i><input type="file" id="ssSubVideoCap" accept="video/*" capture="environment"></label>' +
+              '<button type="button" class="ss-sub-way is-mic" id="ssSubMic">' + I.mic + '<b>錄音</b><i>只錄聲音，用這支手機的麥克風</i></button>' +
+              '<label class="ss-sub-way is-file">' + I.file + '<b>選檔</b><i>手機裡現成的影片或音檔</i><input type="file" id="ssSubAudioFile" accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.mp4,.mov,.3gp"></label>' +
+            '</div>' +
+            '<p class="ss-sub-ways-note" id="ssSubWaysNote">影片只會取出聲音和一張截圖當封面，不會上傳整支影片。</p>' +
+            '<div class="ss-sub-rec" id="ssSubRecPanel" hidden>' +
+              '<button type="button" class="ss-sub-recbtn is-rec" id="ssSubRec" aria-label="停止錄音">' + I.stop + '</button>' +
+              '<div class="ss-sub-rectext"><b id="ssSubRecLabel">錄音中</b><i id="ssSubRecHint" hidden></i><div class="ss-sub-meter" id="ssSubMeter" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
             '</div>' +
             '<div class="ss-sub-preview" id="ssSubAudioPreview" hidden>' +
               '<div class="ss-sub-pv-row">' +
                 '<button type="button" class="ss-sub-pp" id="ssSubPP">' + I.play + '</button>' +
+                '<img class="ss-sub-pv-thumb" id="ssSubThumb" alt="" hidden>' +
                 '<div class="ss-sub-pv-text"><b id="ssSubAudioName">錄音</b><i id="ssSubAudioMeta"></i></div>' +
                 '<button type="button" class="ss-sub-x" id="ssSubAudioClear" aria-label="移除聲音">' + I.trash + '</button>' +
               '</div>' +
@@ -343,6 +350,7 @@
             '<div class="ss-sub-posrow">' +
               '<button type="button" class="ss-sub-chipbtn" id="ssSubLocate">' + I.locate + '用我現在的位置</button>' +
               '<button type="button" class="ss-sub-chipbtn" id="ssSubPhotoPos" hidden>' + I.photo + '用照片裡的位置</button>' +
+              '<button type="button" class="ss-sub-chipbtn" id="ssSubVideoPos" hidden>' + I.cam + '用影片裡的位置</button>' +
             '</div>' +
             '<div class="ss-sub-pos" id="ssSubPosText">還沒選位置</div>' +
           '</section>' +
@@ -388,7 +396,10 @@
     $('.ss-sub-close', root).addEventListener('click', close);
     root.addEventListener('click', function (e) { if (e.target === root) close(); });
     $('#ssSubRec', root).addEventListener('click', toggleRec);
-    $('#ssSubAudioFile', root).addEventListener('change', function (e) { if (e.target.files[0]) setAudio(e.target.files[0], e.target.files[0].name); e.target.value = ''; });
+    $('#ssSubMic', root).addEventListener('click', toggleRec);
+    $('#ssSubVideoCap', root).addEventListener('change', function (e) { if (e.target.files[0]) setVideo(e.target.files[0]); e.target.value = ''; });
+    $('#ssSubAudioFile', root).addEventListener('change', function (e) { var f = e.target.files[0]; if (f) { if (isVideoFile(f)) setVideo(f); else setAudio(f, f.name); } e.target.value = ''; });
+    if (!isTouch()) $('#ssSubVideoHint', root).textContent = '選一段影片，會取出聲音、截圖和位置';
     $('#ssSubAudioClear', root).addEventListener('click', function () { clearAudio(); saveDraft(); });
     $('#ssSubPP', root).addEventListener('click', togglePreview);
     audioPreview.addEventListener('ended', function () { $('#ssSubPP', root).innerHTML = I.play; });
@@ -406,6 +417,8 @@
     $('#ssSubPhoto', root).addEventListener('change', function (e) { if (e.target.files[0]) setPhoto(e.target.files[0]); });
     $('#ssSubLocate', root).addEventListener('click', useMyLocation);
     $('#ssSubPhotoPos', root).addEventListener('click', function () { if (st.photoGps) setPos(st.photoGps.lat, st.photoGps.lon, 'photo', true); });
+    $('#ssSubVideoPos', root).addEventListener('click', function () { if (st.videoGps) setPos(st.videoGps.lat, st.videoGps.lon, 'video', true); });
+    $('#ssSubWhen', root).addEventListener('input', function () { st.whenTouched = true; });
     $('#ssSubDraftClear', root).addEventListener('click', function () { resetForm(); clearDraft(); $('#ssSubDraftBar', root).hidden = true; });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
     var author = readLS(LS_AUTHOR);
@@ -509,15 +522,15 @@
     if (st.miniMap && pan) st.miniMap.setView([lat, lon], Math.max(st.miniMap.getZoom(), 16));
     var t = $('#ssSubPosText', root);
     if (tentative) t.innerHTML = '<span class="ss-sub-coord">圖釘先放在畫面中間，拖到真正的地點</span>';
-    else t.innerHTML = '<span class="ss-sub-coord">' + lat.toFixed(5) + ', ' + lon.toFixed(5) + (source === 'gps' ? '（我的位置）' : source === 'photo' ? '（照片）' : '') + '</span>';
+    else t.innerHTML = '<span class="ss-sub-coord">' + lat.toFixed(5) + ', ' + lon.toFixed(5) + (source === 'gps' ? '（我的位置）' : source === 'photo' ? '（照片）' : source === 'video' ? '（影片）' : '') + '</span>';
     t.classList.toggle('is-set', !tentative);
     markSec('pos', !tentative);
     if (!tentative) { status(''); lookupPlace(lat, lon); saveDraft(); }
   }
 
-  function useMyLocation() {
+  function useMyLocation(silent) {
     var b = $('#ssSubLocate', root);
-    if (!navigator.geolocation) { note('這個裝置抓不到位置，請直接拖圖釘'); return; }
+    if (!navigator.geolocation) { if (!silent) note('這個裝置抓不到位置，請直接拖圖釘'); return; }
     b.disabled = true;
     b.classList.add('is-busy');
     navigator.geolocation.getCurrentPosition(function (p) {
@@ -525,7 +538,7 @@
       setPos(p.coords.latitude, p.coords.longitude, 'gps', true);
     }, function () {
       b.disabled = false; b.classList.remove('is-busy');
-      note('抓不到位置，請直接在小地圖上拖圖釘');
+      if (!silent) note('抓不到位置，請直接在小地圖上拖圖釘');
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
 
@@ -610,15 +623,105 @@
   }
 
   function syncRecUI(on) {
-    var b = $('#ssSubRec', root);
-    b.classList.toggle('is-rec', on);
-    b.innerHTML = on ? I.stop : I.mic;
-    b.setAttribute('aria-label', on ? '停止錄音' : '開始錄音');
-    $('#ssSubRecHint', root).hidden = on;
-    if (!on) {
-      $('#ssSubRecLabel', root).textContent = st.audioBlob ? '重新錄一段' : '按一下開始錄音';
-      $('#ssSubRecHint', root).textContent = st.audioBlob ? '會取代現在這段聲音' : '用手機麥克風，錄到你覺得夠了再按停止';
+    $('#ssSubRecPanel', root).hidden = !on;
+    $('#ssSubWays', root).hidden = on;
+    $('#ssSubWaysNote', root).hidden = on;
+    $('#ssSubRecHint', root).hidden = true;
+    if (on) $('#ssSubRecLabel', root).textContent = '錄音中 0:00';
+    else $('#ssSubWaysNote', root).textContent = st.audioBlob ? '再錄或再選一次，會取代現在這段聲音。' : '影片只會取出聲音和一張截圖當封面，不會上傳整支影片。';
+  }
+
+  function isTouch() {
+    return !!(navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  }
+
+  function isVideoFile(f) {
+    return /^video\//.test(f.type || '') || /\.(mp4|mov|m4v|webm|3gp|3g2|mkv|avi)$/i.test(f.name || '');
+  }
+
+  // ------------------------------------------------------------ 錄影檔：取聲音、截封面、讀座標
+  function setVideo(file) {
+    if (file.size > CONFIG.maxVideoMB * 1048576) { note('影片太大了（上限 ' + CONFIG.maxVideoMB + ' MB），請先剪短再選'); return; }
+    setAudio(file, file.name || '現場錄影.mp4', { kind: 'video' });
+    if (st.audioBlob !== file) return;
+    if (!st.whenTouched && !st.restoring && file.lastModified && Date.now() - file.lastModified > 90e3) {
+      $('#ssSubWhen', root).value = localDateTime(new Date(file.lastModified));
     }
+    var fresh = file.lastModified && Date.now() - file.lastModified < 20 * 60e3;
+    grabFrame(file).then(function (blob) {
+      if (st.audioBlob !== file || !blob) return;
+      if (st.thumbUrl) URL.revokeObjectURL(st.thumbUrl);
+      st.thumbUrl = URL.createObjectURL(blob);
+      var th = $('#ssSubThumb', root);
+      th.src = st.thumbUrl; th.hidden = false;
+      if (!st.photoFile && !st.restoring) {
+        setPhoto(new File([blob], 'cover.jpg', { type: 'image/jpeg' }), { fromVideo: true });
+      }
+    }).catch(function () {});
+    videoGps(file).then(function (gps) {
+      if (st.audioBlob !== file) return;
+      st.videoGps = gps;
+      $('#ssSubVideoPos', root).hidden = !gps;
+      if (st.restoring) return;
+      if (gps) {
+        if (!st.pos) setPos(gps.lat, gps.lon, 'video', true);
+        else {
+          var t = $('#ssSubTrimNote', root);
+          t.innerHTML = I.pin + ' 影片裡有位置資訊。<button type="button" class="ss-sub-link" id="ssSubUseVideoPos">用它當採集地點</button>';
+          $('#ssSubUseVideoPos', root).addEventListener('click', function () { setPos(gps.lat, gps.lon, 'video', true); syncTrimText(); });
+        }
+      } else if (!st.pos && fresh) {
+        // 剛錄完、影片沒帶座標：人大概還在現場，先抓目前位置
+        useMyLocation(true);
+      }
+    });
+  }
+
+  function grabFrame(file) {
+    return new Promise(function (resolve, reject) {
+      var v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+      var url = URL.createObjectURL(file), done = false, timer;
+      var finish = function (b) { if (done) return; done = true; clearTimeout(timer); try { v.removeAttribute('src'); v.load(); } catch (e) {} URL.revokeObjectURL(url); b ? resolve(b) : reject(new Error('frame')); };
+      timer = setTimeout(function () { finish(null); }, 15000);
+      v.onerror = function () { finish(null); };
+      v.onloadedmetadata = function () {
+        var d = isFinite(v.duration) ? v.duration : 0;
+        v.currentTime = d > 0.4 ? Math.min(1.5, d * 0.25) : 0.01;
+      };
+      v.onseeked = function () {
+        try {
+          var w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) return finish(null);
+          var scale = Math.min(1, 1600 / Math.max(w, h));
+          var c = document.createElement('canvas');
+          c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+          c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+          c.toBlob(function (b) { finish(b); }, 'image/jpeg', 0.84);
+        } catch (e) { finish(null); }
+      };
+      v.src = url;
+      v.load();
+    });
+  }
+
+  // 手機相機錄的 mp4/mov 會把座標寫成 ISO 6709（例如 +23.0320+120.2100/），在檔頭或檔尾找得到
+  function videoGps(file) {
+    if (!window.TextDecoder) return Promise.resolve(null);
+    var N = 4 * 1048576;
+    var parts = file.size > 2 * N ? [file.slice(0, N), file.slice(file.size - N)] : [file];
+    return Promise.all(parts.map(function (p) { return p.arrayBuffer(); })).then(function (bufs) {
+      var dec = new TextDecoder('latin1');
+      for (var i = 0; i < bufs.length; i++) {
+        var txt = dec.decode(bufs[i]);
+        var m = /([+-]\d{1,2}\.\d{2,})([+-]\d{1,3}\.\d{2,})([+-]\d+(?:\.\d+)?)?(?:CRS[^\/]{0,40})?\//.exec(txt);
+        if (m) {
+          var lat = +m[1], lon = +m[2];
+          if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && (lat || lon)) return { lat: lat, lon: lon };
+        }
+      }
+      return null;
+    }).catch(function () { return null; });
   }
 
   // ------------------------------------------------------------ 聲音檔：預覽、波形、剪輯
@@ -627,6 +730,7 @@
     if (blob.size > CONFIG.maxAudioMB * 1048576) { note('檔案太大了（上限 ' + CONFIG.maxAudioMB + ' MB），請剪短一點'); return; }
     clearAudio(true);
     st.audioBlob = blob;
+    st.audioKind = opts.kind || (/^video\//.test(blob.type || '') ? 'video' : 'audio');
     st.audioName = name || 'audio';
     st.audioUrl = URL.createObjectURL(blob);
     st.audioDur = 0;
@@ -661,7 +765,8 @@
       if (st.audioBlob !== blob) return;
       st.buffer = null;
       syncAudioMeta();
-      $('#ssSubTrimNote', root).textContent = '這個格式瀏覽器讀不出來，會直接上傳原檔。';
+      $('#ssSubTrimNote', root).textContent = st.audioKind === 'video' ? '這支影片的聲音瀏覽器讀不出來，會上傳整支影片，由伺服器轉成 mp3。' : '這個格式瀏覽器讀不出來，會直接上傳原檔。';
+      if (st.audioKind === 'video' && blob.size > CONFIG.maxAudioMB * 1048576) { note('影片太大又讀不出聲音（上限 ' + CONFIG.maxAudioMB + ' MB）'); clearAudio(); }
     });
   }
 
@@ -687,7 +792,7 @@
     $('#ssSubTrimAT', root).textContent = fmtTime1(st.trimStart);
     $('#ssSubTrimBT', root).textContent = fmtTime1(st.trimEnd);
     var cut = st.buffer ? (st.buffer.duration - (st.trimEnd - st.trimStart)) : 0;
-    $('#ssSubTrimNote', root).textContent = cut > 0.2 ? '會剪掉 ' + cut.toFixed(1) + ' 秒，留下 ' + fmtTime1(st.trimEnd - st.trimStart) + '。送出前壓成 mp3。' : '拖兩個滑桿剪掉頭尾，送出前會壓成 mp3。';
+    $('#ssSubTrimNote', root).textContent = (cut > 0.2 ? '會剪掉 ' + cut.toFixed(1) + ' 秒，留下 ' + fmtTime1(st.trimEnd - st.trimStart) + '。送出前壓成 mp3。' : '拖兩個滑桿剪掉頭尾，送出前會壓成 mp3。') + (st.audioKind === 'video' ? '只上傳聲音，不上傳影片。' : '');
   }
 
   function drawWave() {
@@ -729,7 +834,12 @@
     if (st.audioUrl) URL.revokeObjectURL(st.audioUrl);
     st.audioBlob = null; st.audioUrl = ''; st.audioName = ''; st.audioDur = 0; st.buffer = null; st.peaks = null; st.mp3 = null; st.trimStart = 0; st.trimEnd = 0;
     audioPreview.removeAttribute('src');
+    st.audioKind = 'audio'; st.videoGps = null;
+    if (st.thumbUrl) { URL.revokeObjectURL(st.thumbUrl); st.thumbUrl = ''; }
     if (root) {
+      var th = $('#ssSubThumb', root); th.hidden = true; th.removeAttribute('src');
+      $('#ssSubVideoPos', root).hidden = true;
+      if (st.photoFromVideo) clearPhoto();
       $('#ssSubAudioPreview', root).hidden = true;
       $('#ssSubWaveBox', root).hidden = true;
       markSec('audio', false);
@@ -769,11 +879,12 @@
     if (st.photoUrl) URL.revokeObjectURL(st.photoUrl);
     st.photoFile = file;
     st.photoBlob = null;
+    st.photoFromVideo = !!opts.fromVideo;
     st.photoUrl = URL.createObjectURL(file);
     var box = $('#ssSubPhotoBox', root);
     box.classList.add('has-photo');
     box.style.backgroundImage = 'url("' + st.photoUrl + '")';
-    box.querySelector('span').textContent = '換一張';
+    box.querySelector('span').textContent = opts.fromVideo ? '影片截圖當封面・換一張' : '換一張';
     markSec('photo', true);
     st.photoGps = null;
     $('#ssSubPhotoPos', root).hidden = true;
@@ -782,7 +893,7 @@
     shrinkImage(file).then(function (b) {
       if (st.photoFile !== file) return;
       st.photoBlob = b;
-      box.querySelector('span').textContent = '換一張 · ' + fmtMB(b.size);
+      box.querySelector('span').textContent = (st.photoFromVideo ? '影片截圖當封面・換一張 · ' : '換一張 · ') + fmtMB(b.size);
       if (!opts.skipSave) saveDraft();
     });
     exifGps(file).then(function (gps) {
@@ -874,7 +985,8 @@
     var jobs = [];
     if (d.hasAudio) jobs.push(idbGet('draft', 'audio').then(function (r) {
       if (r && r.blob) {
-        setAudio(r.blob, r.name, { skipSave: true });
+        if (isVideoFile({ type: r.blob.type, name: r.name })) setVideo(new File([r.blob], r.name || 'video.mp4', { type: r.blob.type || 'video/mp4' }));
+        else setAudio(r.blob, r.name, { skipSave: true });
         if (d.trimEnd) {
           var tryTrim = function (n) {
             if (st.buffer) {
@@ -1153,14 +1265,20 @@
     $('#ssSubAgain', root).addEventListener('click', function () { resetForm(); box.hidden = true; form.hidden = false; });
   }
 
-  function resetForm() {
-    clearAudio();
+  function clearPhoto() {
     if (st.photoUrl) URL.revokeObjectURL(st.photoUrl);
-    st.photoFile = null; st.photoBlob = null; st.photoUrl = ''; st.photoGps = null;
+    st.photoFile = null; st.photoBlob = null; st.photoUrl = ''; st.photoGps = null; st.photoFromVideo = false;
     var box = $('#ssSubPhotoBox', root);
     box.classList.remove('has-photo'); box.style.backgroundImage = ''; box.querySelector('span').textContent = '拍一張或選一張';
     $('#ssSubPhotoNote', root).hidden = true;
     $('#ssSubPhotoPos', root).hidden = true;
+    markSec('photo', false);
+  }
+
+  function resetForm() {
+    clearAudio();
+    clearPhoto();
+    st.whenTouched = false;
     $('#ssSubTitleIn', root).value = '';
     $('#ssSubDesc', root).value = '';
     $('#ssSubWhen', root).value = localDateTime();
