@@ -22,7 +22,6 @@
     <link rel="preconnect" href="https://tiles.openfreemap.org">
     <link rel="preconnect" href="https://wmts.nlsc.gov.tw">
     <link rel="preconnect" href="https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <style>
       /* 首屏就隱藏舊版入口卡片，新版首頁載入前只顯示同色底與呼吸光球 */
       #splashScreen > .splash-card { display: none !important; }
@@ -43,7 +42,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script defer src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -96,7 +94,7 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.20">
+    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.21">
 
 <!-- HAIDIAN_9PLUS_STABLE_V4_CSS_START -->
 
@@ -109,9 +107,71 @@
 <!-- ===== END: RIGHT_TOOLS_UNIVERSAL_DESIGN ===== -->
 
 <link rel="stylesheet" href="./gba-estimated/integration.css?v=20261020.3">
-<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.20">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&display=swap">
-<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.20">
+<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.21">
+<script>
+/* 標題明體（Noto Serif TC，只取 700 一種字重）不擋首屏，也不讓頁面載到一半整頁重排：
+ * - 第一次造訪：這次先用系統明體。頁面載完、瀏覽器有空時，只把目前畫面上明體文字用得到的字型分片抓進快取，不套用。
+ * - 之後造訪：字型已在快取，開頭就直接套用（display=optional，萬一快取被清掉就用系統明體，不會閃動）。 */
+(function () {
+  var href = 'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional';
+  var KEY = 'ss-serif-cached';
+  var cached = false;
+  try { cached = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  // 兩處都加 crossorigin，讓第一次預抓和之後正式套用是同一個快取項目
+  if (cached) { document.write('<link rel="stylesheet" crossorigin="anonymous" href="' + href + '">'); return; }
+  if (!window.fetch || !window.Set) return;
+
+  var idle = window.requestIdleCallback || function (f) { return setTimeout(function () { f({ timeRemaining: function () { return 8; } }); }, 200); };
+  // 找出畫面上用明體的字；逐段在瀏覽器空檔做，避免一次卡住主執行緒
+  function serifText(done) {
+    var els = document.querySelectorAll('body *'), i = 0, chars = new Set();
+    (function step(deadline) {
+      while (i < els.length && deadline.timeRemaining() > 2) {
+        var el = els[i++], own = '';
+        for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3) own += n.nodeValue;
+        own = own.replace(/\s+/g, '');
+        if (!own || getComputedStyle(el).fontFamily.indexOf('Noto Serif') < 0) continue;
+        for (var k = 0; k < own.length; k++) chars.add(own.charCodeAt(k));
+      }
+      if (i < els.length) idle(step); else done(chars);
+    })({ timeRemaining: function () { return 8; } });
+  }
+  function inRanges(chars, ranges) {
+    return ranges.split(',').some(function (r) {
+      var m = r.trim().replace(/^U\+/i, '').split('-');
+      var lo = parseInt(m[0], 16), hi = m[1] ? parseInt(m[1], 16) : lo;
+      for (var c of chars) if (c >= lo && c <= hi) return true;
+      return false;
+    });
+  }
+  function warm() {
+    // media="print" 只下載、不套用到畫面，所以不會觸發重排；crossorigin 讓我們讀得到裡面的 @font-face
+    var l = document.createElement('link');
+    l.rel = 'stylesheet'; l.media = 'print'; l.crossOrigin = 'anonymous'; l.href = href;
+    l.onload = function () { serifText(function (chars) {
+      var urls = [];
+      try {
+        Array.prototype.forEach.call(l.sheet.cssRules, function (rule) {
+          if (rule.type !== 5) return; // CSSFontFaceRule
+          var src = /url\(["']?([^"')]+)/.exec(rule.style.getPropertyValue('src'));
+          var range = rule.style.getPropertyValue('unicode-range');
+          if (src && (!range || inRanges(chars, range))) urls.push(src[1]);
+        });
+      } catch (e) { return; }
+      l.remove();
+      Promise.all(urls.map(function (u) { return fetch(u, { mode: 'cors' }); })).then(function () {
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      }).catch(function () {});
+    }); };
+    document.head.appendChild(l);
+  }
+  window.addEventListener('load', function () {
+    idle(warm, { timeout: 5000 });
+  }, { once: true });
+})();
+</script>
+<noscript><link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional"></noscript>
+<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.21">
 </head>
 <body>
 
@@ -1252,27 +1312,27 @@
         </div>
     </div>
     
-    <script defer src="./src/app/app-main.js?v=20261023.20"></script>
+    <script defer src="./src/app/app-main.js?v=20261023.21"></script>
 
 
 <!-- HAIDIAN_FINAL_UI_PACK_START -->
 
-<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.20"></script>
+<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.21"></script>
 <!-- HAIDIAN_FINAL_UI_PACK_END -->
 
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_START -->
-<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.20"></script>
+<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.21"></script>
 <!-- HAIDIAN_9PLUS_STABLE_V4_JS_END -->
 
 <script defer src="./src/heat-risk.js?v=9.0.0-dev37.8"></script>
 <script defer src="./src/cwa-temperature-layer.js?v=9.0.0-dev37.8"></script>
 
 <!-- ===== START: MOVE_CWA_HEAT_RISK_TO_HISTORY ===== -->
-<script defer src="./src/app/move-cwa-heat-risk-to-history.js?v=20261023.20"></script>
+<script defer src="./src/app/move-cwa-heat-risk-to-history.js?v=20261023.21"></script>
 <!-- ===== END: MOVE_CWA_HEAT_RISK_TO_HISTORY ===== -->
 
 <!-- ===== START: DESKTOP_RIGHT_TOOLS_ALIGNMENT ===== -->
-<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.20"></script>
+<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.21"></script>
 <!-- ===== END: DESKTOP_RIGHT_TOOLS_ALIGNMENT ===== -->
 
    
@@ -1281,14 +1341,14 @@
 <!-- ===== END: URGENT_RIGHT_TOOLS_AND_FOCUS_FIX ===== -->
 
 <!-- ===== START: FOCUS_MODE_CLOSE_NONWORK_POPUPS ===== -->
-<script defer src="./src/app/focus-mode-close-nonwork-popups.js?v=20261023.20"></script>
+<script defer src="./src/app/focus-mode-close-nonwork-popups.js?v=20261023.21"></script>
 <!-- ===== END: FOCUS_MODE_CLOSE_NONWORK_POPUPS ===== -->
 
 <!-- ===== START: MOBILE_RIGHT_CONTROL_STACK_FIX ===== -->
 
 <!-- ===== END: MOBILE_RIGHT_CONTROL_STACK_FIX ===== -->
 
-<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.20"></script>
+<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.21"></script>
 
 
 <!-- ===== START: FLOOD_DEDUPE_AND_RIGHT_TOOLS_STACK_FIX ===== -->
@@ -1298,7 +1358,7 @@
 <!-- ===== START: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
 
 
-<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.20"></script>
+<script defer src="./src/app/immediate-flood-events-and-solid-right-tool-rail-fix-script.js?v=20261023.21"></script>
 <!-- ===== END: IMMEDIATE_FLOOD_EVENTS_AND_SOLID_RIGHT_TOOL_RAIL_FIX ===== -->
 
 
@@ -1323,7 +1383,7 @@
 <!-- ===== START: MOBILE_RIGHT_TOOLS_TOOLBAR_AND_BANNER_FIX ===== -->
 
 
-<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.20"></script>
+<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.21"></script>
 <!-- ===== END: MOBILE_RIGHT_TOOLS_TOOLBAR_AND_BANNER_FIX ===== -->
 <script defer src="./config.shademap.js?v=9.0.0-dev37.8"></script>
 <script defer src="./config.route-exposure.js?v=9.0.0-dev37.8"></script>
@@ -1344,9 +1404,9 @@
 <script defer src="./src/route-source-provenance.js?v=20261020.2"></script>
 <script defer src="./src/route-exposure.js?v=9.0.0-dev37.8&core=37.9.9.16.11&patch=mapped-source-handoff-20261020.2"></script>
 <!-- 聲景介面改版層：移除下面這段即可還原 -->
-<script defer src="./src/soundscape-basemap.js?v=20261023.20"></script>
-<script defer src="./src/soundscape-ui.js?v=20261023.20"></script>
-<script defer src="./src/soundscape-submit.js?v=20261023.20"></script>
+<script defer src="./src/soundscape-basemap.js?v=20261023.21"></script>
+<script defer src="./src/soundscape-ui.js?v=20261023.21"></script>
+<script defer src="./src/soundscape-submit.js?v=20261023.21"></script>
 <!-- 聲景介面改版層結束 -->
 <script type="module" src="./gba-estimated/integration.mjs?v=20261021.8"></script>
 </body></html>

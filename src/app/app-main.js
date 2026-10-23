@@ -5839,7 +5839,33 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
             executeStandardRoute('geofence_custom', actualPathCoords);
         }
 
-        map.on('pm:create', function(e) {
+        // Turf 只在走路線、自己畫範圍時才用到，解析又很花時間，所以第一次用到才載入；
+        // 頁面閒下來時先預抓檔案（不執行），點下去幾乎馬上就能用，離線快取也照樣存得到。
+        var TURF_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js';
+        var turfLoading = null;
+        function withTurf(fn) {
+            if (window.turf) return fn();
+            if (!turfLoading) {
+                turfLoading = new Promise(function (resolve, reject) {
+                    var s = document.createElement('script');
+                    s.src = TURF_SRC;
+                    s.onload = resolve;
+                    s.onerror = function () { turfLoading = null; reject(new Error('turf')); };
+                    document.head.appendChild(s);
+                });
+            }
+            turfLoading.then(fn, function () { alert('路線工具載入失敗，請確認網路後再試一次。'); });
+        }
+        window.addEventListener('load', function () {
+            (window.requestIdleCallback || function (f) { setTimeout(f, 2000); })(function () {
+                if (window.turf) return;
+                var l = document.createElement('link');
+                l.rel = 'prefetch'; l.href = TURF_SRC; l.as = 'script';
+                document.head.appendChild(l);
+            }, { timeout: 5000 });
+        }, { once: true });
+
+        map.on('pm:create', function(e) { withTurf(function () {
             var layer = e.layer;
             var shape = e.shape; 
             var geojson = layer.toGeoJSON();
@@ -5855,9 +5881,10 @@ if (floatingClearBtn) floatingClearBtn.style.display = 'flex';
 
             map.removeLayer(layer);
             executeCustomGeofence(searchPolygon, pathCoords);
-        });
+        }); });
 
         function toggleRoute(type, btnElement) {
+            if (type !== 'clear' && !window.turf) return withTurf(function () { toggleRoute(type, btnElement); });
             document.querySelectorAll('.route-btn').forEach(btn => btn.classList.remove('active'));
             if (currentGeoFenceBufferLayer) { map.removeLayer(currentGeoFenceBufferLayer); currentGeoFenceBufferLayer = null; }
 
