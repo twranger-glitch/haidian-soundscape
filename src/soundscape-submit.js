@@ -1000,10 +1000,26 @@
   }
   function inAppBrowser() { return /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent || ''); }
   function signIn() {
-    // 手機版原本的登入會整頁跳轉，回來後自動把投稿頁打開；草稿本來就會接回
-    try { sessionStorage.setItem(SS_REOPEN, '1'); } catch (e) {}
+    var a = fbAuth();
+    if (!a || authValid()) return;
     saveDraft();
-    if (typeof window.toggleLogin === 'function' && !authValid()) window.toggleLogin();
+    var btn = $('#ssSubGBtn', root);
+    if (btn) btn.disabled = true;
+    // 用彈出視窗登入，投稿頁留在原地；網站原本手機版是整頁跳轉，會把投稿頁關掉
+    a.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(function () {
+      renderAuth();
+    }).catch(function (err) {
+      if (btn) btn.disabled = false;
+      var code = err && err.code || '';
+      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/.test(code)) return;
+      if (/popup-blocked|operation-not-supported/.test(code)) {
+        // 瀏覽器擋彈出視窗才退回整頁跳轉，回來後自動打開投稿頁，草稿會接回
+        try { sessionStorage.setItem(SS_REOPEN, '1'); } catch (e) {}
+        a.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+        return;
+      }
+      status('登入沒有成功：' + (err && err.message || err), 'err');
+    });
   }
   function signOut() {
     var a = fbAuth();
