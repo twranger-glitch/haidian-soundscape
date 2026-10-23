@@ -8287,7 +8287,7 @@
     }
   };
 
-  if (document.readyState === "loading") {
+  if ((document.readyState === "loading" || window.__ssDCL === false)) {
     document.addEventListener("DOMContentLoaded", boot, { once: true });
   } else {
     boot();

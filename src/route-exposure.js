@@ -5893,6 +5893,6 @@
     }
   };
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
+  if ((document.readyState === "loading" || window.__ssDCL === false)) document.addEventListener("DOMContentLoaded", boot, { once: true });
   else boot();
 })();

@@ -1560,6 +1560,6 @@
     };
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hook, { once: true });
+  if ((document.readyState === 'loading' || window.__ssDCL === false)) document.addEventListener('DOMContentLoaded', hook, { once: true });
   else hook();
 })();

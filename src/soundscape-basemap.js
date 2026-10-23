@@ -117,34 +117,84 @@
     if (osm) osm.classList.add('ss-osm-tiles');
   }
 
-  function start(map) {
-    if (!window.L || !L.maplibreGL || map.__ssWorldBase) return;
-    map.__ssWorldBase = true;
+  // MapLibre 很重（約 800 KB、還要 WebGL 繪圖），只有縮小到全臺以上或看臺灣以外時才需要，
+  // 所以等真的要用才下載；放大回臺灣就把它拿掉，不在背後白白繪圖。
+  var GL_JS = 'https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js';
+  var GL_CSS = 'https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css';
+  var GL_LEAFLET = 'https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js';
+  var TAIWAN_VIEW = [21.7, 26.5, 118.0, 122.3];
+  var glLoading = null;
 
-    fetch(STYLE_URL).then(function (r) { return r.json(); }).then(function (style) {
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('載入失敗：' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadGl() {
+    if (window.L && L.maplibreGL) return Promise.resolve();
+    if (glLoading) return glLoading;
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = GL_CSS;
+    document.head.appendChild(css);
+    glLoading = (window.maplibregl ? Promise.resolve() : loadScript(GL_JS)).then(function () { return loadScript(GL_LEAFLET); });
+    glLoading.catch(function () { glLoading = null; });
+    return glLoading;
+  }
+
+  function needWorld(map) {
+    if (!isTaiwanBase() || document.body.classList.contains('haidian-v4-mode-data')) return false;
+    if (map.getZoom() < NLSC_MIN_ZOOM) return true;
+    var c = map.getCenter();
+    return !(c.lat >= TAIWAN_VIEW[0] && c.lat <= TAIWAN_VIEW[1] && c.lng >= TAIWAN_VIEW[2] && c.lng <= TAIWAN_VIEW[3]);
+  }
+
+  function addGl(map) {
+    if (glLayer) {
+      if (!map.hasLayer(glLayer)) { glLayer.options.style = recolor(JSON.parse(JSON.stringify(baseStyle))); glLayer.addTo(map); }
+      styleGl();
+      return Promise.resolve();
+    }
+    return loadGl().then(function () {
+      return baseStyle ? baseStyle : fetch(STYLE_URL).then(function (r) { return r.json(); });
+    }).then(function (style) {
       baseStyle = style;
-      var layer = L.maplibreGL({
+      if (glLayer) return;
+      glLayer = L.maplibreGL({
         style: recolor(JSON.parse(JSON.stringify(style))),
         attributionControl: false,
         interactive: false
       });
-      layer.addTo(map);
-      glLayer = layer;
-      var c = layer.getContainer && layer.getContainer();
-      if (c) {
-        c.classList.add('ss-world-base');
-        c.style.zIndex = '0';
-      }
+      if (needWorld(map)) glLayer.addTo(map);
+      styleGl();
       map.attributionControl && map.attributionControl.addAttribution('&copy; <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>');
     }).catch(function (e) { console.warn('聲景底圖載入失敗，維持原底圖', e); });
+  }
+  function styleGl() {
+    var c = glLayer && glLayer.getContainer && glLayer.getContainer();
+    if (c) { c.classList.add('ss-world-base'); c.style.zIndex = '0'; }
+  }
 
+  function syncGl(map) {
+    if (needWorld(map)) addGl(map);
+    else if (glLayer && map.hasLayer(glLayer)) map.removeLayer(glLayer);
+  }
+
+  function start(map) {
+    if (!window.L || map.__ssWorldBase) return;
+    map.__ssWorldBase = true;
     [window.taiwanLayer, window.osmLayer].forEach(function (l) { if (l) l.on('add', tagLayers); });
     tagLayers();
-    map.on('zoomend', function () { syncClasses(map); });
+    map.on('zoomend moveend', function () { syncClasses(map); syncGl(map); });
     document.addEventListener('change', function (e) {
-      if (e.target && e.target.name === 'basemap') { tagLayers(); syncClasses(map); }
+      if (e.target && e.target.name === 'basemap') { tagLayers(); syncClasses(map); syncGl(map); }
     });
     syncClasses(map);
+    syncGl(map);
   }
 
   // 夜間模式切換時，把向量底圖整個換色（不重新下載圖磚）
@@ -160,7 +210,7 @@
   };
 
   (function wait(n) {
-    if (window.map && window.L && L.maplibreGL) return start(window.map);
+    if (window.map && window.L) return start(window.map);
     if (n > 200) return;
     setTimeout(function () { wait(n + 1); }, 100);
   })(0);

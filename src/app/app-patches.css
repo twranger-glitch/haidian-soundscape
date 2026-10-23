@@ -1,0 +1,1541 @@
+/* ===== index.html 第 2217 行 ===== */
+        #splashScreen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(15, 23, 42, 0.7); /* 🌟 加深背景遮罩，讓卡片對比度極大化 */
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            z-index: 2147483647; display: flex; justify-content: center; align-items: center;
+            transition: opacity 0.6s ease;
+            font-family: 'Noto Sans TC', 'Helvetica Neue', Arial, '微軟正黑體', sans-serif;
+            padding: 16px; /* 確保卡片即使滿版，也不會緊貼螢幕邊緣 */
+            box-sizing: border-box;
+        }
+        .splash-card {
+            background: #ffffff; border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.8);
+            border-radius: 24px; padding: 45px 40px;
+            max-width: 100%; width: 440px; /* 改用 100% 配合 border-box 避免破版 */
+            box-sizing: border-box; /* 🎯 終極防爆：把 padding 算進寬度內！ */
+            max-height: calc(100dvh - 32px); /* 防止在橫向螢幕被切斷 */
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            transform: translateY(0); transition: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+        #splashScreen.is-hidden { opacity: 0; pointer-events: none; }
+        #splashScreen.is-hidden .splash-card { transform: translateY(20px) scale(0.95); }
+
+        /* 🌟 頂部漸層飾條，象徵水流與閱讀的生命力 */
+        .splash-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 6px;
+            background: linear-gradient(90deg, #10b981, #34d399, #059669);
+        }
+
+        .splash-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 25px; }
+        .splash-logo {
+            display: flex; justify-content: center; align-items: center;
+            width: 60px; height: 60px; border-radius: 16px;
+            background: #ecfdf5; color: #059669; margin-bottom: 16px;
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.12);
+            animation: splashFloat 3s ease-in-out infinite;
+        }
+        @keyframes splashFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+        .splash-title { font-size: 28px; font-weight: 900; color: #0f172a; margin: 0 0 6px 0; letter-spacing: 2px; text-align: center; }
+        .splash-subtitle { font-size: 13px; font-weight: 800; color: #64748b; letter-spacing: 4px; text-transform: uppercase; text-align: center;}
+
+        /* 🌟 專屬引言區塊設計：編排雜誌化 */
+        .splash-quote {
+            background: #f8fafc; border-left: 4px solid #059669;
+            padding: 20px 22px; border-radius: 0 12px 12px 0;
+            margin-bottom: 24px; text-align: left;
+        }
+        .splash-quote-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 15px; font-weight: 900; color: #0f766e; margin-bottom: 12px; letter-spacing: 1px;
+        }
+        .splash-quote-title svg { color: #10b981; }
+        
+        .splash-quote-text {
+            font-size: 14.5px; color: #475569; line-height: 1.8; margin: 0; font-weight: 600; text-align: justify;
+        }
+        /* 🌟 凸顯雙關語的視覺設計 */
+        .splash-quote-text strong {
+            color: #047857; background: #d1fae5; padding: 2px 6px; border-radius: 6px; font-weight: 800; letter-spacing: 0.5px;
+        }
+
+        .splash-slogan {
+            font-size: 12.5px; color: #94a3b8; line-height: 1.6; margin-bottom: 28px; 
+            text-align: center; font-weight: 800; letter-spacing: 1px;
+        }
+        .splash-slogan span { display: block; color: #059669; font-size: 13.5px; margin-bottom: 4px;}
+
+        .btn-enter-map {
+            background: #059669; color: white; border: none; padding: 16px 30px; border-radius: 14px;
+            font-size: 16px; font-weight: 800; cursor: pointer; width: 100%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 8px 20px rgba(5, 150, 105, 0.25);
+            display: flex; justify-content: center; align-items: center; gap: 8px; letter-spacing: 1px;
+        }
+        .btn-enter-map:hover { background: #047857; transform: translateY(-3px); box-shadow: 0 12px 25px rgba(5, 150, 105, 0.35); }
+        .btn-enter-map:active { transform: translateY(0); }
+
+        /* 📱 手機版專屬：入口帷幕極限壓縮排版 */
+        @media (max-width: 600px) {
+            /* 🌟 修正彈出卡片被右側按鈕遮擋：整體往左偏移 35px */
+            .leaflet-popup { margin-left: -35px !important; }
+            #splashScreen { padding: 10px; } /* 減少外邊距 */
+            
+            .splash-card { 
+                padding: 20px 20px 18px 20px !important; /* 大幅減少內距 */
+                border-radius: 20px; 
+                max-width: 100%; 
+            }
+
+            .splash-header { margin-bottom: 12px; }
+            .splash-logo { 
+                width: 44px; height: 44px; margin-bottom: 8px; 
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+            }
+            .splash-logo svg { width: 22px; height: 22px; }
+
+            .splash-title { font-size: 22px; }
+            .splash-subtitle { font-size: 11px; letter-spacing: 2px; margin-bottom: 15px; }
+
+            .splash-quote { 
+                padding: 12px 14px; 
+                margin-bottom: 15px; 
+                border-left-width: 3px;
+            }
+            .splash-quote-title { font-size: 13px; margin-bottom: 6px; }
+            .splash-quote-text { font-size: 13px; line-height: 1.6; }
+
+            .splash-slogan { font-size: 11px; margin-bottom: 15px; }
+            .splash-slogan span { font-size: 11px; margin-bottom: 2px; }
+
+            /* 🌟 今日推薦卡片也要跟著變矮 */
+            .featured-sound-card { 
+                padding: 10px 12px; 
+                margin-bottom: 15px; 
+                border-radius: 10px;
+            }
+            .featured-label { font-size: 10px; }
+            .featured-title { font-size: 12.5px; }
+
+            .btn-enter-map { 
+                padding: 12px 20px; 
+                font-size: 15px; 
+                border-radius: 12px;
+            }
+        }
+
+        /* 🌟 1. 帷幕背景紋理 (紙張與光影) */
+        #splashScreen::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 20% 20%, rgba(16,185,129,0.15), transparent 28%), radial-gradient(circle at 80% 70%, rgba(14,165,233,0.1), transparent 30%); opacity: 0.9; z-index: -1;}
+        #splashScreen::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.05; background-image: linear-gradient(120deg, rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(30deg, rgba(255,255,255,0.5) 1px, transparent 1px); background-size: 40px 40px; mix-blend-mode: overlay; z-index: -1;}
+
+        /* 🌟 2. 今日聲景推薦卡片 */
+        .featured-sound-card { margin: 0 0 20px 0; padding: 12px 16px; border-radius: 12px; background: linear-gradient(135deg, #f8fafc, #ecfdf5); border: 1px solid #d1fae5; text-align: left; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .featured-sound-card:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(5, 150, 105, 0.1); border-color: #a7f3d0;}
+        .featured-label { font-size: 11px; font-weight: 900; color: #059669; letter-spacing: 1.5px; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;}
+        .featured-title { font-size: 13.5px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+
+        /* 🌟 3. 聲音光點 Marker */
+        .custom-sound-icon { background: transparent; border: none; }
+        .sound-dot-marker { width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); border: 2px solid #fff; box-shadow: 0 0 0 4px rgba(39,174,96,0.15), 0 4px 10px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .sound-dot-marker::after { content: ""; width: 12px; height: 12px; border-radius: 50%; background: #27ae60; box-shadow: 0 0 8px rgba(39,174,96,0.6); }
+        .sound-dot-marker.cat-nature::after { background: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.6);}
+        .sound-dot-marker.cat-culture::after { background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.6);}
+        .sound-dot-marker.cat-industry::after { background: #ea580c; box-shadow: 0 0 8px rgba(234,88,12,0.6);}
+        .sound-dot-marker.cat-space::after { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.6);}
+        .sound-dot-marker.cat-history::after { background: #8b5cf6; box-shadow: 0 0 8px rgba(139,92,246,0.6);}
+        .sound-dot-marker.cat-default::after { background: #64748b; box-shadow: 0 0 8px rgba(100,116,139,0.6);}
+        .sound-dot-marker.pulse { animation: soundPulse 2.5s infinite ease-in-out; }
+        @keyframes soundPulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39,174,96,0.4); } 70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(39,174,96,0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39,174,96,0); } }
+
+        /* 🌟 4. 聆聽模式沉浸感 */
+        body.listening-mode .glass-header, body.listening-mode #sidePanel, body.listening-mode #routePanel, body.listening-mode .right-tools-wrapper, body.listening-mode .locate-me-wrapper, body.listening-mode .leaflet-control-container { opacity: 0 !important; pointer-events: none !important; transform: translateY(-10px); transition: all 0.5s ease; }
+        body.listening-mode #map { filter: saturate(0.8) contrast(1.1) brightness(0.85); transition: filter 0.6s ease; }
+        .listening-hint { position: fixed; left: 50%; top: 25px; transform: translateX(-50%) translateY(-20px); z-index: 3000; background: rgba(15, 23, 42, 0.85); color: #fff; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 800; letter-spacing: 1px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 32px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: 0.5s ease; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1);}
+        body.listening-mode .listening-hint { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; cursor: pointer; }
+        .listening-hint:hover { background: #e74c3c; border-color: #fca5a5; }
+
+        /* 🚨 淹水感測器：通用設計圖示與特效 */
+        .flood-marker-icon {
+            background: transparent;
+            border: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
+            transition: transform 0.2s ease;
+        }
+        .flood-marker-icon:hover {
+            transform: scale(1.2);
+            z-index: 1000 !important;
+        }
+        @keyframes pulseFloodDangerUD {
+            0% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(239, 68, 68, 0.8)); }
+            50% { transform: scale(1.15); filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0)); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(239, 68, 68, 0)); }
+        }
+        .pulse-flood-danger-ud {
+            animation: pulseFloodDangerUD 1.5s infinite;
+        }
+
+        /* ✨ 淹水感測器：高顏值美學卡片 Popup 徹底覆寫防破版 */
+        .aesthetic-popup .leaflet-popup-content-wrapper {
+            padding: 0 !important;
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(0,0,0,0.05) !important;
+            border-radius: 20px !important;
+            overflow: hidden !important;
+        }
+        .aesthetic-popup .leaflet-popup-content {
+            margin: 0 !important;
+            width: 260px !important; 
+            box-sizing: border-box !important;
+        }
+        .aesthetic-popup .leaflet-popup-tip-container {
+            display: none !important; 
+        }
+        .aesthetic-popup .leaflet-popup-close-button {
+            top: 14px !important; right: 14px !important;
+            width: 26px !important; height: 26px !important;
+            background: #f1f5f9 !important; border-radius: 50% !important;
+            color: #64748b !important; text-align: center !important;
+            line-height: 26px !important; font-size: 16px !important; font-weight: bold !important;
+            border: 1px solid #e2e8f0 !important; transition: 0.2s !important;
+        }
+        .aesthetic-popup .leaflet-popup-close-button:hover {
+            background: #e2e8f0 !important; color: #0f172a !important; transform: scale(1.1);
+        }
+    
+
+/* ===== index.html 第 2838 行 ===== */
+.national-history-flood-panel{border-color:#99c2e7;background:linear-gradient(180deg,#f8fcff 0%,#fff 100%)}
+.national-history-flood-panel .nhf-badge{background:#e0f2fe;border-color:#38bdf8;color:#075985}
+.national-history-flood-panel .nhf-main-toggle{border-color:#7dd3fc;background:#f0f9ff}
+.national-history-flood-panel .nhf-main-toggle input{accent-color:#0369a1}
+.national-history-flood-panel .nhf-controls{border-color:#bae6fd}
+.national-history-flood-panel .nhf-topline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.national-history-flood-panel .nhf-state{padding:4px 7px;color:#075985;background:#f0f9ff;border:1px solid #7dd3fc;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.national-history-flood-panel .nhf-state.is-warning{color:#9a3412;background:#fff7ed;border-color:#fdba74}
+.national-history-flood-panel .nhf-notice{margin:10px 0;padding:9px 10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;font-size:11.5px;line-height:1.55;font-weight:650}
+.national-history-flood-panel .nhf-notice strong{color:#0f172a}
+.national-history-flood-panel .nhf-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.national-history-flood-panel .nhf-field{display:grid;gap:4px;min-width:0}
+.national-history-flood-panel .nhf-field.is-wide{grid-column:1/-1}
+.national-history-flood-panel .nhf-field label{color:#334155;font-size:11px;font-weight:800}
+.national-history-flood-panel .nhf-field select{width:100%;min-height:34px;padding:7px 8px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:8px;font:inherit;font-size:12px;font-weight:700}
+.national-history-flood-panel .nhf-option-row{display:flex;align-items:center;gap:8px;margin:6px 0 0;color:#334155;font-size:12px;font-weight:700;cursor:pointer}
+.national-history-flood-panel .nhf-option-row input{width:17px;height:17px;margin:0;accent-color:#0369a1;cursor:pointer}
+.national-history-flood-panel .nhf-actions{display:flex;gap:7px;margin:10px 0 8px}
+.national-history-flood-panel .nhf-action{flex:1;min-height:34px;padding:7px 9px;color:#075985;background:#fff;border:1px solid #38bdf8;border-radius:8px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.national-history-flood-panel .nhf-action:hover{color:#fff;background:#0284c7;border-color:#0284c7}
+.national-history-flood-panel .nhf-action.secondary{color:#334155;border-color:#94a3b8}
+.national-history-flood-panel .nhf-action.secondary:hover{color:#fff;background:#475569;border-color:#475569}
+.national-history-flood-panel .nhf-results{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:10px;padding:9px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px}
+.national-history-flood-panel .nhf-results strong{display:block;color:#0c4a6e;font-size:12px;font-weight:900}
+.national-history-flood-panel .nhf-results span{display:block;margin-top:2px;color:#475569;font-size:11px;line-height:1.4;font-weight:650}
+.national-history-flood-panel .nhf-upload{margin-top:10px;padding:10px;background:#fff;border:1px dashed #7dd3fc;border-radius:10px}
+.national-history-flood-panel .nhf-upload label{display:grid;gap:4px;color:#0f172a;font-size:12px;font-weight:800;cursor:pointer}
+.national-history-flood-panel .nhf-upload small{color:#64748b;font-size:10.5px;line-height:1.45;font-weight:650}
+.national-history-flood-panel .nhf-upload input{width:100%;margin-top:3px;color:#334155;font:inherit;font-size:11px}
+.national-history-flood-panel .nhf-facts{margin-top:11px;padding-top:10px;border-top:1px dashed #94a3b8}
+.national-history-flood-panel .nhf-facts summary{color:#0f172a;cursor:pointer;font-size:12px;font-weight:800}
+.national-history-flood-panel .nhf-facts p{margin:7px 0;color:#334155;font-size:11.5px;line-height:1.58;font-weight:600}
+.national-history-flood-panel .nhf-facts a{color:#0369a1;font-size:11.5px;font-weight:800;text-decoration:none}
+.national-history-flood-panel .nhf-facts a:hover{text-decoration:underline}
+@media (max-width:600px){.national-history-flood-panel .nhf-field-grid{gap:7px}.national-history-flood-panel .nhf-actions{gap:6px}.national-history-flood-panel .nhf-action{font-size:11.5px}}
+
+/* ===== index.html 第 2974 行 ===== */
+.history-flood-panel{margin:14px 0;padding:14px;background:#fff;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 5px 16px rgba(15,23,42,.08);color:#0f172a}
+.history-flood-panel *{box-sizing:border-box;font-family:inherit}
+.history-flood-panel .hf-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.history-flood-panel .hf-title{margin:0!important;color:#0f172a!important;font-size:16px!important;font-weight:800!important}
+.history-flood-panel .hf-title small{margin-left:4px;color:#475569!important;font-size:12px!important;font-weight:700!important}
+.history-flood-panel .hf-intro{margin:5px 0 0;color:#475569;font-size:13px;line-height:1.5;font-weight:600}
+.history-flood-panel .hf-badge{flex:0 0 auto;padding:5px 7px;color:#0f172a;background:#f8fafc;border:1px solid #94a3b8;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em}
+.history-flood-panel .hf-main-toggle{display:flex;align-items:center;gap:10px;margin:0;padding:11px 12px;background:#f8fafc;border:1px solid #94a3b8;border-radius:11px;cursor:pointer}
+.history-flood-panel .hf-main-toggle input{width:19px!important;height:19px!important;margin:0!important;accent-color:#0f172a;cursor:pointer}
+.history-flood-panel .hf-toggle-copy{display:grid;gap:2px;min-width:0}
+.history-flood-panel .hf-toggle-copy strong{color:#0f172a;font-size:14px;font-weight:800}
+.history-flood-panel .hf-toggle-copy small{color:#475569;font-size:12px;font-weight:650}
+.history-flood-panel .hf-main-toggle:focus-within,.history-flood-panel .hf-event-row:focus-within{outline:3px solid rgba(37,99,235,.3);outline-offset:2px}
+.history-flood-panel .hf-controls{margin-top:10px;padding:12px;background:#fff;border:1px solid #cbd5e1;border-radius:12px}
+.history-flood-panel .hf-controls[hidden]{display:none!important}
+.history-flood-panel .hf-topline,.history-flood-panel .hf-opacity-title,.history-flood-panel .hf-events-head,.history-flood-panel .hf-events-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.history-flood-panel .hf-kicker{color:#334155;font-size:12px;font-weight:800}
+.history-flood-panel .hf-state{padding:4px 7px;color:#0f172a;background:#f8fafc;border:1px solid #94a3b8;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.history-flood-panel .hf-state.is-warning{color:#991b1b;background:#fef2f2;border-color:#fca5a5}
+.history-flood-panel .hf-step{margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #dbeafe;border-radius:12px}
+.history-flood-panel .hf-step-title{display:flex;align-items:center;gap:7px;color:#0f172a;font-size:13px;font-weight:900}
+.history-flood-panel .hf-step-number{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:#fff;background:#2563eb;border-radius:50%;font-size:11px;font-variant-numeric:tabular-nums}
+.history-flood-panel .hf-source-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:9px}
+.history-flood-panel .hf-source-option{display:grid;gap:2px;min-height:64px;padding:8px;color:#334155;background:#fff;border:1px solid #cbd5e1;border-radius:9px;text-align:left;cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease}
+.history-flood-panel .hf-source-option:hover{border-color:#60a5fa;background:#eff6ff;transform:translateY(-1px)}
+.history-flood-panel .hf-source-option.is-active{color:#0f172a;background:#dbeafe;border-color:#2563eb;box-shadow:inset 0 0 0 1px #2563eb}
+.history-flood-panel .hf-source-option strong{font-size:12px;font-weight:900;line-height:1.2}
+.history-flood-panel .hf-source-option small{color:#64748b;font-size:10.5px;font-weight:750;line-height:1.25}
+.history-flood-panel .hf-source-option.is-active small{color:#1d4ed8}
+.history-flood-panel .hf-source-help{margin:8px 0 0;color:#475569;font-size:11px;line-height:1.5;font-weight:650}
+.history-flood-panel .hf-native-select{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.history-flood-panel .hf-opacity-title{color:#334155;font-size:13px;font-weight:750}
+.history-flood-panel .hf-opacity-title output{color:#0f172a;font-variant-numeric:tabular-nums;font-weight:800}
+.history-flood-panel .hf-range{width:100%;min-height:28px;margin:4px 0 12px;accent-color:#2563eb;cursor:pointer}
+.history-flood-panel .hf-events-head{align-items:flex-start;margin:13px 0 8px}
+.history-flood-panel .hf-events-head strong{display:block;color:#0f172a;font-size:14px;font-weight:800}
+.history-flood-panel .hf-events-head span{display:block;margin-top:3px;color:#475569;font-size:12px;line-height:1.45;font-weight:600}
+.history-flood-panel .hf-events-actions{margin:9px 0 8px}
+.history-flood-panel .hf-event-count{color:#334155;font-size:12px;font-weight:750}
+.history-flood-panel .hf-action-group{display:flex;gap:6px}
+.history-flood-panel .hf-action{min-height:30px;padding:5px 8px;color:#0f172a;background:#fff;border:1px solid #94a3b8;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer}
+.history-flood-panel .hf-action:hover{border-color:#2563eb;background:#eff6ff}
+.history-flood-panel .hf-action:disabled{opacity:.5;cursor:not-allowed}
+.history-flood-panel .hf-events{display:grid;gap:7px;max-height:320px;overflow:auto;padding:2px;scrollbar-width:thin;scrollbar-color:#94a3b8 transparent}
+.history-flood-panel .hf-event-row{display:grid;grid-template-columns:22px auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:50px;padding:8px 9px;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:9px;cursor:pointer}
+.history-flood-panel .hf-event-row:hover{border-color:#64748b;background:#f8fafc}
+.history-flood-panel .hf-event-row input{width:18px;height:18px;margin:0;accent-color:#0f172a;cursor:pointer}
+.history-flood-panel .hf-swatch-stack{display:flex;align-items:center;gap:3px;max-width:49px}
+.history-flood-panel .hf-swatch{display:block;flex:0 0 22px;width:22px;height:16px;overflow:hidden;background:#fff;border:1px solid #94a3b8;border-radius:3px}
+.history-flood-panel .hf-swatch img{display:block;width:100%;height:100%;object-fit:contain}
+.history-flood-panel .hf-event-copy{display:grid;gap:2px;min-width:0}
+.history-flood-panel .hf-event-name{overflow-wrap:anywhere;color:inherit;font-size:13px;line-height:1.35;font-weight:800}
+.history-flood-panel .hf-event-origin{overflow-wrap:anywhere;color:#64748b;font-size:10.5px;line-height:1.25;font-weight:700}
+.history-flood-panel .hf-event-status{min-width:44px;padding:4px 6px;color:#334155;background:#fff;border:1px solid #94a3b8;border-radius:6px;font-size:11px;font-weight:800;text-align:center;white-space:nowrap}
+.history-flood-panel .hf-event-row.is-visible .hf-event-status{color:#fff;background:#0f172a;border-color:#0f172a}
+.history-flood-panel .hf-events-loading,.history-flood-panel .hf-events-fallback,.history-flood-panel .hf-events-empty{padding:10px;color:#334155;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}
+@media (max-width:600px){.history-flood-panel .hf-source-option{min-height:58px;padding:7px}.history-flood-panel .hf-source-option small{font-size:9.5px}.history-flood-panel .hf-events{max-height:280px}}
+.history-flood-panel .hf-facts{margin-top:12px;padding-top:10px;border-top:1px dashed #94a3b8}
+.history-flood-panel .hf-facts summary{color:#0f172a;cursor:pointer;font-size:13px;font-weight:800}
+.history-flood-panel .hf-facts p{margin:8px 0 7px;color:#334155;font-size:12px;line-height:1.6;font-weight:600}
+.history-flood-panel .hf-facts a{color:#1d4ed8;font-size:12px;font-weight:800;text-decoration:none}
+.history-flood-panel .hf-facts a:hover{text-decoration:underline}
+/* 拆分前兩個歷史淹水模組前面各隔著一個 <style>，所以「.layer-subsection + .layer-subsection」不會套到它們；拆出 CSS 後明確保留原本 14px 的上間距 */
+.layer-subsection.history-flood-panel,#rightToolsWrapper .layer-subsection.history-flood-panel{margin-top:14px}
+
+/* ===== nimby-facility-layer-style ===== */
+                /* 鄰避設施：沿用圖資工具的淺色通用元件語言 */
+                #rightToolsWrapper .layer-folder.layer-folder-nimby{
+                  margin:12px 0 !important;
+                  border:1px solid var(--rt-line) !important;
+                  border-radius:18px !important;
+                  overflow:hidden;
+                  background:#fff !important;
+                  box-shadow:0 8px 20px rgba(13,47,53,.08) !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary{
+                  min-height:58px;
+                  padding:10px 12px !important;
+                  color:var(--rt-ink) !important;
+                  background:linear-gradient(180deg,#ffffff,#f3f8f7) !important;
+                  border-bottom:0 !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby[open] > summary{
+                  border-bottom:1px solid #dce9e7 !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary span{
+                  display:inline;
+                  color:var(--rt-ink) !important;
+                  font-size:14px !important;
+                  font-weight:900 !important;
+                  letter-spacing:0;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary span::before{
+                  content:none !important;
+                  display:none !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary small{
+                  color:var(--rt-muted) !important;
+                  font-size:10px !important;
+                  font-weight:800 !important;
+                  letter-spacing:0;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby > summary::after{
+                  color:var(--rt-primary) !important;
+                }
+                #rightToolsWrapper .layer-folder.layer-folder-nimby .layer-folder-content{
+                  padding:2px 10px 12px !important;
+                }
+
+                .nimby-facility-panel{
+                  margin:0;
+                  padding-top:0 !important;
+                  overflow:hidden;
+                  color:var(--rt-ink);
+                  background:transparent;
+                }
+                .nimby-facility-panel *{box-sizing:border-box;font-family:inherit}
+                .nimby-hero{
+                  display:grid;
+                  grid-template-columns:auto 1fr auto;
+                  align-items:start;
+                  gap:10px;
+                  padding:12px 2px 10px;
+                  border-bottom:1px solid #dce9e7;
+                }
+                .nimby-hero-icon{
+                  display:grid;
+                  place-items:center;
+                  width:34px;
+                  height:34px;
+                  color:var(--rt-primary);
+                  background:#e9f6f4;
+                  border:1px solid #b7d9d4;
+                  border-radius:11px;
+                }
+                .nimby-hero-icon svg{width:19px;height:19px}
+                .nimby-eyebrow{
+                  display:block;
+                  margin-bottom:2px;
+                  color:var(--rt-primary);
+                  font-size:9px;
+                  font-weight:900;
+                  letter-spacing:.08em;
+                }
+                .nimby-hero h3{
+                  margin:0;
+                  color:var(--rt-ink);
+                  font-size:14px;
+                  font-weight:900;
+                  letter-spacing:0;
+                  line-height:1.35;
+                }
+                .nimby-hero p{
+                  margin:3px 0 0;
+                  color:var(--rt-muted);
+                  font-size:11px;
+                  line-height:1.5;
+                  font-weight:650;
+                }
+                .nimby-api-stamp{
+                  display:grid;
+                  place-items:center;
+                  min-width:46px;
+                  padding:6px 6px 5px;
+                  color:var(--rt-primary-dark);
+                  background:#f3f8f7;
+                  border:1px solid var(--rt-line);
+                  border-radius:9px;
+                  font-size:9px;
+                  font-weight:900;
+                  line-height:1.1;
+                  letter-spacing:.04em;
+                }
+                .nimby-api-stamp small{
+                  margin-top:2px;
+                  color:var(--rt-muted);
+                  font-size:7px;
+                  letter-spacing:.06em;
+                }
+
+                .nimby-main-toggle{
+                  position:relative;
+                  display:grid !important;
+                  grid-template-columns:34px 1fr auto;
+                  align-items:center;
+                  gap:10px;
+                  min-height:0 !important;
+                  margin:10px 0 0 !important;
+                  padding:10px !important;
+                  color:var(--rt-ink) !important;
+                  background:#f3f8f7 !important;
+                  border:1px solid var(--rt-line);
+                  border-radius:12px;
+                  box-shadow:none;
+                  cursor:pointer;
+                  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease;
+                }
+                #rightToolsWrapper .nimby-facility-panel .nimby-main-toggle:hover{
+                  background:#eef8f6 !important;
+                  border-color:#9bc8c1;
+                }
+                #rightToolsWrapper .nimby-facility-panel .nimby-main-toggle:has(input:checked){
+                  background:#e9f6f4 !important;
+                  border-color:#83bdb4;
+                  box-shadow:inset 4px 0 0 var(--rt-primary);
+                }
+                .nimby-toggle-icon{
+                  display:grid;
+                  place-items:center;
+                  width:34px;
+                  height:34px;
+                  color:var(--rt-primary);
+                  background:#fff;
+                  border:1px solid #b7d9d4;
+                  border-radius:10px;
+                }
+                .nimby-toggle-icon svg{width:18px;height:18px}
+                .nimby-toggle-copy{display:grid;gap:2px;min-width:0}
+                .nimby-toggle-copy strong{color:var(--rt-ink);font-size:12.5px;font-weight:900;line-height:1.3}
+                .nimby-toggle-copy small{color:var(--rt-muted);font-size:10.5px;font-weight:700;line-height:1.35}
+                .nimby-switch{position:relative;display:block;width:42px;height:24px;flex:0 0 auto}
+                #rightToolsWrapper .nimby-facility-panel .nimby-switch input{
+                  position:absolute !important;
+                  inset:0;
+                  width:1px !important;
+                  height:1px !important;
+                  min-width:0 !important;
+                  opacity:0;
+                  pointer-events:none;
+                }
+                .nimby-switch-track{
+                  position:absolute;
+                  inset:0;
+                  display:block;
+                  border:1px solid #9fb8b5;
+                  border-radius:999px;
+                  background:#cbd5d6;
+                  box-shadow:inset 0 1px 2px rgba(13,47,53,.12);
+                  transition:.24s ease;
+                }
+                .nimby-switch-track::after{
+                  content:"";
+                  position:absolute;
+                  top:3px;
+                  left:3px;
+                  width:16px;
+                  height:16px;
+                  border-radius:50%;
+                  background:#fff;
+                  box-shadow:0 1px 3px rgba(13,47,53,.26);
+                  transition:.24s cubic-bezier(.4,0,.2,1);
+                }
+                .nimby-switch input:checked + .nimby-switch-track{background:var(--rt-primary);border-color:var(--rt-primary)}
+                .nimby-switch input:checked + .nimby-switch-track::after{transform:translateX(18px)}
+
+                .nimby-controls{
+                  margin:10px 0 0;
+                  padding:10px;
+                  background:#fff;
+                  border:1px solid var(--rt-line);
+                  border-radius:12px;
+                  box-shadow:none;
+                }
+                .nimby-controls[hidden]{display:none!important}
+                .nimby-topline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+                .nimby-kicker{display:flex;align-items:center;gap:6px;color:var(--rt-primary-dark);font-size:10px;font-weight:900;letter-spacing:.06em}
+                .nimby-kicker::before{content:"查詢";padding:3px 5px;color:var(--rt-primary);background:#e9f6f4;border:1px solid #b7d9d4;border-radius:5px;font-size:8px;letter-spacing:.04em}
+                .nimby-state{padding:5px 8px;color:var(--rt-muted);background:#f3f8f7;border:1px solid var(--rt-line);border-radius:999px;font-size:10px;font-weight:850;white-space:nowrap}
+                .nimby-state.is-working{color:#0c4a6e;background:#eff6ff;border-color:#bfdbfe}
+                .nimby-state.is-ready{color:#065f46;background:#ecfdf5;border-color:#a7f3d0}
+                .nimby-state.is-warning{color:#92400e;background:#fffbeb;border-color:#fde68a}
+                .nimby-notice{margin:10px 0;padding:9px 10px;color:#5a4b2f;background:#fffaf0;border:1px solid #f5d9a8;border-radius:10px;font-size:10.5px;line-height:1.55;font-weight:650}
+                .nimby-notice strong{color:#8a5a00;font-weight:900}
+                .nimby-field{display:grid;gap:6px}
+                .nimby-field label{display:block !important;min-height:0 !important;padding:0 !important;color:var(--rt-primary-dark) !important;background:transparent !important;box-shadow:none !important;font-size:10px;font-weight:900;letter-spacing:.05em}
+                #rightToolsWrapper .nimby-field select{
+                  width:100%;
+                  min-height:40px;
+                  padding:8px 10px;
+                  color:var(--rt-ink) !important;
+                  background:#fff !important;
+                  border:1px solid var(--rt-line) !important;
+                  border-radius:10px !important;
+                  font-size:12px;
+                  font-weight:750;
+                  outline:none;
+                }
+                .nimby-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+                .nimby-action{
+                  display:inline-flex;
+                  align-items:center;
+                  justify-content:center;
+                  gap:6px;
+                  min-height:38px;
+                  padding:8px 9px;
+                  color:#fff;
+                  background:var(--rt-primary);
+                  border:1px solid var(--rt-primary);
+                  border-radius:10px;
+                  cursor:pointer;
+                  font-size:11px;
+                  font-weight:900;
+                  line-height:1.2;
+                  transition:background .2s ease,border-color .2s ease,transform .2s ease;
+                }
+                .nimby-action:hover{background:var(--rt-primary-dark);border-color:var(--rt-primary-dark);transform:translateY(-1px)}
+                .nimby-action.secondary{color:var(--rt-primary-dark);background:#fff;border-color:var(--rt-line)}
+                .nimby-action.secondary:hover{color:var(--rt-primary-dark);background:#f3f8f7;border-color:#9bc8c1}
+                .nimby-action svg{width:14px;height:14px}
+                .nimby-action:disabled{opacity:.58;cursor:not-allowed;transform:none;filter:none}
+                .nimby-result{
+                  margin-top:10px;
+                  padding:10px 11px;
+                  color:var(--rt-primary-dark);
+                  background:#e9f6f4;
+                  border:1px solid #b7d9d4;
+                  border-radius:10px;
+                }
+                .nimby-result strong{display:block;color:var(--rt-primary-dark);font-size:12px;font-weight:900;line-height:1.4}
+                .nimby-result span{display:block;margin-top:3px;color:var(--rt-muted);font-size:10.5px;line-height:1.5;font-weight:650}
+                .nimby-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed #c7dcda;color:var(--rt-muted);font-size:10px;font-weight:700}
+                .nimby-meta code{max-width:168px;color:var(--rt-muted);font-family:"SFMono-Regular",Consolas,monospace;font-size:9px;line-height:1.4;overflow-wrap:anywhere}
+                .nimby-doc-link{display:inline-flex;align-items:center;gap:4px;color:var(--rt-primary);font-size:10px;font-weight:900;text-decoration:none;white-space:nowrap}
+                .nimby-doc-link:hover{color:var(--rt-primary-dark);text-decoration:underline}
+
+                /* 地圖內設施資訊卡 */
+                .nimby-popup-card{width:275px;overflow:hidden;color:#172033;background:#f8fafc;border-radius:14px;font-family:'Helvetica Neue',Arial,'微軟正黑體',sans-serif}
+                .nimby-popup-top{display:flex;gap:10px;align-items:flex-start;padding:13px 13px 11px;color:#f8fafc;background:linear-gradient(135deg,#0f172a,#1f3b38)}
+                .nimby-popup-glyph{display:grid;place-items:center;flex:0 0 auto;width:34px;height:34px;color:#0f172a;background:linear-gradient(145deg,#fde68a,#f59e0b);border-radius:11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+                .nimby-popup-glyph svg{width:19px;height:19px}
+                .nimby-popup-kicker{display:block;margin-bottom:2px;color:#fcd34d;font-size:9px;font-weight:900;letter-spacing:.12em}
+                .nimby-popup-title{margin:0;color:#fff;font-size:14px;font-weight:900;line-height:1.3;overflow-wrap:anywhere}
+                .nimby-popup-body{padding:12px 13px 13px}
+                .nimby-popup-metrics{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:stretch;margin-bottom:10px}
+                .nimby-popup-address{padding:9px 10px;color:#475569;background:#fff;border:1px solid #e2e8f0;border-radius:10px;font-size:11px;line-height:1.5;font-weight:650;overflow-wrap:anywhere}
+                .nimby-popup-distance{display:grid;place-items:center;min-width:65px;padding:8px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;text-align:center}
+                .nimby-popup-distance strong{display:block;font-size:14px;font-weight:900;line-height:1.05}
+                .nimby-popup-distance span{display:block;margin-top:2px;font-size:9px;font-weight:800}
+                .nimby-popup-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}
+                .nimby-popup-data{padding:8px 9px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:9px}
+                .nimby-popup-data dt{margin:0 0 3px;color:#64748b;font-size:9px;font-weight:900;letter-spacing:.05em}
+                .nimby-popup-data dd{margin:0;color:#1e293b;font-size:10.5px;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+                .nimby-popup-source{margin:10px 0 0;padding-top:9px;border-top:1px dashed #cbd5e1;color:#64748b;font-size:9px;line-height:1.45;font-weight:700}
+                
+                @media(max-width:600px){
+                  .nimby-hero{grid-template-columns:auto 1fr;gap:10px}
+                  .nimby-api-stamp{grid-column:2;justify-self:start}
+                  .nimby-actions{grid-template-columns:1fr}
+                  .nimby-meta{align-items:flex-start;flex-direction:column}
+                  .nimby-meta code{max-width:none}
+                }
+                
+
+/* ===== haidian-final-ui-pack ===== */
+/*
+  HAIDIAN_FINAL_UI_PACK
+  整理版 UI 覆蓋層：只處理文案、排版與手機版可用性。
+  不修改 Firebase / Firestore / Leaflet / 投稿 / 播放 / 圖資功能邏輯。
+*/
+
+:root {
+  --haidian-final-ink: #0f172a;
+  --haidian-final-muted: #64748b;
+  --haidian-final-green: #0f8f6f;
+  --haidian-final-green-deep: #047857;
+  --haidian-final-teal: #1f8a93;
+  --haidian-final-violet: #7c3aed;
+  --haidian-final-paper: rgba(255, 253, 247, 0.94);
+  --haidian-final-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+}
+
+/* 上方 banner：讓課程定位更明確，避免「聲音地景」重複堆疊。 */
+.glass-header {
+  background: rgba(255, 253, 247, 0.9) !important;
+  border: 1px solid rgba(15, 143, 111, 0.13) !important;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.14) !important;
+}
+.project-title::after {
+  content: "SEL × 在地探究" !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: 10px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(15, 143, 111, 0.08) !important;
+  color: var(--haidian-final-green-deep) !important;
+  border: 1px solid rgba(15, 143, 111, 0.16) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.08em !important;
+  white-space: nowrap !important;
+}
+.project-title span.sub-title {
+  color: var(--haidian-final-muted) !important;
+  font-weight: 750 !important;
+}
+
+/* 專注模式提示：原聆聽沉浸模式改成「專注模式」。 */
+.listening-hint {
+  background: linear-gradient(135deg, rgba(15, 143, 111, 0.96), rgba(31, 138, 147, 0.96)) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.28) !important;
+}
+.listening-hint::after {
+  content: "｜專注模式" !important;
+  opacity: 0.95 !important;
+}
+
+/* 圖資面板：移除第幾節課語氣，改成工具面板語氣。 */
+.custom-layer-control::before {
+  content: "圖資工具｜底圖・歷史・水文・災害" !important;
+  display: block !important;
+  margin-bottom: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(239, 246, 255, 0.86)) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.04em !important;
+}
+.haidian-v4-data-note {
+  background: rgba(240, 253, 250, 0.86) !important;
+  border: 1px solid rgba(153, 246, 228, 0.8) !important;
+  color: #115e59 !important;
+  font-weight: 850 !important;
+}
+
+/* 課程模組 dock：統一文字與手機版收合行為。 */
+.haidian-v4-dock {
+  background: var(--haidian-final-paper) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: var(--haidian-final-shadow) !important;
+}
+.haidian-v4-dock-title strong {
+  display: block !important;
+  color: var(--haidian-final-ink) !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+}
+.haidian-v4-dock-title span {
+  color: var(--haidian-final-muted) !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+}
+body.haidian-v4-mode-idle .haidian-v4-dock-title span::after {
+  content: "" !important;
+}
+.haidian-v4-dock-toggle {
+  position: relative !important;
+  z-index: 10 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.08) !important;
+  color: var(--haidian-final-ink) !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+}
+.haidian-v4-dock-toggle::after {
+  content: "×";
+  font-size: 22px;
+  font-weight: 950;
+  transform: translateY(-1px);
+}
+.haidian-v4-dock.is-minimized .haidian-v4-dock-toggle::after {
+  content: "＋";
+  font-size: 20px;
+}
+
+@media (max-width: 760px) {
+  .glass-header {
+    width: min(94%, calc(100vw - 20px)) !important;
+    padding: 11px 14px !important;
+    border-radius: 18px !important;
+  }
+  .project-title::after {
+    margin-left: 8px !important;
+    padding: 3px 8px !important;
+    font-size: 9.5px !important;
+    letter-spacing: 0.04em !important;
+  }
+  .haidian-v4-dock {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 12px !important;
+    width: auto !important;
+    max-height: 168px !important;
+    overflow: hidden !important;
+    z-index: 1400 !important;
+    padding: 12px !important;
+    border-radius: 20px !important;
+  }
+  .haidian-v4-dock-head {
+    margin-bottom: 8px !important;
+  }
+  .haidian-v4-dock-body {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .haidian-v4-card {
+    min-height: 58px !important;
+    padding: 9px 8px !important;
+  }
+  .haidian-v4-card b {
+    font-size: 12px !important;
+  }
+  .haidian-v4-card small {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+  .locate-me-wrapper {
+    right: 12px !important;
+    bottom: 218px !important;
+    z-index: 3600 !important;
+  }
+  .haidian-v4-dock.is-minimized {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 84px !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding: 8px !important;
+    border-radius: 999px !important;
+  }
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-head {
+    margin: 0 !important;
+  }
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-title,
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-body {
+    display: none !important;
+  }
+  .haidian-v4-dock.is-minimized .haidian-v4-dock-toggle {
+    width: 42px !important;
+    height: 42px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22) !important;
+  }
+  body.nanshan-mode .locate-me-wrapper {
+    bottom: 18px !important;
+  }
+  body.nanshan-mode .haidian-v4-dock {
+    display: none !important;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .haidian-v4-dock { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== urgent-right-tools-and-focus-fix ===== */
+/*
+ * 桌機右側圖資收合耳朵：
+ * 由下方 JavaScript 依選單實際 top 動態定位，
+ * 不再用固定數值，因此會貼在選單左側。
+ */
+#rightToolsCollapseEar {
+  position: absolute;
+  top: var(--right-tools-collapse-ear-top, 0px);
+  left: -46px;
+  z-index: 4510;
+
+  width: 46px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #075a63;
+  background: rgba(232, 247, 245, 0.98);
+  border: 1px solid #9bcfc9;
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  box-shadow: -5px 6px 14px rgba(13, 47, 53, 0.14);
+
+  font-size: 0;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(8px);
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+#rightToolsCollapseEar svg {
+  width: 20px;
+  height: 20px;
+}
+
+#rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden)
+#rightToolsCollapseEar {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+#rightToolsCollapseEar:hover,
+#rightToolsCollapseEar:focus-visible {
+  color: #fff;
+  background: #006c73;
+  border-color: #006c73;
+  outline: 3px solid rgba(8, 127, 150, 0.32);
+  outline-offset: 2px;
+}
+
+/*
+ * 桌機：把外部 heat-risk.js 建立的小太陽，
+ * 正規化成和耳機、圖層相同的控制鍵。
+ */
+@media (min-width: 601px) {
+  #rightToolsWrapper .haidian-heat-risk-control {
+    width: 52px !important;
+    height: 52px !important;
+    min-width: 52px !important;
+    margin: 0 0 12px 0 !important;
+    padding: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    color: #12333b !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    border: 1px solid rgba(255, 255, 255, 0.95) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 12px 28px rgba(13, 47, 53, 0.22) !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control > button,
+  #rightToolsWrapper .haidian-heat-risk-control > a,
+  #rightToolsWrapper .haidian-heat-risk-control > [role="button"] {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    color: inherit !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: inherit !important;
+    box-shadow: none !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control svg,
+  #rightToolsWrapper .haidian-heat-risk-control img {
+    width: 24px !important;
+    height: 24px !important;
+    max-width: 24px !important;
+    max-height: 24px !important;
+  }
+
+  #rightToolsWrapper .haidian-heat-risk-control:hover,
+  #rightToolsWrapper .haidian-heat-risk-control:focus-within {
+    color: #006c73 !important;
+    background: #fff !important;
+  }
+}
+
+@media (max-width: 600px) {
+  /*
+   * 手機圖資面板保留左側耳朵走道。
+   * 抽屜不再貼滿整個畫面，避免耳朵跑出螢幕。
+   */
+  #rightToolsWrapper .tools-menu-container {
+    left: 56px !important;
+  }
+
+  /*
+   * 外掛耳朵接在底部抽屜的左下側。
+   * 抽屜 bottom 為 214px；耳朵略高 22px，避免與左側耳朵重疊。
+   */
+  #rightToolsCollapseEar {
+    position: fixed;
+    top: auto;
+    left: 10px;
+    bottom: calc(236px + env(safe-area-inset-bottom));
+    z-index: 4510;
+
+    width: 46px;
+    height: 72px;
+
+    border-radius: 14px 0 0 14px;
+    transform: translateX(-8px);
+  }
+
+  /*
+   * 圖資抽屜展開時，左側兩個抽屜耳朵暫時隱藏。
+   * 收合圖資後會回到 idle 模式，自動重新顯示。
+   */
+    body.haidian-v4-mode-data #sidePanel .toggle-btn,
+  body.haidian-v4-mode-data #routePanel .toggle-btn {
+    display: none !important;
+  }
+}
+
+/*
+ * 專注模式：
+ * 保留地圖、作品標記、作品 Popup、播放器與頂端「退出專注模式」提示。
+ */
+body.listening-mode .glass-header,
+  body.listening-mode #headerPullTab,
+  body.listening-mode #sidePanel,
+  body.listening-mode #routePanel,
+  body.listening-mode #rightToolsWrapper,
+  body.listening-mode .locate-me-wrapper,
+  body.listening-mode #drawModeHUD,
+  body.listening-mode .haidian-v4-dock,
+  body.listening-mode #floatingClearRouteBtn,
+  body.listening-mode #nanshanCategoryMenu,
+  body.listening-mode .leaflet-control-container {
+    display: none !important;
+  }
+
+  body.listening-mode .listening-hint {
+    display: inline-flex !important;
+    z-index: 5000 !important;
+  }
+
+/* ===== mobile-right-control-stack-fix ===== */
+  /*
+   * 手機右側控制列：
+   * 耳機 → 小太陽 → 圖層 → 我的位置 → 放大。
+   *
+   * 右側工具組往上移；
+   * 定位按鈕往下落到圖層與放大鍵之間，
+   * 不再遮住小太陽。
+   */
+  @media (max-width: 600px) {
+    #rightToolsWrapper {
+      top: auto !important;
+      right: 12px !important;
+      bottom: calc(216px + env(safe-area-inset-bottom)) !important;
+      z-index: 4500 !important;
+    }
+
+    .locate-me-wrapper {
+      right: 12px !important;
+      bottom: calc(160px + env(safe-area-inset-bottom)) !important;
+      z-index: 3600 !important;
+    }
+  }
+
+/* ===== immediate-flood-events-and-solid-right-tool-rail-fix ===== */
+  /* Keep only the flood-event list behavior.  Right-control geometry is owned
+     by the final conflict-free panel rule below. */
+  #tainanHistoryFloodEvents.hf-events {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+
+/* ===== flood-event-card-ui-fix ===== */
+/*
+ * Only the historical-flood selector receives this visual refinement.
+ * It removes unreliable remote legend thumbnails from the selection UI while
+ * retaining every existing event, source, state key, and ArcGIS raw-value filter.
+ */
+#tainanHistoryFloodModule .hf-events {
+  display: grid;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+#tainanHistoryFloodModule .hf-event-row {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 62px;
+  padding: 10px 11px;
+  border: 1px solid #d7e1ea;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+#tainanHistoryFloodModule .hf-event-row:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  box-shadow: 0 5px 14px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+#tainanHistoryFloodModule .hf-event-row:has(input:checked) {
+  border-color: #5eead4;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 64%);
+}
+
+#tainanHistoryFloodModule .hf-event-row input.tainan-history-event-toggle {
+  appearance: auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #0f766e;
+}
+
+#tainanHistoryFloodModule .hf-event-copy {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+  min-width: 0;
+}
+
+#tainanHistoryFloodModule .hf-event-title-line,
+#tainanHistoryFloodModule .hf-event-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+#tainanHistoryFloodModule .hf-event-year {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 39px;
+  padding: 3px 5px;
+  color: #0f3d4a;
+  background: #e6fffb;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  font-family: "Courier New", monospace;
+  font-size: 10.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+#tainanHistoryFloodModule .hf-event-name {
+  color: #0f172a;
+  font-size: 13.5px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+#tainanHistoryFloodModule .hf-event-origin {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+#tainanHistoryFloodModule .hf-source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #334155;
+  background: #f8fafc;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#tainanHistoryFloodModule .hf-source-chip.is-stormwater {
+  color: #0f766e;
+  background: #ecfdf5;
+  border-color: #99f6e4;
+}
+
+#tainanHistoryFloodModule .hf-source-chip.is-planning {
+  color: #5b21b6;
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
+#tainanHistoryFloodModule .hf-event-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 27px;
+  padding: 4px 7px;
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  border-radius: 999px;
+  font-size: 10.5px;
+}
+
+#tainanHistoryFloodModule .hf-event-row.is-visible .hf-event-status {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+/* Prevent any broken remote legend thumbnail from occupying the event rows. */
+#tainanHistoryFloodModule .hf-event-row .hf-swatch-stack,
+#tainanHistoryFloodModule .hf-event-row .hf-swatch {
+  display: none !important;
+}
+
+
+@media (max-width: 600px) {
+  #tainanHistoryFloodModule .hf-event-row {
+    min-height: 58px;
+    padding: 9px 10px;
+  }
+
+  #tainanHistoryFloodModule .hf-event-status {
+    min-width: 40px;
+  }
+}
+
+/* ===== single-real-heat-risk-button-clean-fix ===== */
+/*
+ * heat-risk.js creates exactly one real .heat-risk-tool button and binds its
+ * own click listener.  Keep that same element in the native rail; do not proxy
+ * or move it with JavaScript.  CSS order gives one deterministic desktop stack.
+ */
+@media (min-width: 601px) {
+  #rightToolsWrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-end !important;
+    gap: 12px !important;
+  }
+
+  #rightToolsWrapper > .tools-toggle-btn[onclick*="toggleListeningMode"] {
+    order: 1 !important;
+  }
+
+  #rightToolsWrapper > .heat-risk-tool {
+    order: 2 !important;
+    position: relative !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+    float: none !important;
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    margin: 0 !important;
+    flex: 0 0 52px !important;
+    align-self: flex-end !important;
+    z-index: 4504 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  #rightToolsWrapper > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] {
+    order: 3 !important;
+  }
+
+  #rightToolsWrapper > .tools-menu-container {
+    order: 4 !important;
+  }
+}
+
+/* ===== right-panel-click-safe-compact-header ===== */
+/*
+ * heat-risk.js creates the actual <button class="heat-risk-tool"> inside
+ * #rightToolsWrapper and attaches its own click listener.  This rule only
+ * controls layout: it never clones, moves, overlays, or proxies that button.
+ */
+#rightToolsCompactClose {
+  display: none;
+}
+
+@media (min-width: 601px) {
+  /* The v4 state manager temporarily sets this parent to pointer-events:none.
+     Explicitly restore hit testing for the real controls and their panel. */
+  #rightToolsWrapper,
+  #rightToolsWrapper > .tools-toggle-btn,
+  #rightToolsWrapper > .heat-risk-tool,
+  #rightToolsWrapper > #rightToolsCompactClose,
+  #rightToolsWrapper > .tools-menu-container {
+    pointer-events: auto !important;
+  }
+
+  /* Closed state remains the native vertical rail. */
+  #rightToolsWrapper > .heat-risk-tool {
+    cursor: pointer !important;
+  }
+
+  /* Open state: a natural flex row, not absolute-positioned buttons. */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) {
+    position: absolute !important;
+    top: 116px !important;
+    right: 14px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: min(440px, calc(100vw - 28px)) !important;
+    height: calc(100dvh - 130px) !important;
+
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    align-content: flex-start !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+    isolation: isolate;
+  }
+
+  /* Header controls keep their original DOM and listeners. */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleListeningMode"],
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleRightToolsPanel"],
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose {
+    position: relative !important;
+    inset: auto !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: 0 0 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+
+    color: #12333b !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border: 1px solid #b7d8d4 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 5px 14px rgba(13, 47, 53, 0.14) !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    z-index: 4516 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleListeningMode"] { order: 1 !important; }
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool { order: 2 !important; }
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] { order: 3 !important; }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose {
+    order: 4 !important;
+    margin-left: auto !important;
+    color: #075a63 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn svg,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool svg,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool img,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose svg {
+    width: 16px !important;
+    height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    pointer-events: none !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn:focus-visible,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool:focus-visible,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose:focus-visible {
+    color: #006c73 !important;
+    background: #ffffff !important;
+    outline: 2px solid rgba(8, 127, 150, 0.30) !important;
+    outline-offset: 1px !important;
+  }
+
+  /* The old large left-side ear would be a fourth control in this header. */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCollapseEar {
+    display: none !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose {
+    display: inline-flex !important;
+  }
+
+  /* The menu starts on the next row and receives all remaining height. */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-menu-container {
+    order: 10 !important;
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: calc(100% - 40px) !important;
+    max-height: calc(100% - 40px) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    z-index: 4503 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-menu-container > .custom-layer-control {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 14px 14px 26px !important;
+    overflow-y: auto !important;
+    pointer-events: auto !important;
+  }
+}
+
+@media (max-width: 600px) {
+  #rightToolsCompactClose { display: none !important; }
+}
+
+/* ===== mobile-right-tools-toolbar-and-banner-fix ===== */
+/*
+ * 手機版圖資工具：
+ * 1. 面板開啟時，將三個既有工具鍵縮成桌機同款的頂部工具列；
+ * 2. 不搬動或複製任何按鈕，保留原本的 click listener；
+ * 3. 選單本體使用剩餘高度捲動，避開底部課程模組。
+ */
+@media (max-width: 600px) {
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) {
+    position: fixed !important;
+    top: calc(64px + env(safe-area-inset-top)) !important;
+    right: 10px !important;
+    bottom: calc(214px + env(safe-area-inset-bottom)) !important;
+    left: 10px !important;
+    width: auto !important;
+    height: auto !important;
+
+    display: flex !important;
+    flex-flow: row wrap !important;
+    align-items: center !important;
+    align-content: flex-start !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+
+    pointer-events: none !important;
+    z-index: 4500 !important;
+  }
+
+  /* 與桌機展開狀態一致：保留原生三個控制鍵，縮成工具列按鈕。 */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleListeningMode"],
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleRightToolsPanel"],
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose {
+    position: relative !important;
+    inset: auto !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: 0 0 32px !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+
+    color: #12333b !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border: 1px solid #b7d8d4 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 5px 14px rgba(13, 47, 53, 0.14) !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    z-index: 4516 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleListeningMode"] { order: 1 !important; }
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool { order: 2 !important; }
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn[onclick*="toggleRightToolsPanel"] { order: 3 !important; }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose {
+    display: inline-flex !important;
+    order: 4 !important;
+    margin-left: auto !important;
+    color: #075a63 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn svg,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool svg,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool img,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose svg {
+    width: 16px !important;
+    height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    pointer-events: none !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-toggle-btn:focus-visible,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > button.heat-risk-tool:focus-visible,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose:hover,
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCompactClose:focus-visible {
+    color: #006c73 !important;
+    background: #ffffff !important;
+    outline: 2px solid rgba(8, 127, 150, 0.30) !important;
+    outline-offset: 1px !important;
+  }
+
+  /* 手機版不再使用左側外掛耳朵，改用工具列右端的 X 收合。 */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > #rightToolsCollapseEar {
+    display: none !important;
+  }
+
+  /* 選單置於工具列下方，內容本身可完整捲動。 */
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-menu-container {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    order: 10 !important;
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: calc(100% - 40px) !important;
+    max-height: calc(100% - 40px) !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    z-index: 4503 !important;
+  }
+
+  #rightToolsWrapper.open:not(.haidian-v4-tools-user-hidden) > .tools-menu-container > .custom-layer-control {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 12px 12px calc(22px + env(safe-area-inset-bottom)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    pointer-events: auto !important;
+  }
+}
