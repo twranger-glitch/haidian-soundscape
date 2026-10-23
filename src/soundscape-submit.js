@@ -21,8 +21,8 @@
 
   var CONFIG = window.SS_SUBMIT_CONFIG || {
     cloudName: 'dcccnd4gk',
-    uploadPreset: '',
-    endpoint: '',
+    uploadPreset: 'haidian-site-unsigned',
+    endpoint: 'https://script.google.com/macros/s/AKfycby4WSyAF4RMSahol0m5xoJ9LmIzn7JLIkdvJVOQlXvHFIzhKouqhxxDS0bGSg4oaLiVTg/exec',
     maxAudioMB: 60,
     maxImageMB: 20,
     maxVideoMB: 300,
