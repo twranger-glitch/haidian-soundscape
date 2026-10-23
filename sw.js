@@ -7,7 +7,7 @@
  * - 資料庫 JSON：先走網路，成功就備份，斷線時用備份。
  * 想停用：把 DISABLED 改成 true 重新部署，所有人的快取會自動清掉並解除註冊。
  */
-var VERSION = "20261023.17";
+var VERSION = "20261023.18";
 var DISABLED = false;
 var SHELL = 'ss-shell-' + VERSION;
 var CDN = 'ss-cdn-' + VERSION;

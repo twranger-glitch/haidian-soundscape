@@ -1346,7 +1346,7 @@
   function rememberMine(payload, queued) {
     var mine = readJSON(LS_MINE) || [];
     mine = mine.filter(function (m) { return m.uid !== payload.uid; });
-    mine.unshift({ uid: payload.uid, title: payload.title, lat: payload.lat, lon: payload.lon, category: payload.category, at: Date.now(), queued: !!queued });
+    mine.unshift({ uid: payload.uid, title: payload.title, lat: payload.lat, lon: payload.lon, category: payload.category, at: Date.now(), queued: !!queued, review: !!payload._review });
     writeLS(LS_MINE, JSON.stringify(mine.slice(0, 50)));
   }
   function markMineSent(uid) {
@@ -1366,11 +1366,14 @@
     freshLayer.addLayer(m);
   }
 
+  // 「剛送出」的暫時點只撐到正式上架那一刻；上架過一次就不再出現，之後被下架或刪除也不會冒出來
   function syncFresh() {
-    var mine = (readJSON(LS_MINE) || []).filter(function (m) { return Date.now() - m.at < 86400e3 && !m.queued; });
-    var live = {};
+    var all = readJSON(LS_MINE) || [];
+    var live = {}, changed = false;
     (window.allMarkersData || []).forEach(function (i) { live[i.uid] = 1; });
-    var pending = mine.filter(function (m) { return !live[m.uid]; });
+    all.forEach(function (m) { if (live[m.uid] && !m.seen) { m.seen = true; changed = true; } });
+    if (changed) writeLS(LS_MINE, JSON.stringify(all));
+    var pending = all.filter(function (m) { return !m.seen && !m.queued && !m.review && !live[m.uid] && Date.now() - m.at < 15 * 60e3; });
     if (freshLayer) freshLayer.clearLayers();
     pending.forEach(addFreshMarker);
   }
