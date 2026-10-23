@@ -966,6 +966,9 @@
     document.querySelectorAll('[data-ss-heard]').forEach(function (node) {
       node.textContent = s.heard ? '已聽 ' + s.heard + ' / ' + s.total : s.total + ' 段聲音';
     });
+    var pct = s.total ? Math.round(100 * s.heard / s.total) : 0;
+    document.querySelectorAll('[data-ss-heard-bar]').forEach(function (b) { b.style.width = pct + '%'; });
+    document.querySelectorAll('[data-ss-heard-pct]').forEach(function (b) { b.textContent = s.heard ? pct + '%' : '還沒開始'; });
   }
 
   // ---- 滑鼠靠近聲音點就先告訴你是什麼 ----
@@ -1402,6 +1405,199 @@
     wrap.insertBefore(chip, sep);
   }
 
+  // ---------------------------------------------------------------- 7. 聆聽／走讀面板
+  // 兩個抽屜原本各自塞了模式標頭、模式切換器與分隔線；聆聽面板的類別單選又和地圖上的標籤重複。
+  // 這裡把重複的拿掉，換成一個安靜的標題、一條聆聽進度，以及一排排「看得懂在做什麼」的列。
+
+  var ROUTE_META = {
+    nature: { title: '綠色生態走讀', desc: '自然絮語與空間聲，挑 5 站', color: '#10b981' },
+    culture: { title: '聚落記憶尋寶', desc: '常民聲與歲月回音，挑 5 站', color: '#f59e0b' },
+    geofence_yanshui: { title: '鹽水溪畔', desc: '溪岸兩側 200 公尺內的聲音', color: '#3498db' },
+    geofence_jianan: { title: '嘉南大圳排水線', desc: '沿著鹽水溪排水線一路聽下去', color: '#3498db' },
+    geofence_shanhai: { title: '山海圳綠道', desc: '從台江出發、直達玉山的綠道', color: '#e67e22' },
+    geofence_taijiang: { title: '台江水日', desc: '順著水路溯源到烏山頭', color: '#27ae60' },
+    draw: { title: '自己圈一塊', desc: '在地圖上畫個範圍，走讀裡面的聲音', color: '#8e44ad' },
+    clear: { title: '結束這條路線', desc: '停止導覽，回到自由探索', color: '#e11d48' }
+  };
+  var ROUTE_GROUPS = { nature: '依主題', geofence_yanshui: '沿著水路', draw: '自己畫' };
+  var ICON_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  var ICON_SEARCH = '<svg class="ss-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>';
+  var ICON_TROPHY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/></svg>';
+  var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+
+  function hexRgba(hex, a) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    if (!m) return 'rgba(12,26,29,' + a + ')';
+    return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
+  }
+
+  function closePanels() {
+    if (typeof window.haidianV4CloseAll === 'function') window.haidianV4CloseAll(true);
+    else if (typeof window.closeAllDrawers === 'function') window.closeAllDrawers();
+  }
+
+  function panelHead(content, eyebrow, title, copy) {
+    var head = el('div', 'ss-ph',
+      '<div class="ss-ph-text"><span class="ss-ph-eyebrow">' + eyebrow + '</span><h2 class="ss-ph-title">' + title + '</h2><p class="ss-ph-copy">' + copy + '</p></div>' +
+      '<button type="button" class="ss-ph-close" aria-label="收起面板">' + ICON.close + '</button>');
+    head.querySelector('.ss-ph-close').addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      closePanels();
+    });
+    content.insertBefore(head, content.firstChild);
+    return head;
+  }
+
+  function rowButton(cls, icon, title, desc, onClick) {
+    var b = el('button', 'ss-row ' + (cls || ''),
+      '<span class="ss-row-ico">' + icon + '</span><span class="ss-row-text"><b>' + title + '</b>' + (desc ? '<i>' + desc + '</i>' : '') + '</span><span class="ss-row-go">' + ICON_CHEV + '</span>');
+    b.type = 'button';
+    if (onClick) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function tidySidePanel() {
+    var panel = document.getElementById('sidePanel');
+    var content = panel && panel.querySelector('.drawer-content');
+    if (!content || content.__ssDone) return;
+    content.__ssDone = true;
+    panel.classList.add('ss-panel');
+
+    // 標記每個區塊，讓 CSS 分得出誰是誰
+    var secSearch, secTime, secFav, achBtn;
+    Array.prototype.slice.call(content.children).forEach(function (node) {
+      if (node.tagName === 'HR') { node.classList.add('ss-hr'); return; }
+      if (node.querySelector && node.querySelector('#searchInput')) { secSearch = node; node.classList.add('ss-sec', 'ss-sec-search'); }
+      else if (node.querySelector && node.querySelector('.filter-group')) node.classList.add('ss-sec', 'ss-sec-cat');
+      else if (node.querySelector && node.querySelector('#timeSlider')) { secTime = node; node.classList.add('ss-sec', 'ss-sec-time'); }
+      else if (node.querySelector && node.querySelector('#favFilterToggle')) { secFav = node; node.classList.add('ss-sec', 'ss-sec-fav'); }
+      else if (node.classList && node.classList.contains('btn-more-layers')) achBtn = node;
+    });
+
+    panelHead(content, '聆聽', '找一段聲音來聽', '搜尋、挑時段，或翻開清單慢慢看；想換類別，用地圖上方的標籤。');
+
+    // 聆聽進度
+    var pg = el('div', 'ss-pg',
+      '<div class="ss-pg-head"><span data-ss-heard>' + items().filter(isPlayable).length + ' 段聲音</span><span class="ss-pg-pct" data-ss-heard-pct></span></div>' +
+      '<div class="ss-pg-bar"><i data-ss-heard-bar></i></div>' +
+      '<div class="ss-pg-hint">聽過的聲音會在地圖上變成空心點，慢慢把它們都點亮。</div>');
+    content.insertBefore(pg, content.children[1] || null);
+
+    // 搜尋框：圖示在左、清除在右
+    var input = document.getElementById('searchInput');
+    if (secSearch && input) {
+      var wrap = el('div', 'ss-search', ICON_SEARCH);
+      input.placeholder = '搜尋標題或採集者';
+      input.setAttribute('aria-label', '搜尋標題或採集者');
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+      var clr = el('button', 'ss-search-clear', ICON.close);
+      clr.type = 'button';
+      clr.setAttribute('aria-label', '清除搜尋');
+      clr.addEventListener('click', function () {
+        input.value = '';
+        wrap.classList.remove('has-text');
+        if (typeof window.filterMarkers === 'function') window.filterMarkers();
+        input.focus();
+      });
+      wrap.appendChild(clr);
+      input.addEventListener('input', function () { wrap.classList.toggle('has-text', !!input.value); });
+
+      // 翻看清單
+      var listRow = rowButton('ss-row-list', ICON.list, '翻開全部聲音', '依最新、離我最近或離畫面中心排序', function () {
+        closePanels();
+        setList(true);
+      });
+      secSearch.appendChild(listRow);
+    }
+
+    // 時段：標籤列右側放目前時段，滑桿下放刻度
+    if (secTime) {
+      var label = secTime.querySelector('.panel-label');
+      var disp = document.getElementById('timeDisplay');
+      if (label) {
+        label.lastChild.textContent = ' 時段';
+        if (disp) label.appendChild(disp);
+      }
+      secTime.appendChild(el('div', 'ss-ticks', '<span>深夜</span><span>清晨</span><span>中午</span><span>傍晚</span><span>夜晚</span>'));
+    }
+
+    // 收藏：變成一個開關列
+    if (secFav) {
+      var fl = secFav.querySelector('label');
+      var cb = document.getElementById('favFilterToggle');
+      var fLabel = secFav.querySelector('.panel-label');
+      if (fLabel) fLabel.lastChild.textContent = ' 我的';
+      if (fl && cb) {
+        Array.prototype.slice.call(fl.childNodes).forEach(function (n) { if (n !== cb) fl.removeChild(n); });
+        fl.removeAttribute('style');
+        fl.className = 'ss-row ss-row-fav';
+        fl.insertBefore(el('span', 'ss-row-text', '<b>只看我的收藏</b><i>登入後，地圖只留下你收藏的聲音</i>'), cb);
+        fl.insertBefore(el('span', 'ss-row-ico', ICON_HEART), fl.firstChild);
+      }
+      if (achBtn) {
+        var onclick = achBtn.getAttribute('onclick');
+        var ach = rowButton('ss-row-ach', ICON_TROPHY, '我的聲音獵人成就', '收藏與踩點累積的徽章', function () {
+          try { new Function(onclick).call(achBtn); } catch (e) {}
+        });
+        secFav.appendChild(ach);
+        achBtn.remove();
+      }
+    }
+  }
+
+  function tidyRoutePanel() {
+    var panel = document.getElementById('routePanel');
+    var content = panel && panel.querySelector('.drawer-content');
+    if (!content || content.__ssDone) return;
+    content.__ssDone = true;
+    panel.classList.add('ss-panel');
+    var list = content.querySelector('.route-list');
+    if (!list) return;
+
+    panelHead(content, '走讀', '把聲音串成一條路', '選一條路線，地圖會依序帶你走過沿途的聲音；走完或想停，隨時結束。');
+
+    Array.prototype.slice.call(list.querySelectorAll('hr')).forEach(function (h) { h.parentNode.removeChild(h); });
+    Array.prototype.slice.call(list.querySelectorAll('.route-btn')).forEach(function (btn) {
+      var oc = btn.getAttribute('onclick') || '';
+      var m = /toggleRoute\('([^']+)'/.exec(oc);
+      var key = m ? m[1] : (/openCustomDrawHelp/.test(oc) ? 'draw' : null);
+      var meta = key && ROUTE_META[key];
+      if (!meta) return;
+      var svg = btn.querySelector('svg');
+      btn.classList.add('ss-rt');
+      btn.dataset.route = key;
+      ['border-left', 'background', 'color', 'border-color', 'justify-content'].forEach(function (p) { btn.style.removeProperty(p); });
+      btn.style.setProperty('--rt', meta.color);
+      btn.style.setProperty('--rt-soft', hexRgba(meta.color, 0.14));
+      btn.innerHTML = '';
+      var ico = el('span', 'ss-rt-ico');
+      if (svg) { svg.setAttribute('stroke', 'currentColor'); ico.appendChild(svg); }
+      btn.appendChild(ico);
+      btn.appendChild(el('span', 'ss-rt-text', '<b>' + meta.title + '</b>' + (meta.desc ? '<i>' + meta.desc + '</i>' : '')));
+      if (key !== 'clear') btn.appendChild(el('span', 'ss-rt-go', ICON_CHEV));
+      if (ROUTE_GROUPS[key]) list.insertBefore(el('div', 'ss-rt-group', ROUTE_GROUPS[key]), btn);
+    });
+  }
+
+  // 清單與左側面板在桌機上共用同一個位置：誰打開，另一個就讓位。
+  function bindPanelList() {
+    if (!window.MutationObserver) return;
+    ['sidePanel', 'routePanel'].forEach(function (id) {
+      var p = document.getElementById(id);
+      if (!p) return;
+      new MutationObserver(function () {
+        if (!p.classList.contains('collapsed') && document.body.classList.contains('ss-list-open')) setList(false);
+      }).observe(p, { attributes: true, attributeFilter: ['class'] });
+    });
+  }
+
+  function tidyPanels() {
+    tidySidePanel();
+    tidyRoutePanel();
+    bindPanelList();
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
@@ -1413,6 +1609,7 @@
     buildBarExtras();
     heroGreeting();
     tidyLayout();
+    tidyPanels();
     bindKeys();
     bindBarSwipe();
     landOnSharedWork();
