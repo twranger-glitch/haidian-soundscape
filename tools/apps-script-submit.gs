@@ -10,7 +10,8 @@
  *      換成
  *        if (status !== "" && status.indexOf("失敗") === -1 && status.indexOf("無 GPS") === -1 && !siteHidden_(status)) {
  *
- * 二、appsscript.json 的 oauthScopes 加三行（寄摘要信、建立排程、試算表選單）
+ * 二、appsscript.json 的 oauthScopes 加四行（寄摘要信、建立排程、試算表選單、知道摘要信寄給誰）
+ *        "https://www.googleapis.com/auth/userinfo.email",
  *        "https://www.googleapis.com/auth/script.send_mail",
  *        "https://www.googleapis.com/auth/script.scriptapp",
  *        "https://www.googleapis.com/auth/script.container.ui"
@@ -287,11 +288,18 @@ function siteSendDigest_(force) {
     (items.length > flagged.length ? '<h3 style="font-size:14px;margin:18px 0 8px">其他（已經上地圖）</h3>' + items.filter(function (x) { return !x.flags.length; }).map(card).join('') : '') +
     '<p style="font-size:12px;color:#64748b;margin-top:18px">要下架：在試算表選那一列，用選單「📮 站內投稿 → 下架選取的列」。<br>待審的沒問題：把「處理狀態」改成「已完成」就會上地圖。<br>不在台灣只是提醒，出國錄的也很好，不用處理。<br>擋字和封鎖帳號在「' + SITE_SUBMIT.SETTINGS_SHEET + '」分頁。</p></div>';
   MailApp.sendEmail({
-    to: SITE_SUBMIT.DIGEST_TO || Session.getEffectiveUser().getEmail(),
+    to: siteDigestTo_(),
     subject: '海佃溪遊記｜過去 24 小時 ' + items.length + ' 件投稿' + (flagged.length ? '（' + flagged.length + ' 件要看）' : ''),
     htmlBody: body
   });
   return items.length;
+}
+
+function siteDigestTo_() {
+  if (SITE_SUBMIT.DIGEST_TO) return SITE_SUBMIT.DIGEST_TO;
+  try { var me = Session.getEffectiveUser().getEmail(); if (me) return me; } catch (e) {}
+  try { return SpreadsheetApp.getActiveSpreadsheet().getOwner().getEmail(); } catch (e) {}
+  throw new Error('找不到要寄給誰：請在站內投稿.gs 最上面的 DIGEST_TO 填你的 email');
 }
 
 // 台灣本島、澎湖、金門、馬祖、蘭嶼綠島的大致範圍；只用來在摘要信裡提醒，不會擋
