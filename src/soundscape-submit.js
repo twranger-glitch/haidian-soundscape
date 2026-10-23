@@ -1452,7 +1452,7 @@
   // ------------------------------------------------------------ hook into the page
   function hook() {
     document.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('.glass-header .btn-submit, [onclick*="submitChoiceModal"]');
+      var b = e.target.closest && e.target.closest('[onclick*="submitChoiceModal"]');
       if (!b) return;
       e.preventDefault(); e.stopPropagation();
       open();
