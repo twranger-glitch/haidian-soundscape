@@ -1598,6 +1598,71 @@
     bindPanelList();
   }
 
+  // ---------------------------------------------------------------- 8. 夜間模式
+  // 傍晚六點到清晨六點、或系統偏好深色時自動入夜；左下角的小按鈕可手動切換，手動選擇維持 12 小時。
+
+  var LS_THEME = 'ss-theme-v1';
+  var ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  var ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+
+  function ssNote(msg) {
+    var n = document.getElementById('ssNote');
+    if (!n) { n = el('div', 'ss-note'); n.id = 'ssNote'; n.setAttribute('role', 'status'); document.body.appendChild(n); }
+    n.textContent = msg;
+    n.classList.add('is-on');
+    clearTimeout(ssNote.t);
+    ssNote.t = setTimeout(function () { n.classList.remove('is-on'); }, 1800);
+  }
+
+  function autoNight() {
+    var h = new Date().getHours();
+    var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return !!sys || h >= 18 || h < 6;
+  }
+
+  function themeChoice() {
+    var o = readJSON(LS_THEME);
+    if (o && o.until > Date.now() && (o.mode === 'night' || o.mode === 'day')) return o.mode;
+    return null;
+  }
+
+  function isNight() {
+    var c = themeChoice();
+    return c ? c === 'night' : autoNight();
+  }
+
+  function applyTheme(night) {
+    document.body.classList.toggle('ss-night', night);
+    var btn = document.getElementById('ssTheme');
+    if (btn) {
+      btn.innerHTML = night ? ICON_SUN : ICON_MOON;
+      btn.setAttribute('aria-pressed', night ? 'true' : 'false');
+      btn.title = night ? '切回日間' : '切到夜間';
+    }
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', night ? '#0b1517' : '#0c1a1d');
+    if (window.ssBasemap) window.ssBasemap.setNight(night);
+  }
+
+  function buildTheme() {
+    if (document.getElementById('ssTheme')) return;
+    var b = el('button', 'ss-theme');
+    b.id = 'ssTheme';
+    b.type = 'button';
+    b.setAttribute('aria-label', '切換日夜模式');
+    b.addEventListener('click', function () {
+      var night = !document.body.classList.contains('ss-night');
+      writeLS(LS_THEME, JSON.stringify({ mode: night ? 'night' : 'day', until: Date.now() + 12 * 3600e3 }));
+      applyTheme(night);
+      ssNote(night ? '入夜了：地圖與介面一起暗下來' : '回到白天');
+    });
+    document.body.appendChild(b);
+    applyTheme(isNight());
+    setInterval(function () { applyTheme(isNight()); }, 10 * 60e3);
+    var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq && mq.addEventListener) mq.addEventListener('change', function () { applyTheme(isNight()); });
+  }
+
   // ---------------------------------------------------------------- boot
 
   function boot() {
@@ -1610,6 +1675,7 @@
     heroGreeting();
     tidyLayout();
     tidyPanels();
+    buildTheme();
     bindKeys();
     bindBarSwipe();
     landOnSharedWork();

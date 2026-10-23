@@ -31,10 +31,39 @@
     waterText: '#3d7672'
   };
 
+  var NIGHT = {
+    background: '#101c1f',
+    park: '#15302a',
+    wood: '#122820',
+    residential: '#152325',
+    water: '#0c2b34',
+    waterway: '#14424f',
+    building: '#1b2b2e',
+    buildingLine: '#243739',
+    roadMinor: '#25393c',
+    roadCasing: '#1a2b2e',
+    roadMajor: '#31474b',
+    motorway: '#4d4a36',
+    motorwayCasing: '#3b3a2a',
+    rail: '#2b3d40',
+    boundary: '#3f5357',
+    text: '#c7d1cf',
+    textSoft: '#8a9a9a',
+    halo: '#101c1f',
+    waterText: '#6fb3b0'
+  };
+
+  var baseStyle = null;
+  var glLayer = null;
+
+  function palette() {
+    return document.body && document.body.classList.contains('ss-night') ? NIGHT : PALETTE;
+  }
+
   var LABEL = ['coalesce', ['get', 'name:zh-Hant'], ['get', 'name:zh'], ['get', 'name'], ['get', 'name_en']];
 
-  function recolor(style) {
-    var P = PALETTE;
+  function recolor(style, P) {
+    P = P || palette();
     var fills = {
       background: { 'background-color': P.background },
       park: { 'fill-color': P.park },
@@ -58,7 +87,7 @@
       if (/^railway/.test(id) && !/dashline/.test(id)) paint['line-color'] = P.rail;
       if (/^railway.*dashline$/.test(id)) paint['line-color'] = P.background;
       if (/^boundary/.test(id)) paint['line-color'] = P.boundary;
-      if (l.type === 'raster') paint['raster-opacity'] = 0.25;
+      if (l.type === 'raster') paint['raster-opacity'] = P === NIGHT ? 0.1 : 0.25;
 
       if (l.type === 'symbol' && l.layout && l.layout['text-field'] && !/shield/.test(id)) {
         if (id !== 'highway-shield-non-us') l.layout['text-field'] = LABEL;
@@ -93,12 +122,14 @@
     map.__ssWorldBase = true;
 
     fetch(STYLE_URL).then(function (r) { return r.json(); }).then(function (style) {
+      baseStyle = style;
       var layer = L.maplibreGL({
-        style: recolor(style),
+        style: recolor(JSON.parse(JSON.stringify(style))),
         attributionControl: false,
         interactive: false
       });
       layer.addTo(map);
+      glLayer = layer;
       var c = layer.getContainer && layer.getContainer();
       if (c) {
         c.classList.add('ss-world-base');
@@ -115,6 +146,18 @@
     });
     syncClasses(map);
   }
+
+  // 夜間模式切換時，把向量底圖整個換色（不重新下載圖磚）
+  window.ssBasemap = {
+    setNight: function (night) {
+      if (!glLayer || !baseStyle) return;
+      var gl = glLayer.getMaplibreMap && glLayer.getMaplibreMap();
+      if (!gl) return;
+      try {
+        gl.setStyle(recolor(JSON.parse(JSON.stringify(baseStyle)), night ? NIGHT : PALETTE), { diff: true });
+      } catch (e) { console.warn('底圖換色失敗', e); }
+    }
+  };
 
   (function wait(n) {
     if (window.map && window.L && L.maplibreGL) return start(window.map);
