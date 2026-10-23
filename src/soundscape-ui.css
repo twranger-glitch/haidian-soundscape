@@ -2171,3 +2171,162 @@ body.ss-sub-open #ssBar, body.ss-sub-open #ssChips, body.ss-sub-open #ssIdle { o
 .ss-sub-mine-st.is-working { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
 .ss-sub-mine-list .ss-sub-chipbtn { flex-shrink: 0; padding: 7px 10px; }
 @media (max-width: 420px) { .ss-sub-minebtn { padding: 8px 10px; font-size: 12px; } }
+
+
+/* ------------------------------------------------------------------ */
+/* 第十四輪：導覽列                                                     */
+/* 標題在左、四個動作在右：關於、最新上架、我要投稿、帳號。永遠一行。     */
+/* ------------------------------------------------------------------ */
+.glass-header {
+  width: min(94%, 1080px) !important;
+  max-width: 1080px !important;
+  padding: 9px 10px 9px 22px !important;
+  gap: 16px !important;
+  flex-wrap: nowrap !important;
+}
+.glass-header .project-title {
+  flex: 0 0 auto !important;
+  flex-wrap: nowrap !important;
+  white-space: nowrap;
+  font-size: 19px !important;
+  gap: 0;
+}
+.glass-header .project-title span.sub-title { margin-left: 8px !important; }
+.glass-header .nav-buttons {
+  flex: 0 0 auto !important;
+  flex-wrap: nowrap !important;
+  gap: 2px !important;
+  margin: 0 !important;
+  width: auto !important;
+}
+.glass-header .nav-buttons button {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  padding: 8px 13px !important;
+  font-size: 13.5px !important;
+  line-height: 1 !important;
+  gap: 7px !important;
+  height: 38px;
+  box-sizing: border-box;
+}
+.glass-header .nav-buttons button span { white-space: nowrap !important; }
+.glass-header .nav-buttons button svg { flex: 0 0 auto; }
+.glass-header .nav-buttons button.btn-submit { padding: 8px 16px !important; margin-left: 4px; }
+/* 登入後這三個收進帳號選單 */
+body.ss-acct-on .glass-header .nav-buttons #navFavBtn,
+body.ss-acct-on .glass-header .nav-buttons #navMineBtn,
+body.ss-acct-on .glass-header .nav-buttons #authBtn { display: none !important; }
+
+.ss-acct { position: relative; margin-left: 4px; }
+.ss-acct-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px !important;
+  padding: 4px 12px 4px 4px !important;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid rgba(12, 26, 29, 0.16) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--ss-ink) !important;
+  font: 600 13.5px/1 var(--ss-sans) !important;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.ss-acct-btn:not(.is-in) { padding: 8px 14px 8px 12px !important; }
+.ss-acct-btn:not(.is-in) > svg { width: 17px; height: 17px; }
+.ss-acct-btn:hover, .ss-acct.is-open .ss-acct-btn { background: rgba(12, 26, 29, 0.06) !important; border-color: rgba(12, 26, 29, 0.26) !important; }
+.ss-acct-ava { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; display: inline-grid; place-items: center; background: var(--ss-teal); color: #fff; font: 700 13px/1 var(--ss-sans); }
+.ss-acct-chev { display: inline-flex; width: 14px; height: 14px; color: var(--ss-muted); transition: transform 0.2s; }
+.ss-acct-chev svg { width: 14px; height: 14px; }
+.ss-acct.is-open .ss-acct-chev { transform: rotate(180deg); }
+.ss-acct-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 232px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--ss-paper);
+  border: 1px solid var(--ss-line);
+  box-shadow: var(--ss-shadow);
+  z-index: 3000;
+  animation: ssMenuIn 0.18s var(--ss-ease) both;
+}
+@keyframes ssMenuIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.ss-acct-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 12px; }
+.ss-acct-head .ss-acct-ava { width: 40px; height: 40px; font-size: 16px; }
+.ss-acct-head b { display: block; font: 700 14px/1.3 var(--ss-sans); color: var(--ss-ink); }
+.ss-acct-head i { display: block; font: 500 12px/1.3 var(--ss-sans); color: var(--ss-muted); font-style: normal; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glass-header .nav-buttons .ss-acct-menu button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px !important; width: 100%; min-width: 0; min-height: 0;
+  padding: 10px 10px !important; border: 0; border-radius: 10px !important; background: transparent;
+  color: var(--ss-ink); font: 600 13.5px/1 var(--ss-sans) !important; text-align: left; cursor: pointer; margin: 0;
+}
+.glass-header .nav-buttons .ss-acct-menu button svg { width: 18px; height: 18px; color: var(--ss-muted); }
+.glass-header .nav-buttons .ss-acct-menu button:hover { background: rgba(12, 26, 29, 0.06) !important; }
+.glass-header .nav-buttons .ss-acct-menu button:hover svg { color: var(--ss-teal); }
+.ss-acct-sep { height: 1px; margin: 6px 8px; background: var(--ss-line); }
+
+/* 寬度不夠時：先收起副標與 SEL 標籤，再把文字縮成兩個字 */
+@media (max-width: 1100px) {
+  .glass-header .project-title span.sub-title { display: none !important; }
+}
+@media (max-width: 960px) {
+  .glass-header .project-title::after { display: none !important; }
+  .glass-header .nav-buttons button .full-text { display: none !important; }
+  .glass-header .nav-buttons button .short-text { display: inline !important; }
+  .glass-header .nav-buttons button { padding: 8px 11px !important; }
+}
+@media (max-width: 600px) {
+  .glass-header { padding: 7px 8px 7px 14px !important; gap: 8px !important; }
+  .glass-header .project-title { font-size: 17px !important; }
+  .glass-header .nav-buttons button { padding: 8px !important; min-width: 38px; min-height: 38px; }
+  .glass-header .nav-buttons button.btn-submit { padding: 8px 12px !important; margin-left: 2px; }
+  .ss-acct { margin-left: 2px; }
+  .ss-acct-btn { padding: 4px !important; min-width: 38px; justify-content: center; }
+  .ss-acct-btn:not(.is-in) { padding: 8px !important; }
+  .ss-acct-btn.is-in { border-color: transparent !important; }
+  .ss-acct-name, .ss-acct-chev { display: none; }
+  .ss-acct-menu { position: fixed; top: auto; right: 10px; left: 10px; top: calc(66px + env(safe-area-inset-top, 0px)); min-width: 0; }
+  .ss-acct-head i { max-width: none; }
+}
+
+/* 圖資面板標題列裡的「GBA 估計」 */
+#rightToolsWrapper > #astra-gba-launcher.ss-gba-inline {
+  position: relative !important;
+  inset: auto !important;
+  order: 4 !important;
+  flex: 0 0 auto !important;
+  margin: 0 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap;
+  font: 700 12px/1 var(--ss-sans) !important;
+  letter-spacing: 0.02em;
+  color: #12333b !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid #b7d8d4 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 5px 14px rgba(13, 47, 53, 0.14) !important;
+  z-index: 4516;
+}
+#rightToolsWrapper > #astra-gba-launcher.ss-gba-inline:hover,
+#rightToolsWrapper > #astra-gba-launcher.ss-gba-inline[aria-expanded="true"] { color: #006c73 !important; outline: 2px solid rgba(8, 127, 150, 0.3); outline-offset: 1px; }
+#rightToolsWrapper:not(.open) > #astra-gba-launcher.ss-gba-inline,
+#rightToolsWrapper.haidian-v4-tools-user-hidden > #astra-gba-launcher.ss-gba-inline { display: none !important; }
+#rightToolsWrapper.open > #astra-gba-launcher.ss-gba-inline ~ #rightToolsCompactClose { margin-left: 0 !important; }
+
+/* 手機：類別標籤列可以左右滑，右邊淡出提示還有更多 */
+@media (max-width: 600px) {
+  #ssChips {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    padding-right: 28px;
+  }
+}

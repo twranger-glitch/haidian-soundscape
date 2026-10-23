@@ -647,6 +647,113 @@
     });
   }
 
+  // ---------------------------------------------------------------- 5b. 導覽列：帳號選單
+  // 登入後的「我的收藏」「我的投稿」「登出」收進右上角的帳號選單，導覽列永遠只有四個項目，不會擠到換行。
+
+  var ICON_USER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+  var ICON_DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>';
+  var ICON_OUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
+  var ICON_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  function tidyHeader() {
+    var nav = document.querySelector('.glass-header .nav-buttons');
+    if (!nav || document.getElementById('ssAcct')) return;
+    var wrap = el('div', 'ss-acct');
+    wrap.id = 'ssAcct';
+    var btn = el('button', 'ss-acct-btn');
+    btn.type = 'button';
+    btn.id = 'ssAcctBtn';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    var menu = el('div', 'ss-acct-menu');
+    menu.id = 'ssAcctMenu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+    wrap.appendChild(btn);
+    wrap.appendChild(menu);
+    nav.appendChild(wrap);
+    document.body.classList.add('ss-acct-on');
+
+    var user = null;
+    function initial(u) {
+      var n = (u.displayName || u.email || '').trim();
+      return n ? n.charAt(0).toUpperCase() : '';
+    }
+    function avatar(u, size) {
+      if (u.photoURL) return '<img class="ss-acct-ava" src="' + esc(u.photoURL) + '" alt="" width="' + size + '" height="' + size + '" referrerpolicy="no-referrer">';
+      return '<span class="ss-acct-ava ss-acct-ini">' + esc(initial(u)) + '</span>';
+    }
+    function render() {
+      if (user) {
+        var name = (user.displayName || '').split(/\s+/)[0] || '我的';
+        btn.className = 'ss-acct-btn is-in';
+        btn.innerHTML = avatar(user, 28) + '<span class="ss-acct-name">' + esc(name) + '</span><span class="ss-acct-chev">' + ICON_CHEV + '</span>';
+        btn.setAttribute('aria-label', '帳號選單：' + name);
+        btn.title = '帳號';
+        menu.innerHTML =
+          '<div class="ss-acct-head">' + avatar(user, 40) + '<div><b>' + esc(user.displayName || '') + '</b><i>' + esc(user.email || '') + '</i></div></div>' +
+          '<button type="button" role="menuitem" data-act="fav">' + ICON_HEART + '<span>我的收藏</span></button>' +
+          '<button type="button" role="menuitem" data-act="mine">' + ICON_DOC + '<span>我的投稿</span></button>' +
+          '<div class="ss-acct-sep"></div>' +
+          '<button type="button" role="menuitem" data-act="out">' + ICON_OUT + '<span>登出</span></button>';
+      } else {
+        btn.className = 'ss-acct-btn';
+        btn.innerHTML = ICON_USER + '<span class="ss-acct-name">登入</span>';
+        btn.setAttribute('aria-label', '登入');
+        btn.title = '用 Google 帳號登入';
+        menu.innerHTML = '';
+        close();
+      }
+    }
+    function open() {
+      if (!user) return;
+      menu.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      wrap.classList.add('is-open');
+    }
+    function close() {
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      wrap.classList.remove('is-open');
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!user) { if (typeof window.toggleLogin === 'function') window.toggleLogin(); return; }
+      menu.hidden ? open() : close();
+    });
+    menu.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      close();
+      var act = b.getAttribute('data-act');
+      if (act === 'fav' && typeof window.openModal === 'function') window.openModal('favoritesModal');
+      if (act === 'mine' && window.ssSubmit) window.ssSubmit.open({ mine: true });
+      if (act === 'out' && typeof window.toggleLogin === 'function') window.toggleLogin();
+    });
+    document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+
+    render();
+    window.ssUI = window.ssUI || {};
+    window.ssUI.setUser = function (u) { user = u; render(); };
+    waitFor(function () { return window.firebase && firebase.auth && firebase.auth(); }, function (a) {
+      a.onAuthStateChanged(function (u) { user = u; render(); });
+    }, 30000);
+  }
+
+  // 圖資面板：「GBA 估計」原本固定浮在畫面右側，會壓在面板上；移到面板標題列、關閉鈕左邊。
+  function tidyRightTools() {
+    waitFor(function () {
+      return document.getElementById('astra-gba-launcher') && document.getElementById('rightToolsCompactClose');
+    }, function () {
+      var l = document.getElementById('astra-gba-launcher');
+      var c = document.getElementById('rightToolsCompactClose');
+      if (l.parentNode !== c.parentNode) c.parentNode.insertBefore(l, c);
+      l.classList.add('ss-gba-inline');
+    }, 60000);
+  }
+
   // ---------------------------------------------------------------- 6. cards + sheet
 
   function uidFromCard(root) {
@@ -1752,6 +1859,8 @@
     buildBarExtras();
     heroGreeting();
     tidyLayout();
+    tidyHeader();
+    tidyRightTools();
     tidyPanels();
     buildOffline();
     registerSW();
