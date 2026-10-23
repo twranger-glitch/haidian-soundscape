@@ -930,6 +930,6 @@
     }
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
+  if ((document.readyState === "loading" || window.__ssDCL === false)) document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();

@@ -1,0 +1,710 @@
+<!DOCTYPE html><html lang="zh-TW" data-site="sound"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>海佃溪遊記｜聲音地景</title>
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="海佃溪遊記｜聲音地景">
+    <meta property="og:description" content="海佃地下圖書室聲音地景計畫。這是一張用耳朵閱讀的地圖，邀您沿著水圳與聚落，一起把台江的聲音帶回來。">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=1200&auto=format&fit=crop"> 
+    <meta property="og:url" content="https://twranger-glitch.github.io/haidian-soundscape/sound.html">
+    <meta property="og:site_name" content="海佃溪遊記">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <!-- 聲景介面改版層：可加到主畫面 -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#0c1a1d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="海佃溪遊記">
+    <link rel="apple-touch-icon" href="src/pwa/apple-touch-icon.png">
+    <link rel="preconnect" href="https://res.cloudinary.com">
+    <link rel="preconnect" href="https://tiles.openfreemap.org">
+    <link rel="preconnect" href="https://wmts.nlsc.gov.tw">
+    <link rel="preconnect" href="https://haidian-soundscape-default-rtdb.asia-southeast1.firebasedatabase.app">
+    <!-- 聲景介面改版層結束 -->
+    
+    <script>window.__ssDCL=false;document.addEventListener("DOMContentLoaded",function(){window.__ssDCL=true},{once:true});</script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script defer src="https://unpkg.com/protomaps-leaflet@4.0.1/dist/protomaps-leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script defer src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.css" />
+    <script defer src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.15.0/dist/leaflet-geoman.min.js"></script>
+
+    <script>
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIOS) { document.documentElement.classList.add('ios-device'); }
+    </script>
+<script>
+        (function() {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            var isLine = (ua.indexOf("Line") > -1);
+            var isFb = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1);
+            var isIG = (ua.indexOf("Instagram") > -1);
+            
+            if (isLine || isFb || isIG) {
+                // 1. 針對 LINE 的密技：嘗試加上參數促使它呼叫外部瀏覽器
+                if (isLine && location.search.indexOf('openExternalBrowser=1') === -1) {
+                    var separator = location.href.indexOf('?') > -1 ? '&' : '?';
+                    window.location.href = location.href + separator + 'openExternalBrowser=1';
+                }
+                
+                // 2. 顯示極簡質感的引導擋板 (防止使用者在內建瀏覽器中遇到 Bug)
+                document.addEventListener("DOMContentLoaded", function() {
+                    // 🌟 如果是在內建瀏覽器，強制把迎賓帷幕藏起來，免得它擋住警告！
+                    var splash = document.getElementById('splashScreen');
+                    if (splash) splash.style.display = 'none';
+
+                    var overlay = document.createElement('div');
+                    // 🌟 將 z-index 提升到極限值 2147483647，確保無人能擋
+                    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:2147483647; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; text-align:center; padding:20px; backdrop-filter:blur(10px);";
+                    overlay.innerHTML = `
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; letter-spacing:1px;">請使用系統瀏覽器開啟</h2>
+                        <p style="font-size:15px; line-height:1.7; color:#94a3b8; margin-bottom:30px; font-weight:600;">LINE 或 FB 的內建瀏覽器無法完美支援<br>地圖引擎與背景聲音播放。</p>
+                        <div style="background:#1e293b; padding:20px 25px; border-radius:16px; border:1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                            <p style="margin:0 0 12px 0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    請點擊畫面右上角的 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋮</span> 或 <span style="background:#334155; padding:4px 8px; border-radius:6px; color:#fff;">⋯</span>
+</p>
+                            <p style="margin:0; font-size:16px; color:#38bdf8; font-weight:800;">選擇「以預設瀏覽器開啟」<br>或「在 Safari 開啟」</p>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+                    // 鎖死地圖與滾動
+                    document.body.style.overflow = 'hidden'; 
+                });
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="./src/app/app-base.css?v=20261023.27">
+
+<!-- HAIDIAN_9PLUS_STABLE_V4_CSS_START -->
+
+<!-- HAIDIAN_9PLUS_STABLE_V4_CSS_END -->
+
+
+
+<!-- ===== START: RIGHT_TOOLS_UNIVERSAL_DESIGN ===== -->
+
+<!-- ===== END: RIGHT_TOOLS_UNIVERSAL_DESIGN ===== -->
+
+<link rel="stylesheet" href="./src/app/app-patches.css?v=20261023.27">
+<script>
+/* 標題明體（Noto Serif TC，只取 700 一種字重）不擋首屏，也不讓頁面載到一半整頁重排：
+ * - 第一次造訪：這次先用系統明體。頁面載完、瀏覽器有空時，只把目前畫面上明體文字用得到的字型分片抓進快取，不套用。
+ * - 之後造訪：字型已在快取，開頭就直接套用（display=optional，萬一快取被清掉就用系統明體，不會閃動）。 */
+(function () {
+  var href = 'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional';
+  var KEY = 'ss-serif-cached';
+  var cached = false;
+  try { cached = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  // 兩處都加 crossorigin，讓第一次預抓和之後正式套用是同一個快取項目
+  if (cached) { document.write('<link rel="stylesheet" crossorigin="anonymous" href="' + href + '">'); return; }
+  if (!window.fetch || !window.Set) return;
+
+  var idle = window.requestIdleCallback || function (f) { return setTimeout(function () { f({ timeRemaining: function () { return 8; } }); }, 200); };
+  // 找出畫面上用明體的字；逐段在瀏覽器空檔做，避免一次卡住主執行緒
+  function serifText(done) {
+    var els = document.querySelectorAll('body *'), i = 0, chars = new Set();
+    (function step(deadline) {
+      while (i < els.length && deadline.timeRemaining() > 2) {
+        var el = els[i++], own = '';
+        for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3) own += n.nodeValue;
+        own = own.replace(/\s+/g, '');
+        if (!own || getComputedStyle(el).fontFamily.indexOf('Noto Serif') < 0) continue;
+        for (var k = 0; k < own.length; k++) chars.add(own.charCodeAt(k));
+      }
+      if (i < els.length) idle(step); else done(chars);
+    })({ timeRemaining: function () { return 8; } });
+  }
+  function inRanges(chars, ranges) {
+    return ranges.split(',').some(function (r) {
+      var m = r.trim().replace(/^U\+/i, '').split('-');
+      var lo = parseInt(m[0], 16), hi = m[1] ? parseInt(m[1], 16) : lo;
+      for (var c of chars) if (c >= lo && c <= hi) return true;
+      return false;
+    });
+  }
+  function warm() {
+    // media="print" 只下載、不套用到畫面，所以不會觸發重排；crossorigin 讓我們讀得到裡面的 @font-face
+    var l = document.createElement('link');
+    l.rel = 'stylesheet'; l.media = 'print'; l.crossOrigin = 'anonymous'; l.href = href;
+    l.onload = function () { serifText(function (chars) {
+      var urls = [];
+      try {
+        Array.prototype.forEach.call(l.sheet.cssRules, function (rule) {
+          if (rule.type !== 5) return; // CSSFontFaceRule
+          var src = /url\(["']?([^"')]+)/.exec(rule.style.getPropertyValue('src'));
+          var range = rule.style.getPropertyValue('unicode-range');
+          if (src && (!range || inRanges(chars, range))) urls.push(src[1]);
+        });
+      } catch (e) { return; }
+      l.remove();
+      Promise.all(urls.map(function (u) { return fetch(u, { mode: 'cors' }); })).then(function () {
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      }).catch(function () {});
+    }); };
+    document.head.appendChild(l);
+  }
+  window.addEventListener('load', function () {
+    idle(warm, { timeout: 5000 });
+  }, { once: true });
+})();
+</script>
+<noscript><link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=optional"></noscript>
+<link rel="stylesheet" href="./src/soundscape-ui.css?v=20261023.27">
+</head>
+<body>
+
+    <!-- 🌟 卓越設計版：毛玻璃迎賓帷幕 -->
+    
+
+    <!-- 入口頁在 index.html；分站進來直接看地圖 -->
+
+    <!-- 🌟 插入：聆聽模式退出提示 -->
+    <div class="listening-hint" onclick="toggleListeningMode()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        點擊退出專注模式
+    </div>
+
+    <header class="glass-header">
+        <h1 class="project-title" style="cursor: pointer;" onclick="window.location.href = 'index.html';" title="回到入口頁">海佃 <span class="main-title">溪遊記</span> <span class="sub-title">聲音地景</span></h1>
+        <nav class="nav-buttons">
+            
+            <button onclick="openModal('aboutModal')" title="關於我們">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span class="full-text">關於我們</span><span class="short-text">關於</span>
+            </button>
+            <button class="btn-latest" onclick="openModal('favoritesModal')" title="我的收藏" id="navFavBtn" style="display: none; color: #e11d48 !important;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                <span class="full-text">我的收藏</span><span class="short-text">收藏</span>
+            </button>
+            <button class="btn-latest" onclick="openModal('latestModal')" title="最新上架">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                <span class="full-text">最新上架</span><span class="short-text">新作</span>
+            </button>
+            <button class="btn-submit" onclick="openModal('submitChoiceModal')" title="我要投稿">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <span class="full-text">我要投稿</span><span class="short-text">投稿</span>
+            </button>
+        </nav>
+    </header>
+    
+    <div id="headerPullTab" class="header-pull-tab" onclick="updateHeaderVisibility(false)">
+        <div class="pull-line"></div>
+        <div class="pull-text">顯示選單</div>
+    </div>
+
+    <div id="drawModeHUD" class="draw-mode-hud">
+        <div id="geomanContainer" class="custom-geoman-container"></div>
+        <button class="hud-close-btn" onclick="exitDrawMode()" title="退出手繪模式">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+
+    <div id="sidePanel" class="drawer-panel collapsed">
+        <button class="toggle-btn" onclick="togglePanel('sidePanel', event)">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <div class="drawer-content">
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    搜尋標題或採集者
+                </span>
+                <input type="text" id="searchInput" class="search-input" placeholder="輸入聲景標題或採集者..." oninput="filterMarkers()">
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;"> <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    聲景類別篩選
+                </span>
+                <div class="filter-group" style="margin-bottom: 6px;">
+                    <label class="filter-item"><input type="radio" name="catFilter" value="all" checked onchange="filterMarkers()"> 所有聲景</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="自然絮語" onchange="filterMarkers()"> 自然絮語</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="常民聲" onchange="filterMarkers()"> 常民聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="活動與產業" onchange="filterMarkers()"> 活動與產業</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="空間聲" onchange="filterMarkers()"> 空間聲</label>
+                    <label class="filter-item"><input type="radio" name="catFilter" value="歲月回音" onchange="filterMarkers()"> 歲月回音</label>
+                </div>
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;"> <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    時間軸探索
+                </span>
+                <p style="font-size:12px; color:#94a3b8; margin-top:0; margin-bottom:12px;">撥動滑桿探索不同時段的聲音</p>
+                <input type="range" id="timeSlider" class="time-slider" min="-1" max="23" value="-1" oninput="filterMarkers()">
+                <div id="timeDisplay" class="time-display">全部時段</div>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 15px 0;">
+            <div>
+                <span class="panel-label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    專屬尋寶圖
+                </span>
+                <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--text-main); cursor:pointer; background:#fff0f2; padding:10px 12px; border-radius:10px; border:1px solid #ffe4e6; transition:0.2s;">
+                    <input type="checkbox" id="favFilterToggle" style="accent-color:#e11d48; width:16px; height:16px; margin:0;" onchange="filterMarkers()">
+                    只顯示我的收藏
+                </label>
+            </div>
+            <button class="btn-more-layers" style="margin-top: 15px; background: #fffbeb; color: #b45309; border-color: #fde68a;" onclick="openAchievementWall()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-3.5 3.5c-.93.93-2.58.93-3.5 0v0c-.93-.93-.93-2.58 0-3.5L8.5 11.5"></path><path d="M15 8.5L18.5 5c.93-.93 2.58-.93 3.5 0v0c.93.93.93 2.58 0 3.5L18.5 12"></path><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
+                查看我的聲音獵人成就
+            </button>
+        </div>
+    </div>
+
+    <div id="routePanel" class="drawer-panel collapsed">
+        <button class="toggle-btn" onclick="togglePanel('routePanel', event)">
+            <svg class="toggle-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <div class="drawer-content">
+            <span class="panel-label">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
+                主題與空間走讀
+            </span>
+            <p style="font-size:12px; color:#94a3b8; margin-top:0; margin-bottom:12px;">選擇路線或空間魔法，系統將為您導航。</p>
+            <div class="route-list">
+                <button class="route-btn" onclick="toggleRoute('nature', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4-4 8-10 8-14a8 8 0 1 0-16 0c0 4 4 10 8 14z"></path></svg>
+                    綠色生態走讀 (依類別)
+                </button>
+                <button class="route-btn" onclick="toggleRoute('culture', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    聚落記憶尋寶 (依類別)
+                </button>
+                <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_yanshui', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-3 4 6 2-3h4"></path></svg>
+                    鹽水溪畔 200m 走讀
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #3498db;" onclick="toggleRoute('geofence_jianan', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-3 4 6 2-3h4"></path></svg>
+                    嘉南大圳鹽水溪排水線
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #e67e22;" onclick="toggleRoute('geofence_shanhai', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l4 8 5-5 5 15H2L8 3z"></path></svg>
+                    山海圳綠道 (直達玉山)
+                </button>
+                <button class="route-btn" style="border-left: 4px solid #27ae60;" onclick="toggleRoute('geofence_taijiang', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    台江水日 (烏山頭溯源)
+                </button>
+                <hr style="border: 0; border-top: 1px dashed #e2e8f0; margin: 4px 0;">
+                
+                <button class="route-btn" style="border-left: 4px solid #8e44ad;" onclick="openCustomDrawHelp()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#8e44ad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                    手繪自訂走讀範圍
+                </button>
+
+                <button class="route-btn" onclick="toggleRoute('clear', this)" id="clearRouteBtn" style="display:none; background:#fef2f2; color:#ef4444; border-color:#fca5a5; justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    結束路線任務
+                </button>
+                
+            </div>
+        </div>
+    </div>
+<!-- ===== [FIX-NEW START] 浮動結束路線任務按鈕（放在 drawer 外） ===== -->
+<button
+    class="route-btn"
+    onclick="toggleRoute('clear', document.getElementById('clearRouteBtn'))"
+    id="floatingClearRouteBtn"
+    style="
+        display:none;
+        position:fixed;
+        right:18px;
+        bottom:92px;
+        z-index:99999;
+        background:#fef2f2;
+        color:#ef4444;
+        border:1px solid #fca5a5;
+        justify-content:center;
+        box-shadow:0 10px 30px rgba(0,0,0,0.18);
+    "
+>
+    結束路線任務
+</button>
+<!-- ===== [FIX-NEW END] ===== -->
+    <div id="rightToolsWrapper" class="right-tools-wrapper">
+        <!-- 🌟 將聆聽模式按鈕移到右側，解決手機版擠爆問題 -->
+        <div class="tools-toggle-btn" onclick="toggleListeningMode()" title="沉浸聆聽模式" style="margin-bottom: 12px; color: #10b981;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-8h3z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-8H3z"></path></svg>
+        </div>
+
+<div class="tools-toggle-btn" onclick="toggleRightToolsPanel(event)" title="地圖圖層工具">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+    </svg>
+</div>
+
+<!-- 圖資抽屜的外掛收合耳朵：刻意放在選單容器外面 -->
+<button
+    type="button"
+    id="rightToolsCollapseEar"
+    class="right-tools-collapse-ear"
+    onclick="toggleRightToolsPanel(event)"
+    aria-label="收合圖資工具"
+    aria-controls="rightToolsMenu"
+    title="收合圖資工具"
+>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 6 15 12 9 18"></polyline>
+    </svg>
+</button>
+
+<button
+    type="button"
+    id="rightToolsCompactClose"
+    onclick="toggleRightToolsPanel(event)"
+    aria-label="收合圖資工具"
+    aria-controls="rightToolsMenu"
+    title="收合圖資工具"
+>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+</button>
+
+<div id="rightToolsMenu" class="tools-menu-container">
+    <div class="custom-layer-control">
+<details class="layer-folder ss-group" data-group="place" open>
+    <summary><span>定位與底圖</span><small>搜尋・底圖・透明度</small></summary>
+    <div class="layer-folder-content">
+<section class="layer-subsection">
+<div class="layer-subsection-title ss-rt-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> 搜尋特定地點</div>
+                <div style="display:flex; gap:6px; margin-bottom:4px;">
+                    <input type="text" id="placeSearchInput" class="search-input" style="padding: 8px 12px; font-size:13px;" placeholder="輸入地名 (如: 台江)" onkeydown="if(event.key === 'Enter') searchPlaceName()">
+                    <button onclick="searchPlaceName()" class="btn-submit" style="border-radius: 8px !important; padding: 0 12px; border: none; flex-shrink: 0;" title="開始搜尋">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                </div>
+                <div id="placeSearchResultsContainer"></div>
+</section>
+<section class="layer-subsection">
+<div class="layer-subsection-title ss-rt-title">現代圖資 <small>自選底圖</small></div>
+                <label><input type="radio" name="basemap" value="taiwan" checked onchange="switchBasemap(this.value)"> 臺灣通用電子地圖</label>
+                <label><input type="radio" name="basemap" value="esri_sat" onchange="switchBasemap(this.value)"> ESRI 衛星影像</label>
+                <label><input type="radio" name="basemap" value="osm" onchange="switchBasemap(this.value)"> OSM 標準地圖</label>
+                <div id="basemapAutoFallbackNote" role="status" aria-live="polite" style="display:none; font-size:11px; color:var(--text-muted); margin:3px 0 5px 4px;">已離開臺灣底圖範圍，正在使用 OSM 標準地圖。</div>
+
+                <!-- 🎯 底圖透明度獨立控制 -->
+                <div style="display:flex; align-items:center; gap:8px; margin-top:8px; margin-bottom:12px; background:#f8fafc; padding:8px 10px; border-radius:8px; border:1px solid #e2e8f0;">
+                    <span style="font-size:11px; color:#64748b; font-weight:800; white-space:nowrap;">底圖透明度</span>
+                    <input type="range" id="basemapOpacity" min="0" max="1" step="0.05" value="1" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateBasemapOpacity(this.value)">
+                </div>
+</section>
+    </div>
+</details>
+<details class="layer-folder ss-group" data-group="history">
+    <summary><span>歷史套疊</span><small>可多重疊加・獨立透明度</small></summary>
+    <div class="layer-folder-content">
+<section class="layer-subsection ss-history-list">
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1875" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1874 府城街道圖</label><button type="button" class="ss-info" data-info="history_1875" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1875" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1875', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_tainan" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1895 臺南府迅速測圖</label><button type="button" class="ss-info" data-info="history_tainan" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_tainan" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_tainan', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1900" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1900 臺南府城內外略圖</label><button type="button" class="ss-info" data-info="history_1900" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1900" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1900', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1904" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1904 臺灣堡圖</label><button type="button" class="ss-info" data-info="history_1904" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1904" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1904', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1920" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1920 臺南市區改正圖</label><button type="button" class="ss-info" data-info="history_1920" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1920" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1920', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1921" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1921 臺灣堡圖</label><button type="button" class="ss-info" data-info="history_1921" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1921" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1921', this.value)"></div>
+                </div>
+                <div class="history-layer-item" style="margin-bottom:8px;">
+                    <div class="ss-info-row"><label style="margin-bottom:0;"><input type="checkbox" value="history_1944" onchange="switchHistoryMap(this.value, this.checked)" style="accent-color:var(--accent-color);"> 1944 美軍航照圖</label><button type="button" class="ss-info" data-info="history_1944" aria-label="這張圖資是什麼" title="這張圖資是什麼">i</button></div>
+                    <div id="ctrl_history_1944" style="display:none; padding-left:24px; margin-top:4px;"><input type="range" min="0" max="1" step="0.05" value="0.8" style="width:100%; accent-color:var(--accent-color); margin:0;" oninput="updateSingleHistoryOpacity('history_1944', this.value)"></div>
+                </div>
+</section>
+    </div>
+</details>
+    </div>
+</div>
+    </div>
+
+    <!-- 🌟 智慧投稿分流選單 -->
+    <div id="submitChoiceModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'submitChoiceModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 400px;">
+            <button class="modal-close-btn" onclick="closeModal('submitChoiceModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px; text-align: center;">
+                <h2 class="modal-title" style="justify-content:center; margin-bottom: 8px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    準備投稿！
+                </h2>
+                <p style="font-size:13px; color:#64748b; margin-top:0; margin-bottom:20px;">請選擇您目前的狀態，系統將協助您定位</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button onclick="locateAndSubmit()" class="btn-submit" style="width:100%; padding:14px; font-size:15px; border-radius:12px; display:flex; justify-content:center; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        我在現場 (自動抓取目前位置)
+                    </button>
+                    <button onclick="closeModal('submitChoiceModal'); alert('請直接在地圖上【長按 (約一秒) 您採集聲音的地點】，系統會自動為您標記並開啟投稿表單！');" style="width:100%; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:14px; font-size:15px; border-radius:12px; font-weight:800; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                        不在現場 (返回地圖長按選點)
+                    </button>
+                    <button onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdEq8I8O6zWZ95RO0Jf-YCKAuwUedMHsnThrU71FcTJQbuGGg/viewform', '_blank')" style="width:100%; background:transparent; color:#e74c3c; border:1px dashed #fca5a5; padding:12px; font-size:14px; border-radius:12px; font-weight:700; cursor:pointer; transition:0.2s; display:flex; justify-content:center; align-items:center; gap:8px; margin-top:5px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        打開空白表單 (自行輸入或由系統判讀)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🌟 南山公墓：左側獨立分類目錄 -->
+    <div id="nanshanCategoryMenu" class="nanshan-category-menu" aria-label="南山公墓年代分類選單">
+        <div class="nanshan-category-head">
+            <div class="nanshan-category-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M6 21V8l6-5 6 5v13"></path><path d="M10 21v-6h4v6"></path></svg>
+                南山公墓分類
+            </div>
+            <div class="nanshan-category-actions">
+                <button type="button" class="nanshan-mini-btn" onclick="setAllNanshanCategories(true)">全選</button>
+                <button type="button" class="nanshan-mini-btn" onclick="setAllNanshanCategories(false)">清空</button>
+                <button type="button" class="nanshan-mini-btn" onclick="toggleNanshanLayer(false); var t=document.getElementById('nanshanToggle'); if(t) t.checked=false;">關閉</button>
+            </div>
+        </div>
+        <div class="nanshan-category-note">以顏色區分年代，可輸入姓名、關鍵字或年代搜尋墓塚。資料來源：張鎧臣及蔡韋漢等，2020，南山公墓歷史名人墓塚地圖（0900更新）。</div>
+
+        <div class="nanshan-search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="nanshanSearchInput" class="nanshan-search-input" type="search" placeholder="搜尋姓名、簡介、年代…" oninput="handleNanshanSearchInput(this.value)">
+            <button id="nanshanSearchClearBtn" class="nanshan-search-clear" type="button" onclick="clearNanshanSearch()" title="清除搜尋">×</button>
+        </div>
+
+        <!-- 🎯 分類選單放上面當過濾器 -->
+        <div id="nanshanCategoryList" class="nanshan-category-list"></div>
+        
+        <!-- 🎯 搜尋結果放下面並填滿剩餘空間 -->
+        <div id="nanshanSearchStatus" class="nanshan-search-status"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- 🌟 Google 地圖風格：一鍵定位準星 -->
+    <div class="locate-me-wrapper">
+        <button id="locateMeBtn" class="locate-me-btn" onclick="flyToMyLocation()" title="定位我的位置">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+        </button>
+    </div>
+
+<div id="hazardInfoModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'hazardInfoModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 400px; transform: scale(0.95); transition: 0.3s;">
+            <button class="modal-close-btn" onclick="closeModal('hazardInfoModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: left; justify-content:flex-start; margin-bottom: 16px; color:#4c1d95;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span id="hazardInfoTitle">地質名詞</span>
+                </h2>
+                <div style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                    <p id="hazardInfoDesc" style="font-size: 15px; color: #475569; line-height: 1.7; margin: 0; text-align: justify;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="moreLayersModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'moreLayersModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
+            <button class="modal-close-btn" onclick="closeModal('moreLayersModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                    更多歷史圖層
+                </h2>
+<div class="more-layers-grid">
+                    <label class="layer-card">
+                        <input type="radio" name="historymap_modal" value="history_1875" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1874 府城街道圖</strong>
+                            <span>Tainan_1875</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="historymap_modal" value="history_1900" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1900 臺南府城內外略圖</strong>
+                            <span>Tainan_1900</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="historymap_modal" value="history_1920" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1920 臺南市區改正圖</strong>
+                            <span>Tainan_1920</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="historymap_modal" value="history_1921" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1921 臺灣堡圖</strong>
+                            <span>JM20K_1921</span>
+                        </div>
+                    </label>
+                    <label class="layer-card">
+                        <input type="radio" name="historymap_modal" value="history_1944" onchange="switchHistoryMap(this.value); closeModal('moreLayersModal');"> 
+                        <div class="layer-card-content">
+                            <strong style="color: var(--text-main);">1944 美軍航照圖</strong>
+                            <span>AM25K_1944B</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="latestModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'latestModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
+            <button class="modal-close-btn" onclick="closeModal('latestModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d35400" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    最新上架聲景 (Top 10)
+                </h2>
+                <div id="latestList" class="latest-list">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="favoritesModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'favoritesModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 500px;">
+            <button class="modal-close-btn" onclick="closeModal('favoritesModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 24px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    我的專屬收藏
+                </h2>
+                <div id="favoritesList" class="latest-list">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="badgeUnlockModal" class="achievement-overlay" onclick="closeModalOnBgClick(event, 'badgeUnlockModal')">
+        <div class="achievement-card">
+            <div class="badge-icon-wrapper" id="unlockedBadgeIcon">
+                </div>
+            <h2 class="achievement-title" id="unlockedBadgeName">成就解鎖！</h2>
+            <p class="achievement-desc" id="unlockedBadgeDesc">恭喜你達成條件</p>
+            <button class="btn-claim-badge" onclick="closeModal('badgeUnlockModal')">收下徽章繼續探索</button>
+        </div>
+    </div>
+
+    <div id="achievementWallModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'achievementWallModal')">
+        <div class="modal-box" style="background: #f8fafc; max-width: 450px;">
+            <button class="modal-close-btn" onclick="closeModal('achievementWallModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content" style="padding: 30px 24px;">
+                <h2 class="modal-title" style="text-align: center; justify-content:center; margin-bottom: 8px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-3.5 3.5c-.93.93-2.58.93-3.5 0v0c-.93-.93-.93-2.58 0-3.5L8.5 11.5"></path><path d="M15 8.5L18.5 5c.93-.93 2.58-.93 3.5 0v0c.93.93.93 2.58 0 3.5L18.5 12"></path><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
+                    聲音獵人成就牆
+                </h2>
+                <p style="text-align:center; font-size:13px; color:#64748b; margin-top:0;">探索、聆聽並留下回音來解鎖徽章</p>
+                <div id="achievementWallGrid" class="wall-grid">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="globalPlayer" class="global-player">
+        <button id="playerToggleBtn" class="player-control-btn" onclick="toggleGlobalAudio()">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+        <div class="player-main">
+            <div class="player-header-row">
+                <div id="playerTitleContainer" class="player-title-container">
+                    <div id="playerTitleUI" class="player-title">載入中...</div>
+                </div>
+                <button id="favBtn" class="fav-btn" onclick="toggleFavorite()" title="加入我的收藏">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </button>
+                <div id="playerTimeDisplay" class="player-time-display">00:00 / 00:00</div>
+            </div>
+            <div class="waveform-wrapper" id="waveformWrapper" onclick="seekGlobalAudio(event)">
+                <img id="waveBase" class="wave-base" src=""><img id="waveProgress" class="wave-progress" src="">
+            </div>
+        </div>
+        <div class="volume-control">
+            <span id="muteBtn" class="mute-icon" onclick="toggleMute()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </span>
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="changeVolume()">
+        </div>
+        <button class="close-player-btn" onclick="closeGlobalPlayer()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+
+    <div id="aboutModal" class="modal-overlay" onclick="closeModalOnBgClick(event, 'aboutModal')">
+        <div class="modal-box">
+            <button class="modal-close-btn" onclick="closeModal('aboutModal')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <img src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=800&auto=format&fit=crop" class="modal-img">
+            <div class="modal-content">
+                <h2 class="modal-title about-title">
+    <span class="about-title-zh">海佃地圖</span>
+    <span class="about-title-en">Haidian Hidden Library</span>
+</h2>
+                <div class="modal-tag">Hidden below, growing beyond.</div>
+                <p class="modal-text">海佃地下圖書室，不只是校園一隅的空間，更是孵育思想的基地。我們如根系般隱身地下，灌溉想像、守護好奇，讓孩子帶走的不只是一本書，而是一張探索世界的「地圖」。</p>
+                <p class="modal-text">如今，我們將地圖的邊界從書頁延伸至真實的土地。在<strong>【海佃 溪遊記】</strong>聲音地景計畫中，圖書室成為了起點，引領孩子走出教室，沿著鹽水溪、曾文溪與嘉南大圳，進行一場聽覺的田野調查。</p>
+                <p class="modal-text">我們希望孩子暫時放下對視覺的依賴，用「聆聽」重新覺察環境。從自然水流的低語到地方產業的喧囂，每一次錄音，都是孩子在學著打開心胸、觀察細節，建構出屬於這片土地最真實的聲景記憶。</p>
+                <div class="quote-block">
+                    <p class="modal-text" style="font-weight: bold; color: #2c3e50;">閱讀不限於文字，用耳朵，我們也能聽見世界的輪廓。</p>
+                    <p class="modal-text" style="font-size: 14px;">家鄉是認識世界的起點，而聆聽，是我們擁抱土地的方式。</p>
+                </div>
+                
+                
+            </div>
+        </div>
+    </div>
+    
+    <script defer src="./src/app/app-main.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-final-ui-pack-js.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-9plus-stable-v4-js.js?v=20261023.27"></script>
+<script defer src="./src/app/desktop-right-tools-alignment.js?v=20261023.27"></script>
+<script defer src="./src/app/haidian-right-tools-scroll-guard.js?v=20261023.27"></script>
+<script defer src="./src/app/mobile-right-tools-banner-auto-collapse-fix.js?v=20261023.27"></script>
+<script defer src="./src/app/focus-mode-close-nonwork-popups.js?v=20261023.27"></script>
+<!-- 聲景介面改版層：兩個分站共用 -->
+<script defer src="./src/soundscape-basemap.js?v=20261023.27"></script>
+<script defer src="./src/app/layer-info.js?v=20261023.27"></script>
+<script defer src="./src/soundscape-ui.js?v=20261023.27"></script>
+<script defer src="./src/soundscape-submit.js?v=20261023.27"></script>
+</body></html>

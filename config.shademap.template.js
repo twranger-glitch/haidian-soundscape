@@ -175,7 +175,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // DO NOT put the MOI DTM api_key in this file. Configure the included Cloudflare
   // Worker and set only its public proxy URL here. v7.8.8 prefers the official value
   // but can fall back to the global Terrarium DEM, clearly labelled as non-official.
-  taiwanOfficialDtmProxyUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/elevation",
+  taiwanOfficialDtmProxyUrl: (window.ssProxyUrl||String)("https://haidian-dtm-proxy.yhzkiki.workers.dev/elevation"),
   taiwanOfficialDtmLabel: "內政部 DTM API 20 m（2010–2019 合併資料）",
   taiwanOfficialDtmTimeoutMs: 9000,
   taiwanGlobalDemFallbackEnabled: true,
@@ -183,7 +183,7 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
 
   // v8.0.3 — official 2025 Taiwan 20 m DTM, converted to Terrarium XYZ z13.
   // Cloudflare proxies/caches the public Hugging Face tiles; Mapzen remains the explicit fallback.
-  taiwanTerrainTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/terrain/{z}/{x}/{y}.png",
+  taiwanTerrainTileUrl: (window.ssProxyUrl||String)("https://haidian-dtm-proxy.yhzkiki.workers.dev/terrain/{z}/{x}/{y}.png"),
   taiwanTerrainMaxZoom: 13,
   taiwanTerrainLabel: "內政部官方 DTM Terrarium XYZ",
   taiwanTerrainDatasetLabel: "2025 年版官方 20 m DTM（自建 tiles）",
@@ -194,9 +194,9 @@ window.HAIDIAN_SHADEMAP_CONFIG = {
   // Do not change buildingDataVersion until the matching hosted dataset exists.
   buildingMode: "pipeline",
   buildingGeoJSONUrl: "./data/buildings.geojson",
-  buildingTileUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson",
-  buildingManifestUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/manifest.json",
-  buildingTileIndexUrl: "https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/tile-index.json",
+  buildingTileUrl: (window.ssProxyUrl||String)("https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/{z}/{x}/{y}.geojson"),
+  buildingManifestUrl: (window.ssProxyUrl||String)("https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/manifest.json"),
+  buildingTileIndexUrl: (window.ssProxyUrl||String)("https://haidian-dtm-proxy.yhzkiki.workers.dev/buildings/tile-index.json"),
   buildingDataVersion: "2026-08-19.0-overture-tainan-city-v1",
 
   // v8.6.3 — no named-building exceptions. Low-confidence heights are

@@ -1,0 +1,17 @@
+{
+  "name": "海佃溪遊記｜聲音地景",
+  "short_name": "海佃溪遊記",
+  "description": "一張用耳朵閱讀的地圖：海佃地下圖書室的聲音地景計畫。",
+  "lang": "zh-TW",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1a1d",
+  "theme_color": "#0c1a1d",
+  "icons": [
+    { "src": "src/pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "src/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "src/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

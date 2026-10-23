@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node tools/vercel-build.js",
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/_w/heat-risk/:path*", "destination": "https://haidian-heat-risk-api.yhzkiki.workers.dev/:path*" },
+    { "source": "/_w/dtm/:path*", "destination": "https://haidian-dtm-proxy.yhzkiki.workers.dev/:path*" }
+  ]
+}
